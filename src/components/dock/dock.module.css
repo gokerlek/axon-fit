@@ -1,0 +1,116 @@
+/*
+ * Dock — React Bits "Dock" bileşeninden uyarlandı (MIT + Commons Clause, © 2026 David Haz).
+ * Değişiklikler: tokenlar, sabit konum, aktif gösterge, hareket azaltma, bağlantı semantiği.
+ */
+
+.layer {
+  /* Büyüyen ikonlara ve etiketlere yer açan görünmez katman; altındaki içeriğe tıklamayı engellemez. */
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom));
+}
+
+.panel {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--tab-bar) 94%, transparent);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow:
+    0 12px 32px -12px rgb(0 0 0 / 0.55),
+    0 2px 6px rgb(0 0 0 / 0.25);
+}
+
+.item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  text-decoration: none;
+  outline: none;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.item:hover {
+  color: var(--text);
+}
+
+.item:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.item[aria-current='page'] {
+  background: var(--accent-muted);
+  border-color: color-mix(in srgb, var(--accent-indicator) 45%, transparent);
+  color: var(--accent-text);
+}
+
+/* Aktif sayfa: ikonun altında küçük nokta (macOS dock'taki gibi). */
+.item[aria-current='page']::after {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-indicator);
+  transform: translateX(-50%);
+}
+
+.item[aria-disabled='true'] {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* İkon kutuyla birlikte büyüsün. */
+  width: 46%;
+  height: 46%;
+}
+
+.icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.label {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.separator {
+  align-self: stretch;
+  width: 1px;
+  margin: var(--space-xs) 2px;
+  background: var(--border-strong);
+}
