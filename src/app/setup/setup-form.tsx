@@ -25,10 +25,13 @@ export function SetupForm({
   initial,
   firstRun,
   hasLogo,
+  afterSave = '/dashboard',
 }: {
   initial: SetupForm;
   firstRun: boolean;
   hasLogo: boolean;
+  /** Kayıttan sonra gidilecek sayfa (sihirbazda panele, ayarlarda aynı sayfada kal). */
+  afterSave?: string;
 }) {
   const router = useRouter();
   const form = useForm({ schema: setupFormSchema, initialInput: initial });
@@ -39,7 +42,7 @@ export function SetupForm({
     notify: { success: firstRun ? 'Kurulum tamamlandı.' : 'Görünüm güncellendi.' },
     onError: (error) => applyFieldErrors(form as never, error),
     onSuccess: () => {
-      router.replace('/dashboard');
+      router.replace(afterSave);
       // Sunucu bileşenleri yeni ayarı okusun (başlık, renk, tema).
       router.refresh();
     },

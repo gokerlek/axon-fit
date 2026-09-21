@@ -143,9 +143,17 @@ Kodun kendisi hiçbir yerde saklanmaz; `localStorage`'da yalnızca "hangi danı�
 
 ---
 
-## 6. Ekranlar
+## 6. Ekranlar ve cihaz odağı
 
-**PT:** giriş · danışan listesi · danışan detayı (program ata, geçmiş, sağlık modülü, bağlantı ver) · antrenman şablonu düzenleyici · egzersiz kütüphanesi (video/görsel bağlantısı, görsel yükleme) · davet QR ekranı · ayarlar (marka, yönetim işlemleri).
+| Alan | Birincil cihaz | Düzen |
+|---|---|---|
+| **Danışan** (`/me`) | Telefon | Tek sütun, alt menü, antrenman ekranı büyük dokunma hedefleriyle |
+| **PT — oluşturma** (`/dashboard`) | **Masaüstü** | Kenar menü, çok sütunlu ekranlar; telefonda da çalışır |
+| **PT — salonda** | Telefon | Şu an antrenman yapanlar (canlı), bugünün planı, hızlı not |
+
+Oluşturma işi (şablon kurmak, program atamak, birkaç danışanı yan yana görmek) büyük ekranda çok daha verimli; PT ekranları masaüstü için tasarlanır. Salondayken kullanılacak kısımlar telefonda öne çıkar.
+
+**PT:** giriş · danışan listesi + detayı yan yana · antrenman şablonu düzenleyici (kütüphaneden sürükle-bırak) · egzersiz kütüphanesi · davet QR ekranı · canlı görünüm · ayarlar (marka, yönetim işlemleri).
 
 **Danışan:** kodla giriş · bugünün antrenmanı · antrenman ekranı (set kaydı, dinlenme sayacı, su sayacı, sürükle-bırak) · antrenmanlarım (kendi şablonları, serbest antrenman) · geçmiş · profil · bağlantılar.
 
@@ -153,9 +161,16 @@ Kodun kendisi hiçbir yerde saklanmaz; `localStorage`'da yalnızca "hangi danı�
 
 ---
 
-## 7. Antrenman sırasında yazma davranışı
+## 7. Antrenman sırasında yazma davranışı — set başına, canlı
 
-Setler antrenman boyunca tarayıcıda tutulur (sekme kapanırsa kaybolmaz). Antrenman bitince **tek commit** gider. Her sete commit atılmaz: yavaş olur ve repo'yu şişirir.
+**Her set bitince bir commit.** Danışan başına ayrı repo olduğu için o repo'nun commit geçmişi doğrudan antrenman günlüğüdür: `Set 3/4 · Bench Press · 80 kg × 8`, dakikası dakikasına.
+
+- **Ekran beklemez:** set kaydı önce telefonda tutulur, yazma arka planda kuyruğa girer.
+- **Çevrimdışı güvenli:** salonda çekim yoksa kuyruk birikir, bağlantı gelince sırayla gönderilir. Telefon kapansa da kayıt kaybolmaz.
+- **Tek dosya, sırayla:** her antrenman tek bir oturum dosyasıdır (`sessions/<tarih>-<id>.json`); yalnız o danışanın kuyruğu yazar, sırayla — çakışma olmaz.
+- **PT canlı görür:** PT ekranında açık olan antrenman 10 sn'de bir tazelenir; genel görünüm (şu an kimler çalışıyor) daha seyrek. Yalnız ekrandaki veri çekilir.
+
+**Sınır (GitHub):** içerik yazan istekler için dakikada 80, saatte 500 üst sınırı var. Set başına bir yazmayla bu, **aynı saat içinde ~20 tam antrenman** demek. 10-30 danışanlı bir antrenörde aynı saatte 3-8 kişi çalışır; pay rahat ama izlenecek sayı budur.
 
 ---
 
@@ -222,9 +237,9 @@ Uygulama beyaz etiketli: paketin adı `pulsecoach`, yayınlanan kurulumun adın�
 |---|---|
 | 0 | Proje iskeleti, tasarım tokenları, PT girişi |
 | 1 | Kurulum sihirbazı (ad, logo, renk, tema) + GitHub veri katmanı (repo koruma kuralı dahil) |
-| 2 | Egzersiz kütüphanesi, antrenman şablonu düzenleyici |
+| 2 | Egzersiz kütüphanesi ✓ · **PT kabuğu** (masaüstünde kenar menü, telefonda alt menü) |
 | 3 | Danışan ekleme (repo açma), sağlık modülü seçimi, QR davet, danışan girişi |
-| 4 | Antrenman ekranı (tarayıcıda tut, sonunda tek commit), geçmiş |
+| 4 | Antrenman şablonu düzenleyici · antrenman ekranı (**set başına canlı yazma**, çevrimdışı kuyruk) · PT canlı görünüm · geçmiş |
 | 5 | Sağlık modülü ekranları, onay akışı |
 | 6 | Yönetim işlemleri (silme, dışa aktarma, yedek), JSON şeması + doğrulama, AI için PR kuralı |
 | 7 | Bağlantılar (danışanların birbirini görmesi) |

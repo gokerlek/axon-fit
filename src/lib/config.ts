@@ -1,4 +1,5 @@
 import 'server-only';
+import { revalidateTag, unstable_cache } from 'next/cache';
 import * as v from 'valibot';
 import { appRepo } from './github/client';
 import { readJson, writeJson } from './github/files';
@@ -13,39 +14,43 @@ export { appConfigSchema, CONFIG_PATH, defaultConfig, type AppConfig };
  * önbellek düşürülür, böylece PT ayarı değiştirince sonucu hemen görür.
  */
 
-const CACHE_TTL_MS = 30_000;
-let cache: { value: AppConfig; sha: string | null; at: number } | null = null;
+/**
+ * Önbellek: Next'in veri önbelleği (sunucu örnekleri arasında paylaşılır).
+ *
+ * Bellek içi önbellek burada YANLIŞ olurdu: Next sayfaları ve API uçlarını ayrı
+ * paketlerde çalıştırır, Vercel'de birden fazla örnek vardır; bir yerde düşürülen
+ * önbellek diğerlerinde yaşamaya devam eder (ör. logo silinince kırık görsel).
+ */
+export const CONFIG_TAG = 'app-config';
 
-export function invalidateConfigCache(): void {
-  cache = null;
-}
-
-/** Ayarı okur. GitHub'a ulaşılamazsa uygulama düşmez: varsayılanla açılır. */
-export async function readAppConfig(): Promise<AppConfig> {
-  return (await readAppConfigWithSha()).config;
-}
-
-export async function readAppConfigWithSha(): Promise<{ config: AppConfig; sha: string | null }> {
-  if (cache && Date.now() - cache.at < CACHE_TTL_MS) {
-    return { config: cache.value, sha: cache.sha };
-  }
-
-  try {
+/** Hata önbelleğe ALINMAZ: fırlatılır; `unstable_cache` fırlatılan sonucu saklamaz. */
+const readFromGithub = unstable_cache(
+  async (): Promise<{ config: AppConfig; sha: string | null }> => {
     const stored = await readJson<unknown>(appRepo(), CONFIG_PATH);
     if (!stored) return { config: defaultConfig, sha: null };
-
     const parsed = v.safeParse(appConfigSchema, stored.content);
     // Bozuk ayar uygulamayı düşürmez: varsayılana dönülür, kurulum sihirbazı devreye girer.
-    const config = parsed.success ? parsed.output : defaultConfig;
-    cache = { value: config, sha: stored.sha, at: Date.now() };
-    return { config, sha: stored.sha };
+    return { config: parsed.success ? parsed.output : defaultConfig, sha: stored.sha };
+  },
+  ['app-config'],
+  { tags: [CONFIG_TAG], revalidate: 300 },
+);
+
+/** Ayarı okur. GitHub'a ulaşılamazsa uygulama düşmez: varsayılanla açılır (ve bu önbelleğe girmez). */
+export async function readAppConfig(): Promise<AppConfig> {
+  try {
+    return (await readFromGithub()).config;
   } catch {
-    return { config: defaultConfig, sha: null };
+    return defaultConfig;
   }
 }
 
+/**
+ * Ayarı yazar. `sha` önbellekten değil TAZE okunur: önbellekteki sha eskiyse
+ * GitHub yazmayı çakışma olarak reddeder.
+ */
 export async function writeAppConfig(config: AppConfig, message: string): Promise<void> {
-  const { sha } = await readAppConfigWithSha();
-  await writeJson(appRepo(), CONFIG_PATH, config, { sha: sha ?? undefined, message });
-  invalidateConfigCache();
+  const current = await readJson<unknown>(appRepo(), CONFIG_PATH);
+  await writeJson(appRepo(), CONFIG_PATH, config, { sha: current?.sha, message });
+  revalidateTag(CONFIG_TAG, { expire: 0 });
 }
