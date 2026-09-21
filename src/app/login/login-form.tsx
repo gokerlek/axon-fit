@@ -54,7 +54,7 @@ export function LoginForm() {
               <Input
                 {...field.props}
                 id="code"
-                className="tabular h-11 text-center text-lg tracking-[0.4em]"
+                className="tabular-nums h-11 text-center text-lg tracking-[0.4em]"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 maxLength={OTP_LENGTH}

@@ -55,7 +55,7 @@ export function ExerciseList({ initial }: { initial: ExerciseWithSource[] }) {
         title="Egzersizler"
         description={
           <>
-            <span className="tabular">{exercises.length}</span> egzersiz · <span className="tabular">{customCount}</span>{' '}
+            <span className="tabular-nums">{exercises.length}</span> egzersiz · <span className="tabular-nums">{customCount}</span>{' '}
             tanesi senin
           </>
         }

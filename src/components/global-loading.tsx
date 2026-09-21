@@ -2,16 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { useIsFetching, useIsMutating } from '@tanstack/react-query';
+import { Progress } from '@/components/ui/progress';
 
 /** Kısa isteklerde çubuğun yanıp sönmesini engelleyen eşik. */
 const DELAY_MS = 200;
 
 /**
- * Uygulama genelinde yükleniyor göstergesi.
+ * Uygulama genelinde yükleniyor göstergesi — shadcn Progress, belirsiz durumda (`value={null}`).
  *
- * Ekranlar kendi yükleniyor durumlarını düğmelerde göstermeye devam eder (dokunulan
- * şeyin tepki vermesi için). Bu çubuk, arka planda süren her isteği tek yerden bildirir:
- * GitHub yazmaları yarım saniye civarı sürdüğü için kullanıcı "takıldı mı" diye düşünmesin.
+ * Ekranlar kendi yükleniyor durumlarını düğmelerde göstermeye devam eder. Bu çubuk arka planda
+ * süren her isteği tek yerden bildirir: GitHub yazmaları yarım saniye civarı sürüyor.
  */
 export function GlobalLoading() {
   const busy = useIsFetching() + useIsMutating() > 0;
@@ -29,11 +29,10 @@ export function GlobalLoading() {
   if (!visible) return null;
 
   return (
-    <div
-      role="status"
+    <Progress
+      value={null}
       aria-label="Yükleniyor"
-      className="fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden bg-primary/20">
-      <div className="h-full w-2/5 animate-[loading-bar_1.1s_ease-out_infinite] bg-primary motion-reduce:w-full motion-reduce:animate-none motion-reduce:opacity-60" />
-    </div>
+      className="fixed inset-x-0 top-0 z-50 [&_[data-slot=progress-indicator]]:w-full [&_[data-slot=progress-indicator]]:animate-pulse [&_[data-slot=progress-track]]:h-0.5 [&_[data-slot=progress-track]]:rounded-none"
+    />
   );
 }

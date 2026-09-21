@@ -23,7 +23,7 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader>
             <CardDescription>Danışan</CardDescription>
-            <CardTitle className="tabular text-4xl">{clientIds.length}</CardTitle>
+            <CardTitle className="tabular-nums text-4xl">{clientIds.length}</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">Danışan ekleme sıradaki adım.</CardContent>
         </Card>
@@ -31,7 +31,7 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader>
             <CardDescription>Şu an antrenmanda</CardDescription>
-            <CardTitle className="tabular text-4xl">—</CardTitle>
+            <CardTitle className="tabular-nums text-4xl">—</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">Canlı görünüm antrenman ekranıyla gelecek.</CardContent>
         </Card>
@@ -40,7 +40,7 @@ export default async function DashboardPage() {
           <Card className="h-full transition-colors hover:bg-muted/50">
             <CardHeader>
               <CardDescription>Egzersiz</CardDescription>
-              <CardTitle className="tabular text-4xl">{exercises.length}</CardTitle>
+              <CardTitle className="tabular-nums text-4xl">{exercises.length}</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">{custom} tanesi senin.</CardContent>
           </Card>

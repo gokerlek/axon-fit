@@ -338,7 +338,7 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
                   id="loadIncrementKg"
                   type="number"
                   step="0.5"
-                  className="tabular"
+                  className="tabular-nums"
                   value={field.input ?? 0}
                 />
                 <FieldDescription>
@@ -357,7 +357,7 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
                   id="minLoadKg"
                   type="number"
                   step="0.5"
-                  className="tabular"
+                  className="tabular-nums"
                   value={field.input ?? 0}
                 />
                 <FieldDescription>

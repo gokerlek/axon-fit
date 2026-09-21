@@ -10,6 +10,7 @@ import {
 } from "@formisch/react";
 import { Check } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -25,6 +26,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Item, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { readableOn } from "@/lib/color";
@@ -121,9 +123,11 @@ export function SetupForm({
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex items-center gap-3">
-            <div className="grid size-11 shrink-0 place-items-center rounded-md bg-primary text-lg font-bold text-primary-foreground">
-              {(appName || "P").trim().charAt(0).toUpperCase()}
-            </div>
+            <Avatar className="size-11 rounded-md after:rounded-md">
+              <AvatarFallback className="rounded-md bg-primary text-lg font-bold text-primary-foreground">
+                {(appName || 'P').trim().charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
             <div className="min-w-0">
               <p className="truncate font-semibold">
                 {appName || "Uygulama adı"}
@@ -140,12 +144,12 @@ export function SetupForm({
             </Button>
             <Badge>Yeni rekor</Badge>
           </div>
-          <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-            <p className="font-medium">Bench Press</p>
-            <p className="tabular text-muted-foreground">
-              4 set · 8 tekrar · 60 kg
-            </p>
-          </div>
+          <Item variant="outline" size="sm">
+            <ItemContent>
+              <ItemTitle>Bench Press</ItemTitle>
+              <ItemDescription className="tabular-nums">4 set · 8 tekrar · 60 kg</ItemDescription>
+            </ItemContent>
+          </Item>
         </CardContent>
       </Card>
 

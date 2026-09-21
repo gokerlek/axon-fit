@@ -130,17 +130,3 @@
     @apply font-sans;
     }
 }
-/* Global yükleniyor çubuğu (src/components/global-loading.tsx) */
-@keyframes loading-bar {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(350%);
-  }
-}
-
-/* Rakamlar hizalı dursun: set, kilo, süre gibi değerler alt alta okunur. */
-.tabular {
-  font-variant-numeric: tabular-nums;
-}

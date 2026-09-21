@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Item, ItemContent, ItemGroup, ItemMedia, ItemTitle } from '@/components/ui/item';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { VideoEmbed } from '@/components/video-embed';
 import { getExercise } from '@/lib/exercises';
 import { formatKg } from '@/lib/format';
@@ -19,6 +21,16 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
   const { id } = await params;
   const exercise = await getExercise(id);
   if (!exercise) notFound();
+
+  const summary: [string, string][] = [
+    ['Hedef kas', MUSCLE_LABELS[exercise.targetMuscle]],
+    ['Ekipman', EQUIPMENT_LABELS[exercise.equipment]],
+    ['Tür', CATEGORY_LABELS[exercise.category]],
+    ['Kayıt', TRACKING_LABELS[exercise.trackingType]],
+    ...(exercise.trackingType === 'weight_reps'
+      ? ([['Artış / taban', `${formatKg(exercise.loadIncrementKg)} / ${formatKg(exercise.minLoadKg)}`]] as [string, string][])
+      : []),
+  ];
 
   const origin =
     exercise.source === 'library' ? 'Hazır kütüphane' : exercise.overridesLibrary ? 'Senin sürümün' : 'Senin egzersizin';
@@ -47,24 +59,16 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
               <CardDescription>{origin}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4 text-sm">
-              <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">
-                <dt className="text-muted-foreground">Hedef kas</dt>
-                <dd>{MUSCLE_LABELS[exercise.targetMuscle]}</dd>
-                <dt className="text-muted-foreground">Ekipman</dt>
-                <dd>{EQUIPMENT_LABELS[exercise.equipment]}</dd>
-                <dt className="text-muted-foreground">Tür</dt>
-                <dd>{CATEGORY_LABELS[exercise.category]}</dd>
-                <dt className="text-muted-foreground">Kayıt</dt>
-                <dd>{TRACKING_LABELS[exercise.trackingType]}</dd>
-                {exercise.trackingType === 'weight_reps' ? (
-                  <>
-                    <dt className="text-muted-foreground">Artış / taban</dt>
-                    <dd className="tabular">
-                      {formatKg(exercise.loadIncrementKg)} / {formatKg(exercise.minLoadKg)}
-                    </dd>
-                  </>
-                ) : null}
-              </dl>
+              <Table>
+                <TableBody>
+                  {summary.map(([label, value]) => (
+                    <TableRow key={label}>
+                      <TableCell className="w-40 text-muted-foreground">{label}</TableCell>
+                      <TableCell className="tabular-nums">{value}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
               {exercise.secondaryMuscles.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {exercise.secondaryMuscles.map((muscle) => (
@@ -84,11 +88,18 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
                 <CardDescription>Harekete başlarken danışana hatırlatılır.</CardDescription>
               </CardHeader>
               <CardContent>
-                <ol className="flex list-decimal flex-col gap-2 pl-5 text-sm marker:text-muted-foreground">
-                  {exercise.cues.map((cue) => (
-                    <li key={cue}>{cue}</li>
+                <ItemGroup className="gap-2">
+                  {exercise.cues.map((cue, index) => (
+                    <Item key={cue} variant="muted" size="sm">
+                      <ItemMedia variant="icon" className="tabular-nums text-muted-foreground">
+                        {index + 1}
+                      </ItemMedia>
+                      <ItemContent>
+                        <ItemTitle className="font-normal">{cue}</ItemTitle>
+                      </ItemContent>
+                    </Item>
                   ))}
-                </ol>
+                </ItemGroup>
               </CardContent>
             </Card>
           ) : null}

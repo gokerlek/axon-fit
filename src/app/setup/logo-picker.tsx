@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ImageSquare, Trash, UploadSimple } from '@phosphor-icons/react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { FieldDescription, FieldLabel } from '@/components/ui/field';
 import { fetchJson } from '@/lib/query/errors';
@@ -47,15 +48,12 @@ export function LogoPicker({ hasLogo }: { hasLogo: boolean }) {
     <div className="flex flex-col gap-2">
       <FieldLabel>Logo</FieldLabel>
       <div className="flex items-center gap-4">
-        <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted">
-          {preview ? (
-            // Tek bir marka dosyası; Next/Image'a gerek yok.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="Yüklenen logo" className="size-full object-contain" />
-          ) : (
-            <ImageSquare className="size-6 text-muted-foreground" aria-hidden />
-          )}
-        </div>
+        <Avatar className="size-16 rounded-lg after:rounded-lg">
+          {preview ? <AvatarImage src={preview} alt="Yüklenen logo" className="rounded-lg object-contain" /> : null}
+          <AvatarFallback className="rounded-lg">
+            <ImageSquare className="size-6" aria-hidden />
+          </AvatarFallback>
+        </Avatar>
 
         <input
           ref={inputRef}
