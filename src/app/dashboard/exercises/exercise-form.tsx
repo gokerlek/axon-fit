@@ -1,6 +1,14 @@
 'use client';
 
-import { Field, FieldArray, Form, getDeepError, insert, remove, setInput, useForm } from '@formisch/react';
+import { Field as FormField, FieldArray, Form, getDeepError, insert, remove, setInput, useForm } from '@formisch/react';
+import { Plus, X } from '@phosphor-icons/react';
+import { Button } from '@/components/ui/button';
+import { DialogFooter } from '@/components/ui/dialog';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { fetchJson } from '@/lib/query/errors';
 import { applyFieldErrors } from '@/lib/query/field-errors';
 import { useServiceMutation } from '@/lib/query/use-service';
@@ -17,7 +25,6 @@ import {
   type ExerciseInput,
   type Muscle,
 } from '@/lib/schemas/exercise';
-import styles from './exercises.module.css';
 
 const TRACKING_LABELS: Record<(typeof TRACKING_TYPES)[number], string> = {
   weight_reps: 'Ağırlık + tekrar',
@@ -38,40 +45,47 @@ const BLANK: ExerciseInput = {
   minLoadKg: 0,
 };
 
-/**
- * Egzersiz ekleme/düzenleme.
- *
- * İpuçları `FieldArray` ile: satır eklenip çıkarılabiliyor. Kaydedince PT'nin
- * repo'sundaki `data/exercises.json` güncellenir ve liste tazelenir.
- */
 /** Düzenlemede kimlik forma girmez: şemada yok. */
 function toInput({ id: _id, ...rest }: Exercise): ExerciseInput {
   return rest;
 }
 
-function FormErrorSummary({ form }: { form: ReturnType<typeof useForm<typeof exerciseFormSchema>> }) {
-  const error = getDeepError(form);
-  if (!error) return null;
+/** Açılır liste: Base UI `items` ile seçili değerin Türkçe etiketini gösterir. */
+function LabeledSelect<T extends string>({
+  id,
+  value,
+  labels,
+  onChange,
+}: {
+  id: string;
+  value: T | undefined;
+  labels: Record<T, string>;
+  onChange: (value: T) => void;
+}) {
+  const items = Object.entries(labels).map(([key, label]) => ({ value: key, label: label as string }));
   return (
-    <p role="alert" className={styles.error}>
-      {error}
-    </p>
+    <Select items={items} value={value ?? null} onValueChange={(next) => next && onChange(next as T)}>
+      <SelectTrigger id={id} className="w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {items.map((item) => (
+          <SelectItem key={item.value} value={item.value}>
+            {item.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
-export function ExerciseForm({
-  editing,
-  onDone,
-  onCancel,
-}: {
-  editing: Exercise | null;
-  onDone: () => void;
-  onCancel: () => void;
-}) {
-  const form = useForm({
-    schema: exerciseFormSchema,
-    initialInput: editing ? toInput(editing) : BLANK,
-  });
+/**
+ * Egzersiz ekleme/düzenleme (diyalog içinde).
+ * İpuçları `FieldArray` ile satır satır. Kaydedince PT'nin repo'sundaki
+ * `data/exercises.json` güncellenir, liste `invalidate` ile tazelenir.
+ */
+export function ExerciseForm({ editing, onDone }: { editing: Exercise | null; onDone: () => void }) {
+  const form = useForm({ schema: exerciseFormSchema, initialInput: editing ? toInput(editing) : BLANK });
 
   const save = useServiceMutation({
     fn: (values: ExerciseInput) =>
@@ -86,235 +100,195 @@ export function ExerciseForm({
     onSuccess: onDone,
   });
 
+  // Ekranda karşılığı olmayan bir doğrulama hatası kalırsa form sessizce gönderilmez;
+  // bu özet o durumu görünür kılar.
+  const hiddenError = getDeepError(form);
+
   return (
     <Form
       of={form}
-      className={styles.panel}
+      className="flex flex-col gap-5"
       onSubmit={(values) => save.mutateAsync(values as ExerciseInput).catch(() => undefined)}>
-      {/* Ekranda karşılığı olmayan bir doğrulama hatası kalırsa form sessizce
-          gönderilmez; bu özet o durumu görünür kılar. */}
-      <FormErrorSummary form={form} />
-      <Field of={form} path={['title']}>
+      <FormField of={form} path={['title']}>
         {(field) => (
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor="title">
-              Egzersiz adı
-            </label>
-            <input {...field.props} id="title" className={styles.input} value={field.input ?? ''} />
-            {field.errors ? <p className={styles.error}>{field.errors[0]}</p> : null}
-          </div>
+          <Field data-invalid={Boolean(field.errors) || undefined}>
+            <FieldLabel htmlFor="title">Egzersiz adı</FieldLabel>
+            <Input {...field.props} id="title" value={field.input ?? ''} aria-invalid={Boolean(field.errors) || undefined} />
+            <FieldError>{field.errors?.[0]}</FieldError>
+          </Field>
         )}
-      </Field>
+      </FormField>
 
-      <Field of={form} path={['description']}>
+      <FormField of={form} path={['description']}>
         {(field) => (
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor="description">
-              Açıklama
-            </label>
-            <textarea
+          <Field data-invalid={Boolean(field.errors) || undefined}>
+            <FieldLabel htmlFor="description">Açıklama</FieldLabel>
+            <Textarea
               {...field.props}
               id="description"
-              className={styles.textarea}
               value={field.input ?? ''}
               placeholder="Hareketin ne işe yaradığı, kısa."
+              rows={2}
             />
-            {field.errors ? <p className={styles.error}>{field.errors[0]}</p> : null}
-          </div>
+            <FieldError>{field.errors?.[0]}</FieldError>
+          </Field>
         )}
-      </Field>
+      </FormField>
 
-      <div className={styles.field}>
-        <span className={styles.label}>İpuçları</span>
+      <Field>
+        <FieldLabel>İpuçları</FieldLabel>
         <FieldArray of={form} path={['cues']}>
           {(array) => (
-            <>
+            <div className="flex flex-col gap-2">
               {array.items.map((item, index) => (
-                <div key={item} className={styles.cueRow}>
-                  <Field of={form} path={['cues', index]}>
+                <div key={item} className="flex gap-2">
+                  <FormField of={form} path={['cues', index]}>
                     {(field) => (
-                      <input
+                      <Input
                         {...field.props}
-                        className={styles.input}
                         value={field.input ?? ''}
                         placeholder="Kürek kemiklerini sıkıştır"
+                        aria-label={`${index + 1}. ipucu`}
                       />
                     )}
-                  </Field>
-                  <button
+                  </FormField>
+                  <Button
                     type="button"
-                    className={`${styles.iconButton} ${styles.danger}`}
+                    variant="ghost"
+                    size="icon"
                     aria-label={`${index + 1}. ipucunu sil`}
                     onClick={() => remove(form, { path: ['cues'], at: index })}>
-                    Sil
-                  </button>
+                    <X />
+                  </Button>
                 </div>
               ))}
               {array.items.length < 6 ? (
-                <button
+                <Button
                   type="button"
-                  className={styles.ghost}
+                  variant="outline"
+                  size="sm"
+                  className="self-start"
                   onClick={() => insert(form, { path: ['cues'], initialInput: '' })}>
+                  <Plus data-icon="inline-start" />
                   İpucu ekle
-                </button>
+                </Button>
               ) : null}
-            </>
+            </div>
           )}
         </FieldArray>
-      </div>
-
-      <div className={styles.row}>
-        <Field of={form} path={['targetMuscle']}>
-          {(field) => (
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="targetMuscle">
-                Hedef kas
-              </label>
-              <select {...field.props} id="targetMuscle" className={styles.select} value={field.input ?? ''}>
-                {MUSCLES.map((muscle) => (
-                  <option key={muscle} value={muscle}>
-                    {MUSCLE_LABELS[muscle]}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </Field>
-
-        <Field of={form} path={['equipment']}>
-          {(field) => (
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="equipment">
-                Ekipman
-              </label>
-              <select {...field.props} id="equipment" className={styles.select} value={field.input ?? ''}>
-                {EQUIPMENT.map((item) => (
-                  <option key={item} value={item}>
-                    {EQUIPMENT_LABELS[item]}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </Field>
-      </div>
-
-      <div className={styles.row}>
-        <Field of={form} path={['category']}>
-          {(field) => (
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="category">
-                Tür
-              </label>
-              <select {...field.props} id="category" className={styles.select} value={field.input ?? ''}>
-                {CATEGORIES.map((item) => (
-                  <option key={item} value={item}>
-                    {CATEGORY_LABELS[item]}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </Field>
-
-        <Field of={form} path={['trackingType']}>
-          {(field) => (
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="trackingType">
-                Kayıt türü
-              </label>
-              <select {...field.props} id="trackingType" className={styles.select} value={field.input ?? ''}>
-                {TRACKING_TYPES.map((item) => (
-                  <option key={item} value={item}>
-                    {TRACKING_LABELS[item]}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </Field>
-      </div>
-
-      <Field of={form} path={['secondaryMuscles']}>
-        {(field) => {
-          const selected = (field.input ?? []) as Muscle[];
-          return (
-            <div className={styles.field}>
-              <span className={styles.label}>Yardımcı kaslar</span>
-              <div className={styles.filters}>
-                {MUSCLES.map((muscle) => {
-                  const on = selected.includes(muscle);
-                  return (
-                    <button
-                      key={muscle}
-                      type="button"
-                      className={styles.chip}
-                      aria-pressed={on}
-                      onClick={() =>
-                        setInput(form, {
-                          path: ['secondaryMuscles'],
-                          input: on ? selected.filter((item) => item !== muscle) : [...selected, muscle],
-                        })
-                      }>
-                      {MUSCLE_LABELS[muscle]}
-                    </button>
-                  );
-                })}
-              </div>
-              {field.errors ? <p className={styles.error}>{field.errors[0]}</p> : null}
-            </div>
-          );
-        }}
       </Field>
 
-      <div className={styles.row}>
-        <Field of={form} path={['loadIncrementKg']}>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FormField of={form} path={['targetMuscle']}>
           {(field) => (
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="loadIncrementKg">
-                Artış (kg)
-              </label>
-              <input
-                {...field.props}
-                id="loadIncrementKg"
-                className={styles.input}
-                type="number"
-                step="0.5"
-                value={field.input ?? 0}
+            <Field>
+              <FieldLabel htmlFor="targetMuscle">Hedef kas</FieldLabel>
+              <LabeledSelect
+                id="targetMuscle"
+                value={field.input}
+                labels={MUSCLE_LABELS}
+                onChange={(value) => setInput(form, { path: ['targetMuscle'], input: value })}
               />
-              {field.errors ? <p className={styles.error}>{field.errors[0]}</p> : null}
-            </div>
+            </Field>
           )}
-        </Field>
-
-        <Field of={form} path={['minLoadKg']}>
+        </FormField>
+        <FormField of={form} path={['equipment']}>
           {(field) => (
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="minLoadKg">
-                Taban ağırlık (kg)
-              </label>
-              <input
-                {...field.props}
-                id="minLoadKg"
-                className={styles.input}
-                type="number"
-                step="0.5"
-                value={field.input ?? 0}
+            <Field>
+              <FieldLabel htmlFor="equipment">Ekipman</FieldLabel>
+              <LabeledSelect
+                id="equipment"
+                value={field.input}
+                labels={EQUIPMENT_LABELS}
+                onChange={(value) => setInput(form, { path: ['equipment'], input: value })}
               />
-              {field.errors ? <p className={styles.error}>{field.errors[0]}</p> : null}
-            </div>
+            </Field>
           )}
-        </Field>
+        </FormField>
+        <FormField of={form} path={['category']}>
+          {(field) => (
+            <Field>
+              <FieldLabel htmlFor="category">Tür</FieldLabel>
+              <LabeledSelect
+                id="category"
+                value={field.input}
+                labels={CATEGORY_LABELS}
+                onChange={(value) => setInput(form, { path: ['category'], input: value })}
+              />
+            </Field>
+          )}
+        </FormField>
+        <FormField of={form} path={['trackingType']}>
+          {(field) => (
+            <Field>
+              <FieldLabel htmlFor="trackingType">Kayıt türü</FieldLabel>
+              <LabeledSelect
+                id="trackingType"
+                value={field.input}
+                labels={TRACKING_LABELS}
+                onChange={(value) => setInput(form, { path: ['trackingType'], input: value })}
+              />
+            </Field>
+          )}
+        </FormField>
       </div>
 
-      <div className={styles.actions}>
-        <button type="button" className={styles.ghost} onClick={onCancel}>
-          Vazgeç
-        </button>
-        <button type="submit" className={styles.primary} disabled={save.isPending}>
+      <FormField of={form} path={['secondaryMuscles']}>
+        {(field) => (
+          <Field data-invalid={Boolean(field.errors) || undefined}>
+            <FieldLabel>Yardımcı kaslar</FieldLabel>
+            <ToggleGroup
+              multiple
+              variant="outline"
+              size="sm"
+              className="flex-wrap justify-start"
+              value={(field.input ?? []) as Muscle[]}
+              onValueChange={(value) => setInput(form, { path: ['secondaryMuscles'], input: value as Muscle[] })}>
+              {MUSCLES.map((muscle) => (
+                <ToggleGroupItem key={muscle} value={muscle}>
+                  {MUSCLE_LABELS[muscle]}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+            <FieldError>{field.errors?.[0]}</FieldError>
+          </Field>
+        )}
+      </FormField>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FormField of={form} path={['loadIncrementKg']}>
+          {(field) => (
+            <Field data-invalid={Boolean(field.errors) || undefined}>
+              <FieldLabel htmlFor="loadIncrementKg">Artış (kg)</FieldLabel>
+              <Input {...field.props} id="loadIncrementKg" type="number" step="0.5" className="tabular" value={field.input ?? 0} />
+              <FieldDescription>Bir sonraki sette önerilecek artış.</FieldDescription>
+              <FieldError>{field.errors?.[0]}</FieldError>
+            </Field>
+          )}
+        </FormField>
+        <FormField of={form} path={['minLoadKg']}>
+          {(field) => (
+            <Field data-invalid={Boolean(field.errors) || undefined}>
+              <FieldLabel htmlFor="minLoadKg">Taban ağırlık (kg)</FieldLabel>
+              <Input {...field.props} id="minLoadKg" type="number" step="0.5" className="tabular" value={field.input ?? 0} />
+              <FieldDescription>Bar ya da aletin kendi ağırlığı.</FieldDescription>
+              <FieldError>{field.errors?.[0]}</FieldError>
+            </Field>
+          )}
+        </FormField>
+      </div>
+
+      {hiddenError ? (
+        <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {hiddenError}
+        </p>
+      ) : null}
+
+      <DialogFooter>
+        <Button type="submit" disabled={save.isPending}>
           {save.isPending ? 'Kaydediliyor…' : 'Kaydet'}
-        </button>
-      </div>
+        </Button>
+      </DialogFooter>
     </Form>
   );
 }

@@ -2,15 +2,15 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ImageSquare, Trash, UploadSimple } from '@phosphor-icons/react';
+import { Button } from '@/components/ui/button';
+import { FieldDescription, FieldLabel } from '@/components/ui/field';
 import { fetchJson } from '@/lib/query/errors';
 import { useServiceMutation } from '@/lib/query/use-service';
-import styles from './setup.module.css';
 
 /**
- * Logo yükleme.
- *
- * Dosya seçilir seçilmez yüklenir (ayrı bir "yükle" düğmesi beklemeye değmez).
- * Seçilen dosya önce tarayıcıda gösterilir; sunucudan dönen yolla tazelenir.
+ * Logo yükleme. Dosya seçilir seçilmez yüklenir; önce tarayıcıda önizlenir,
+ * sunucudan dönünce kalıcı adresle tazelenir.
  */
 export function LogoPicker({ hasLogo }: { hasLogo: boolean }) {
   const router = useRouter();
@@ -25,7 +25,7 @@ export function LogoPicker({ hasLogo }: { hasLogo: boolean }) {
     },
     notify: { success: 'Logo yüklendi.' },
     onSuccess: () => {
-      // Önbelleği atlat: aynı adres, yeni içerik.
+      // Aynı adres, yeni içerik: önbelleği atlat.
       setPreview(`/api/brand/logo?v=${Date.now()}`);
       router.refresh();
     },
@@ -44,45 +44,47 @@ export function LogoPicker({ hasLogo }: { hasLogo: boolean }) {
   const busy = upload.isPending || remove.isPending;
 
   return (
-    <div>
-      <span className={styles.label}>Logo</span>
-      <div className={styles.logoRow}>
-        <div className={styles.logoBox}>
+    <div className="flex flex-col gap-2">
+      <FieldLabel>Logo</FieldLabel>
+      <div className="flex items-center gap-4">
+        <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted">
           {preview ? (
-            // Sunucudan gelen tek bir marka dosyası; Next/Image'a gerek yok.
+            // Tek bir marka dosyası; Next/Image'a gerek yok.
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="Yüklenen logo" className={styles.logoImage} />
+            <img src={preview} alt="Yüklenen logo" className="size-full object-contain" />
           ) : (
-            <span className={styles.logoEmpty}>yok</span>
+            <ImageSquare className="size-6 text-muted-foreground" aria-hidden />
           )}
         </div>
 
-        <div className={styles.logoActions}>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className={styles.fileInput}
-            id="logo"
-            disabled={busy}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (!file) return;
-              setPreview(URL.createObjectURL(file));
-              upload.mutate(file);
-            }}
-          />
-          <label htmlFor="logo" className={styles.secondary} aria-disabled={busy}>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="sr-only"
+          id="logo"
+          disabled={busy}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            setPreview(URL.createObjectURL(file));
+            upload.mutate(file);
+          }}
+        />
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" disabled={busy} onClick={() => inputRef.current?.click()}>
+            <UploadSimple data-icon="inline-start" />
             {upload.isPending ? 'Yükleniyor…' : preview ? 'Değiştir' : 'Dosya seç'}
-          </label>
+          </Button>
           {preview ? (
-            <button type="button" className={styles.ghost} disabled={busy} onClick={() => remove.mutate()}>
+            <Button type="button" variant="ghost" disabled={busy} onClick={() => remove.mutate()}>
+              <Trash data-icon="inline-start" />
               {remove.isPending ? 'Kaldırılıyor…' : 'Kaldır'}
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>
-      <p className={styles.hint}>PNG, JPG veya WebP · en fazla 512 KB. Sekme ikonu da bundan üretilir.</p>
+      <FieldDescription>PNG, JPG veya WebP · en fazla 512 KB. Sekme ikonu da bundan üretilir.</FieldDescription>
     </div>
   );
 }

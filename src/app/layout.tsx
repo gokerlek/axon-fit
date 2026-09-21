@@ -1,7 +1,16 @@
 import type { Metadata, Viewport } from 'next';
+import { Geist_Mono, Outfit } from 'next/font/google';
 import { Providers } from '@/components/providers';
 import { readAppConfig } from '@/lib/config';
-import '@/styles/globals.css';
+import { RADIUS_OPTIONS } from '@/lib/schemas/config';
+import { readableOn } from '@/lib/color';
+import { cn } from '@/lib/utils';
+import './globals.css';
+
+// latin-ext şart: ğ ş ı İ bu alt kümede. Yalnız 'latin' yüklenirse bu harfler
+// sistem yazı tipine düşer ve kelimelerin ortasında farklı görünür.
+const outfit = Outfit({ subsets: ['latin', 'latin-ext'], variable: '--font-sans' });
+const geistMono = Geist_Mono({ subsets: ['latin', 'latin-ext'], variable: '--font-mono' });
 
 export async function generateMetadata(): Promise<Metadata> {
   const config = await readAppConfig();
@@ -19,25 +28,28 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: [
-    { media: '(prefers-color-scheme: dark)', color: '#0a0c0b' },
-    { media: '(prefers-color-scheme: light)', color: '#f3f4ef' },
-  ],
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const config = await readAppConfig();
-  // 'system' seçiliyken data-theme yazılmaz: tokenlar işletim sistemi tercihine düşer.
-  const themeAttr = config.theme === 'system' ? undefined : config.theme;
-  // Özel vurgu rengi tokenları satır içinde ezer (SPEC §10).
-  const accentStyle = config.accent
-    ? ({ '--accent': config.accent, '--accent-text': config.accent, '--accent-indicator': config.accent } as React.CSSProperties)
-    : undefined;
+
+  // PT'nin seçtiği ana renk temanın --primary değişkenini ezer; üzerindeki yazı rengi
+  // kontrasta göre hesaplanır (açık renkte koyu yazı, koyu renkte açık yazı).
+  const brandStyle = {
+    '--radius': RADIUS_OPTIONS[config.radius].value,
+    ...(config.accent
+      ? { '--primary': config.accent, '--primary-foreground': readableOn(config.accent) }
+      : {}),
+  } as React.CSSProperties;
 
   return (
-    <html lang="tr" data-theme={themeAttr} style={accentStyle}>
-      <body>
-        <Providers>{children}</Providers>
+    <html
+      lang="tr"
+      suppressHydrationWarning
+      style={brandStyle}
+      className={cn('font-sans antialiased', outfit.variable, geistMono.variable)}>
+      <body className="min-h-dvh bg-background text-foreground">
+        <Providers defaultTheme={config.theme}>{children}</Providers>
       </body>
     </html>
   );

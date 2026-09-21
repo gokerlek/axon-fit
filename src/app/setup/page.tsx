@@ -1,13 +1,10 @@
 import { readAppConfig } from '@/lib/config';
 import { requirePt } from '@/lib/guards';
 import { SetupForm } from './setup-form';
-import styles from './setup.module.css';
 
 /**
- * Kurulum sihirbazı (SPEC §10).
- *
- * İlk girişte buraya düşülür. Kurulum tamamlandıktan sonra aynı ekran
- * "Görünüm ayarları" olarak çalışmaya devam eder.
+ * Kurulum sihirbazı (SPEC §10). İlk girişte buraya düşülür; kurulumdan sonra
+ * aynı form Ayarlar → Görünüm'de çalışır.
  */
 export default async function SetupPage() {
   await requirePt();
@@ -15,11 +12,13 @@ export default async function SetupPage() {
   const firstRun = !config.setupCompleted;
 
   return (
-    <main className={styles.screen}>
-      <div className={styles.center}>
-        <header className={styles.header}>
-          <h1>{firstRun ? 'Uygulamanı kur' : 'Görünüm'}</h1>
-          <p>
+    <main className="min-h-dvh px-4 py-10">
+      <div className="mx-auto flex w-full max-w-lg flex-col gap-6">
+        <header className="flex flex-col gap-1">
+          <h1 className="font-heading text-2xl font-semibold tracking-tight">
+            {firstRun ? 'Uygulamanı kur' : 'Görünüm'}
+          </h1>
+          <p className="text-muted-foreground">
             {firstRun
               ? 'Danışanların göreceği ad, renk ve temayı seç. Hepsi sonradan değiştirilebilir.'
               : 'Uygulamanın adını, rengini ve temasını buradan değiştirebilirsin.'}
@@ -31,8 +30,9 @@ export default async function SetupPage() {
           hasLogo={Boolean(config.logo)}
           initial={{
             appName: config.appName,
-            accent: config.accent ?? '#D4FF3F',
+            accent: config.accent,
             theme: config.theme,
+            radius: config.radius,
           }}
         />
       </div>

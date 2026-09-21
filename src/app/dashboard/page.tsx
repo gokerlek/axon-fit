@@ -1,7 +1,7 @@
 import Link from 'next/link';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { listExercises } from '@/lib/exercises';
 import { listClientIds } from '@/lib/github/repos';
-import styles from './overview.module.css';
 
 /**
  * Genel bakış. Şimdilik sayılar; danışan ve antrenman ekranları geldikçe
@@ -15,29 +15,39 @@ export default async function DashboardPage() {
   const custom = exercises.filter((item) => item.source === 'custom').length;
 
   return (
-    <>
-      <h1 className={styles.hello}>Genel bakış</h1>
-      <p className={styles.sub}>Danışanların, şablonların ve egzersiz kütüphanen.</p>
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-col gap-1">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight">Genel bakış</h1>
+        <p className="text-muted-foreground">Danışanların, şablonların ve egzersiz kütüphanen.</p>
+      </header>
 
-      <div className={styles.grid}>
-        <div className={styles.card}>
-          <span className={styles.value}>{clientIds.length}</span>
-          <span className={styles.label}>Danışan</span>
-          <span className={styles.note}>Danışan ekleme sıradaki adım</span>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardDescription>Danışan</CardDescription>
+            <CardTitle className="tabular text-4xl">{clientIds.length}</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">Danışan ekleme sıradaki adım.</CardContent>
+        </Card>
 
-        <div className={styles.card}>
-          <span className={styles.value}>—</span>
-          <span className={styles.label}>Şu an antrenmanda</span>
-          <span className={styles.note}>Canlı görünüm antrenman ekranıyla gelecek</span>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardDescription>Şu an antrenmanda</CardDescription>
+            <CardTitle className="tabular text-4xl">—</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">Canlı görünüm antrenman ekranıyla gelecek.</CardContent>
+        </Card>
 
-        <Link href="/dashboard/exercises" className={styles.card}>
-          <span className={styles.value}>{exercises.length}</span>
-          <span className={styles.label}>Egzersiz</span>
-          <span className={styles.note}>{custom} tanesi senin</span>
+        <Link href="/dashboard/exercises" className="rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+          <Card className="h-full transition-colors hover:bg-muted/50">
+            <CardHeader>
+              <CardDescription>Egzersiz</CardDescription>
+              <CardTitle className="tabular text-4xl">{exercises.length}</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">{custom} tanesi senin.</CardContent>
+          </Card>
         </Link>
       </div>
-    </>
+    </div>
   );
 }

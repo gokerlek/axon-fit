@@ -45,7 +45,12 @@ export const exerciseSchema = v.object({
   title: v.pipe(v.string(), v.trim(), v.minLength(2, 'Egzersiz adı çok kısa.'), v.maxLength(60)),
   description: v.pipe(v.string(), v.trim(), v.maxLength(400, 'Açıklama en fazla 400 karakter.')),
   /** Harekete başlarken hatırlatılacak kısa maddeler. */
-  cues: v.pipe(v.array(v.pipe(v.string(), v.trim(), v.maxLength(120))), v.maxLength(6)),
+  cues: v.pipe(
+    v.array(v.pipe(v.string(), v.trim(), v.maxLength(120, 'İpucu en fazla 120 karakter.'))),
+    // Formda boş bırakılan satırlar kayda girmesin.
+    v.transform((items) => items.filter((item) => item.length > 0)),
+    v.maxLength(6, 'En fazla 6 ipucu.'),
+  ),
   category: v.picklist(CATEGORIES, 'Geçerli bir tür seç.'),
   trackingType: v.picklist(TRACKING_TYPES, 'Geçerli bir kayıt türü seç.'),
   equipment: v.picklist(EQUIPMENT, 'Geçerli bir ekipman seç.'),

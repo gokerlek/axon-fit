@@ -2,18 +2,20 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Field, Form, useForm } from '@formisch/react';
+import { Field as FormField, Form, useForm } from '@formisch/react';
+import { Button } from '@/components/ui/button';
+import { Field, FieldError, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 import { fetchJson } from '@/lib/query/errors';
 import { useServiceMutation } from '@/lib/query/use-service';
-import { enterCodeSchema, requestCodeSchema, OTP_LENGTH } from '@/lib/schemas/auth';
-import styles from './login.module.css';
+import { enterCodeSchema, OTP_LENGTH, requestCodeSchema } from '@/lib/schemas/auth';
 
 /**
  * Yedek giriş yolu (e-posta kodu).
  *
  * - Alan doğrulaması Formisch + Valibot: kurallar `@/lib/schemas/auth` içinde, sunucuyla ORTAK.
- * - İstek durumu React Query'de: `try/catch` yok, yükleniyor/failure oradan okunur.
- * - Kod adımı `meta.sessiz` ile bildirim çubuğunu susturur; failure alanın altında görünmeli.
+ * - İstek durumu React Query'de: `try/catch` yok, yükleniyor/hata oradan okunur.
+ * - Kod adımı bildirim çubuğunu susturur; yanlış kod hatası alanın altında görünmeli.
  */
 export function LoginForm() {
   const router = useRouter();
@@ -33,7 +35,6 @@ export function LoginForm() {
     fn: (code: string) =>
       fetchJson<{ ok: true }>('/api/auth/verify', { method: 'POST', body: JSON.stringify({ email, code }) }),
     onSuccess: () => router.replace('/dashboard'),
-    // Yanlış kod hatası alanın altında gösterilir; tepede balon çıkmaz.
     notify: 'none',
   });
 
@@ -41,54 +42,42 @@ export function LoginForm() {
     return (
       <Form
         of={codeForm}
-        className={styles.inner}
-        onSubmit={async (output) => {
-          await verify.mutateAsync(output.code).catch(() => undefined);
-        }}>
-        <Field of={codeForm} path={['code']}>
+        className="flex flex-col gap-3"
+        onSubmit={(output) => verify.mutateAsync(output.code).catch(() => undefined)}>
+        <FormField of={codeForm} path={['code']}>
           {(field) => (
-            <div>
-              <label className={styles.label} htmlFor="kod">
+            <Field data-invalid={Boolean(field.errors || verify.error) || undefined}>
+              <FieldLabel htmlFor="code">
                 {email} adresine gönderilen {OTP_LENGTH} haneli kod
-              </label>
-              <input
+              </FieldLabel>
+              <Input
                 {...field.props}
-                id="kod"
-                className={styles.input}
+                id="code"
+                className="tabular h-11 text-center text-lg tracking-[0.4em]"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 maxLength={OTP_LENGTH}
                 value={field.input ?? ''}
                 placeholder="000000"
                 autoFocus
+                aria-invalid={Boolean(field.errors || verify.error) || undefined}
               />
-              {field.errors ? (
-                <p role="alert" className={styles.error}>
-                  {field.errors[0]}
-                </p>
-              ) : null}
-            </div>
+              <FieldError>{field.errors?.[0] ?? verify.error?.message}</FieldError>
+            </Field>
           )}
-        </Field>
-
-        {verify.error ? (
-          <p role="alert" className={styles.error}>
-            {verify.error.message}
-          </p>
-        ) : null}
-
-        <button className={styles.primary} type="submit" disabled={verify.isPending}>
+        </FormField>
+        <Button type="submit" size="lg" className="h-11" disabled={verify.isPending}>
           {verify.isPending ? 'Kontrol ediliyor…' : 'Giriş yap'}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className={styles.google}
+          variant="ghost"
           onClick={() => {
             sendCode.reset();
             verify.reset();
           }}>
           Adresi değiştir
-        </button>
+        </Button>
       </Form>
     );
   }
@@ -96,39 +85,31 @@ export function LoginForm() {
   return (
     <Form
       of={emailForm}
-      className={styles.inner}
-      onSubmit={async (output) => {
-        await sendCode.mutateAsync(output.email).catch(() => undefined);
-      }}>
-      <Field of={emailForm} path={['email']}>
+      className="flex flex-col gap-3"
+      onSubmit={(output) => sendCode.mutateAsync(output.email).catch(() => undefined)}>
+      <FormField of={emailForm} path={['email']}>
         {(field) => (
-          <div>
-            <label className={styles.label} htmlFor="eposta">
-              E-posta adresi
-            </label>
-            <input
+          <Field data-invalid={Boolean(field.errors) || undefined}>
+            <FieldLabel htmlFor="email">E-posta adresi</FieldLabel>
+            <Input
               {...field.props}
-              id="eposta"
-              className={styles.input}
+              id="email"
+              className="h-11"
               type="email"
               inputMode="email"
               autoComplete="email"
               value={field.input ?? ''}
               placeholder="ornek@eposta.com"
+              aria-invalid={Boolean(field.errors) || undefined}
             />
-            {field.errors ? (
-              <p role="alert" className={styles.error}>
-                {field.errors[0]}
-              </p>
-            ) : null}
-          </div>
+            <FieldError>{field.errors?.[0]}</FieldError>
+          </Field>
         )}
-      </Field>
-
-      <button className={styles.primary} type="submit" disabled={sendCode.isPending}>
+      </FormField>
+      <Button type="submit" variant="outline" size="lg" className="h-11" disabled={sendCode.isPending}>
         {sendCode.isPending ? 'Gönderiliyor…' : 'Giriş kodu gönder'}
-      </button>
-      <p className={styles.note}>Kod 5 dakika geçerli, tek kullanımlık.</p>
+      </Button>
+      <p className="text-center text-xs text-muted-foreground">Kod 5 dakika geçerli, tek kullanımlık.</p>
     </Form>
   );
 }

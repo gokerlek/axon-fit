@@ -25,7 +25,7 @@ import {
   type MotionValue,
   type SpringOptions,
 } from 'motion/react';
-import styles from './dock.module.css';
+import { cn } from '@/lib/utils';
 
 export type DockEntry = {
   href: string;
@@ -81,13 +81,13 @@ function DockItem({
 
   const content = (
     <>
-      <span className={styles.icon} aria-hidden>
+      <span className="flex size-[46%] items-center justify-center [&_svg]:size-full" aria-hidden>
         {item.icon}
       </span>
       <AnimatePresence>
         {showLabel ? (
           <motion.span
-            className={styles.label}
+            className="pointer-events-none absolute bottom-[calc(100%+10px)] left-1/2 rounded-md border bg-popover px-2.5 py-1 text-xs font-medium whitespace-nowrap text-popover-foreground shadow-md"
             role="tooltip"
             initial={{ opacity: 0, y: 4, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
@@ -101,7 +101,14 @@ function DockItem({
   );
 
   const shared = {
-    className: styles.item,
+    className: cn(
+      'relative inline-flex shrink-0 items-center justify-center rounded-lg border bg-muted text-muted-foreground outline-none transition-colors',
+      'hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50',
+      // Aktif sayfa: ana renk tonu + altta nokta (macOS dock'taki gibi).
+      'aria-[current=page]:border-primary/40 aria-[current=page]:bg-primary/15 aria-[current=page]:text-primary',
+      'aria-[current=page]:after:absolute aria-[current=page]:after:-bottom-[7px] aria-[current=page]:after:left-1/2 aria-[current=page]:after:size-1 aria-[current=page]:after:-translate-x-1/2 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-primary',
+      'aria-disabled:cursor-default aria-disabled:opacity-40',
+    ),
     style: { width: size, height: size },
     onHoverStart: () => setShowLabel(true),
     onHoverEnd: () => setShowLabel(false),
@@ -141,15 +148,15 @@ export function Dock({
   const reduced = useReducedMotion() ?? false;
 
   return (
-    <div className={styles.layer}>
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
       <motion.nav
-        className={styles.panel}
+        className="pointer-events-auto flex items-end gap-2 rounded-2xl border bg-background/95 p-2 shadow-xl backdrop-blur-xl supports-backdrop-filter:bg-background/85"
         aria-label={ariaLabel}
         onMouseMove={({ pageX }) => mouseX.set(pageX)}
         onMouseLeave={() => mouseX.set(Infinity)}>
         {items.map((item) => (
           <Fragment key={item.href}>
-            {item.separatorBefore ? <span className={styles.separator} aria-hidden /> : null}
+            {item.separatorBefore ? <span className="mx-0.5 my-1 w-px self-stretch bg-border" aria-hidden /> : null}
             <DockItem
               item={item}
               mouseX={mouseX}

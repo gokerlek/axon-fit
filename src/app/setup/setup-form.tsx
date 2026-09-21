@@ -1,13 +1,28 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Field, Form, getInput, setInput, useForm } from '@formisch/react';
+import { Field as FormField, Form, getInput, setInput, useForm } from '@formisch/react';
+import { Check } from '@phosphor-icons/react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { readableOn } from '@/lib/color';
+import { cn } from '@/lib/utils';
 import { fetchJson } from '@/lib/query/errors';
 import { applyFieldErrors } from '@/lib/query/field-errors';
 import { useServiceMutation } from '@/lib/query/use-service';
-import { ACCENT_PRESETS, setupFormSchema, type SetupForm } from '@/lib/schemas/setup';
+import { RADIUS_OPTIONS, type RadiusKey } from '@/lib/schemas/config';
+import { ACCENT_PRESETS, setupFormSchema, type SetupForm as SetupValues } from '@/lib/schemas/setup';
 import { LogoPicker } from './logo-picker';
-import styles from './setup.module.css';
+
+/**
+ * Temanın kendi ana rengini (globals.css) geri getirir: sayfada PT'nin önceki seçimi
+ * `--primary`'yi ezmiş olabilir. Değerler src/app/globals.css :root ve .dark ile aynı.
+ */
+const THEME_PRIMARY =
+  '[--primary:oklch(0.841_0.238_128.85)] [--primary-foreground:oklch(0.405_0.101_131.063)] dark:[--primary:oklch(0.768_0.233_130.85)]';
 
 const THEMES = [
   { value: 'dark', label: 'Koyu' },
@@ -16,10 +31,10 @@ const THEMES = [
 ] as const;
 
 /**
- * Marka ayarı: uygulama adı, vurgu rengi, tema.
+ * Tema ayarı: uygulama adı, logo, ana renk, köşe yuvarlaklığı, tema.
  *
- * Kaydedince ayar PT'nin kendi repo'suna commit edilir. Renk ve tema seçimi
- * anında üstteki önizlemede görünür; kaydetmeden nasıl duracağını görür.
+ * Kaydedince PT'nin kendi repo'suna commit edilir. Renk ve köşe seçimi üstteki
+ * önizlemede anında görünür (tema değişkenleri önizleme kutusuna uygulanır).
  */
 export function SetupForm({
   initial,
@@ -27,7 +42,7 @@ export function SetupForm({
   hasLogo,
   afterSave = '/dashboard',
 }: {
-  initial: SetupForm;
+  initial: SetupValues;
   firstRun: boolean;
   hasLogo: boolean;
   /** Kayıttan sonra gidilecek sayfa (sihirbazda panele, ayarlarda aynı sayfada kal). */
@@ -37,110 +52,159 @@ export function SetupForm({
   const form = useForm({ schema: setupFormSchema, initialInput: initial });
 
   const save = useServiceMutation({
-    fn: (values: SetupForm) =>
+    fn: (values: SetupValues) =>
       fetchJson<{ ok: true }>('/api/setup/config', { method: 'POST', body: JSON.stringify(values) }),
     notify: { success: firstRun ? 'Kurulum tamamlandı.' : 'Görünüm güncellendi.' },
     onError: (error) => applyFieldErrors(form as never, error),
     onSuccess: () => {
       router.replace(afterSave);
-      // Sunucu bileşenleri yeni ayarı okusun (başlık, renk, tema).
+      // Sunucu bileşenleri yeni ayarı okusun (başlık, renk, köşe, tema).
       router.refresh();
     },
   });
 
-  const current = getInput(form) as Partial<SetupForm>;
-  const accent = current.accent ?? initial.accent;
+  const current = getInput(form) as Partial<SetupValues>;
+  const accent = current.accent === undefined ? initial.accent : current.accent;
   const appName = current.appName ?? initial.appName;
+  const radius = RADIUS_OPTIONS[(current.radius ?? initial.radius) as RadiusKey].value;
 
   return (
-    <Form of={form} className={styles.card} onSubmit={(values) => save.mutateAsync(values).catch(() => undefined)}>
-      <div className={styles.preview} style={{ ['--accent' as string]: accent }}>
-        <div className={styles.previewMark} style={{ background: accent }}>
-          {(appName || 'P').trim().charAt(0).toUpperCase()}
-        </div>
-        <div>
-          <strong>{appName || 'Uygulama adı'}</strong>
-          <p className={styles.hint}>Danışanların göreceği ad ve renk</p>
-        </div>
-      </div>
-
-      <Field of={form} path={['appName']}>
-        {(field) => (
-          <div>
-            <label className={styles.label} htmlFor="appName">
-              Uygulama adı
-            </label>
-            <input
-              {...field.props}
-              id="appName"
-              className={styles.input}
-              value={field.input ?? ''}
-              maxLength={40}
-              placeholder="Ece Kaya Training"
-            />
-            {field.errors ? (
-              <p role="alert" className={styles.error}>
-                {field.errors[0]}
-              </p>
-            ) : null}
-          </div>
-        )}
-      </Field>
-
-      <LogoPicker hasLogo={hasLogo} />
-
-      <Field of={form} path={['accent']}>
-        {(field) => (
-          <div>
-            <span className={styles.label}>Vurgu rengi</span>
-            <div className={styles.swatches}>
-              {ACCENT_PRESETS.map((preset) => (
-                <button
-                  key={preset.value}
-                  type="button"
-                  className={styles.swatch}
-                  aria-pressed={field.input === preset.value}
-                  aria-label={preset.label}
-                  title={preset.label}
-                  onClick={() => setInput(form, { path: ['accent'], input: preset.value })}>
-                  <span className={styles.dot} style={{ background: preset.value }} />
-                </button>
-              ))}
+    <Card>
+      <CardContent>
+        <Form
+          of={form}
+          className="flex flex-col gap-6"
+          onSubmit={(values) => save.mutateAsync(values as SetupValues).catch(() => undefined)}>
+          {/* Canlı önizleme: seçilen renk ve köşe yalnız bu kutuya uygulanır. */}
+          <div
+            className={cn(
+              'flex items-center gap-3 rounded-lg border border-dashed p-4',
+              // "Tema" seçiliyken sayfadaki eski seçimi değil temanın kendi rengini göster.
+              accent === null && THEME_PRIMARY,
+            )}
+            style={
+              {
+                ...(accent ? { '--primary': accent, '--primary-foreground': readableOn(accent) } : {}),
+                '--radius': radius,
+              } as React.CSSProperties
+            }>
+            <div className="grid size-11 shrink-0 place-items-center rounded-md bg-primary text-lg font-bold text-primary-foreground">
+              {(appName || 'P').trim().charAt(0).toUpperCase()}
             </div>
-            {field.errors ? (
-              <p role="alert" className={styles.error}>
-                {field.errors[0]}
-              </p>
-            ) : null}
-          </div>
-        )}
-      </Field>
-
-      <Field of={form} path={['theme']}>
-        {(field) => (
-          <div>
-            <span className={styles.label}>Varsayılan tema</span>
-            <div className={styles.segmented}>
-              {THEMES.map((theme) => (
-                <button
-                  key={theme.value}
-                  type="button"
-                  className={styles.segment}
-                  aria-pressed={field.input === theme.value}
-                  onClick={() => setInput(form, { path: ['theme'], input: theme.value })}>
-                  {theme.label}
-                </button>
-              ))}
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-semibold">{appName || 'Uygulama adı'}</p>
+              <p className="text-sm text-muted-foreground">Danışanların göreceği ad ve renk</p>
             </div>
-            <p className={styles.hint}>Salonda koyu tema göz yormaz.</p>
+            <Button type="button" size="sm" tabIndex={-1} aria-hidden>
+              Örnek düğme
+            </Button>
           </div>
-        )}
-      </Field>
 
-      <button type="submit" className={styles.primary} disabled={save.isPending}>
-        {save.isPending ? 'Kaydediliyor…' : firstRun ? 'Kurulumu tamamla' : 'Kaydet'}
-      </button>
-      <p className={styles.hint}>Ayarlar senin GitHub repo'na kaydedilir, istediğin zaman değiştirebilirsin.</p>
-    </Form>
+          <FormField of={form} path={['appName']}>
+            {(field) => (
+              <Field data-invalid={Boolean(field.errors) || undefined}>
+                <FieldLabel htmlFor="appName">Uygulama adı</FieldLabel>
+                <Input
+                  {...field.props}
+                  id="appName"
+                  value={field.input ?? ''}
+                  maxLength={40}
+                  placeholder="Ece Kaya Training"
+                  aria-invalid={Boolean(field.errors) || undefined}
+                />
+                <FieldError>{field.errors?.[0]}</FieldError>
+              </Field>
+            )}
+          </FormField>
+
+          <LogoPicker hasLogo={hasLogo} />
+
+          <FormField of={form} path={['accent']}>
+            {(field) => (
+              <Field>
+                <FieldLabel>Ana renk</FieldLabel>
+                <div className="grid grid-cols-8 gap-2" role="radiogroup" aria-label="Ana renk">
+                  {ACCENT_PRESETS.map((preset) => {
+                    const selected = (field.input ?? null) === preset.value;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        aria-label={preset.label}
+                        title={preset.label}
+                        onClick={() => setInput(form, { path: ['accent'], input: preset.value })}
+                        className={cn(
+                          'grid aspect-square place-items-center rounded-md border-2 border-transparent transition-colors aria-checked:border-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
+                          preset.value === null && `${THEME_PRIMARY} bg-primary text-primary-foreground`,
+                        )}
+                        style={
+                          preset.value ? { background: preset.value, color: readableOn(preset.value) } : undefined
+                        }>
+                        {selected ? <Check weight="bold" className="size-4" aria-hidden /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+                <FieldError>{field.errors?.[0]}</FieldError>
+              </Field>
+            )}
+          </FormField>
+
+          <FormField of={form} path={['radius']}>
+            {(field) => (
+              <Field>
+                <FieldLabel>Köşeler</FieldLabel>
+                <ToggleGroup
+                  variant="outline"
+                  value={[field.input ?? 'subtle']}
+                  onValueChange={(value) => {
+                    const next = value[0] as RadiusKey | undefined;
+                    if (next) setInput(form, { path: ['radius'], input: next });
+                  }}
+                  className="w-full">
+                  {(Object.keys(RADIUS_OPTIONS) as RadiusKey[]).map((key) => (
+                    <ToggleGroupItem key={key} value={key} className="flex-1">
+                      {RADIUS_OPTIONS[key].label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </Field>
+            )}
+          </FormField>
+
+          <FormField of={form} path={['theme']}>
+            {(field) => (
+              <Field>
+                <FieldLabel>Varsayılan tema</FieldLabel>
+                <ToggleGroup
+                  variant="outline"
+                  value={[field.input ?? 'dark']}
+                  onValueChange={(value) => {
+                    const next = value[0] as SetupValues['theme'] | undefined;
+                    if (next) setInput(form, { path: ['theme'], input: next });
+                  }}
+                  className="w-full">
+                  {THEMES.map((theme) => (
+                    <ToggleGroupItem key={theme.value} value={theme.value} className="flex-1">
+                      {theme.label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+                <FieldDescription>Salonda koyu tema göz yormaz.</FieldDescription>
+              </Field>
+            )}
+          </FormField>
+
+          <Button type="submit" size="lg" className="h-11" disabled={save.isPending}>
+            {save.isPending ? 'Kaydediliyor…' : firstRun ? 'Kurulumu tamamla' : 'Kaydet'}
+          </Button>
+          <p className="text-center text-xs text-muted-foreground">
+            Ayarlar senin GitHub repo&apos;na kaydedilir, istediğin zaman değiştirebilirsin.
+          </p>
+        </Form>
+      </CardContent>
+    </Card>
   );
 }

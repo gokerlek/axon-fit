@@ -9,23 +9,25 @@ import { appConfigSchema } from './config';
  */
 export const setupFormSchema = v.object({
   appName: appConfigSchema.entries.appName,
-  accent: v.pipe(
-    v.string(),
-    v.regex(/^#[0-9a-fA-F]{6}$/, 'Renk #RRGGBB biçiminde olmalı.'),
-  ),
+  /** null = temanın kendi ana rengi (koyu ve açık mod için ayrı ayarlı); hiçbir şey ezilmez. */
+  accent: v.nullable(v.pipe(v.string(), v.regex(/^#[0-9a-fA-F]{6}$/, 'Renk #RRGGBB biçiminde olmalı.'))),
   theme: appConfigSchema.entries.theme,
+  radius: appConfigSchema.entries.radius,
 });
 
 export type SetupForm = v.InferOutput<typeof setupFormSchema>;
 
-/** Hazır palet: hepsi koyu ve açık temada okunaklı kontrast verir. */
-export const ACCENT_PRESETS = [
-  { value: '#D4FF3F', label: 'Volt' },
+/**
+ * Hazır palet. İlk seçenek (`null`) temanın kendi rengidir; diğerleri onu ezer.
+ * Üstündeki yazı rengi her seçimde kontrasta göre hesaplanır (src/lib/color.ts).
+ */
+export const ACCENT_PRESETS: readonly { value: string | null; label: string }[] = [
+  { value: null, label: 'Tema' },
   { value: '#7DF9C7', label: 'Nane' },
-  { value: '#63B6FF', label: 'Gökyüzü' },
-  { value: '#B79BFF', label: 'Lavanta' },
-  { value: '#FF9BB5', label: 'Gül' },
-  { value: '#FFB86B', label: 'Kehribar' },
-  { value: '#F5F5F5', label: 'Kireç' },
-  { value: '#3EDC8A', label: 'Çimen' },
-] as const;
+  { value: '#38BDF8', label: 'Gökyüzü' },
+  { value: '#A78BFA', label: 'Lavanta' },
+  { value: '#FB7185', label: 'Gül' },
+  { value: '#FBBF24', label: 'Kehribar' },
+  { value: '#F97316', label: 'Turuncu' },
+  { value: '#E5E5E5', label: 'Kireç' },
+];

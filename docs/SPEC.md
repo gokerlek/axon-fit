@@ -22,6 +22,7 @@ Her PT uygulamayı kendi GitHub hesabına kurar, kendi adresinde yayınlar, kend
 | Marka | Uygulama adı, logo, renk, tema PT'ye ait (beyaz etiket) |
 | Kullanıcı sayısı | 1 PT + ~10–30 danışan. Çoklu PT kapsam dışı |
 | Platform | Web (mobil öncelikli), PWA. Mağaza yayını yok |
+| Arayüz | **shadcn + Base UI** (`base-nova`, preset `b3QvsSZhg`), Tailwind v4, Phosphor ikonları, Outfit + Geist Mono. Renkler temanın `globals.css`'inden; özel renk sistemi yazılmaz |
 
 npm'de boşta: `pulsecoach`, `create-pulsecoach`, `@pulsecoach/app`.
 
@@ -199,20 +200,19 @@ Tasarım dili, ekran akışları, Türkçe metinler, antrenman ekranı mantığ�
 
 ---
 
-## 10. Marka ve kurulum sihirbazı
+## 10. Marka ve tema düzenleyici
 
-Uygulama beyaz etiketli: paketin adı `pulsecoach`, yayınlanan kurulumun adını PT koyar.
+Uygulama beyaz etiketli: paketin adı `pulsecoach`, yayınlanan kurulumun adını ve görünümünü PT belirler.
 
-**İlk açılışta (bir kez):** uygulama adı · logo (PNG/SVG, en fazla 512 KB) · vurgu rengi (8 hazır palet ya da kendi rengi) · varsayılan tema. Hepsi sonradan **Ayarlar → Görünüm**'den değiştirilebilir.
+**Temel tema:** shadcn preset'inin `globals.css`'i (Base UI, `base-nova`). Bütün bileşenler aynı CSS değişkenlerini okur; bu yüzden tema düzenleyici birkaç değişkeni değiştirerek bütün uygulamayı tutarlı biçimde değiştirebilir.
 
-**Saklanma:** `pulsecoach.config.json` ve `media/brand/logo.png`, uygulama repo'sunda.
+**Şu an düzenlenebilenler:** uygulama adı · logo · ana renk (`--primary`; "Tema" seçeneği temanın kendi koyu/açık rengini korur) · köşe yuvarlaklığı (`--radius`: keskin / hafif / yuvarlak / yumuşak) · varsayılan tema (koyu / açık / sistem).
 
-**Görünme yerleri:** tarayıcı sekmesi, giriş ekranı, telefona eklenen kısayol (PWA), davet QR ekranı, danışana giden kod e-postası, favicon.
+**Kontrast:** PT hangi rengi seçerse seçsin üzerindeki yazı rengi kontrasta göre hesaplanır (açık renkte koyu, koyu renkte açık yazı).
 
-**Sınırlar (bilinçli):**
-- Özel renk otomatik kontrast denetiminden geçer; metin okunmaz hale geliyorsa uyarılır ve düzeltilmiş ton önerilir.
-- Logodan favicon ve PWA ikonları otomatik üretilir.
-- **Tam tema editörü yok.** Yazı tipi, boşluk ölçeği, köşe yuvarlaklığı, ikon seti kilitli kalır; aksi halde her kurulum farklı şekilde bozulur.
+**Yol haritası (web):** tema düzenleyicide uygulamanın bütün ekranları yan yana gösterilecek; her değişiklik hepsine anında yansıyacak, "Kaydet" denince seçim kalıcı olacak.
+
+**Saklanma:** `pulsecoach.config.json` ve `media/brand/logo.<uzantı>`, uygulama repo'sunda.
 
 ---
 

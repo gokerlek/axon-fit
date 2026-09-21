@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useIsFetching, useIsMutating } from '@tanstack/react-query';
-import styles from './global-loading.module.css';
 
 /** Kısa isteklerde çubuğun yanıp sönmesini engelleyen eşik. */
 const DELAY_MS = 200;
@@ -29,5 +28,12 @@ export function GlobalLoading() {
 
   if (!visible) return null;
 
-  return <div className={styles.bar} role="status" aria-label="Yükleniyor" />;
+  return (
+    <div
+      role="status"
+      aria-label="Yükleniyor"
+      className="fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden bg-primary/20">
+      <div className="h-full w-2/5 animate-[loading-bar_1.1s_ease-out_infinite] bg-primary motion-reduce:w-full motion-reduce:animate-none motion-reduce:opacity-60" />
+    </div>
+  );
 }
