@@ -156,11 +156,12 @@ Oluşturma işi (şablon kurmak, program atamak, birkaç danışanı yan yana g�
 
 **Arayüz kuralları:**
 - **Ortalı, sabit genişlikli sayfa.** Her PT sayfası aynı ortalı içerik sütununda durur (`max-w-5xl`). Bileşenler bu genişliğe göre yerleşir: masaüstünde yan yana (formlar iki sütun, ayarlarda sağda kaydırınca yerinde kalan önizleme), telefonda alt alta.
-- **Her şey shadcn bileşeni.** Yerleşim dahil: kartlar `Card`, arama `InputGroup`, boş durum `Empty`, uyarılar `Alert`, yükleniyor `Spinner`, sayfa yolu `Breadcrumb`. Elle yazılmış düğme/rol yok (tek istisna: kullanıcı isteğiyle React Bits'ten uyarlanan dock).
+- **Her şey shadcn bileşeni.** Yerleşim dahil: kartlar `Card`, arama `InputGroup`, boş durum `Empty`, uyarılar `Alert`, yükleniyor `Spinner`, sayfa yolu `Breadcrumb`. Elle yazılmış düğme/rol yok (istisnalar: React Bits'ten uyarlanan dock ve kas haritasının SVG'si).
 - **Detay ve oluşturma ekranları sayfadır, modal değildir.** Kendi adresi olur, geri tuşuyla dönülür (`/…/new`, `/…/[id]`, `/…/[id]/edit`). Diyalog yalnız kısa onaylar içindir (ör. silme).
 - **Üst çubuk yok.** Sağ üstte kullanıcı menüsü (avatar): görünüm ayarları ve çıkış burada. Dock yalnız gezinme içindir.
 - Bağlantı olarak çizilen düğmelerde `nativeButton={false}` (Base UI, gerçek `<button>` olmayanı böyle bilmeli).
 - Sayılar Türkçe biçimde: `2,5 kg` (`src/lib/format.ts`).
+- **Kas haritası** (`src/components/muscle-map`): ön/arka gövde, kas gruplarımızı gösterir. Veri çekmez, neyin yanacağını dışarıdan alır (`intensity` 0–1, `selected`, `onToggle`, `counts`); `flip` (tek gövde, `motion` ile çevrilir) ya da `split` (yan yana). Egzersiz listesinde süzgeç (`?muscle=chest,back`), egzersiz detayında çalışan kaslar; ileride program kapsamı ve haftalık yük ısı haritası. SVG yolları body-muscles'tan (Apache-2.0, LICENSE ve NOTICE klasörde).
 
 **PT:** giriş · danışan listesi + detayı yan yana · antrenman şablonu düzenleyici (kütüphaneden sürükle-bırak) · egzersiz kütüphanesi · davet QR ekranı · canlı görünüm · ayarlar (marka, yönetim işlemleri).
 
@@ -245,7 +246,7 @@ Uygulama beyaz etiketli: paketin adı `pulsecoach`, yayınlanan kurulumun adın�
 |---|---|
 | 0 | Proje iskeleti, tasarım tokenları, PT girişi |
 | 1 | Kurulum sihirbazı (ad, logo, renk, tema) + GitHub veri katmanı (repo koruma kuralı dahil) |
-| 2 | Egzersiz kütüphanesi ✓ · **PT kabuğu** (masaüstünde kenar menü, telefonda alt menü) |
+| 2 | Egzersiz kütüphanesi ✓ · PT kabuğu (dock + sağ üstte kullanıcı menüsü) ✓ · kas haritası (süzgeç + detay) ✓ |
 | 3 | Danışan ekleme (repo açma), sağlık modülü seçimi, QR davet, danışan girişi |
 | 4 | Antrenman şablonu düzenleyici · antrenman ekranı (**set başına canlı yazma**, çevrimdışı kuyruk) · PT canlı görünüm · geçmiş |
 | 5 | Sağlık modülü ekranları, onay akışı |

@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
+import { ExerciseMuscleMap } from '@/components/muscle-map/exercise-muscle-map';
 import { PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Item, ItemContent, ItemGroup, ItemMedia, ItemTitle } from '@/components/ui/item';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
@@ -16,7 +16,7 @@ const TRACKING_LABELS = {
   duration: 'Süre',
 } as const;
 
-/** Egzersiz detayı — kendi sayfası (modal değil, SPEC §6). Kas haritası buraya gelecek. */
+/** Egzersiz detayı — kendi sayfası (modal değil, SPEC §6). */
 export default async function ExerciseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const exercise = await getExercise(id);
@@ -24,6 +24,9 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
 
   const summary: [string, string][] = [
     ['Hedef kas', MUSCLE_LABELS[exercise.targetMuscle]],
+    ...(exercise.secondaryMuscles.length > 0
+      ? ([['Yardımcı kaslar', exercise.secondaryMuscles.map((muscle) => MUSCLE_LABELS[muscle]).join(', ')]] as [string, string][])
+      : []),
     ['Ekipman', EQUIPMENT_LABELS[exercise.equipment]],
     ['Tür', CATEGORY_LABELS[exercise.category]],
     ['Kayıt', TRACKING_LABELS[exercise.trackingType]],
@@ -58,7 +61,7 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
               <CardTitle>Özet</CardTitle>
               <CardDescription>{origin}</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4 text-sm">
+            <CardContent className="text-sm">
               <Table>
                 <TableBody>
                   {summary.map(([label, value]) => (
@@ -69,15 +72,6 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
                   ))}
                 </TableBody>
               </Table>
-              {exercise.secondaryMuscles.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {exercise.secondaryMuscles.map((muscle) => (
-                    <Badge key={muscle} variant="outline">
-                      {MUSCLE_LABELS[muscle]}
-                    </Badge>
-                  ))}
-                </div>
-              ) : null}
             </CardContent>
           </Card>
 
@@ -105,19 +99,39 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
           ) : null}
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Video</CardTitle>
-            <CardDescription>
-              {exercise.video ? 'Hareketin doğru yapılışı.' : 'Bu egzersize henüz video bağlanmamış.'}
-            </CardDescription>
-          </CardHeader>
-          {exercise.video ? (
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Çalışan kaslar</CardTitle>
+              <CardDescription>
+                {exercise.targetMuscle === 'cardio'
+                  ? 'Kardiyo hareketi; haritada yalnız yardımcı kaslar görünür.'
+                  : 'Hedef kas tam renkte, yardımcı kaslar açık tonda.'}
+              </CardDescription>
+            </CardHeader>
             <CardContent>
-              <VideoEmbed provider={exercise.video.provider} id={exercise.video.id} title={exercise.title} />
+              <ExerciseMuscleMap
+                targetMuscle={exercise.targetMuscle}
+                secondaryMuscles={exercise.secondaryMuscles}
+                bodyClassName="h-72"
+              />
             </CardContent>
-          ) : null}
-        </Card>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Video</CardTitle>
+              <CardDescription>
+                {exercise.video ? 'Hareketin doğru yapılışı.' : 'Bu egzersize henüz video bağlanmamış.'}
+              </CardDescription>
+            </CardHeader>
+            {exercise.video ? (
+              <CardContent>
+                <VideoEmbed provider={exercise.video.provider} id={exercise.video.id} title={exercise.title} />
+              </CardContent>
+            ) : null}
+          </Card>
+        </div>
       </div>
     </div>
   );
