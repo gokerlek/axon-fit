@@ -16,7 +16,10 @@ export default async function DashboardPage() {
       <p style={{ color: 'var(--text-tertiary)', fontSize: 14 }}>
         Sıradaki adım: egzersiz kütüphanesi ve danışan listesi.
       </p>
-      <p>
+      <p style={{ display: 'flex', gap: 'var(--space-lg)' }}>
+        <Link href="/dashboard/exercises" style={{ color: 'var(--accent-text)' }}>
+          Egzersizler
+        </Link>
         <Link href="/setup" style={{ color: 'var(--accent-text)' }}>
           Görünüm ayarları
         </Link>
