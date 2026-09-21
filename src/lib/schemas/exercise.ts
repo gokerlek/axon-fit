@@ -18,18 +18,35 @@ export const EQUIPMENT = [
   'cardio_machine',
 ] as const;
 
+/**
+ * Kaslar — kas haritasındaki bölgelerle bire bir (fitness standardı; sol ve sağ birlikte).
+ * Kardiyo bir kas değil ama egzersizin neyi çalıştırdığı olarak burada durur.
+ */
 export const MUSCLES = [
+  'upper_chest',
   'chest',
-  'back',
-  'shoulders',
+  'front_delts',
+  'side_delts',
+  'rear_delts',
+  'upper_traps',
+  'mid_back',
+  'lats',
+  'lower_back',
   'biceps',
   'triceps',
   'forearms',
-  'quadriceps',
-  'hamstrings',
+  'abs',
+  'obliques',
+  'serratus',
   'glutes',
+  'glute_medius',
+  'hip_flexors',
+  'quadriceps',
+  'adductors',
+  'hamstrings',
   'calves',
-  'core',
+  'tibialis',
+  'neck',
   'cardio',
 ] as const;
 
@@ -54,8 +71,8 @@ export const exerciseSchema = v.object({
   category: v.picklist(CATEGORIES, 'Geçerli bir tür seç.'),
   trackingType: v.picklist(TRACKING_TYPES, 'Geçerli bir kayıt türü seç.'),
   equipment: v.picklist(EQUIPMENT, 'Geçerli bir ekipman seç.'),
-  targetMuscle: v.picklist(MUSCLES, 'Geçerli bir kas grubu seç.'),
-  secondaryMuscles: v.pipe(v.array(v.picklist(MUSCLES, 'Geçerli bir kas grubu seç.')), v.maxLength(6, 'En fazla 6 yardımcı kas seçilebilir.')),
+  targetMuscle: v.picklist(MUSCLES, 'Geçerli bir kas seç.'),
+  secondaryMuscles: v.pipe(v.array(v.picklist(MUSCLES, 'Geçerli bir kas seç.')), v.maxLength(8, 'En fazla 8 yardımcı kas seçilebilir.')),
   /** Bir sonraki sette önerilecek artış (kg) ve barın/aletin taban ağırlığı. */
   loadIncrementKg: v.pipe(v.number('Sayı gir.'), v.minValue(0, 'Negatif olamaz.'), v.maxValue(50, 'En fazla 50 kg.')),
   minLoadKg: v.pipe(v.number('Sayı gir.'), v.minValue(0, 'Negatif olamaz.'), v.maxValue(500, 'En fazla 500 kg.')),
@@ -83,7 +100,46 @@ export type ExerciseInput = v.InferOutput<typeof exerciseFormSchema>;
 export type Equipment = (typeof EQUIPMENT)[number];
 export type Muscle = (typeof MUSCLES)[number];
 
-export const customExercisesSchema = v.array(exerciseSchema);
+/** Kasların bölgeleri: formda ve özetlerde gruplamak için. Kardiyo "Diğer"de. */
+export const MUSCLE_GROUPS: readonly { id: string; label: string; muscles: readonly Muscle[] }[] = [
+  { id: 'chest', label: 'Göğüs', muscles: ['upper_chest', 'chest'] },
+  { id: 'shoulders', label: 'Omuz', muscles: ['front_delts', 'side_delts', 'rear_delts'] },
+  { id: 'back', label: 'Sırt', muscles: ['upper_traps', 'mid_back', 'lats', 'lower_back'] },
+  { id: 'arms', label: 'Kol', muscles: ['biceps', 'triceps', 'forearms'] },
+  { id: 'core', label: 'Karın', muscles: ['abs', 'obliques', 'serratus'] },
+  {
+    id: 'legs',
+    label: 'Kalça ve bacak',
+    muscles: ['glutes', 'glute_medius', 'hip_flexors', 'quadriceps', 'adductors', 'hamstrings', 'calves', 'tibialis'],
+  },
+  { id: 'neck', label: 'Boyun', muscles: ['neck'] },
+  { id: 'other', label: 'Diğer', muscles: ['cardio'] },
+];
+
+/**
+ * İlk sürümdeki 12'li gruptan kalan değerler. Repo'daki eski kayıtlar okunurken
+ * yenisine çevrilir; yoksa şema bütün dosyayı reddeder ve PT'nin egzersizleri kaybolur.
+ */
+const LEGACY_MUSCLES: Record<string, Muscle> = { back: 'lats', shoulders: 'front_delts', core: 'abs' };
+
+function migrateMuscle(value: unknown): unknown {
+  return typeof value === 'string' ? (LEGACY_MUSCLES[value] ?? value) : value;
+}
+
+function migrateStoredExercise(input: unknown): unknown {
+  if (!input || typeof input !== 'object') return input;
+  const item = input as Record<string, unknown>;
+  return {
+    ...item,
+    targetMuscle: migrateMuscle(item.targetMuscle),
+    secondaryMuscles: Array.isArray(item.secondaryMuscles)
+      ? [...new Set(item.secondaryMuscles.map(migrateMuscle))]
+      : item.secondaryMuscles,
+  };
+}
+
+/** Repo'daki `data/exercises.json`: eski kas adları okunurken yenisine çevrilir. */
+export const customExercisesSchema = v.array(v.pipe(v.unknown(), v.transform(migrateStoredExercise), exerciseSchema));
 
 export const EQUIPMENT_LABELS: Record<Equipment, string> = {
   barbell: 'Halter',
@@ -104,16 +160,29 @@ export const CATEGORY_LABELS: Record<Category, string> = {
 };
 
 export const MUSCLE_LABELS: Record<Muscle, string> = {
+  upper_chest: 'Üst göğüs',
   chest: 'Göğüs',
-  back: 'Sırt',
-  shoulders: 'Omuz',
+  front_delts: 'Ön omuz',
+  side_delts: 'Yan omuz',
+  rear_delts: 'Arka omuz',
+  upper_traps: 'Üst trapez',
+  mid_back: 'Orta sırt',
+  lats: 'Kanat (lat)',
+  lower_back: 'Bel',
   biceps: 'Biceps',
   triceps: 'Triceps',
   forearms: 'Ön kol',
-  quadriceps: 'Ön bacak',
-  hamstrings: 'Arka bacak',
+  abs: 'Karın',
+  obliques: 'Yan karın',
+  serratus: 'Serratus',
   glutes: 'Kalça',
+  glute_medius: 'Yan kalça',
+  hip_flexors: 'Kalça fleksörü',
+  quadriceps: 'Ön bacak',
+  adductors: 'İç bacak',
+  hamstrings: 'Arka bacak',
   calves: 'Baldır',
-  core: 'Karın',
+  tibialis: 'Kaval',
+  neck: 'Boyun',
   cardio: 'Kardiyo',
 };

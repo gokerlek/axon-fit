@@ -17,7 +17,7 @@ const SIDE_LABELS: Record<MuscleSide, string> = { front: 'Ön', back: 'Arka' };
 type SideShape = {
   /** Grubu olmayan parçalar (baş, el, ayak…): yalnız siluet. */
   neutral: MusclePath[];
-  /** Kas grubu → o görünümdeki parçaları (sol ve sağ birlikte). */
+  /** Kas → o görünümdeki parçaları (sol ve sağ birlikte). */
   groups: [BodyMuscle, MusclePath[]][];
 };
 
@@ -41,7 +41,7 @@ function fillOpacity(level: number) {
 }
 
 type MuscleMapProps = {
-  /** Kasın ne kadar çalıştığı (0–1). Ör. birincil 1, yardımcı 0.45, ya da haftalık set yükü. */
+  /** Kasın ne kadar çalıştığı (0–1). Ör. hedef 1, yardımcı 0.3, ya da haftalık set yükü. */
   intensity?: MuscleIntensity;
   /** Seçili kaslar (süzgeç). Tam renkle çizilir. */
   selected?: readonly BodyMuscle[];
@@ -67,7 +67,7 @@ type MuscleMapProps = {
 };
 
 /**
- * Kas haritası: ön ve arka gövde üzerinde kas gruplarımızı gösterir.
+ * Kas haritası: ön ve arka gövde üzerinde kaslarımızı (24 kas) gösterir.
  *
  * Veri çekmez; neyin yanacağını tamamen dışarıdan alır. Aynı bileşen egzersiz
  * detayında (çalışan kaslar), listede (süzgeç) ve ileride program kapsamında
@@ -190,7 +190,7 @@ type BodyProps = {
   onHighlight: (muscle: BodyMuscle | null) => void;
 };
 
-/** Tek yüzün SVG'si. Kas grupları `g` olarak çizilir; sol ve sağ birlikte yanar. */
+/** Tek yüzün SVG'si. Her kas bir `g`; sol ve sağ birlikte yanar. */
 function Body({ side, label, intensity, selected, counts, onToggle, highlighted, onHighlight }: BodyProps) {
   const { neutral, groups } = SHAPES[side];
   const interactive = Boolean(onToggle);

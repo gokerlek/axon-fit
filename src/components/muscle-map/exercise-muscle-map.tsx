@@ -34,13 +34,13 @@ export function ExerciseMuscleMap({ targetMuscle, secondaryMuscles, bodyClassNam
       />
       <dl className="flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm">
         <div className="flex items-center gap-2">
-          <span className="size-2.5 rounded-full bg-primary" aria-hidden />
+          <span className="size-2.5 shrink-0 rounded-full bg-primary" aria-hidden />
           <dt className="text-muted-foreground">Hedef</dt>
           <dd>{MUSCLE_LABELS[targetMuscle]}</dd>
         </div>
         {secondary.length > 0 ? (
           <div className="flex items-center gap-2">
-            <span className="size-2.5 rounded-full bg-primary/60" aria-hidden />
+            <span className="size-2.5 shrink-0 rounded-full bg-primary/50" aria-hidden />
             <dt className="text-muted-foreground">Yardımcı</dt>
             <dd>{secondary.map((muscle) => MUSCLE_LABELS[muscle]).join(', ')}</dd>
           </div>

@@ -26,7 +26,9 @@ import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -41,6 +43,7 @@ import {
   EQUIPMENT,
   EQUIPMENT_LABELS,
   MUSCLES,
+  MUSCLE_GROUPS,
   MUSCLE_LABELS,
   TRACKING_TYPES,
   exerciseFormSchema,
@@ -108,6 +111,49 @@ function LabeledSelect<T extends string>({
     </Select>
   );
 }
+
+const MUSCLE_ITEMS = MUSCLES.map((muscle) => ({
+  value: muscle,
+  label: MUSCLE_LABELS[muscle],
+}));
+
+/** Hedef kas: 24 kas bölgelere göre gruplu (Göğüs, Omuz, Sırt…). */
+function MuscleSelect({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: Muscle | undefined;
+  onChange: (value: Muscle) => void;
+}) {
+  return (
+    <Select
+      items={MUSCLE_ITEMS}
+      value={value ?? null}
+      onValueChange={(next) => next && onChange(next as Muscle)}
+    >
+      <SelectTrigger id={id} className="w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {MUSCLE_GROUPS.map((group) => (
+          <SelectGroup key={group.id}>
+            <SelectLabel>{group.label}</SelectLabel>
+            {group.muscles.map((muscle) => (
+              <SelectItem key={muscle} value={muscle}>
+                {MUSCLE_LABELS[muscle]}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/** Yardımcı kaslar bölge bölge; kardiyo yardımcı kas olamaz. */
+const SECONDARY_GROUPS = MUSCLE_GROUPS.filter((group) => group.id !== "other");
 
 /**
  * Egzersiz ekleme/düzenleme formu — kendi sayfasında (modal değil, SPEC §6).
@@ -242,10 +288,9 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
             {(field) => (
               <Field>
                 <FieldLabel htmlFor="targetMuscle">Hedef kas</FieldLabel>
-                <LabeledSelect
+                <MuscleSelect
                   id="targetMuscle"
                   value={field.input}
-                  labels={MUSCLE_LABELS}
                   onChange={(value) =>
                     setInput(form, { path: ["targetMuscle"], input: value })
                   }
@@ -301,31 +346,53 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
         </div>
 
         <FormField of={form} path={["secondaryMuscles"]}>
-          {(field) => (
-            <Field data-invalid={Boolean(field.errors) || undefined}>
-              <FieldLabel>Yardımcı kaslar</FieldLabel>
-              <ToggleGroup
-                multiple
-                variant="outline"
-                size="sm"
-                className="flex-wrap justify-start"
-                value={(field.input ?? []) as Muscle[]}
-                onValueChange={(value) =>
-                  setInput(form, {
-                    path: ["secondaryMuscles"],
-                    input: value as Muscle[],
-                  })
-                }
-              >
-                {MUSCLES.map((muscle) => (
-                  <ToggleGroupItem key={muscle} value={muscle}>
-                    {MUSCLE_LABELS[muscle]}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-              <FieldError>{field.errors?.[0]}</FieldError>
-            </Field>
-          )}
+          {(field) => {
+            const selected = (field.input ?? []) as Muscle[];
+            return (
+              <Field data-invalid={Boolean(field.errors) || undefined}>
+                <FieldLabel>Yardımcı kaslar</FieldLabel>
+                <div className="flex flex-col gap-3">
+                  {SECONDARY_GROUPS.map((group) => (
+                    <div key={group.id} className="flex flex-col gap-1.5">
+                      <span className="text-xs text-muted-foreground">
+                        {group.label}
+                      </span>
+                      <ToggleGroup
+                        multiple
+                        variant="outline"
+                        size="sm"
+                        className="flex-wrap justify-start"
+                        aria-label={`Yardımcı kaslar: ${group.label}`}
+                        value={selected.filter((muscle) =>
+                          group.muscles.includes(muscle),
+                        )}
+                        onValueChange={(value) => {
+                          // Bu bölgenin seçimi değişti; diğer bölgeler olduğu gibi kalır.
+                          const next = new Set([
+                            ...selected.filter(
+                              (muscle) => !group.muscles.includes(muscle),
+                            ),
+                            ...(value as Muscle[]),
+                          ]);
+                          setInput(form, {
+                            path: ["secondaryMuscles"],
+                            input: MUSCLES.filter((muscle) => next.has(muscle)),
+                          });
+                        }}
+                      >
+                        {group.muscles.map((muscle) => (
+                          <ToggleGroupItem key={muscle} value={muscle}>
+                            {MUSCLE_LABELS[muscle]}
+                          </ToggleGroupItem>
+                        ))}
+                      </ToggleGroup>
+                    </div>
+                  ))}
+                </div>
+                <FieldError>{field.errors?.[0]}</FieldError>
+              </Field>
+            );
+          }}
         </FormField>
 
         <div className="grid gap-4 sm:grid-cols-2">

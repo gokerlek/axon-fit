@@ -67,7 +67,7 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
                   {summary.map(([label, value]) => (
                     <TableRow key={label}>
                       <TableCell className="w-40 text-muted-foreground">{label}</TableCell>
-                      <TableCell className="tabular-nums">{value}</TableCell>
+                      <TableCell className="whitespace-normal tabular-nums">{value}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

@@ -1,11 +1,11 @@
 import { MUSCLES, type Exercise, type Muscle } from '@/lib/schemas/exercise';
 
 /**
- * Kas grubu yardımcıları — kas haritası ve kas süzgeci ortak kullanır.
+ * Kas yardımcıları — kas haritası ve kas süzgeci ortak kullanır.
  * Sunucuda da çalışır (bileşen içermez).
  */
 
-/** Haritada yeri olan gruplar. Kardiyo bir kas değil, haritanın dışında ayrı bir düğmedir. */
+/** Haritada yeri olan kaslar. Kardiyo bir kas değil, haritanın dışında ayrı bir düğmedir. */
 export type BodyMuscle = Exclude<Muscle, 'cardio'>;
 
 export const BODY_MUSCLES = MUSCLES.filter((item): item is BodyMuscle => item !== 'cardio');
@@ -18,7 +18,7 @@ export function isBodyMuscle(muscle: Muscle): muscle is BodyMuscle {
 export type MuscleIntensity = Partial<Record<BodyMuscle, number>>;
 
 /** Yardımcı kasların haritadaki yoğunluğu (birincil kas 1). */
-export const SECONDARY_INTENSITY = 0.45;
+export const SECONDARY_INTENSITY = 0.3;
 
 type Worked = Pick<Exercise, 'targetMuscle' | 'secondaryMuscles'>;
 

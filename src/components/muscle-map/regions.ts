@@ -1,33 +1,38 @@
 import type { BodyMuscle } from '@/lib/muscles';
 
 /**
- * Kas gruplarımızın haritadaki parçaları (`paths.ts` kimlikleri, sol/sağ eki olmadan).
+ * Kaslarımızın haritadaki parçaları (`paths.ts` kimlikleri, sol/sağ eki olmadan).
  *
- * Harita bizim 12 grubumuzdan daha ayrıntılı; bir grup birden çok parçayı yakar.
- * Burada olmayan parçalar (baş, boyun, el, ayak, diz, dirsek, omurga, iç bacak)
- * gri siluet olarak çizilir ve tıklanmaz.
+ * Kas listesi haritaya göre kuruldu: çoğu kas tek parça, bazıları haritada
+ * birkaç parçaya bölünmüş (ör. kanat üst/orta/alt). Burada olmayan parçalar
+ * (baş, yüz, el, ayak, diz, dirsek, omurga) kas değildir; gri siluet olarak
+ * çizilir ve tıklanmaz.
  */
 export const MUSCLE_REGIONS: Record<BodyMuscle, readonly string[]> = {
-  chest: ['chest-upper', 'chest-lower'],
-  back: [
-    'traps-upper',
-    'traps-mid',
-    'traps-lower',
-    'lats-upper',
-    'lats-mid',
-    'lats-lower',
-    'lower-back-erectors',
-    'lower-back-ql',
-  ],
-  shoulders: ['shoulder-front', 'shoulder-side', 'deltoid-rear'],
+  upper_chest: ['chest-upper'],
+  chest: ['chest-lower'],
+  front_delts: ['shoulder-front'],
+  side_delts: ['shoulder-side'],
+  rear_delts: ['deltoid-rear'],
+  upper_traps: ['traps-upper'],
+  mid_back: ['traps-mid', 'traps-lower'],
+  lats: ['lats-upper', 'lats-mid', 'lats-lower'],
+  lower_back: ['lower-back-erectors', 'lower-back-ql'],
   biceps: ['biceps'],
   triceps: ['triceps-long', 'triceps-lateral'],
   forearms: ['forearm', 'forearm-flexors', 'forearm-extensors'],
-  quadriceps: ['quads', 'hip-flexor'],
+  abs: ['abs-upper', 'abs-lower'],
+  obliques: ['obliques'],
+  serratus: ['serratus-anterior'],
+  glutes: ['gluteus-maximus'],
+  glute_medius: ['gluteus-medius'],
+  hip_flexors: ['hip-flexor'],
+  quadriceps: ['quads'],
+  adductors: ['adductors'],
   hamstrings: ['hamstrings-medial', 'hamstrings-lateral'],
-  glutes: ['gluteus-maximus', 'gluteus-medius'],
-  calves: ['tibialis-anterior', 'calves-gastroc-medial', 'calves-gastroc-lateral', 'calves-soleus'],
-  core: ['abs-upper', 'abs-lower', 'obliques', 'serratus-anterior'],
+  calves: ['calves-gastroc-medial', 'calves-gastroc-lateral', 'calves-soleus'],
+  tibialis: ['tibialis-anterior'],
+  neck: ['neck', 'nape'],
 };
 
 const REGION_TO_MUSCLE = new Map<string, BodyMuscle>(

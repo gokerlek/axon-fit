@@ -161,7 +161,8 @@ Oluşturma işi (şablon kurmak, program atamak, birkaç danışanı yan yana g�
 - **Üst çubuk yok.** Sağ üstte kullanıcı menüsü (avatar): görünüm ayarları ve çıkış burada. Dock yalnız gezinme içindir.
 - Bağlantı olarak çizilen düğmelerde `nativeButton={false}` (Base UI, gerçek `<button>` olmayanı böyle bilmeli).
 - Sayılar Türkçe biçimde: `2,5 kg` (`src/lib/format.ts`).
-- **Kas haritası** (`src/components/muscle-map`): ön/arka gövde, kas gruplarımızı gösterir. Veri çekmez, neyin yanacağını dışarıdan alır (`intensity` 0–1, `selected`, `onToggle`, `counts`); `flip` (tek gövde, `motion` ile çevrilir) ya da `split` (yan yana). Egzersiz listesinde süzgeç (`?muscle=chest,back`), egzersiz detayında çalışan kaslar; ileride program kapsamı ve haftalık yük ısı haritası. SVG yolları body-muscles'tan (Apache-2.0, LICENSE ve NOTICE klasörde).
+- **Kaslar:** 24 kas + kardiyo, haritadaki bölgelerle bire bir (sol ve sağ birlikte): üst göğüs, göğüs · ön/yan/arka omuz · üst trapez, orta sırt, kanat, bel · biceps, triceps, ön kol · karın, yan karın, serratus · kalça, yan kalça, kalça fleksörü, ön bacak, iç bacak, arka bacak, baldır, kaval · boyun. Formda ve özetlerde bölgelere göre gruplanır (`MUSCLE_GROUPS`). İlk sürümün 12'li grubundan kalan kayıtlar okunurken yenisine çevrilir.
+- **Kas haritası** (`src/components/muscle-map`): ön/arka gövde, kasları gösterir. Veri çekmez, neyin yanacağını dışarıdan alır (`intensity` 0–1, `selected`, `onToggle`, `counts`); `flip` (tek gövde, `motion` ile çevrilir) ya da `split` (yan yana). Egzersiz listesinde süzgeç (`?muscle=chest,back`), egzersiz detayında çalışan kaslar; ileride program kapsamı ve haftalık yük ısı haritası. SVG yolları body-muscles'tan (Apache-2.0, LICENSE ve NOTICE klasörde).
 
 **PT:** giriş · danışan listesi + detayı yan yana · antrenman şablonu düzenleyici (kütüphaneden sürükle-bırak) · egzersiz kütüphanesi · davet QR ekranı · canlı görünüm · ayarlar (marka, yönetim işlemleri).
 
