@@ -5,9 +5,14 @@ import { DashboardDock } from './nav';
 import { UserMenu } from './user-menu';
 
 /**
- * PT kabuğu (SPEC §6): üst çubuk yok. Sağ üstte kullanıcı menüsü (ayarlar, çıkış),
- * altta dock (gezinme). Kurulum tamamlanmadıysa hiçbir PT ekranı açılmaz, önce sihirbaz.
+ * PT kabuğu (SPEC §6).
+ *
+ * Her sayfa aynı ortalı içerik sütununda durur (`PAGE_WIDTH`); bileşenler bu genişliğe
+ * göre yerleşir — masaüstünde yan yana, telefonda alt alta. Üst çubuk yok: kullanıcı
+ * menüsü içerik sütununun sağ üst köşesine hizalıdır. Gezinme alttaki dock'ta.
  */
+const PAGE_WIDTH = 'mx-auto w-full max-w-5xl px-4 md:px-8';
+
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await requirePt();
   const config = await readAppConfig();
@@ -15,15 +20,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <>
-      <div className="fixed top-3 right-4 z-30 md:top-5 md:right-6">
-        <UserMenu login={session.subject} appName={config.appName} />
+      {/* Menü sabit durur ama içerik sütununa hizalıdır; boş alan tıklamayı engellemez. */}
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-30">
+        <div className={`${PAGE_WIDTH} flex justify-end pt-4`}>
+          <div className="pointer-events-auto">
+            <UserMenu login={session.subject} appName={config.appName} />
+          </div>
+        </div>
       </div>
 
-      {/* Üstte menüye, altta dock'a yer: dar ekranda içerik menünün altından başlar,
-          geniş ekranda menü içerik sütununun dışında kalır. */}
-      <main className="px-4 pt-16 pb-32 md:px-8 xl:pt-8">
-        <div className="mx-auto max-w-6xl">{children}</div>
-      </main>
+      {/* Başlık satırı menünün soluna düşsün diye sağda pay; altta dock'a yer. */}
+      <main className={`${PAGE_WIDTH} pt-6 pb-32 [&>*:first-child>header]:pr-14`}>{children}</main>
 
       <DashboardDock />
     </>

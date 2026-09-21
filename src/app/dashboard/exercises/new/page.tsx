@@ -4,7 +4,7 @@ import { ExerciseForm } from '../exercise-form';
 
 export default function NewExercisePage() {
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <PageHeader
         crumbs={[{ label: 'Egzersizler', href: '/dashboard/exercises' }, { label: 'Yeni egzersiz' }]}
         title="Yeni egzersiz"

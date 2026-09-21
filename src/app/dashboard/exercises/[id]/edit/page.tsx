@@ -12,7 +12,7 @@ export default async function EditExercisePage({ params }: { params: Promise<{ i
   const { source: _source, overridesLibrary: _override, ...editable } = exercise;
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <PageHeader
         crumbs={[
           { label: 'Egzersizler', href: '/dashboard/exercises' },
