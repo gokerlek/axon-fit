@@ -9,7 +9,7 @@ import * as v from 'valibot';
 
 export const OTP_LENGTH = 6;
 
-export const epostaSchema = v.pipe(
+export const emailSchema = v.pipe(
   v.string(),
   v.trim(),
   v.toLowerCase(),
@@ -17,19 +17,19 @@ export const epostaSchema = v.pipe(
   v.maxLength(200, 'E-posta adresi çok uzun.'),
 );
 
-export const kodSchema = v.pipe(
+export const codeSchema = v.pipe(
   v.string(),
   v.trim(),
   v.regex(new RegExp(`^[0-9]{${OTP_LENGTH}}$`), `${OTP_LENGTH} haneli kodu gir.`),
 );
 
 /** Form: "giriş kodu gönder" adımı. */
-export const kodIsteSchema = v.object({ email: epostaSchema });
-export type KodIste = v.InferOutput<typeof kodIsteSchema>;
+export const requestCodeSchema = v.object({ email: emailSchema });
+export type RequestCode = v.InferOutput<typeof requestCodeSchema>;
 
 /** Form: kod doğrulama adımı. */
-export const kodGirSchema = v.object({ code: kodSchema });
-export type KodGir = v.InferOutput<typeof kodGirSchema>;
+export const enterCodeSchema = v.object({ code: codeSchema });
+export type EnterCode = v.InferOutput<typeof enterCodeSchema>;
 
-/** Sunucu ucu: POST /api/giris/dogrula gövdesi. */
-export const dogrulaGovdeSchema = v.object({ email: epostaSchema, code: kodSchema });
+/** Sunucu ucu: POST /api/auth/verify gövdesi. */
+export const verifyBodySchema = v.object({ email: emailSchema, code: codeSchema });

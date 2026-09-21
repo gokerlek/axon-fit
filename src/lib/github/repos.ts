@@ -1,5 +1,5 @@
 import 'server-only';
-import { clientRepoName, gh, GithubError, isClientRepo, owner, toGithubError } from './client';
+import { appRepo, clientRepoName, gh, GithubError, isClientRepo, owner, toGithubError } from './client';
 import { CLIENT_REPO_PREFIX } from '../env';
 
 /**
@@ -9,6 +9,40 @@ import { CLIENT_REPO_PREFIX } from '../env';
  * geçmişi yeniden yazılmaz. Repo adında isim geçmez, yalnız kimlik: repo adları
  * silindikten sonra da denetim kayıtlarında kalabiliyor.
  */
+
+/**
+ * Uygulama repo'sunu oluşturur (kurulumun ilk adımı).
+ *
+ * PT'nin GitHub arayüzüyle uğraşmasına gerek kalmasın diye uygulama kendi deposunu
+ * kendisi açar. Zaten varsa dokunmaz. Özel (private) olmak zorunda: içinde marka
+ * ayarı ve danışan kimlikleri var.
+ */
+export async function createAppRepo(): Promise<{ created: boolean }> {
+  const repo = appRepo();
+  try {
+    await gh().rest.repos.get({ owner: owner(), repo });
+    return { created: false };
+  } catch (error) {
+    if (typeof error !== 'object' || !error || !('status' in error) || error.status !== 404) {
+      throw toGithubError(error, repo);
+    }
+  }
+
+  try {
+    await gh().rest.repos.createForAuthenticatedUser({
+      name: repo,
+      private: true,
+      auto_init: true,
+      description: 'PulseCoach — uygulama ayarları ve antrenman kütüphanesi',
+      has_issues: false,
+      has_projects: false,
+      has_wiki: false,
+    });
+    return { created: true };
+  } catch (error) {
+    throw toGithubError(error, repo);
+  }
+}
 
 export async function createClientRepo(clientId: string): Promise<{ repo: string }> {
   const repo = clientRepoName(clientId);

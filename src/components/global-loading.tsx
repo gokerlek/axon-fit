@@ -5,7 +5,7 @@ import { useIsFetching, useIsMutating } from '@tanstack/react-query';
 import styles from './global-loading.module.css';
 
 /** Kısa isteklerde çubuğun yanıp sönmesini engelleyen eşik. */
-const GECIKME_MS = 200;
+const DELAY_MS = 200;
 
 /**
  * Uygulama genelinde yükleniyor göstergesi.
@@ -15,19 +15,19 @@ const GECIKME_MS = 200;
  * GitHub yazmaları yarım saniye civarı sürdüğü için kullanıcı "takıldı mı" diye düşünmesin.
  */
 export function GlobalLoading() {
-  const mesgul = useIsFetching() + useIsMutating() > 0;
-  const [gorunur, setGorunur] = useState(false);
+  const busy = useIsFetching() + useIsMutating() > 0;
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (!mesgul) {
-      setGorunur(false);
+    if (!busy) {
+      setVisible(false);
       return;
     }
-    const zamanlayici = setTimeout(() => setGorunur(true), GECIKME_MS);
-    return () => clearTimeout(zamanlayici);
-  }, [mesgul]);
+    const timer = setTimeout(() => setVisible(true), DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [busy]);
 
-  if (!gorunur) return null;
+  if (!visible) return null;
 
   return <div className={styles.bar} role="status" aria-label="Yükleniyor" />;
 }

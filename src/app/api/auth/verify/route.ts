@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import * as v from 'valibot';
 import { serverEnv } from '@/lib/env';
 import { consumeOtp, createSession } from '@/lib/session';
-import { dogrulaGovdeSchema } from '@/lib/schemas/auth';
+import { verifyBodySchema } from '@/lib/schemas/auth';
 
 const messages = {
   expired: 'Kodun süresi doldu. Yeni kod iste.',
@@ -11,7 +11,7 @@ const messages = {
 } as const;
 
 export async function POST(request: Request) {
-  const parsed = v.safeParse(dogrulaGovdeSchema, await request.json().catch(() => null));
+  const parsed = v.safeParse(verifyBodySchema, await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: messages.invalid }, { status: 400 });
   }

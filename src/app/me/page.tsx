@@ -1,6 +1,6 @@
 import { requireClient } from '@/lib/guards';
 
-/** Danışan alanı. PT ekranlarıyla hiçbir adres paylaşmaz (SPEC §5). */
+/** Danışan alanı. PT ekranlarıyla hiçbir address paylaşmaz (SPEC §5). */
 export default async function BenPage() {
   const session = await requireClient();
 

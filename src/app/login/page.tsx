@@ -4,7 +4,7 @@ import { readAppConfig } from '@/lib/config';
 import { githubLoginEnabled } from '@/lib/github-oauth';
 import { readSession } from '@/lib/session';
 import { LoginForm } from './login-form';
-import styles from './giris.module.css';
+import styles from './login.module.css';
 
 const errors: Record<string, string> = {
   yetkisiz: 'Bu GitHub hesabı uygulamanın sahibi değil.',
@@ -15,14 +15,14 @@ const errors: Record<string, string> = {
   kod_yok: 'GitHub yetki kodu gelmedi. Tekrar dene.',
 };
 
-export default async function GirisPage({ searchParams }: { searchParams: Promise<{ hata?: string }> }) {
+export default async function GirisPage({ searchParams }: { searchParams: Promise<{ failure?: string }> }) {
   const session = await readSession();
-  if (session?.role === 'pt') redirect('/panel');
-  if (session?.role === 'client') redirect('/ben');
+  if (session?.role === 'pt') redirect('/dashboard');
+  if (session?.role === 'client') redirect('/me');
 
   const config = await readAppConfig();
-  const { hata } = await searchParams;
-  const error = hata ? (errors[hata] ?? 'Giriş yapılamadı.') : null;
+  const { failure } = await searchParams;
+  const error = failure ? (errors[failure] ?? 'Giriş yapılamadı.') : null;
   const github = githubLoginEnabled();
   // Yedek yol yalnız PT açıkça istediyse görünür (SPEC §5).
   const emailFallback = Boolean(process.env.RESEND_API_KEY) || process.env.NODE_ENV !== 'production';
@@ -45,7 +45,7 @@ export default async function GirisPage({ searchParams }: { searchParams: Promis
 
           {github ? (
             <>
-              <a className={styles.primary} href="/api/giris/github">
+              <a className={styles.primary} href="/api/auth/github">
                 GitHub ile devam et
               </a>
               <p className={styles.note}>Antrenör girişi. Uygulamanın sahibi olan hesapla açılır.</p>

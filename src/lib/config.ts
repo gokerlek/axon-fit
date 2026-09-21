@@ -1,45 +1,51 @@
 import 'server-only';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import * as v from 'valibot';
+import { appRepo } from './github/client';
+import { readJson, writeJson } from './github/files';
+import { appConfigSchema, CONFIG_PATH, defaultConfig, type AppConfig } from './schemas/config';
+
+export { appConfigSchema, CONFIG_PATH, defaultConfig, type AppConfig };
 
 /**
- * Beyaz etiket ayarı (SPEC §10).
+ * Beyaz etiket ayarı (SPEC §10) — uygulama repo'sundaki `pulsecoach.config.json`.
  *
- * Faz 0'da yerel dosyadan okunur; Faz 1'de uygulama repo'sundaki
- * `pulsecoach.config.json` dosyasından okunacak (aynı şema).
+ * Her istekte GitHub'a gitmemek için kısa ömürlü bellek önbelleği var. Yazma anında
+ * önbellek düşürülür, böylece PT ayarı değiştirince sonucu hemen görür.
  */
 
-export const appConfigSchema = v.object({
-  /** Kurulum sihirbazında PT'nin verdiği ad; sekmede, giriş ekranında, PWA kısayolunda görünür. */
-  appName: v.pipe(v.string(), v.trim(), v.minLength(1, 'Uygulama adı boş olamaz.'), v.maxLength(40, 'Uygulama adı en fazla 40 karakter.')),
-  /** Uygulama repo'sundaki logo yolu; yoksa harf işareti kullanılır. */
-  logo: v.nullable(v.string()),
-  /** Vurgu rengi; null ise tokenlardaki volt kalır. */
-  accent: v.nullable(v.pipe(v.string(), v.regex(/^#[0-9a-fA-F]{6}$/, 'Renk #RRGGBB biçiminde olmalı.'))),
-  theme: v.picklist(['dark', 'light', 'system']),
-  timeZone: v.pipe(v.string(), v.minLength(1)),
-  setupCompleted: v.boolean(),
-});
+const CACHE_TTL_MS = 30_000;
+let cache: { value: AppConfig; sha: string | null; at: number } | null = null;
 
-export type AppConfig = v.InferOutput<typeof appConfigSchema>;
+export function invalidateConfigCache(): void {
+  cache = null;
+}
 
-export const defaultConfig: AppConfig = {
-  appName: 'PulseCoach',
-  logo: null,
-  accent: null,
-  theme: 'dark',
-  timeZone: 'Europe/Istanbul',
-  setupCompleted: false,
-};
-
+/** Ayarı okur. GitHub'a ulaşılamazsa uygulama düşmez: varsayılanla açılır. */
 export async function readAppConfig(): Promise<AppConfig> {
-  try {
-    const raw = await readFile(path.join(process.cwd(), 'pulsecoach.config.json'), 'utf8');
-    const parsed = v.safeParse(appConfigSchema, JSON.parse(raw));
-    // Bozuk ayar uygulamayı düşürmez: varsayılana dönüp kurulum sihirbazına yönlendirir.
-    return parsed.success ? parsed.output : defaultConfig;
-  } catch {
-    return defaultConfig;
+  return (await readAppConfigWithSha()).config;
+}
+
+export async function readAppConfigWithSha(): Promise<{ config: AppConfig; sha: string | null }> {
+  if (cache && Date.now() - cache.at < CACHE_TTL_MS) {
+    return { config: cache.value, sha: cache.sha };
   }
+
+  try {
+    const stored = await readJson<unknown>(appRepo(), CONFIG_PATH);
+    if (!stored) return { config: defaultConfig, sha: null };
+
+    const parsed = v.safeParse(appConfigSchema, stored.content);
+    // Bozuk ayar uygulamayı düşürmez: varsayılana dönülür, kurulum sihirbazı devreye girer.
+    const config = parsed.success ? parsed.output : defaultConfig;
+    cache = { value: config, sha: stored.sha, at: Date.now() };
+    return { config, sha: stored.sha };
+  } catch {
+    return { config: defaultConfig, sha: null };
+  }
+}
+
+export async function writeAppConfig(config: AppConfig, message: string): Promise<void> {
+  const { sha } = await readAppConfigWithSha();
+  await writeJson(appRepo(), CONFIG_PATH, config, { sha: sha ?? undefined, message });
+  invalidateConfigCache();
 }

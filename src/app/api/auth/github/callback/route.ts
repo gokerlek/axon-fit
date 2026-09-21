@@ -9,7 +9,7 @@ import { callbackUrl } from '@/lib/urls';
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const fail = (reason: string) => NextResponse.redirect(new URL(`/giris?hata=${reason}`, request.url));
+  const fail = (reason: string) => NextResponse.redirect(new URL(`/login?error=${reason}`, request.url));
 
   if (!githubLoginEnabled()) return fail('github_kapali');
   if (url.searchParams.get('error')) return fail('iptal');
@@ -26,5 +26,5 @@ export async function GET(request: Request) {
   if (!isOwner(user)) return fail('yetkisiz');
 
   await createSession({ role: 'pt', via: 'github', subject: user.login });
-  return NextResponse.redirect(new URL('/panel', request.url));
+  return NextResponse.redirect(new URL('/dashboard', request.url));
 }

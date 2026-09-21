@@ -5,7 +5,7 @@ import 'server-only';
  * birebir aynı olmasını ister; ikisi de buradan üretilir.
  */
 export function callbackUrl(request: Request): string {
-  return new URL('/api/giris/github/callback', origin(request)).toString();
+  return new URL('/api/auth/github/callback', origin(request)).toString();
 }
 
 /** Vercel'de istek proxy'den geldiği için origin `x-forwarded-*` başlıklarından kurulur. */

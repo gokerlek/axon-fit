@@ -3,8 +3,8 @@ import 'server-only';
 /**
  * Sunucu ortam değişkenleri — TEK okuma noktası.
  *
- * `server-only` bilerek en üstte: bu modül bir istemci bileşeninden import edilirse
- * derleme hata verir, yani GITHUB_TOKEN yanlışlıkla tarayıcı paketine giremez.
+ * `server-only` bilerek en üstte: bu modül bir client bileşeninden import edilirse
+ * derleme failure verir, yani GITHUB_TOKEN yanlışlıkla tarayıcı paketine giremez.
  * Hiçbir değişken NEXT_PUBLIC_ ile başlamaz.
  */
 
