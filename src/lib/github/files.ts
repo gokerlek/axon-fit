@@ -131,7 +131,7 @@ export async function deleteFile(
 
 export type DirEntry = { name: string; path: string; sha: string; type: 'file' | 'dir' };
 
-/** Klasör listesi. Klasör yoksa boş dizi döner (failure değil: henüz yazılmamış demektir). */
+/** Klasör listesi. Klasör yoksa boş dizi döner (hata değil: henüz yazılmamış demektir). */
 export async function listDir(repo: string, path: string): Promise<DirEntry[]> {
   assertRepoAllowed(repo);
   try {

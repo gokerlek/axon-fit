@@ -1,7 +1,7 @@
 /**
- * Uygulama genelinde tek failure tipi.
+ * Uygulama genelinde tek hata tipi.
  *
- * Sunucu uçları `{ error: "mesaj" }` ya da alan bazlı failure için
+ * Sunucu uçları `{ error: "mesaj" }` ya da alan bazlı hata için
  * `{ error: "mesaj", fields: { ad: "mesaj" } }` döner. `fetchJson` bunu `ApiError`'a
  * çevirir; bildirim gösterme işi tek merkezde (query/client.ts), alan hatalarını
  * forma basma işi `applyFieldErrors` içinde olur.
@@ -49,7 +49,7 @@ export async function fetchJson<T>(input: string, init?: RequestInit): Promise<T
     const body = (await response.json().catch(() => null)) as
       | { error?: string; fields?: FieldErrors }
       | null;
-    const message = body?.error ?? defaultMessages[response.status] ?? 'Beklenmeyen bir failure oldu.';
+    const message = body?.error ?? defaultMessages[response.status] ?? 'Beklenmeyen bir hata oldu.';
     throw new ApiError(message, response.status, body?.fields ?? {});
   }
 

@@ -15,7 +15,8 @@ Her PT uygulamayı kendi GitHub hesabına kurar, kendi adresinde yayınlar, kend
 | Veritabanı | GitHub. JSON dosyaları, yazma Octokit ile commit |
 | Veri yerleşimi | **Danışan başına ayrı özel repo** (`client-<id>`), PT'nin kişisel hesabında |
 | Barındırma | Vercel ücretsiz plan (ticari kullanım yok) |
-| Görseller | Başta uygulama repo'sunda; Cloudflare R2 sonra opsiyonel |
+| Görseller | Başta uygulama repo'sunda (en fazla 1 MB, büyüğü reddedilir); Cloudflare R2 sonra opsiyonel |
+| Videolar | Yalnız YouTube/Vimeo bağlantısı (liste dışı da olur); dosya yükleme R2 ile gelir (Vercel isteği ~4,5 MB ile sınırlı) |
 | PT girişi | **GitHub ile giriş (OAuth)** — tek yöntem. Kimlik kontrolü: giren kişi repoların sahibi mi |
 | Danışan girişi | Kare kod + PT'nin bizzat verdiği tek kullanımlık kod. GitHub hesabı gerekmez |
 | Sağlık verisi | PT danışanı açarken kişi bazında karar verir; danışan ayrıca onaylar |
@@ -60,7 +61,7 @@ data/
   clients.json                 YALNIZ kimlik ve durum: [{ "id": "c_8f3k", "status": "active" }]
 media/
   brand/logo.png               PT'nin logosu
-  exercises/<dosya>            egzersiz görselleri
+  exercises/<id>-<özet>.<uzantı>  egzersiz görselleri (PNG/JPG/WebP, en fazla 1 MB)
 ```
 
 `clients.json` bilerek çıplak: isim, e-posta, not **hiçbir koşulda** buraya yazılmaz. Bir kez yazılırsa danışanı silmek için bu repo'nun geçmişini yeniden yazmak gerekir ve modelin bütün avantajı kaybolur.

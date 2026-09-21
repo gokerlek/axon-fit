@@ -1,5 +1,4 @@
 import 'server-only';
-import { revalidateTag, unstable_cache } from 'next/cache';
 import * as v from 'valibot';
 import { EXERCISE_LIBRARY } from '@/data/exercise-library';
 import { appRepo } from './github/client';
@@ -12,13 +11,17 @@ import { customExercisesSchema, type Exercise } from './schemas/exercise';
  * İkisi ayrı durur ki paket güncellemesi PT'nin eklediklerini ezmesin. Aynı kimlik
  * iki tarafta da varsa PT'ninki kazanır — böylece PT hazır bir egzersizin ipuçlarını
  * kendine göre değiştirebilir.
+ *
+ * Sunucuda önbellek yok, her okuma GitHub'dan taze: kaydın hemen ardından açılan
+ * sayfa yeni kaydı görmeli. Next'in veri önbelleği rota ucundan temizlendiğinde bu
+ * garanti değil (kayıttan sonra açılan detay sayfası eski listeyi görüp 404 verdi).
+ * Tek PT'li uygulamada her sayfada bir GitHub okuması sorun değil; istemcide
+ * React Query önbelleği var.
  */
 
 export const CUSTOM_EXERCISES_PATH = 'data/exercises.json';
 
 export type ExerciseWithSource = Exercise & { source: 'library' | 'custom' };
-
-export const EXERCISES_TAG = 'exercises';
 
 /** Taze okuma (yazmadan önce `sha` için ve silme/güncelleme kararları için). */
 export async function readCustomExercises(): Promise<{ items: Exercise[]; sha: string | null }> {
@@ -30,24 +33,16 @@ export async function readCustomExercises(): Promise<{ items: Exercise[]; sha: s
   return { items: parsed.success ? parsed.output : [], sha: stored.sha };
 }
 
-/** Liste gösterimi için önbellekli okuma; hata önbelleğe girmez. */
-const readCustomExercisesCached = unstable_cache(
-  async () => (await readCustomExercises()).items,
-  ['custom-exercises'],
-  { tags: [EXERCISES_TAG], revalidate: 300 },
-);
-
 export async function writeCustomExercises(
   items: Exercise[],
   message: string,
   sha: string | null,
 ): Promise<void> {
   await writeJson(appRepo(), CUSTOM_EXERCISES_PATH, items, { sha: sha ?? undefined, message });
-  revalidateTag(EXERCISES_TAG, { expire: 0 });
 }
 
 export async function listExercises(): Promise<ExerciseWithSource[]> {
-  const items = await readCustomExercisesCached();
+  const { items } = await readCustomExercises();
   const customIds = new Set(items.map((item) => item.id));
 
   return [

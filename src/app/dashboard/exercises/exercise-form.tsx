@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -12,7 +13,8 @@ import {
   setInput,
   useForm,
 } from "@formisch/react";
-import { Plus, WarningCircle, X } from "@phosphor-icons/react";
+import { ImageSquare, Plus, WarningCircle, X } from "@phosphor-icons/react";
+import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -34,12 +36,16 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { fetchJson } from "@/lib/query/errors";
+import { VideoEmbed } from "@/components/video-embed";
+import { exerciseImageUrl } from "@/lib/exercise-media";
+import { ApiError, fetchJson } from "@/lib/query/errors";
 import { applyFieldErrors } from "@/lib/query/field-errors";
 import { useServiceMutation } from "@/lib/query/use-service";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
+  EXERCISE_IMAGE_MAX_BYTES,
+  EXERCISE_IMAGE_TYPES,
   EQUIPMENT,
   EQUIPMENT_LABELS,
   MUSCLES,
@@ -51,6 +57,7 @@ import {
   type ExerciseInput,
   type Muscle,
 } from "@/lib/schemas/exercise";
+import { parseVideoUrl, videoUrl } from "@/lib/video";
 
 const TRACKING_LABELS: Record<(typeof TRACKING_TYPES)[number], string> = {
   weight_reps: "Ağırlık + tekrar",
@@ -69,11 +76,136 @@ const BLANK: ExerciseInput = {
   secondaryMuscles: [],
   loadIncrementKg: 2.5,
   minLoadKg: 0,
+  videoUrl: "",
 };
 
-/** Düzenlemede kimlik forma girmez: şemada yok. */
-function toInput({ id: _id, ...rest }: Exercise): ExerciseInput {
-  return rest;
+/**
+ * Düzenlemede kimlik ve görsel forma girmez (şemada yok); video, yapıştırılan
+ * bağlantı olarak gösterilir.
+ */
+function toInput({ id: _id, image: _image, video, ...rest }: Exercise): ExerciseInput {
+  return { ...rest, videoUrl: video ? videoUrl(video) : "" };
+}
+
+/** Görselde ne yapılacak: olduğu gibi kalsın, yenisi yüklensin ya da kaldırılsın. */
+type ImageChange =
+  | { kind: "keep" }
+  | { kind: "upload"; file: File }
+  | { kind: "remove" };
+
+/**
+ * Görsel seçimi. Tür ve boyut tarayıcıda denetlenir (sunucu da denetler):
+ * 1 MB'tan büyük görsel kabul edilmez. Dosya "Kaydet"te, egzersiz kaydedildikten
+ * sonra yüklenir.
+ */
+function ImageField({
+  currentUrl,
+  change,
+  onChange,
+  error,
+  onError,
+}: {
+  currentUrl: string | null;
+  change: ImageChange;
+  onChange: (change: ImageChange) => void;
+  error: string | null;
+  onError: (error: string | null) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  // Seçilen dosyanın önizlemesi; değişince ya da çıkınca bellekten bırakılır.
+  useEffect(() => {
+    if (change.kind !== "upload") return setPreview(null);
+    const url = URL.createObjectURL(change.file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [change]);
+
+  const shown =
+    change.kind === "upload" ? preview : change.kind === "keep" ? currentUrl : null;
+
+  function pick(file: File | undefined) {
+    if (!file) return;
+    if (!EXERCISE_IMAGE_TYPES[file.type]) {
+      onError("Yalnız PNG, JPG ya da WebP seçebilirsin.");
+      return;
+    }
+    if (file.size > EXERCISE_IMAGE_MAX_BYTES) {
+      const mb = (file.size / 1024 / 1024).toLocaleString("tr-TR", {
+        maximumFractionDigits: 1,
+      });
+      onError(`Görsel ${mb} MB; en fazla 1 MB olabilir. Daha küçük bir görsel seç.`);
+      return;
+    }
+    onError(null);
+    onChange({ kind: "upload", file });
+  }
+
+  return (
+    <Field data-invalid={Boolean(error) || undefined}>
+      <FieldLabel htmlFor="image">Görsel</FieldLabel>
+      <div className="flex items-center gap-3">
+        {shown ? (
+          // Özel repo'dan uygulama üzerinden gelir; Next görsel iyileştiricisi oturum çerezini taşımaz.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={shown}
+            alt="Egzersiz görseli önizlemesi"
+            className="size-24 shrink-0 rounded-lg border object-cover"
+          />
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => inputRef.current?.click()}
+          >
+            <ImageSquare data-icon="inline-start" />
+            {shown ? "Değiştir" : "Görsel seç"}
+          </Button>
+          {shown ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                onError(null);
+                onChange(currentUrl ? { kind: "remove" } : { kind: "keep" });
+              }}
+            >
+              Kaldır
+            </Button>
+          ) : null}
+          {change.kind !== "keep" && currentUrl ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => onChange({ kind: "keep" })}
+            >
+              Geri al
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <input
+        ref={inputRef}
+        id="image"
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        hidden
+        onChange={(event) => {
+          pick(event.target.files?.[0]);
+          // Aynı dosya yeniden seçilebilsin.
+          event.target.value = "";
+        }}
+      />
+      <FieldDescription>PNG, JPG ya da WebP; en fazla 1 MB.</FieldDescription>
+      <FieldError>{error}</FieldError>
+    </Field>
+  );
 }
 
 /** Açılır liste: Base UI `items` ile seçili değerin Türkçe etiketini gösterir. */
@@ -166,22 +298,49 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
     schema: exerciseFormSchema,
     initialInput: editing ? toInput(editing) : BLANK,
   });
+  const [image, setImage] = useState<ImageChange>({ kind: "keep" });
+  const [imageError, setImageError] = useState<string | null>(null);
+  const currentImageUrl = editing ? exerciseImageUrl(editing) : null;
 
   const save = useServiceMutation({
-    fn: (values: ExerciseInput) =>
-      fetchJson<{ id: string }>("/api/exercises", {
+    fn: async (values: ExerciseInput) => {
+      const { videoUrl: link, ...rest } = values;
+      const video = link ? (parseVideoUrl(link) ?? undefined) : undefined;
+      const { id } = await fetchJson<{ id: string }>("/api/exercises", {
         method: "POST",
         // Yeni egzersizde kimlik sunucuda başlıktan üretilir; düzenlemede mevcut kimlik gider.
-        body: JSON.stringify(editing ? { ...values, id: editing.id } : values),
-      }),
+        body: JSON.stringify({ ...rest, video, ...(editing ? { id: editing.id } : {}) }),
+      });
+
+      // Görsel ayrı uca gider. Egzersiz kaydedildiyse görsel hatası kaydı geri almaz:
+      // kullanıcı düzenleme sayfasına düşer ve yalnız görseli yeniden dener.
+      try {
+        if (image.kind === "upload") {
+          const body = new FormData();
+          body.set("image", image.file);
+          await fetchJson(`/api/exercises/${id}/image`, { method: "POST", body });
+        } else if (image.kind === "remove") {
+          await fetchJson(`/api/exercises/${id}/image`, { method: "DELETE" });
+        }
+      } catch (error) {
+        const message = error instanceof ApiError ? error.message : "Görsel yüklenemedi.";
+        return { id, imageFailed: message };
+      }
+      return { id, imageFailed: null };
+    },
     invalidate: [["exercises"]],
     notify: {
       success: editing ? "Egzersiz güncellendi." : "Egzersiz eklendi.",
     },
     onError: (error) => applyFieldErrors(form as never, error),
     // Yeni kayıtta sunucunun ürettiği kimlikle detay sayfasına geçilir.
-    onSuccess: ({ id }) => {
-      router.push(`/dashboard/exercises/${id}`);
+    onSuccess: ({ id, imageFailed }) => {
+      if (imageFailed) {
+        toast.error(`Egzersiz kaydedildi ama görsel yüklenemedi: ${imageFailed}`);
+        router.push(`/dashboard/exercises/${id}/edit`);
+      } else {
+        router.push(`/dashboard/exercises/${id}`);
+      }
       router.refresh();
     },
   });
@@ -279,6 +438,47 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
             )}
           </FieldArray>
         </Field>
+
+        <FormField of={form} path={["videoUrl"]}>
+          {(field) => {
+            const video = field.input ? parseVideoUrl(field.input) : null;
+            return (
+              <Field data-invalid={Boolean(field.errors) || undefined}>
+                <FieldLabel htmlFor="videoUrl">Video bağlantısı</FieldLabel>
+                <Input
+                  {...field.props}
+                  id="videoUrl"
+                  inputMode="url"
+                  autoComplete="off"
+                  value={field.input ?? ""}
+                  placeholder="https://www.youtube.com/watch?v=…"
+                  aria-invalid={Boolean(field.errors) || undefined}
+                />
+                <FieldDescription>
+                  {field.input && !video && !field.errors
+                    ? "Bağlantı tanınmadı: YouTube ya da Vimeo video bağlantısı olmalı."
+                    : "YouTube ya da Vimeo. Kendi videonu YouTube'a “liste dışı” yükleyip bağlantısını yapıştırabilirsin."}
+                </FieldDescription>
+                <FieldError>{field.errors?.[0]}</FieldError>
+                {video ? (
+                  <VideoEmbed
+                    provider={video.provider}
+                    id={video.id}
+                    title="Video önizlemesi"
+                  />
+                ) : null}
+              </Field>
+            );
+          }}
+        </FormField>
+
+        <ImageField
+          currentUrl={currentImageUrl}
+          change={image}
+          onChange={setImage}
+          error={imageError}
+          onError={setImageError}
+        />
       </div>
 
       {/* Sağ sütun: sınıflandırma — kas, ekipman, tür, kayıt, yük. */}

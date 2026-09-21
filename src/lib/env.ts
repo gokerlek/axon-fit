@@ -4,7 +4,7 @@ import 'server-only';
  * Sunucu ortam değişkenleri — TEK okuma noktası.
  *
  * `server-only` bilerek en üstte: bu modül bir client bileşeninden import edilirse
- * derleme failure verir, yani GITHUB_TOKEN yanlışlıkla tarayıcı paketine giremez.
+ * derleme hatası verir, yani GITHUB_TOKEN yanlışlıkla tarayıcı paketine giremez.
  * Hiçbir değişken NEXT_PUBLIC_ ile başlamaz.
  */
 

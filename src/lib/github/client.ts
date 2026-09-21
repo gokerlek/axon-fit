@@ -10,7 +10,7 @@ import { CLIENT_REPO_PREFIX, serverEnv } from '../env';
  *   1. uygulama repo'su (APP_REPO)
  *   2. `client-` önekli danışan repoları
  * Başka bir repo adı buraya gelirse istek hiç çıkmaz. Bu kontrol tek noktada,
- * bilerek: bir failure ya da kötü girdi gidip başka bir repoyu silemesin.
+ * bilerek: bir hata ya da kötü girdi gidip başka bir repoyu silemesin.
  */
 
 let client: Octokit | null = null;

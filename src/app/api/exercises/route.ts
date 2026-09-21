@@ -43,12 +43,13 @@ export async function POST(request: Request) {
 
   try {
     const { items, sha } = await readCustomExercises();
-    const input = parsed.output;
+    // Görsel yalnız görsel ucundan yazılır; istemcinin gönderdiği yol yok sayılır, kayıtlı olan korunur.
+    const { image: _ignored, ...input } = parsed.output;
     const taken = new Set([...items.map((item) => item.id), ...EXERCISE_LIBRARY.map((item) => item.id)]);
 
     if (input.id) {
       const index = items.findIndex((item) => item.id === input.id);
-      const entry = { ...input, id: input.id };
+      const entry = { ...input, id: input.id, image: items[index]?.image };
       const next = index >= 0 ? items.map((item, i) => (i === index ? entry : item)) : [...items, entry];
       await writeCustomExercises(next, `Egzersiz güncellendi: ${input.title}`, sha);
       return NextResponse.json({ id: input.id });

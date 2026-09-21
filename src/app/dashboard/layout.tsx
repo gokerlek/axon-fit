@@ -29,8 +29,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
       </div>
 
-      {/* Başlık satırı menünün soluna düşsün diye sağda pay; altta dock'a yer. */}
-      <main className={`${PAGE_WIDTH} pt-6 pb-32 [&>*:first-child>header]:pr-14`}>{children}</main>
+      {/* Menüye pay `PageHeader`'ın en üst satırında; altta dock'a yer. */}
+      <main className={`${PAGE_WIDTH} pt-6 pb-32`}>{children}</main>
 
       <DashboardDock />
     </>

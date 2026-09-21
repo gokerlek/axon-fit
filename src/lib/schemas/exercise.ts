@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { isValidVideoId, parseVideoUrl } from '@/lib/video';
 
 /**
  * Egzersiz şeması — sunucu ve istemci ortak.
@@ -77,26 +78,48 @@ export const exerciseSchema = v.object({
   loadIncrementKg: v.pipe(v.number('Sayı gir.'), v.minValue(0, 'Negatif olamaz.'), v.maxValue(50, 'En fazla 50 kg.')),
   minLoadKg: v.pipe(v.number('Sayı gir.'), v.minValue(0, 'Negatif olamaz.'), v.maxValue(500, 'En fazla 500 kg.')),
   video: v.optional(
-    v.object({
-      provider: v.picklist(['youtube', 'vimeo'], 'Video sağlayıcı YouTube ya da Vimeo olabilir.'),
-      /** Video kimliği; gömme adresi buradan kurulur, medya barındırmıyoruz. */
-      id: v.pipe(v.string(), v.trim(), v.maxLength(64)),
-    }),
+    v.pipe(
+      v.object({
+        provider: v.picklist(['youtube', 'vimeo'], 'Video sağlayıcı YouTube ya da Vimeo olabilir.'),
+        /** Video kimliği; gömme adresi buradan kurulur, medya barındırmıyoruz (`src/lib/video.ts`). */
+        id: v.pipe(v.string(), v.trim(), v.maxLength(64)),
+      }),
+      v.check(isValidVideoId, 'Video kimliği geçersiz.'),
+    ),
   ),
-  /** Görsel adresi (PT'nin kendi bağlantısı ya da repo yolu). */
-  image: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(300))),
+  /** Görselin uygulama repo'sundaki yolu (`media/exercises/<id>.<uzantı>`). Yalnız görsel ucu yazar. */
+  image: v.optional(v.pipe(v.string(), v.regex(/^media\/exercises\/[a-z0-9-]+\.(png|jpg|webp)$/))),
 });
 
 export type Exercise = v.InferOutput<typeof exerciseSchema>;
 
 /**
- * Formun şeması: `id` yok.
+ * Formun şeması: `id`, `video`, `image` yok; video yerine yapıştırılan bağlantı var.
  *
  * Kimlik yeni kayıtta sunucuda başlıktan üretilir, düzenlemede zaten bellidir.
- * Formda olmayan bir alanı zorunlu tutmak formu sessizce geçersiz bırakır.
+ * Görsel ayrı uca dosya olarak gider. Formda olmayan bir alanı zorunlu tutmak
+ * formu sessizce geçersiz bırakır.
  */
-export const exerciseFormSchema = v.omit(exerciseSchema, ['id']);
+export const exerciseFormSchema = v.object({
+  ...v.omit(exerciseSchema, ['id', 'video', 'image']).entries,
+  videoUrl: v.pipe(
+    v.string(),
+    v.trim(),
+    v.check(
+      (value) => value === '' || parseVideoUrl(value) !== null,
+      'Bu bağlantıyı tanıyamadım. YouTube ya da Vimeo video bağlantısı yapıştır.',
+    ),
+  ),
+});
 export type ExerciseInput = v.InferOutput<typeof exerciseFormSchema>;
+
+/** Egzersiz görseli: PNG, JPG, WebP; en fazla 1 MB. SVG yok (betik taşıyabilir). */
+export const EXERCISE_IMAGE_TYPES: Record<string, 'png' | 'jpg' | 'webp'> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+};
+export const EXERCISE_IMAGE_MAX_BYTES = 1024 * 1024;
 export type Equipment = (typeof EQUIPMENT)[number];
 export type Muscle = (typeof MUSCLES)[number];
 
