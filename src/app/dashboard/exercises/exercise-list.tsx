@@ -92,22 +92,22 @@ export function ExerciseList({ initial }: { initial: ExerciseWithSource[] }) {
             <CardTitle>Kas haritası</CardTitle>
             <CardDescription>Kaslara dokunarak süz.</CardDescription>
           </CardHeader>
-          <CardContent className="flex items-start gap-5 lg:flex-col lg:items-stretch">
+          <CardContent className="flex flex-col gap-4">
+            {/* Telefonda harita ekran genişliğinde büyük: parmakla seçilebilsin. */}
             <MuscleMap
               layout="flip"
               selected={selectedBody}
               onToggle={toggle}
               counts={counts}
-              hint="Bir kas seç"
-              bodyClassName="h-64 lg:h-96"
+              hint="Bir kasa dokun"
+              bodyClassName="h-[min(34rem,68svh)] lg:h-96"
               label="Kas süzgeci"
-              className="shrink-0"
             />
 
-            <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <div className="flex flex-col gap-3">
               <Toggle
                 variant="outline"
-                size="sm"
+                size="lg"
                 className="justify-start"
                 pressed={selected.includes('cardio')}
                 onPressedChange={() => toggle('cardio')}

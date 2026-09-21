@@ -154,7 +154,7 @@ export function MuscleMap({
       {layout === 'flip' ? (
         <ToggleGroup
           variant="outline"
-          size="sm"
+          size="lg"
           spacing={0}
           value={[side]}
           onValueChange={(value) => {
@@ -163,7 +163,7 @@ export function MuscleMap({
           }}
           aria-label="Görünüm">
           {SIDES.map((face) => (
-            <ToggleGroupItem key={face} value={face} className="px-3">
+            <ToggleGroupItem key={face} value={face} className="px-5">
               {SIDE_LABELS[face]}
               {face !== side && selectedOn(face) ? (
                 <>
@@ -190,6 +190,31 @@ type BodyProps = {
   onHighlight: (muscle: BodyMuscle | null) => void;
 };
 
+/** Dokunma toleransı: boşluğa düşen dokunuşta bu yarıçaplarda (px) en yakın kas aranır. */
+const TOLERANCE_RADII = [6, 12, 18];
+const TOLERANCE_SAMPLES = 12;
+
+/**
+ * Dokunulan noktanın çevresinde en çok rastlanan seçilebilir kas.
+ * Ekran koordinatıyla çalışır; arka yüzün 3B dönüşü hesabı bozmaz.
+ */
+function nearestMuscle(x: number, y: number, svg: SVGSVGElement): BodyMuscle | null {
+  for (const radius of TOLERANCE_RADII) {
+    const hits = new Map<BodyMuscle, number>();
+    for (let i = 0; i < TOLERANCE_SAMPLES; i++) {
+      const angle = (i / TOLERANCE_SAMPLES) * Math.PI * 2;
+      const element = document.elementFromPoint(x + radius * Math.cos(angle), y + radius * Math.sin(angle));
+      const group = element?.closest<SVGGElement>('[data-clickable]');
+      const muscle = group && svg.contains(group) ? (group.dataset.muscle as BodyMuscle) : null;
+      if (muscle) hits.set(muscle, (hits.get(muscle) ?? 0) + 1);
+    }
+    let best: BodyMuscle | null = null;
+    for (const [muscle, count] of hits) if (!best || count > (hits.get(best) ?? 0)) best = muscle;
+    if (best) return best;
+  }
+  return null;
+}
+
 /** Tek yüzün SVG'si. Her kas bir `g`; sol ve sağ birlikte yanar. */
 function Body({ side, label, intensity, selected, counts, onToggle, highlighted, onHighlight }: BodyProps) {
   const { neutral, groups } = SHAPES[side];
@@ -198,11 +223,24 @@ function Body({ side, label, intensity, selected, counts, onToggle, highlighted,
   return (
     <svg
       viewBox={VIEWBOX[side]}
-      className="size-full overflow-visible stroke-card"
+      className="size-full overflow-visible stroke-card [-webkit-tap-highlight-color:transparent]"
       strokeWidth={0.12}
       strokeLinejoin="round"
       role={interactive ? 'group' : 'img'}
-      aria-label={label}>
+      aria-label={label}
+      onClick={
+        interactive
+          ? (event) => {
+              // Kasın üstüne düşen dokunuşu kasın kendisi karşılar. Boşluğa ya da
+              // kas olmayan parçaya (dirsek, omurga…) düşerse en yakın kas seçilir.
+              if ((event.target as Element).closest('[data-muscle]')) return;
+              const muscle = nearestMuscle(event.clientX, event.clientY, event.currentTarget);
+              if (!muscle) return;
+              onHighlight(muscle);
+              onToggle?.(muscle);
+            }
+          : undefined
+      }>
       <g className="fill-foreground/10" aria-hidden>
         {neutral.map((path) => (
           <path key={path.id} d={path.d} />
@@ -220,6 +258,8 @@ function Body({ side, label, intensity, selected, counts, onToggle, highlighted,
         return (
           <g
             key={muscle}
+            data-muscle={muscle}
+            data-clickable={clickable || undefined}
             role={interactive ? 'button' : undefined}
             tabIndex={clickable ? 0 : undefined}
             aria-pressed={interactive ? isSelected : undefined}
