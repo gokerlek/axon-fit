@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/page-header';
 import { readAppConfig } from '@/lib/config';
 import { SetupForm } from '@/app/setup/setup-form';
 
@@ -7,10 +8,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="flex max-w-lg flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">Görünüm</h1>
-        <p className="text-muted-foreground">Danışanların göreceği ad, logo, renk, köşeler ve tema.</p>
-      </header>
+      <PageHeader title="Görünüm" description="Danışanların göreceği ad, logo, renk, köşeler ve tema." />
       <SetupForm
         firstRun={false}
         hasLogo={Boolean(config.logo)}

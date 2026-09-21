@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
-import { GithubLogo } from '@phosphor-icons/react/dist/ssr';
+import { GithubLogo, WarningCircle } from '@phosphor-icons/react/dist/ssr';
 import { PulseLine } from '@/components/pulse-line';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -42,14 +43,15 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <Card>
           <CardContent className="flex flex-col gap-4">
             {error ? (
-              <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {error}
-              </p>
+              <Alert variant="destructive">
+                <WarningCircle />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             ) : null}
 
             {github ? (
               <div className="flex flex-col gap-2">
-                <Button size="lg" className="h-11 w-full" render={<a href="/api/auth/github" />}>
+                <Button size="lg" className="h-11 w-full" nativeButton={false} render={<a href="/api/auth/github" />}>
                   <GithubLogo data-icon="inline-start" weight="bold" />
                   GitHub ile devam et
                 </Button>

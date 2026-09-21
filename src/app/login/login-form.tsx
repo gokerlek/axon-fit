@@ -6,6 +6,7 @@ import { Field as FormField, Form, useForm } from '@formisch/react';
 import { Button } from '@/components/ui/button';
 import { Field, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Spinner } from '@/components/ui/spinner';
 import { fetchJson } from '@/lib/query/errors';
 import { useServiceMutation } from '@/lib/query/use-service';
 import { enterCodeSchema, OTP_LENGTH, requestCodeSchema } from '@/lib/schemas/auth';
@@ -67,6 +68,7 @@ export function LoginForm() {
           )}
         </FormField>
         <Button type="submit" size="lg" className="h-11" disabled={verify.isPending}>
+          {verify.isPending ? <Spinner data-icon="inline-start" /> : null}
           {verify.isPending ? 'Kontrol ediliyor…' : 'Giriş yap'}
         </Button>
         <Button
@@ -107,6 +109,7 @@ export function LoginForm() {
         )}
       </FormField>
       <Button type="submit" variant="outline" size="lg" className="h-11" disabled={sendCode.isPending}>
+        {sendCode.isPending ? <Spinner data-icon="inline-start" /> : null}
         {sendCode.isPending ? 'Gönderiliyor…' : 'Giriş kodu gönder'}
       </Button>
       <p className="text-center text-xs text-muted-foreground">Kod 5 dakika geçerli, tek kullanımlık.</p>

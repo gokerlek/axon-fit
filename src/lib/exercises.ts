@@ -79,3 +79,16 @@ export function slugify(title: string, taken: Set<string>): string {
   }
   return `${base}-${Date.now()}`;
 }
+
+export type ExerciseDetail = ExerciseWithSource & {
+  /** PT'nin sürümü hazır kütüphanedeki bir egzersizin yerine geçiyor ("Varsayılana dön" mümkün). */
+  overridesLibrary: boolean;
+};
+
+export async function getExercise(id: string): Promise<ExerciseDetail | null> {
+  const all = await listExercises();
+  const found = all.find((item) => item.id === id);
+  if (!found) return null;
+  const inLibrary = EXERCISE_LIBRARY.some((item) => item.id === id);
+  return { ...found, overridesLibrary: found.source === 'custom' && inLibrary };
+}

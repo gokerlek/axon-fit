@@ -1,9 +1,12 @@
 'use client';
 
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Field as FormField, FieldArray, Form, getDeepError, insert, remove, setInput, useForm } from '@formisch/react';
-import { Plus, X } from '@phosphor-icons/react';
+import { Plus, WarningCircle, X } from '@phosphor-icons/react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { DialogFooter } from '@/components/ui/dialog';
+import { Spinner } from '@/components/ui/spinner';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -80,11 +83,12 @@ function LabeledSelect<T extends string>({
 }
 
 /**
- * Egzersiz ekleme/düzenleme (diyalog içinde).
+ * Egzersiz ekleme/düzenleme formu — kendi sayfasında (modal değil, SPEC §6).
  * İpuçları `FieldArray` ile satır satır. Kaydedince PT'nin repo'sundaki
  * `data/exercises.json` güncellenir, liste `invalidate` ile tazelenir.
  */
-export function ExerciseForm({ editing, onDone }: { editing: Exercise | null; onDone: () => void }) {
+export function ExerciseForm({ editing }: { editing: Exercise | null }) {
+  const router = useRouter();
   const form = useForm({ schema: exerciseFormSchema, initialInput: editing ? toInput(editing) : BLANK });
 
   const save = useServiceMutation({
@@ -97,7 +101,11 @@ export function ExerciseForm({ editing, onDone }: { editing: Exercise | null; on
     invalidate: [['exercises']],
     notify: { success: editing ? 'Egzersiz güncellendi.' : 'Egzersiz eklendi.' },
     onError: (error) => applyFieldErrors(form as never, error),
-    onSuccess: onDone,
+    // Yeni kayıtta sunucunun ürettiği kimlikle detay sayfasına geçilir.
+    onSuccess: ({ id }) => {
+      router.push(`/dashboard/exercises/${id}`);
+      router.refresh();
+    },
   });
 
   // Ekranda karşılığı olmayan bir doğrulama hatası kalırsa form sessizce gönderilmez;
@@ -279,16 +287,22 @@ export function ExerciseForm({ editing, onDone }: { editing: Exercise | null; on
       </div>
 
       {hiddenError ? (
-        <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {hiddenError}
-        </p>
+        <Alert variant="destructive">
+          <WarningCircle />
+          <AlertTitle>Form gönderilemedi</AlertTitle>
+          <AlertDescription>{hiddenError}</AlertDescription>
+        </Alert>
       ) : null}
 
-      <DialogFooter>
+      <div className="flex justify-end gap-2 border-t pt-4">
+        <Button variant="outline" nativeButton={false} render={<Link href={editing ? `/dashboard/exercises/${editing.id}` : '/dashboard/exercises'} />}>
+          Vazgeç
+        </Button>
         <Button type="submit" disabled={save.isPending}>
+          {save.isPending ? <Spinner data-icon="inline-start" /> : null}
           {save.isPending ? 'Kaydediliyor…' : 'Kaydet'}
         </Button>
-      </DialogFooter>
+      </div>
     </Form>
   );
 }

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Spinner } from '@/components/ui/spinner';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { readableOn } from '@/lib/color';
 import { cn } from '@/lib/utils';
@@ -123,30 +124,36 @@ export function SetupForm({
             {(field) => (
               <Field>
                 <FieldLabel>Ana renk</FieldLabel>
-                <div className="grid grid-cols-8 gap-2" role="radiogroup" aria-label="Ana renk">
+                <ToggleGroup
+                  aria-label="Ana renk"
+                  spacing={2}
+                  className="grid w-full grid-cols-8"
+                  // "Tema" seçeneği null değer taşır; ToggleGroup string ister → '' ile temsil edilir.
+                  value={[field.input ?? '']}
+                  onValueChange={(value) => {
+                    if (value[0] === undefined) return;
+                    setInput(form, { path: ['accent'], input: value[0] === '' ? null : value[0] });
+                  }}>
                   {ACCENT_PRESETS.map((preset) => {
                     const selected = (field.input ?? null) === preset.value;
                     return (
-                      <button
+                      <ToggleGroupItem
                         key={preset.label}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
+                        value={preset.value ?? ''}
                         aria-label={preset.label}
                         title={preset.label}
-                        onClick={() => setInput(form, { path: ['accent'], input: preset.value })}
                         className={cn(
-                          'grid aspect-square place-items-center rounded-md border-2 border-transparent transition-colors aria-checked:border-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
-                          preset.value === null && `${THEME_PRIMARY} bg-primary text-primary-foreground`,
+                          'aspect-square h-auto w-full border-2 border-transparent p-0 data-pressed:border-foreground',
+                          preset.value === null && `${THEME_PRIMARY} bg-primary text-primary-foreground hover:bg-primary`,
                         )}
                         style={
                           preset.value ? { background: preset.value, color: readableOn(preset.value) } : undefined
                         }>
                         {selected ? <Check weight="bold" className="size-4" aria-hidden /> : null}
-                      </button>
+                      </ToggleGroupItem>
                     );
                   })}
-                </div>
+                </ToggleGroup>
                 <FieldError>{field.errors?.[0]}</FieldError>
               </Field>
             )}
@@ -198,6 +205,7 @@ export function SetupForm({
           </FormField>
 
           <Button type="submit" size="lg" className="h-11" disabled={save.isPending}>
+            {save.isPending ? <Spinner data-icon="inline-start" /> : null}
             {save.isPending ? 'Kaydediliyor…' : firstRun ? 'Kurulumu tamamla' : 'Kaydet'}
           </Button>
           <p className="text-center text-xs text-muted-foreground">

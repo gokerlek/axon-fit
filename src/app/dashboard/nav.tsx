@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { Barbell, GearSix, ListChecks, SquaresFour, UsersThree } from '@phosphor-icons/react';
+import { Barbell, ListChecks, SquaresFour, UsersThree } from '@phosphor-icons/react';
 import { Dock, type DockEntry } from '@/components/dock/dock';
 
 const ITEMS: Omit<DockEntry, 'active'>[] = [
@@ -9,8 +9,8 @@ const ITEMS: Omit<DockEntry, 'active'>[] = [
   { href: '/dashboard/clients', label: 'Danışanlar', icon: <UsersThree />, disabled: true },
   { href: '/dashboard/templates', label: 'Şablonlar', icon: <ListChecks />, disabled: true },
   { href: '/dashboard/exercises', label: 'Egzersizler', icon: <Barbell /> },
-  { href: '/dashboard/settings', label: 'Ayarlar', icon: <GearSix />, separatorBefore: true },
 ];
+// Ayarlar ve çıkış dock'ta değil, sağ üstteki kullanıcı menüsünde (user-menu.tsx).
 
 function isActive(pathname: string, href: string): boolean {
   // Genel bakış yalnız tam eşleşmede aktif; diğerleri alt sayfalarında da.

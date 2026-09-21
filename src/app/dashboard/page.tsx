@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { listExercises } from '@/lib/exercises';
 import { listClientIds } from '@/lib/github/repos';
@@ -16,10 +17,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">Genel bakış</h1>
-        <p className="text-muted-foreground">Danışanların, şablonların ve egzersiz kütüphanen.</p>
-      </header>
+      <PageHeader title="Genel bakış" description="Danışanların, şablonların ve egzersiz kütüphanen." />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card>
