@@ -35,6 +35,36 @@ export async function readJson<T>(repo: string, path: string): Promise<StoredFil
   }
 }
 
+/**
+ * Dosyanın yalnız `sha`'sını verir (içeriğini ayrıştırmadan).
+ * İkili dosyaların üzerine yazarken gerekir: JSON okuyucu burada kullanılamaz.
+ */
+export async function getFileSha(repo: string, path: string): Promise<string | null> {
+  assertRepoAllowed(repo);
+  try {
+    const response = await gh().rest.repos.getContent({ owner: owner(), repo, path });
+    const data = response.data;
+    if (Array.isArray(data) || data.type !== 'file') return null;
+    return data.sha;
+  } catch (error) {
+    if (typeof error === 'object' && error && 'status' in error && error.status === 404) return null;
+    throw toGithubError(error, path);
+  }
+}
+
+export async function readBinary(repo: string, path: string): Promise<{ bytes: Uint8Array; sha: string } | null> {
+  assertRepoAllowed(repo);
+  try {
+    const response = await gh().rest.repos.getContent({ owner: owner(), repo, path });
+    const data = response.data;
+    if (Array.isArray(data) || data.type !== 'file' || !('content' in data)) return null;
+    return { bytes: new Uint8Array(Buffer.from(data.content, 'base64')), sha: data.sha };
+  } catch (error) {
+    if (typeof error === 'object' && error && 'status' in error && error.status === 404) return null;
+    throw toGithubError(error, path);
+  }
+}
+
 export async function writeJson(
   repo: string,
   path: string,

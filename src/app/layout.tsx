@@ -10,6 +10,8 @@ export async function generateMetadata(): Promise<Metadata> {
     description: `${config.appName} — antrenman takibi`,
     applicationName: config.appName,
     appleWebApp: { capable: true, title: config.appName, statusBarStyle: 'black-translucent' },
+    // Logo yüklendiyse sekme ve telefon kısayol ikonu da ondan üretilir.
+    ...(config.logo ? { icons: { icon: '/api/brand/logo', apple: '/api/brand/logo' } } : {}),
   };
 }
 

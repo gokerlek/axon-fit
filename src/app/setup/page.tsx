@@ -28,6 +28,7 @@ export default async function SetupPage() {
 
         <SetupForm
           firstRun={firstRun}
+          hasLogo={Boolean(config.logo)}
           initial={{
             appName: config.appName,
             accent: config.accent ?? '#D4FF3F',

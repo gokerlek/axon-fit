@@ -35,9 +35,11 @@ const defaultMessages: Record<number, string> = {
 export async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
+    const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
     response = await fetch(input, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      // FormData'da Content-Type'ı tarayıcı kurar (sınır değeri gerekir); elle konursa yükleme bozulur.
+      headers: isFormData ? init?.headers : { 'Content-Type': 'application/json', ...init?.headers },
     });
   } catch {
     throw new ApiError('Bağlantı kurulamadı. İnternetini kontrol et.', 0);

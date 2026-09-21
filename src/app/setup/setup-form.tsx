@@ -6,6 +6,7 @@ import { fetchJson } from '@/lib/query/errors';
 import { applyFieldErrors } from '@/lib/query/field-errors';
 import { useServiceMutation } from '@/lib/query/use-service';
 import { ACCENT_PRESETS, setupFormSchema, type SetupForm } from '@/lib/schemas/setup';
+import { LogoPicker } from './logo-picker';
 import styles from './setup.module.css';
 
 const THEMES = [
@@ -20,7 +21,15 @@ const THEMES = [
  * Kaydedince ayar PT'nin kendi repo'suna commit edilir. Renk ve tema seçimi
  * anında üstteki önizlemede görünür; kaydetmeden nasıl duracağını görür.
  */
-export function SetupForm({ initial, firstRun }: { initial: SetupForm; firstRun: boolean }) {
+export function SetupForm({
+  initial,
+  firstRun,
+  hasLogo,
+}: {
+  initial: SetupForm;
+  firstRun: boolean;
+  hasLogo: boolean;
+}) {
   const router = useRouter();
   const form = useForm({ schema: setupFormSchema, initialInput: initial });
 
@@ -74,6 +83,8 @@ export function SetupForm({ initial, firstRun }: { initial: SetupForm; firstRun:
           </div>
         )}
       </Field>
+
+      <LogoPicker hasLogo={hasLogo} />
 
       <Field of={form} path={['accent']}>
         {(field) => (

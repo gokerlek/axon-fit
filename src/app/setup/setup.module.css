@@ -149,3 +149,81 @@
   color: var(--danger);
   font-size: 14px;
 }
+
+.logoRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.logoBox {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.logoImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.logoEmpty {
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.logoActions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+/* Dosya girdisi gizlenir; etiket düğmeye dönüşür (tarayıcı varsayılanı çirkin ve dar). */
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fileInput:focus-visible + .secondary {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.secondary,
+.ghost {
+  min-height: var(--touch-min);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-lg);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.secondary {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+
+.ghost {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--danger);
+}
+
+.secondary[aria-disabled='true'] {
+  opacity: 0.5;
+  pointer-events: none;
+}
