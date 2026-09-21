@@ -1,0 +1,9 @@
+{
+  "$schema": "./docs/config.schema.json",
+  "appName": "PulseCoach",
+  "logo": null,
+  "accent": null,
+  "theme": "dark",
+  "timeZone": "Europe/Istanbul",
+  "setupCompleted": false
+}
