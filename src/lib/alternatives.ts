@@ -80,6 +80,8 @@ export type AlternativeCandidate = {
   title: string;
   category: string;
   equipment: string;
+  /** Hareketin yapıldığı cihaz. */
+  deviceId?: string;
   pattern?: MovementPattern;
   primaryMuscles: readonly string[];
   secondaryMuscles: readonly string[];
@@ -183,4 +185,22 @@ export function groupByEquipment<T extends AlternativeCandidate>(alternatives: r
     groups.set(key, [...(groups.get(key) ?? []), alternative]);
   }
   return [...groups].sort(([a], [b]) => Number(b === 'bodyweight') - Number(a === 'bodyweight'));
+}
+
+/**
+ * Cihaz değişince hangi egzersiz yapılır: kaynağın bu cihazla yapılan en iyi muadili.
+ * Kaynak zaten o cihazdaysa kendisi; uygun muadil yoksa `null`. Şablonda satırın
+ * cihazı değiştirilince egzersiz buna göre değişir.
+ */
+export function alternativeForDevice<T extends AlternativeCandidate>(
+  source: T,
+  deviceId: string,
+  candidates: readonly T[],
+  familyOf: (muscle: string) => string,
+): T | null {
+  if (source.deviceId === deviceId) return source;
+  const onDevice = candidates.filter((candidate) => candidate.deviceId === deviceId);
+  // PT'nin sabitledikleri de bu cihazdaysa önce onlar.
+  const best = rankAlternatives(source, [source, ...onDevice], familyOf, { limit: 1 })[0];
+  return best?.exercise ?? null;
 }

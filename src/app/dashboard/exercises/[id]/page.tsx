@@ -6,12 +6,16 @@ import { Item, ItemContent, ItemGroup, ItemMedia, ItemTitle } from '@/components
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { VideoEmbed } from '@/components/video-embed';
 import { getExercise, listExercises } from '@/lib/exercises';
+import { listDevices } from '@/lib/devices';
+import { DEVICE_KIND_LABELS, DEVICE_KINDS, loadSpecFor } from '@/lib/device-loads';
+import { alternativeForDevice } from '@/lib/alternatives';
+import Link from 'next/link';
 import { PATTERN_LABELS } from '@/lib/alternatives';
 import { formatKg } from '@/lib/format';
-import { exerciseAlternatives, summarizeMuscles } from '@/lib/muscles';
+import { exerciseAlternatives, familyOf, summarizeMuscles } from '@/lib/muscles';
 import { describeRule, progressionOf, PROGRESSION_LABELS } from '@/lib/progression';
 import { CATEGORY_LABELS, EQUIPMENT_LABELS } from '@/lib/schemas/exercise';
-import { AlternativesCard, type AlternativeRow } from './alternatives-card';
+import { AlternativesCard, type AlternativeRow, type DeviceSwap } from './alternatives-card';
 import { ExerciseActions } from './exercise-actions';
 
 const TRACKING_LABELS = {
@@ -23,34 +27,63 @@ const TRACKING_LABELS = {
 /** Egzersiz detayı — kendi sayfası (modal değil, SPEC §6). */
 export default async function ExerciseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const all = await listExercises();
+  const [all, devices] = await Promise.all([listExercises(), listDevices()]);
   const exercise = await getExercise(id, all);
   if (!exercise) notFound();
+  const deviceById = new Map(devices.map((device) => [device.id, device]));
+  const device = exercise.deviceId ? deviceById.get(exercise.deviceId) : undefined;
 
   const alternatives: AlternativeRow[] = exerciseAlternatives(exercise, all).map(({ exercise: other, pinned, samePattern }) => ({
     id: other.id,
     title: other.title,
     equipment: other.equipment,
+    // Grup: cihazı varsa cihazın adı ("Dambıl seti", "Chest press makinesi"), yoksa ekipman.
+    device: other.deviceId ? (deviceById.get(other.deviceId)?.name ?? null) : null,
     muscles: summarizeMuscles(other.primaryMuscles).join(', '),
     pattern: samePattern && other.pattern ? PATTERN_LABELS[other.pattern] : null,
     pinned,
   }));
 
   const rule = progressionOf(exercise);
-  const summary: [string, string][] = [
+  // Cihaz değişirse hangi egzersize geçilir (şablonda satırın cihazı değiştirilince aynısı olur).
+  const swaps: DeviceSwap[] = DEVICE_KINDS.flatMap((kind) =>
+    devices
+      .filter((item) => item.kind === kind && item.id !== exercise.deviceId)
+      .map((item) => {
+        const match = alternativeForDevice(exercise, item.id, all, familyOf);
+        return {
+          deviceId: item.id,
+          deviceName: item.name,
+          kindLabel: DEVICE_KIND_LABELS[kind],
+          exercise: match && match.id !== exercise.id ? { id: match.id, title: match.title } : null,
+        };
+      }),
+  );
+
+  const summary: [string, React.ReactNode][] = [
     ['Hedef kaslar', summarizeMuscles(exercise.primaryMuscles).join(', ')],
     ...(exercise.secondaryMuscles.length > 0
-      ? ([['Yardımcı kaslar', summarizeMuscles(exercise.secondaryMuscles).join(', ')]] as [string, string][])
+      ? ([['Yardımcı kaslar', summarizeMuscles(exercise.secondaryMuscles).join(', ')]] as [string, React.ReactNode][])
       : []),
     ...(exercise.stabilizerMuscles.length > 0
-      ? ([['Dengeleyici kaslar', summarizeMuscles(exercise.stabilizerMuscles).join(', ')]] as [string, string][])
+      ? ([['Dengeleyici kaslar', summarizeMuscles(exercise.stabilizerMuscles).join(', ')]] as [string, React.ReactNode][])
       : []),
     ['Ekipman', EQUIPMENT_LABELS[exercise.equipment]],
-    ...(exercise.pattern ? ([['Hareket kalıbı', PATTERN_LABELS[exercise.pattern]]] as [string, string][]) : []),
+    ...(device
+      ? ([
+          [
+            'Cihaz',
+            <Link key="cihaz" href={`/dashboard/devices/${device.id}`} className="underline underline-offset-4">
+              {device.name}
+            </Link>,
+          ],
+        ] as [string, React.ReactNode][])
+      : []),
+    ...(exercise.pattern ? ([['Hareket kalıbı', PATTERN_LABELS[exercise.pattern]]] as [string, React.ReactNode][]) : []),
     ['Tür', CATEGORY_LABELS[exercise.category]],
     ['Kayıt', TRACKING_LABELS[exercise.trackingType]],
-    ...(exercise.trackingType === 'weight_reps'
-      ? ([['Ağırlık adımı / taban', `${formatKg(exercise.loadStepKg)} / ${formatKg(exercise.minLoadKg)}`]] as [string, string][])
+    ...(exercise.trackingType === 'weight_reps' && !(device && loadSpecFor(exercise, device).loadsKg)
+      ? ([['Ağırlık adımı / taban', `${formatKg(exercise.loadStepKg)} / ${formatKg(exercise.minLoadKg)}`]] as [string, React.ReactNode][])
       : []),
     [
       'İlerleme',
@@ -95,7 +128,7 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
                   ))}
                 </TableBody>
               </Table>
-              <p className="mt-3 text-muted-foreground">{describeRule(rule, exercise)}</p>
+              <p className="mt-3 text-muted-foreground">{describeRule(rule, loadSpecFor(exercise, device))}</p>
             </CardContent>
           </Card>
 
@@ -122,7 +155,7 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
             </Card>
           ) : null}
 
-          <AlternativesCard exerciseId={exercise.id} rows={alternatives} />
+          <AlternativesCard exerciseId={exercise.id} rows={alternatives} swaps={swaps} />
         </div>
 
         <div className="flex flex-col gap-6">

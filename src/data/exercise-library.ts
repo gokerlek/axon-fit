@@ -20,6 +20,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "deviceId": "olimpik-bar",
     "pattern": "horizontal_push",
     "primaryMuscles": [
       "chest_lower"
@@ -50,6 +51,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "deviceId": "dambil-seti",
     "pattern": "horizontal_push",
     "primaryMuscles": [
       "chest_upper"
@@ -80,6 +82,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "deviceId": "dambil-seti",
     "pattern": "chest_fly",
     "primaryMuscles": [
       "chest_lower"
@@ -142,6 +145,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "bodyweight_reps",
     "equipment": "bodyweight",
+    "deviceId": "paralel-bar",
     "pattern": "vertical_push",
     "primaryMuscles": [
       "triceps_long",
@@ -171,6 +175,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "deviceId": "olimpik-bar",
     "pattern": "vertical_push",
     "primaryMuscles": [
       "delt_front"
@@ -205,6 +210,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "deviceId": "dambil-seti",
     "pattern": "vertical_push",
     "primaryMuscles": [
       "delt_front"
@@ -234,6 +240,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "deviceId": "dambil-seti",
     "pattern": "lateral_raise",
     "primaryMuscles": [
       "delt_side"
@@ -261,6 +268,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "cable",
+    "deviceId": "kablo-istasyonu",
     "pattern": "rear_delt",
     "primaryMuscles": [
       "delt_rear"
@@ -289,6 +297,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "bodyweight_reps",
     "equipment": "bodyweight",
+    "deviceId": "barfiks-bari",
     "pattern": "vertical_pull",
     "primaryMuscles": [
       "lats_upper",
@@ -322,6 +331,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "cable",
+    "deviceId": "lat-pulldown-makinesi",
     "pattern": "vertical_pull",
     "primaryMuscles": [
       "lats_upper",
@@ -353,6 +363,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "cable",
+    "deviceId": "oturarak-row-makinesi",
     "pattern": "horizontal_pull",
     "primaryMuscles": [
       "traps_mid",
@@ -385,6 +396,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "deviceId": "olimpik-bar",
     "pattern": "horizontal_pull",
     "primaryMuscles": [
       "traps_mid",
@@ -421,6 +433,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "deviceId": "dambil-seti",
     "pattern": "horizontal_pull",
     "primaryMuscles": [
       "lats_upper",
@@ -453,6 +466,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "deviceId": "olimpik-bar",
     "pattern": "hinge",
     "primaryMuscles": [
       "erectors",
@@ -490,6 +504,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "deviceId": "olimpik-bar",
     "pattern": "hinge",
     "primaryMuscles": [
       "hamstrings_medial",
@@ -521,6 +536,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "deviceId": "olimpik-bar",
     "pattern": "squat",
     "primaryMuscles": [
       "quadriceps",
@@ -553,6 +569,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "deviceId": "dambil-seti",
     "pattern": "squat",
     "primaryMuscles": [
       "quadriceps"
@@ -584,6 +601,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "machine",
+    "deviceId": "leg-press",
     "pattern": "squat",
     "primaryMuscles": [
       "quadriceps"
@@ -614,6 +632,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "deviceId": "dambil-seti",
     "pattern": "lunge",
     "primaryMuscles": [
       "quadriceps",
@@ -644,6 +663,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "deviceId": "dambil-seti",
     "pattern": "lunge",
     "primaryMuscles": [
       "quadriceps",
@@ -676,6 +696,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "deviceId": "olimpik-bar",
     "pattern": "hip_extension",
     "primaryMuscles": [
       "glutes"
@@ -705,6 +726,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "machine",
+    "deviceId": "leg-extension-makinesi",
     "pattern": "knee_extension",
     "primaryMuscles": [
       "quadriceps"
@@ -730,6 +752,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "machine",
+    "deviceId": "yatarak-leg-curl-makinesi",
     "pattern": "knee_flexion",
     "primaryMuscles": [
       "hamstrings_medial",
@@ -759,6 +782,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "machine",
+    "deviceId": "ayakta-calf-makinesi",
     "pattern": "calf_raise",
     "primaryMuscles": [
       "gastroc_medial",
@@ -787,6 +811,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "deviceId": "ez-bar",
     "pattern": "elbow_flexion",
     "primaryMuscles": [
       "biceps"
@@ -814,6 +839,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "deviceId": "dambil-seti",
     "pattern": "elbow_flexion",
     "primaryMuscles": [
       "biceps"
@@ -839,6 +865,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "deviceId": "dambil-seti",
     "pattern": "elbow_flexion",
     "primaryMuscles": [
       "biceps"
@@ -866,6 +893,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "cable",
+    "deviceId": "kablo-istasyonu",
     "pattern": "elbow_extension",
     "primaryMuscles": [
       "triceps_lateral"
@@ -893,6 +921,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "deviceId": "dambil-seti",
     "pattern": "elbow_extension",
     "primaryMuscles": [
       "triceps_long"
@@ -1011,6 +1040,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "bodyweight_reps",
     "equipment": "bodyweight",
+    "deviceId": "barfiks-bari",
     "pattern": "core_flexion",
     "primaryMuscles": [
       "abs_lower"
@@ -1043,6 +1073,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "kettlebell",
+    "deviceId": "kettlebell-seti",
     "pattern": "hinge",
     "primaryMuscles": [
       "glutes"
@@ -1076,6 +1107,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "duration",
     "equipment": "dumbbell",
+    "deviceId": "dambil-seti",
     "pattern": "carry",
     "primaryMuscles": [
       "forearm_flexors"
@@ -1109,6 +1141,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "warmup",
     "trackingType": "duration",
     "equipment": "cardio_machine",
+    "deviceId": "kurek-ergometresi",
     "pattern": "cardio",
     "primaryMuscles": [
       "cardio"
@@ -1141,6 +1174,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "warmup",
     "trackingType": "duration",
     "equipment": "cardio_machine",
+    "deviceId": "sabit-bisiklet",
     "pattern": "cardio",
     "primaryMuscles": [
       "cardio"
@@ -1168,6 +1202,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "warmup",
     "trackingType": "bodyweight_reps",
     "equipment": "band",
+    "deviceId": "direnc-bandi",
     "pattern": "rear_delt",
     "primaryMuscles": [
       "delt_rear"
@@ -1263,5 +1298,765 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "stabilizerMuscles": [],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0
+  },
+  {
+    "id": "makine-chest-press",
+    "title": "Makine Chest Press",
+    "description": "Oturarak makinede göğüs pressi; bardan güvenli, yeni başlayana uygun.",
+    "cues": [
+      "Sırtı pede yasla, kürek kemiklerini sıkıştır",
+      "Tutamaçlar göğüs ortası hizasında olsun",
+      "Dirsekleri tam kilitlemeden it"
+    ],
+    "category": "compound",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "chest-press-makinesi",
+    "pattern": "horizontal_push",
+    "primaryMuscles": [
+      "chest_lower"
+    ],
+    "secondaryMuscles": [
+      "chest_upper",
+      "delt_front",
+      "triceps_long",
+      "triceps_lateral"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "pec-deck",
+    "title": "Pec Deck (Kelebek)",
+    "description": "Makinede göğüs açma; göğsü izole çalıştırır.",
+    "cues": [
+      "Dirsekler hafif bükük ve sabit kalsın",
+      "Kolları göğüs önünde birleştir, bir an sık",
+      "Açılırken omuz önünde gerilmeyi zorlama"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "pec-deck",
+    "pattern": "chest_fly",
+    "primaryMuscles": [
+      "chest_lower"
+    ],
+    "secondaryMuscles": [
+      "chest_upper",
+      "delt_front"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "kablo-crossover",
+    "title": "Kablo Crossover",
+    "description": "İki kablo arasında göğüs açma; hareket boyunca sabit gerilim.",
+    "cues": [
+      "Bir adım öne çık, gövde hafif öne eğik",
+      "Elleri göbek önünde buluştur",
+      "Dirsek açısını hareket boyunca koru"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "cable",
+    "deviceId": "kablo-istasyonu",
+    "pattern": "chest_fly",
+    "primaryMuscles": [
+      "chest_lower"
+    ],
+    "secondaryMuscles": [
+      "chest_upper",
+      "delt_front"
+    ],
+    "stabilizerMuscles": [
+      "abs_upper",
+      "abs_lower"
+    ],
+    "loadStepKg": 2.5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "smith-bench-press",
+    "title": "Smith Bench Press",
+    "description": "Smith makinesinde bench press; bar raylı, dengelemek gerekmez.",
+    "cues": [
+      "Bar göğüs ortasına insin",
+      "Kürek kemikleri sehpaya sabit",
+      "Kilitleri bırakmadan önce tutuşu yerleştir"
+    ],
+    "category": "compound",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "smith-makinesi",
+    "pattern": "horizontal_push",
+    "primaryMuscles": [
+      "chest_lower"
+    ],
+    "secondaryMuscles": [
+      "chest_upper",
+      "delt_front",
+      "triceps_long",
+      "triceps_lateral"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "makine-omuz-press",
+    "title": "Makine Omuz Press",
+    "description": "Oturarak makinede omuz pressi.",
+    "cues": [
+      "Sırt pede yaslı, bel boşluğu doğal",
+      "Tutamaçları kulak hizasından yukarı it",
+      "İnişte dirsekler omuz altına kadar insin"
+    ],
+    "category": "compound",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "shoulder-press-makinesi",
+    "pattern": "vertical_push",
+    "primaryMuscles": [
+      "delt_front"
+    ],
+    "secondaryMuscles": [
+      "delt_side",
+      "triceps_long",
+      "triceps_lateral"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "makine-yana-acis",
+    "title": "Makine Yana Açış",
+    "description": "Makinede yan omuz izolasyonu.",
+    "cues": [
+      "Omuzları kulaklara çekme",
+      "Kolları omuz hizasına kadar kaldır",
+      "İnişi yavaş kontrol et"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "yana-acis-makinesi",
+    "pattern": "lateral_raise",
+    "primaryMuscles": [
+      "delt_side"
+    ],
+    "secondaryMuscles": [
+      "traps_upper"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "kablo-yana-acis",
+    "title": "Kablo Yana Açış",
+    "description": "Tek kolla kablodan yana açış; alt noktada da gerilim var.",
+    "cues": [
+      "Kablo vücudun önünden geçsin",
+      "Dirsek hafif bükük, el dirsekten yukarı çıkmasın",
+      "Gövdeyi sallamadan kaldır"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "cable",
+    "deviceId": "kablo-istasyonu",
+    "pattern": "lateral_raise",
+    "primaryMuscles": [
+      "delt_side"
+    ],
+    "secondaryMuscles": [
+      "traps_upper"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 2.5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "ters-pec-deck",
+    "title": "Ters Pec Deck",
+    "description": "Pec deck makinesinde ters oturarak arka omuz açma.",
+    "cues": [
+      "Göğsü pede yasla",
+      "Kolları yana açarken kürek kemiklerini sık",
+      "Omuzları kulaklara çekme"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "pec-deck",
+    "pattern": "rear_delt",
+    "primaryMuscles": [
+      "delt_rear"
+    ],
+    "secondaryMuscles": [
+      "traps_mid",
+      "traps_lower"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "t-bar-row",
+    "title": "T-Bar Row",
+    "description": "Plaka yüklemeli T-bar ile öne eğilerek çekiş.",
+    "cues": [
+      "Kalçadan menteşelen, sırt nötr",
+      "Tutamacı göğüs altına çek",
+      "Dirsekleri gövdeye yakın tut"
+    ],
+    "category": "compound",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "t-bar-row",
+    "pattern": "horizontal_pull",
+    "primaryMuscles": [
+      "traps_mid",
+      "traps_lower",
+      "lats_mid"
+    ],
+    "secondaryMuscles": [
+      "lats_upper",
+      "lats_lower",
+      "delt_rear",
+      "biceps"
+    ],
+    "stabilizerMuscles": [
+      "erectors",
+      "hamstrings_medial",
+      "hamstrings_lateral"
+    ],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "kablo-duz-kol-pulldown",
+    "title": "Kablo Düz Kol Pulldown",
+    "description": "Kolları düz tutarak kablodan aşağı çekiş; kanat kasını izole eder.",
+    "cues": [
+      "Gövde hafif öne eğik, kollar neredeyse düz",
+      "Barı kalçaya doğru süpür",
+      "Yukarıda kanat kasında gerilmeyi hisset"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "cable",
+    "deviceId": "kablo-istasyonu",
+    "pattern": "vertical_pull",
+    "primaryMuscles": [
+      "lats_upper",
+      "lats_mid",
+      "lats_lower"
+    ],
+    "secondaryMuscles": [
+      "triceps_long"
+    ],
+    "stabilizerMuscles": [
+      "abs_upper",
+      "abs_lower"
+    ],
+    "loadStepKg": 2.5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "hiperekstansiyon",
+    "title": "Hiperekstansiyon",
+    "description": "Hiperekstansiyon sehpasında bel ve kalça ile gövde kaldırma.",
+    "cues": [
+      "Kalça kemiği pedin hemen üstünde",
+      "Sırt nötr, belden aşırı bükülme",
+      "Yukarıda kalçayı sık, gövde bacaklarla düz"
+    ],
+    "category": "compound",
+    "trackingType": "bodyweight_reps",
+    "equipment": "bodyweight",
+    "deviceId": "hiperekstansiyon-sehpasi",
+    "pattern": "hinge",
+    "primaryMuscles": [
+      "erectors"
+    ],
+    "secondaryMuscles": [
+      "glutes",
+      "hamstrings_medial",
+      "hamstrings_lateral"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 0,
+    "minLoadKg": 0
+  },
+  {
+    "id": "makine-preacher-curl",
+    "title": "Makine Preacher Curl",
+    "description": "Preacher makinesinde biceps curl; hile yapmayı engeller.",
+    "cues": [
+      "Kol arkası pede tam yaslı",
+      "Alt noktada kolu tam açma, gerilimi koru",
+      "Yukarıda bicepsi sık"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "preacher-curl-makinesi",
+    "pattern": "elbow_flexion",
+    "primaryMuscles": [
+      "biceps"
+    ],
+    "secondaryMuscles": [
+      "forearm_flexors"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "kablo-biceps-curl",
+    "title": "Kablo Biceps Curl",
+    "description": "Alt makaradan barla ya da halatla biceps curl.",
+    "cues": [
+      "Dirsekler gövde yanında sabit",
+      "Gövdeyi sallama",
+      "İnişte kolu tam aç"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "cable",
+    "deviceId": "kablo-istasyonu",
+    "pattern": "elbow_flexion",
+    "primaryMuscles": [
+      "biceps"
+    ],
+    "secondaryMuscles": [
+      "forearm_flexors"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 2.5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "makine-triceps-extension",
+    "title": "Makine Triceps Extension",
+    "description": "Oturarak makinede triceps itişi.",
+    "cues": [
+      "Dirsekler pedde sabit",
+      "Kolu tam açıp bir an sık",
+      "Dönüşte omuzları öne düşürme"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "triceps-makinesi",
+    "pattern": "elbow_extension",
+    "primaryMuscles": [
+      "triceps_long",
+      "triceps_lateral"
+    ],
+    "secondaryMuscles": [],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "kablo-bas-ustu-triceps",
+    "title": "Kablo Baş Üstü Triceps Extension",
+    "description": "Arkası dönük, halatla baş üstünden triceps itişi; uzun başı esnetir.",
+    "cues": [
+      "Dirsekler başın yanında, önü göstersin",
+      "Yalnız dirsekten aç",
+      "Gövdeyi sabit tut, beli boşaltma"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "cable",
+    "deviceId": "kablo-istasyonu",
+    "pattern": "elbow_extension",
+    "primaryMuscles": [
+      "triceps_long"
+    ],
+    "secondaryMuscles": [
+      "triceps_lateral"
+    ],
+    "stabilizerMuscles": [
+      "abs_upper",
+      "abs_lower"
+    ],
+    "loadStepKg": 2.5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "hack-squat",
+    "title": "Hack Squat",
+    "description": "Hack squat makinesinde sırt destekli squat.",
+    "cues": [
+      "Sırt ve kalça pede yaslı",
+      "Dizler ayak uçları yönünde",
+      "Kalça diz hizasının altına insin"
+    ],
+    "category": "compound",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "hack-squat",
+    "pattern": "squat",
+    "primaryMuscles": [
+      "quadriceps"
+    ],
+    "secondaryMuscles": [
+      "glutes",
+      "adductors"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "smith-squat",
+    "title": "Smith Squat",
+    "description": "Smith makinesinde squat; bar raylı olduğu için ayaklar biraz önde durabilir.",
+    "cues": [
+      "Ayaklar barın biraz önünde",
+      "Göğüs dik, bakış karşıya",
+      "Kalça dize kadar insin"
+    ],
+    "category": "compound",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "smith-makinesi",
+    "pattern": "squat",
+    "primaryMuscles": [
+      "quadriceps",
+      "glutes"
+    ],
+    "secondaryMuscles": [
+      "adductors"
+    ],
+    "stabilizerMuscles": [
+      "erectors",
+      "abs_upper",
+      "abs_lower"
+    ],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "oturarak-leg-curl",
+    "title": "Oturarak Leg Curl",
+    "description": "Oturarak makinede arka bacak bükme.",
+    "cues": [
+      "Diz ekseni makinenin ekseninde",
+      "Uyluk pedi bacakları sıkı tutsun",
+      "Topuğu kalçaya doğru çek, yavaş bırak"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "oturarak-leg-curl-makinesi",
+    "pattern": "knee_flexion",
+    "primaryMuscles": [
+      "hamstrings_medial",
+      "hamstrings_lateral"
+    ],
+    "secondaryMuscles": [
+      "gastroc_medial",
+      "gastroc_lateral"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "makine-kalca-acma",
+    "title": "Makine Kalça Açma (Abductor)",
+    "description": "Oturarak makinede bacakları dışa açma; yan kalçayı çalıştırır.",
+    "cues": [
+      "Sırt pede yaslı, kalça sabit",
+      "Dizleri dışa it, bir an tut",
+      "Kapanırken ağırlığı bırakma"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "abductor-makinesi",
+    "pattern": "hip_abduction",
+    "primaryMuscles": [
+      "glute_medius"
+    ],
+    "secondaryMuscles": [
+      "glutes"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "makine-kalca-kapama",
+    "title": "Makine Kalça Kapama (Adductor)",
+    "description": "Oturarak makinede bacakları içe kapama; iç bacağı çalıştırır.",
+    "cues": [
+      "Başlangıç açıklığını zorlamadan seç",
+      "Dizleri kontrollü birleştir",
+      "Açılışta ağırlığı yavaş bırak"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "adductor-makinesi",
+    "pattern": "hip_adduction",
+    "primaryMuscles": [
+      "adductors"
+    ],
+    "secondaryMuscles": [],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "makine-hip-thrust",
+    "title": "Makine Hip Thrust",
+    "description": "Hip thrust makinesinde kalça itişi; bar kurmaya gerek yok.",
+    "cues": [
+      "Sırtın üstü pede yaslı",
+      "Topuklardan it, yukarıda kalçayı sık",
+      "Belden değil kalçadan kalk"
+    ],
+    "category": "compound",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "hip-thrust-makinesi",
+    "pattern": "hip_extension",
+    "primaryMuscles": [
+      "glutes"
+    ],
+    "secondaryMuscles": [
+      "hamstrings_medial",
+      "hamstrings_lateral",
+      "glute_medius"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "makine-glute-kickback",
+    "title": "Makine Glute Kickback",
+    "description": "Makinede tek bacakla geriye itiş; kalçayı izole eder.",
+    "cues": [
+      "Gövde sabit, bel boşalmasın",
+      "Bacağı kalçadan geriye it",
+      "Yukarıda bir an kalçayı sık"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "glute-kickback-makinesi",
+    "pattern": "hip_extension",
+    "primaryMuscles": [
+      "glutes"
+    ],
+    "secondaryMuscles": [
+      "hamstrings_medial",
+      "hamstrings_lateral"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "makine-crunch",
+    "title": "Makine Crunch",
+    "description": "Oturarak makinede karın bükme.",
+    "cues": [
+      "Hareketi karından başlat, kollarla çekme",
+      "Aşağıda bir an sık",
+      "Yukarı dönüşte ağırlığı bırakma"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "crunch-makinesi",
+    "pattern": "core_flexion",
+    "primaryMuscles": [
+      "abs_upper"
+    ],
+    "secondaryMuscles": [
+      "abs_lower",
+      "obliques"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "makine-govde-dondurme",
+    "title": "Makine Gövde Döndürme",
+    "description": "Oturarak makinede gövdeyi iki yöne döndürme; yan karını çalıştırır.",
+    "cues": [
+      "Kalça ve dizler sabit",
+      "Dönüşü karından başlat",
+      "Her iki yöne eşit tekrar yap"
+    ],
+    "category": "isolation",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "rotary-torso",
+    "pattern": "core_rotation",
+    "primaryMuscles": [
+      "obliques"
+    ],
+    "secondaryMuscles": [
+      "abs_upper",
+      "abs_lower"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "kablo-woodchop",
+    "title": "Kablo Woodchop",
+    "description": "Fonksiyonel kablodan çapraz çekiş; gövde döndürme gücü.",
+    "cues": [
+      "Kalçadan ve gövdeden dön, kollar yalnız taşısın",
+      "Arka ayak parmak ucunda döner",
+      "Her iki yöne eşit tekrar yap"
+    ],
+    "category": "compound",
+    "trackingType": "weight_reps",
+    "equipment": "cable",
+    "deviceId": "fonksiyonel-kablo",
+    "pattern": "core_rotation",
+    "primaryMuscles": [
+      "obliques"
+    ],
+    "secondaryMuscles": [
+      "abs_upper",
+      "abs_lower",
+      "delt_front"
+    ],
+    "stabilizerMuscles": [
+      "glutes"
+    ],
+    "loadStepKg": 2.5,
+    "minLoadKg": 0
+  },
+  {
+    "id": "kosu-bandi",
+    "title": "Koşu Bandı",
+    "description": "Koşu bandında yürüyüş ya da koşu; ısınma ve dayanıklılık.",
+    "cues": [
+      "Hızı kademeli artır",
+      "Tutunmadan, dik yürü",
+      "Eğimle zorluğu artırabilirsin"
+    ],
+    "category": "warmup",
+    "trackingType": "duration",
+    "equipment": "cardio_machine",
+    "deviceId": "kosu-bandi",
+    "pattern": "cardio",
+    "primaryMuscles": [
+      "cardio"
+    ],
+    "secondaryMuscles": [
+      "quadriceps",
+      "hamstrings_medial",
+      "hamstrings_lateral",
+      "gastroc_medial",
+      "gastroc_lateral"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 0,
+    "minLoadKg": 0
+  },
+  {
+    "id": "eliptik",
+    "title": "Eliptik",
+    "description": "Eklemlere az yük bindiren kardiyo; ısınma ve dayanıklılık.",
+    "cues": [
+      "Topuklar pedallardan kalkmasın",
+      "Kolları da çalıştır",
+      "Direnci kademeli artır"
+    ],
+    "category": "warmup",
+    "trackingType": "duration",
+    "equipment": "cardio_machine",
+    "deviceId": "eliptik",
+    "pattern": "cardio",
+    "primaryMuscles": [
+      "cardio"
+    ],
+    "secondaryMuscles": [
+      "quadriceps",
+      "glutes",
+      "hamstrings_medial",
+      "hamstrings_lateral"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 0,
+    "minLoadKg": 0
+  },
+  {
+    "id": "merdiven",
+    "title": "Merdiven (Stepmill)",
+    "description": "Sürekli dönen merdivende tırmanış; kalça ve bacak ağırlıklı kardiyo.",
+    "cues": [
+      "Tutunmaya yaslanma, dik dur",
+      "Adımın tamamını bas",
+      "Hızı konuşabileceğin tempoda tut"
+    ],
+    "category": "warmup",
+    "trackingType": "duration",
+    "equipment": "cardio_machine",
+    "deviceId": "merdiven",
+    "pattern": "cardio",
+    "primaryMuscles": [
+      "cardio"
+    ],
+    "secondaryMuscles": [
+      "glutes",
+      "quadriceps",
+      "gastroc_medial",
+      "gastroc_lateral"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 0,
+    "minLoadKg": 0
+  },
+  {
+    "id": "air-bike-sprint",
+    "title": "Air Bike Sprint",
+    "description": "Air bike ile kısa, yüksek tempolu aralıklar; tüm vücut kondisyonu.",
+    "cues": [
+      "Aralık boyunca kol ve bacakla birlikte it-çek",
+      "Dinlenmede yavaş pedal çevir",
+      "Tempoyu aralık sonuna kadar koru"
+    ],
+    "category": "conditioning",
+    "trackingType": "duration",
+    "equipment": "cardio_machine",
+    "deviceId": "air-bike",
+    "pattern": "cardio",
+    "primaryMuscles": [
+      "cardio",
+      "quadriceps"
+    ],
+    "secondaryMuscles": [
+      "glutes",
+      "delt_front",
+      "triceps_long",
+      "triceps_lateral"
+    ],
+    "stabilizerMuscles": [
+      "abs_upper",
+      "abs_lower"
+    ],
+    "loadStepKg": 0,
+    "minLoadKg": 0
   }
 ];

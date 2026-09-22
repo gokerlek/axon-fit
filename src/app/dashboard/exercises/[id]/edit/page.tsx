@@ -1,12 +1,13 @@
 import { notFound } from 'next/navigation';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
+import { listDevices } from '@/lib/devices';
 import { getExercise } from '@/lib/exercises';
 import { ExerciseForm } from '../../exercise-form';
 
 export default async function EditExercisePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const exercise = await getExercise(id);
+  const [exercise, devices] = await Promise.all([getExercise(id), listDevices()]);
   if (!exercise) notFound();
 
   const { source: _source, overridesLibrary: _override, ...editable } = exercise;
@@ -28,7 +29,7 @@ export default async function EditExercisePage({ params }: { params: Promise<{ i
       />
       <Card>
         <CardContent>
-          <ExerciseForm editing={editable} />
+          <ExerciseForm editing={editable} devices={devices} />
         </CardContent>
       </Card>
     </div>

@@ -43,6 +43,12 @@ export type LoadSpec = {
   loadStepKg: number;
   /** Bar ya da aletin kendi ağırlığı; öneri bunun altına inmez. */
   minLoadKg: number;
+  /**
+   * Cihazda gerçekten ayarlanabilen ağırlıklar (küçükten büyüğe): ağırlık bloğu, ara
+   * ağırlıklar, dambıl seti… Verilirse öneriler yalnız bunlardan seçilir, `loadStepKg`
+   * yerine bir sonraki/önceki ağırlık kullanılır (`src/lib/device-loads.ts`).
+   */
+  loadsKg?: readonly number[];
 };
 
 /** Danışanın setten sonra tek dokunuşla seçtiği zorluk. */
@@ -181,8 +187,60 @@ export function roundDownToStep(kg: number, stepKg: number): number {
   return clean(Math.floor(clean(kg / stepKg)) * stepKg);
 }
 
+/**
+ * Ağırlık ızgarası: sabit adım (halter 2,5 kg) ya da cihazın ağırlık listesi. Bütün
+ * yuvarlama ve adım hareketleri buradan geçer; ikisi aynı kurallarla davranır.
+ */
+type Grid = {
+  /** `kg`'ye eşit ya da altındaki en büyük ağırlık (yoksa en küçük). */
+  floor(kg: number): number;
+  /** `kg`'nin üstündeki `n`'inci ağırlık (liste bitince en büyüğü). */
+  up(kg: number, n: number): number;
+  /** `kg`'nin altındaki, `target`'a en yakın ağırlık; en az bir adım iner, inecek yer yoksa `kg`. */
+  below(kg: number, target: number): number;
+  /** En küçük ağırlık (bar, ilk blok, en hafif dambıl). */
+  min: number;
+};
+
+const EPSILON = 1e-9;
+
+function gridOf(spec: LoadSpec): Grid | null {
+  const loads = spec.loadsKg?.length ? [...new Set(spec.loadsKg.map(clean))].sort((a, b) => a - b) : null;
+  if (loads) {
+    const first = loads[0] as number;
+    const last = loads[loads.length - 1] as number;
+    return {
+      min: first,
+      floor: (kg) => loads.filter((load) => load <= kg + EPSILON).at(-1) ?? first,
+      up: (kg, n) => {
+        const above = loads.filter((load) => load > kg + EPSILON);
+        return above[Math.min(n, above.length) - 1] ?? last;
+      },
+      below: (kg, target) => {
+        const lower = loads.filter((load) => load < kg - EPSILON);
+        if (lower.length === 0) return kg;
+        // Hedefe en yakın; eşitlikte ağır olan (daha az düşüş).
+        return lower.reduce((best, load) => (Math.abs(load - target) <= Math.abs(best - target) ? load : best));
+      },
+    };
+  }
+  const step = spec.loadStepKg;
+  if (step <= 0) return null;
+  const min = spec.minLoadKg;
+  return {
+    min,
+    floor: (kg) => Math.max(min, roundDownToStep(kg, step)),
+    up: (kg, n) => clean(kg + n * step),
+    below: (kg, target) => {
+      const nearest = clean(Math.round(clean(target / step)) * step);
+      const lowered = Math.max(min, Math.min(nearest, clean(kg - step)));
+      return lowered < kg ? lowered : kg;
+    },
+  };
+}
+
 function usesWeight(spec: LoadSpec): boolean {
-  return spec.trackingType === 'weight_reps' && spec.loadStepKg > 0;
+  return spec.trackingType === 'weight_reps' && gridOf(spec) !== null;
 }
 
 function reachedTop(set: SetResult, rule: ProgressionRule): boolean {
@@ -207,9 +265,12 @@ function workWeight(session: SessionResult): number {
  * ya da sıfıra düşerse ağırlık korunur (hafifletme o zaman yalnız set sayısındadır).
  */
 export function deloadWeight(weightKg: number, spec: LoadSpec): number {
-  if (spec.loadStepKg <= 0) return weightKg;
-  const reduced = roundDownToStep(weightKg * DELOAD_FACTOR, spec.loadStepKg);
-  return reduced <= 0 || reduced < spec.minLoadKg ? weightKg : reduced;
+  const grid = gridOf(spec);
+  if (!grid) return weightKg;
+  const target = weightKg * DELOAD_FACTOR;
+  if (target < grid.min) return weightKg;
+  const reduced = spec.loadsKg?.length ? grid.floor(target) : roundDownToStep(target, spec.loadStepKg);
+  return reduced <= 0 || reduced < spec.minLoadKg || reduced >= weightKg ? weightKg : reduced;
 }
 
 /** Hafifletmede korunacak çalışma seti sayısı (v1 K16): max(1, round(n × 2/3)). */
@@ -222,11 +283,8 @@ export function deloadSets(sets: number): number {
  * 200 → 190). Tabanın altına inmez; inecek yer yoksa ağırlık korunur.
  */
 export function decreaseWeight(weightKg: number, spec: LoadSpec): number {
-  if (spec.loadStepKg <= 0) return weightKg;
-  const step = spec.loadStepKg;
-  const nearest = clean(Math.round(clean((weightKg * (1 - DECREASE_RATIO)) / step)) * step);
-  const lowered = Math.max(spec.minLoadKg, Math.min(nearest, clean(weightKg - step)));
-  return lowered < weightKg ? lowered : weightKg;
+  const grid = gridOf(spec);
+  return grid ? grid.below(weightKg, weightKg * (1 - DECREASE_RATIO)) : weightKg;
 }
 
 /**
@@ -251,9 +309,10 @@ export function nextSession({
   const last = sessions.at(-1);
 
   if (!last) {
-    const start = startWeightKg ?? spec.minLoadKg;
+    const grid = usesWeight(spec) ? gridOf(spec) : null;
+    const start = startWeightKg ?? grid?.min ?? spec.minLoadKg;
     return {
-      weightKg: usesWeight(spec) ? Math.max(spec.minLoadKg, roundDownToStep(start, spec.loadStepKg)) : start,
+      weightKg: grid ? grid.floor(start) : start,
       target: rule.targetMin,
       reason: 'first_time',
     };
@@ -275,7 +334,8 @@ export function nextSession({
 
   const lowest = Math.min(...last.map((set) => set.value));
 
-  if (usesWeight(spec)) {
+  const grid = usesWeight(spec) ? gridOf(spec) : null;
+  if (grid) {
     if (last.every((set) => missed(set, rule))) {
       const lowered = decreaseWeight(weight, spec);
       return { weightKg: lowered, target: rule.targetMin, reason: lowered < weight ? 'decrease' : 'hold' };
@@ -283,13 +343,13 @@ export function nextSession({
     if (sessionFailed(last, rule)) return { weightKg: weight, target: rule.targetMin, reason: 'hold' };
 
     if (rule.scheme === 'linear') {
-      return { weightKg: clean(weight + spec.loadStepKg), target: rule.targetMin, reason: 'increase' };
+      return { weightKg: grid.up(weight, 1), target: rule.targetMin, reason: 'increase' };
     }
     if (last.every((set) => reachedTop(set, rule))) {
       // Hedef zorluğun çok altında kalındıysa (çok kolaydı) iki adım.
       const averageRir = last.reduce((sum, set) => sum + EFFORT_RIR[set.effort], 0) / last.length;
       const steps = averageRir >= rule.targetRir + 2 ? 2 : 1;
-      return { weightKg: clean(weight + steps * spec.loadStepKg), target: rule.targetMin, reason: 'increase' };
+      return { weightKg: grid.up(weight, steps), target: rule.targetMin, reason: 'increase' };
     }
     return { weightKg: weight, target: Math.min(rule.targetMax, lowest + 1), reason: 'add_rep' };
   }
@@ -326,14 +386,15 @@ export function nextSet({
 }): Suggestion {
   const last = done.at(-1);
   if (!last) return { ...plan, reason: 'hold' };
-  if (!usesWeight(spec) || rule.scheme === 'none') return { weightKg: last.weightKg, target: plan.target, reason: 'hold' };
+  const grid = usesWeight(spec) ? gridOf(spec) : null;
+  if (!grid || rule.scheme === 'none') return { weightKg: last.weightKg, target: plan.target, reason: 'hold' };
 
   if (last.effort === 'fail' || last.value <= rule.targetMin - 3) {
     const lowered = decreaseWeight(last.weightKg, spec);
     return { weightKg: lowered, target: plan.target, reason: lowered < last.weightKg ? 'decrease' : 'hold' };
   }
   if (last.effort === 'easy' && last.value >= rule.targetMax) {
-    return { weightKg: clean(last.weightKg + spec.loadStepKg), target: plan.target, reason: 'increase' };
+    return { weightKg: grid.up(last.weightKg, 1), target: plan.target, reason: 'increase' };
   }
   return { weightKg: last.weightKg, target: plan.target, reason: 'hold' };
 }
@@ -357,8 +418,11 @@ export function warmupSets({
   isCompound: boolean;
   isFirstForMuscle: boolean;
 }): Plan[] {
-  const bar = spec.minLoadKg > 0 ? spec.minLoadKg : 20;
-  if (workWeightKg < 40 || !isBarbell || !isCompound || !isFirstForMuscle || spec.loadStepKg <= 0) return [];
+  const grid = gridOf(spec);
+  const bar = (grid?.min ?? spec.minLoadKg) > 0 ? (grid?.min ?? spec.minLoadKg) : 20;
+  if (workWeightKg < 40 || !isBarbell || !isCompound || !isFirstForMuscle || !grid) return [];
+  // Çalışma ağırlığına bu kadar yakın ara set atlanır: bir adım (listede en küçük aralık).
+  const minGap = spec.loadsKg?.length ? grid.up(bar, 1) - bar : spec.loadStepKg;
 
   const steps: [number, number][] =
     workWeightKg < 80
@@ -377,8 +441,8 @@ export function warmupSets({
   const sets: Plan[] = [{ weightKg: bar, target: 10 }];
   let previous = bar;
   for (const [ratio, reps] of steps) {
-    const weight = Math.max(roundDownToStep(workWeightKg * ratio, spec.loadStepKg), bar);
-    if (weight <= previous || workWeightKg - weight < spec.loadStepKg) continue;
+    const weight = Math.max(grid.floor(workWeightKg * ratio), bar);
+    if (weight <= previous || workWeightKg - weight < minGap) continue;
     sets.push({ weightKg: weight, target: reps });
     previous = weight;
   }
@@ -410,10 +474,11 @@ export function describeRule(rule: ProgressionRule, spec: LoadSpec): string {
     isDuration ? '' : rule.targetRir === 0 ? ' Setler tükenişe kadar yapılır.' : ` Set sonunda ~${rule.targetRir} tekrar yedekte kalsın.`;
 
   if (usesWeight(spec)) {
+    const amount = spec.loadsKg?.length ? 'cihazdaki bir sonraki ağırlığa çıkar' : `${kg(spec.loadStepKg)} artar`;
     const growth =
       rule.scheme === 'linear'
-        ? `Her başarılı antrenmanda ağırlık ${kg(spec.loadStepKg)} artar.`
-        : `Bütün setlerde ${rule.targetMax} tekrara ulaşınca ağırlık ${kg(spec.loadStepKg)} artar ve tekrar hedefi yeniden ${rule.targetMin} olur; ulaşılmadıysa aynı ağırlıkla bir tekrar daha.`;
+        ? `Her başarılı antrenmanda ağırlık ${amount}.`
+        : `Bütün setlerde ${rule.targetMax} tekrara ulaşınca ağırlık ${amount} ve tekrar hedefi yeniden ${rule.targetMin} olur; ulaşılmadıysa aynı ağırlıkla bir tekrar daha.`;
     return `Hedef ${range}. ${growth} Hedefin altında kalınırsa ağırlık korunur; ${DELOAD_AFTER_FAILED} antrenman üst üste tıkanırsa %${Math.round((1 - DELOAD_FACTOR) * 100)} hafifletilir.${effort}`;
   }
 

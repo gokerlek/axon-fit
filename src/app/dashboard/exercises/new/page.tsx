@@ -1,8 +1,10 @@
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
+import { listDevices } from '@/lib/devices';
 import { ExerciseForm } from '../exercise-form';
 
-export default function NewExercisePage() {
+export default async function NewExercisePage() {
+  const devices = await listDevices();
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -12,7 +14,7 @@ export default function NewExercisePage() {
       />
       <Card>
         <CardContent>
-          <ExerciseForm editing={null} />
+          <ExerciseForm editing={null} devices={devices} />
         </CardContent>
       </Card>
     </div>

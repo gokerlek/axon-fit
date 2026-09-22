@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupByEquipment, rankAlternatives, type AlternativeCandidate } from './alternatives.ts';
+import { alternativeForDevice, groupByEquipment, rankAlternatives, type AlternativeCandidate } from './alternatives.ts';
 
 const FAMILIES: Record<string, string> = {
   chest_upper: 'chest',
@@ -151,5 +151,35 @@ describe('ekipmana göre gruplama', () => {
     const groups = groupByEquipment(rankAlternatives(bench, all, familyOf));
     assert.deepEqual(groups.map(([equipment]) => equipment), ['bodyweight', 'dumbbell']);
     assert.deepEqual(ids(groups[1]?.[1] ?? []), ['dambil-press', 'fly']);
+  });
+});
+
+describe('cihaza göre muadil', () => {
+  const onBar = { ...bench, deviceId: 'olimpik-bar' };
+  const onDumbbells = { ...dumbbellPress, deviceId: 'dambil-seti' };
+  const flyOnDumbbells = { ...fly, deviceId: 'dambil-seti' };
+  const machinePress = exercise('makine-pres', {
+    equipment: 'machine',
+    deviceId: 'chest-press',
+    pattern: 'horizontal_push',
+    primaryMuscles: ['chest_lower'],
+    secondaryMuscles: ['delt_front', 'triceps_long', 'triceps_lateral'],
+  });
+  const pulldownOnMachine = { ...pulldown, deviceId: 'lat-pulldown' };
+  const pool = [onBar, onDumbbells, flyOnDumbbells, machinePress, pulldownOnMachine];
+
+  test('cihaz değişince o cihazdaki en iyi muadil (bar → dambıl: pres, fly değil)', () => {
+    assert.equal(alternativeForDevice(onBar, 'dambil-seti', pool, familyOf)?.id, 'dambil-press');
+    assert.equal(alternativeForDevice(onBar, 'chest-press', pool, familyOf)?.id, 'makine-pres');
+  });
+
+  test('aynı cihaz → kendisi; o cihazda uygun hareket yoksa null', () => {
+    assert.equal(alternativeForDevice(onBar, 'olimpik-bar', pool, familyOf)?.id, 'bench');
+    assert.equal(alternativeForDevice(onBar, 'lat-pulldown', pool, familyOf), null);
+  });
+
+  test('PT sabitlediyse o cihazdaki sabitlenen önce', () => {
+    const pinned = { ...onBar, alternatives: ['fly'] };
+    assert.equal(alternativeForDevice(pinned, 'dambil-seti', pool, familyOf)?.id, 'fly');
   });
 });

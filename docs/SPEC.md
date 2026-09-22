@@ -211,7 +211,18 @@ Alet doluysa, yoksa ya da danışana uygun değilse yerine ne yapılır (`src/li
 - Kart ekipmana göre gruplu, **ekipmansız grup en başta**.
 - Faz 4: antrenman ekranında "Değiştir" düğmesi aynı listeyi kullanır; muadilin kendi geçmişi ve ilerlemesi vardır.
 
-### 7.3 Şablonda gruplar ve kas yükü haritası (Faz 4)
+### 7.3 Cihazlar
+
+Genel cihaz listesi (salon envanteri yok): hazır katalog pakette (`src/data/device-library.ts`, 38 cihaz), PT'nin eklediği ya da ayarını değiştirdiği cihazlar uygulama repo'sunda (`data/devices.json`, aynı kimlikte PT'ninki kazanır). Sayfalar: `/dashboard/devices` (liste, detay, ekleme, düzenleme; dock'ta "Cihazlar").
+
+- **Türler ve ağırlık ayarı** (`src/lib/device-loads.ts`): ağırlık bloklu makine (ilk blok, adım, en ağır blok, **ara ağırlıklar** +0,5…+5 kg — ör. +1,75 — seçilebilir, birlikte takılabilir), kablo (aynıları + **makara oranı** 1:1 / 2:1 / 3:1 / 4:1), plaka yüklemeli (kızak + en küçük artış), bar (bar + en küçük artış), dambıl/kettlebell seti (ağırlık listesi), ekipmansız istasyon, bant, kardiyo.
+- **Makara:** çift makarada (2:1) blok yarı yol gider, kolda seçilenin **yarısı** hissedilir. Kayıt ve öneri cihazda seçilen ağırlıkla yapılır; gerçek direnç yalnız karşılaştırma için (`effectiveLoadKg`).
+- **Öneriler cihazın ağırlıklarından:** egzersiz `deviceId` ile cihaza bağlanır; öneri motoru cihazın ayarlanabilen ağırlıklarını kullanır (ara ağırlıklar dahil; setteki boşluklar atlanır: 16 → 20). Bar ve plaka yüklemelide düzenli adım. Cihazsız egzersiz kendi `loadStepKg`/`minLoadKg`'sini kullanır.
+- **Cihaza göre muadil:** `alternativeForDevice` — cihaz değişince egzersiz, o cihazla yapılan en iyi muadile geçer (PT'nin sabitledikleri önce). Egzersiz detayındaki "Cihaz değişirse" bunu gösterir; şablonda satırın cihazı değiştirilince aynısı olur (Faz 4). Muadiller kartı cihaza göre gruplu.
+- **Geçmiş cihaza göre (Faz 4):** her set kaydına cihaz kimliği de yazılır; ilerleme aynı egzersizin aynı cihazdaki geçmişine bakar (farklı makinelerin kiloları birbirini tutmaz).
+- Cihaz silinirse bağlı egzersizler cihazsız kalır ve kendi adımlarıyla devam eder.
+
+### 7.4 Şablonda gruplar ve kas yükü haritası (Faz 4)
 
 - **Gruplar:** arka arkaya yapılan hareketler tek egzersiz değil, şablonda grup olarak tutulur: süperset (2 hareket), devre (3+ hareket, tur sayısıyla), kompleks (aynı ağırlıkla ara vermeden). Her hareket kendi kaslarını ve ilerleme kuralını korur; grup yalnız sırayı ve dinlenmeyi belirler.
 - **Şablon haritası:** şablondaki bütün setlerin kesirli set toplamı (hedef 1 · yardımcı 0,5 · dengeleyici 0,25) kas başına hesaplanır; aynı kas birden çok harekette varsa değer toplanır.

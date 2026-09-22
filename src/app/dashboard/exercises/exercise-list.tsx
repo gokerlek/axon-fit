@@ -27,7 +27,14 @@ type ExerciseWithSource = Exercise & { source: 'library' | 'custom' };
  * Kas seçimi adres satırında (`?muscle=chest,back`): detaydan geri dönünce ve
  * paylaşılan bağlantıda süzgeç korunur. İlk veri sunucudan gelir, sonrası React Query'de.
  */
-export function ExerciseList({ initial }: { initial: ExerciseWithSource[] }) {
+export function ExerciseList({
+  initial,
+  deviceNames,
+}: {
+  initial: ExerciseWithSource[];
+  /** Cihaz kimliği → adı: kartta ekipman yerine cihaz yazar. */
+  deviceNames: Record<string, string>;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const selected = useMemo(() => parseMuscles(searchParams.get('muscle')), [searchParams]);
@@ -202,7 +209,8 @@ export function ExerciseList({ initial }: { initial: ExerciseWithSource[] }) {
                             <CardTitle className="truncate">{item.title}</CardTitle>
                             <CardDescription className="flex items-center gap-1.5">
                               <span className="truncate">
-                                {summarizeMuscles(item.primaryMuscles).join(', ')} · {EQUIPMENT_LABELS[item.equipment]}
+                                {summarizeMuscles(item.primaryMuscles).join(', ')} ·{' '}
+                                {(item.deviceId && deviceNames[item.deviceId]) || EQUIPMENT_LABELS[item.equipment]}
                               </span>
                               {item.video ? <YoutubeLogo className="size-4 shrink-0" aria-label="videolu" /> : null}
                             </CardDescription>

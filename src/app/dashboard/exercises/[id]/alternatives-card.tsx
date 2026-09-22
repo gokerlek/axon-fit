@@ -1,10 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { PushPin } from '@phosphor-icons/react';
+import { GroupedSelect } from '@/components/labeled-select';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item';
 import { fetchJson } from '@/lib/query/errors';
 import { useServiceMutation } from '@/lib/query/use-service';
@@ -15,6 +18,8 @@ export type AlternativeRow = {
   id: string;
   title: string;
   equipment: Equipment;
+  /** Hareketin yapıldığı cihazın adı; varsa grup bu olur. */
+  device: string | null;
   /** Hedef kasların özeti ("Kanat", "Göğüs"…). */
   muscles: string;
   /** Aynı hareket kalıbıysa kalıbın adı. */
@@ -24,12 +29,39 @@ export type AlternativeRow = {
 
 const GROUP_LABELS: Record<Equipment, string> = { ...EQUIPMENT_LABELS, bodyweight: 'Ekipmansız' };
 
+/** Cihaz değişirse geçilecek egzersiz (sunucuda hesaplanır). */
+export type DeviceSwap = {
+  deviceId: string;
+  deviceName: string;
+  kindLabel: string;
+  exercise: { id: string; title: string } | null;
+};
+
+/** Satırın grubu: cihazı varsa cihaz, yoksa ekipman; ekipmansızlar "Ekipmansız". */
+function groupOf(row: AlternativeRow): string {
+  return row.device ?? GROUP_LABELS[row.equipment];
+}
+
 /**
  * Muadiller: alet doluysa, yoksa ya da danışana uygun değilse yerine yapılabilecekler.
  * PT'nin sabitledikleri en üstte; diğerleri ekipmana göre gruplu (ekipmansız önce).
  */
-export function AlternativesCard({ exerciseId, rows }: { exerciseId: string; rows: AlternativeRow[] }) {
+export function AlternativesCard({
+  exerciseId,
+  rows,
+  swaps,
+}: {
+  exerciseId: string;
+  rows: AlternativeRow[];
+  swaps: DeviceSwap[];
+}) {
   const router = useRouter();
+  const [swapDevice, setSwapDevice] = useState('');
+  const swap = swaps.find((item) => item.deviceId === swapDevice);
+  const swapGroups = [...new Set(swaps.map((item) => item.kindLabel))].map((label) => ({
+    label,
+    options: swaps.filter((item) => item.kindLabel === label).map((item) => ({ value: item.deviceId, label: item.deviceName })),
+  }));
   const pinnedIds = rows.filter((row) => row.pinned).map((row) => row.id);
 
   const save = useServiceMutation({
@@ -47,15 +79,16 @@ export function AlternativesCard({ exerciseId, rows }: { exerciseId: string; row
     save.mutate(pinnedIds.includes(id) ? pinnedIds.filter((item) => item !== id) : [...pinnedIds, id]);
 
   const pinned = rows.filter((row) => row.pinned);
-  const groups = new Map<Equipment, AlternativeRow[]>();
+  const groups = new Map<string, AlternativeRow[]>();
   for (const row of rows.filter((item) => !item.pinned)) {
-    groups.set(row.equipment, [...(groups.get(row.equipment) ?? []), row]);
+    groups.set(groupOf(row), [...(groups.get(groupOf(row)) ?? []), row]);
   }
-  // Ekipmansız grup önce: alet yokken ilk bakılan yer. Diğerleri en iyi önerinin sırasıyla.
-  const ordered = [...groups].sort(([a], [b]) => Number(b === 'bodyweight') - Number(a === 'bodyweight'));
+  // Ekipmansız hareketler önce: alet yokken ilk bakılan yer. Diğerleri en iyi önerinin sırasıyla.
+  const isBodyweight = (items: AlternativeRow[]) => items.some((item) => item.equipment === 'bodyweight' && !item.device);
+  const ordered = [...groups].sort(([, a], [, b]) => Number(isBodyweight(b)) - Number(isBodyweight(a)));
   const sections: [string, AlternativeRow[]][] = [
     ...(pinned.length > 0 ? ([['Senin seçtiklerin', pinned]] as [string, AlternativeRow[]][]) : []),
-    ...ordered.map(([equipment, items]) => [GROUP_LABELS[equipment], items] as [string, AlternativeRow[]]),
+    ...ordered,
   ];
 
   return (
@@ -67,6 +100,28 @@ export function AlternativesCard({ exerciseId, rows }: { exerciseId: string; row
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        {swaps.length > 0 ? (
+          <Field>
+            <FieldLabel htmlFor="swap-device">Cihaz değişirse</FieldLabel>
+            <GroupedSelect id="swap-device" value={swapDevice} groups={swapGroups} empty="Cihaz seç" onChange={setSwapDevice} />
+            {swap ? (
+              <FieldDescription>
+                {swap.exercise ? (
+                  <>
+                    {swap.deviceName} ile:{' '}
+                    <Link href={`/dashboard/exercises/${swap.exercise.id}`} className="font-medium text-foreground underline underline-offset-4">
+                      {swap.exercise.title}
+                    </Link>
+                  </>
+                ) : (
+                  `${swap.deviceName} ile aynı kasları çalıştıran bir egzersiz yok.`
+                )}
+              </FieldDescription>
+            ) : (
+              <FieldDescription>Şablonda satırın cihazı değişince egzersiz buna göre değişir.</FieldDescription>
+            )}
+          </Field>
+        ) : null}
         {sections.length === 0 ? (
           <p className="text-sm text-muted-foreground">Aynı kasları çalıştıran başka hareket bulunamadı.</p>
         ) : (
@@ -84,7 +139,7 @@ export function AlternativesCard({ exerciseId, rows }: { exerciseId: string; row
                       </ItemTitle>
                       <ItemDescription>
                         {row.muscles}
-                        {row.pinned ? ` · ${EQUIPMENT_LABELS[row.equipment]}` : ''}
+                        {row.pinned ? ` · ${row.device ?? EQUIPMENT_LABELS[row.equipment]}` : ''}
                         {row.pattern ? ` · ${row.pattern}` : ''}
                       </ItemDescription>
                     </ItemContent>

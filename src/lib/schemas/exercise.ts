@@ -111,6 +111,12 @@ export const exerciseSchema = v.object({
   category: v.picklist(CATEGORIES, 'Geçerli bir tür seç.'),
   trackingType: v.picklist(TRACKING_TYPES, 'Geçerli bir kayıt türü seç.'),
   equipment: v.picklist(EQUIPMENT, 'Geçerli bir ekipman seç.'),
+  /**
+   * Hareketin yapıldığı cihaz (`src/data/device-library.ts` ya da PT'nin cihazı). Varsa
+   * ağırlık önerileri cihazın ayarlanabilen ağırlıklarından seçilir; `loadStepKg` ve
+   * `minLoadKg` yalnız cihazsız harekette kullanılır.
+   */
+  deviceId: v.optional(v.pipe(v.string(), v.regex(/^[a-z0-9-]{2,60}$/))),
   /** Hareket kalıbı (yatay itiş, squat…): muadil önerisinin ilk ölçütü (`src/lib/alternatives.ts`). */
   pattern: v.optional(v.picklist(MOVEMENT_PATTERNS, 'Hareket kalıbını seç.')),
   /** PT'nin sabitlediği muadiller (egzersiz kimlikleri); önerilerde en başta gelir. */
