@@ -113,7 +113,10 @@ health.json                    yalnız sağlık modülü açık ve onaylıysa ol
   "id": "s_91", "date": "2026-09-20", "templateId": "t_altvucut",
   "startedAt": "...", "finishedAt": "...",
   "entries": [
-    { "exerciseId": "squat", "sets": [ { "kg": 80, "reps": 8, "rpe": 7 } ] }
+    { "exerciseId": "squat", "sets": [
+      { "type": "warmup",  "kg": 20, "reps": 10 },
+      { "type": "working", "kg": 80, "reps": 8, "effort": "good" }   // effort: easy | good | hard | fail
+    ] }                                                              // süreli harekette "reps" yerine "seconds"
   ],
   "notes": "", "water": 3
 }
@@ -183,11 +186,25 @@ Oluşturma işi (şablon kurmak, program atamak, birkaç danışanı yan yana g�
 
 **Sınır (GitHub):** içerik yazan istekler için dakikada 80, saatte 500 üst sınırı var. Set başına bir yazmayla bu, **aynı saat içinde ~20 tam antrenman** demek. 10-30 danışanlı bir antrenörde aynı saatte 3-8 kişi çalışır; pay rahat ama izlenecek sayı budur.
 
+### 7.1 İlerleme ve öneriler (progressive overload)
+
+Öneri motoru `src/lib/progression.ts`: saf fonksiyonlar, testleri `npm test`. Öneri her zaman öneridir; danışan ya da PT başka ağırlık girebilir.
+
+- **Ağırlık adımı ≠ artış.** Egzersizdeki `loadStepKg` aletin en küçük sıçramasıdır (halter 2,5 · dambıl 2 · makine 5 · kablo 2,5 · kettlebell 4; ağırlıksız harekette 0), `minLoadKg` barın/aletin kendi ağırlığı. Ne kadar artacağını danışanın performansı belirler, sonuç adıma yuvarlanır.
+- **Kural:** `progression = { scheme: double | linear | none, targetMin, targetMax, targetRir }`. Egzersizde yoksa türüne göre varsayılan (bileşik 6–10 · izolasyon 10–15 · vücut ağırlığı 6–12 / 8–15 · süre 30–60 sn · ısınma/soğuma ilerlemesiz). Şablondaki egzersiz satırı kuralı değiştirebilir (Faz 4).
+- **Zorluk:** danışan her çalışma setinden sonra tek dokunuşla seçer: Kolay / İyi / Zor / Başaramadım (yedekte ~4 / 2 / 1 / 0 tekrar).
+- **Bir sonraki antrenman (`nextSession`):** çift ilerlemede bütün setler aralığın tepesindeyse bir adım (çok kolaysa iki), tekrar hedefi alta döner; değilse aynı ağırlık, en düşük tekrar + 1. Doğrusalda her başarılı antrenmanda bir adım. Bir set hedefin altındaysa ağırlık korunur; hiçbiri ulaşmadıysa ~%5 iner (en az bir adım). Ağırlıksız harekette tekrar (+1) ya da süre (+5 sn); tepede "ağırlık ekle ya da zor varyasyon".
+- **Hafifletme:** 3 antrenman üst üste tıkanırsa ağırlık %15 düşer (adıma aşağı; tabanın altına inmez), çalışma setleri üçte ikiye iner (v1 K16).
+- **Aynı antrenmanda (`nextSet`):** setler aynı ağırlıkta kalır; başarısız ya da hedefin 3+ altı → ~%5 aşağı; "kolay" ve tepede → bir adım yukarı.
+- **Isınma (`warmupSets`, v1 §7.8):** halterle bileşik hareket, kas grubunun ilk hareketi ve ≥ 40 kg ise boş bar × 10 + 1–3 ara set.
+- **Aşırı yük (`isOverload`, v1 K14):** hedef + max(%20, 5 kg) üstü girilen set PT'ye bildirilir; reddedilmez.
+- İlk sürümün `loadIncrementKg` alanı okunurken `loadStepKg`'ye çevrilir.
+
 ---
 
 ## 8. v1'den taşınacaklar
 
-Tasarım dili, ekran akışları, Türkçe metinler, antrenman ekranı mantığı (set kaydı, dinlenme sayacı, su sayacı, sürükle-bırak), 1RM ve hacim hesapları, hazır oluşluk skoru ve deload mantığı (sağlık modülü açıkken), hazır antrenman şablonları.
+Tasarım dili, ekran akışları, Türkçe metinler, antrenman ekranı mantığı (set kaydı, dinlenme sayacı, su sayacı, sürükle-bırak), 1RM ve hacim hesapları, hazır oluşluk skoru ve ona bağlı deload (sağlık modülü açıkken; performansa bağlı hafifletme, ısınma ve aşırı yük kuralı §7.1'de taşındı), hazır antrenman şablonları.
 
 **Taşınmayacaklar:** Postgres şeması, satır seviyesi güvenlik, Neon, Better Auth sunucusu, docker ortamı, polling altyapısı, e2e script'leri. v1 repo'su arşiv olarak kalır.
 

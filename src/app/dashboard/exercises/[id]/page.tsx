@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { VideoEmbed } from '@/components/video-embed';
 import { getExercise } from '@/lib/exercises';
 import { formatKg } from '@/lib/format';
+import { describeRule, progressionOf, PROGRESSION_LABELS } from '@/lib/progression';
 import { CATEGORY_LABELS, EQUIPMENT_LABELS, MUSCLE_LABELS } from '@/lib/schemas/exercise';
 import { ExerciseActions } from './exercise-actions';
 
@@ -22,6 +23,7 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
   const exercise = await getExercise(id);
   if (!exercise) notFound();
 
+  const rule = progressionOf(exercise);
   const summary: [string, string][] = [
     ['Hedef kas', MUSCLE_LABELS[exercise.targetMuscle]],
     ...(exercise.secondaryMuscles.length > 0
@@ -31,8 +33,12 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
     ['Tür', CATEGORY_LABELS[exercise.category]],
     ['Kayıt', TRACKING_LABELS[exercise.trackingType]],
     ...(exercise.trackingType === 'weight_reps'
-      ? ([['Artış / taban', `${formatKg(exercise.loadIncrementKg)} / ${formatKg(exercise.minLoadKg)}`]] as [string, string][])
+      ? ([['Ağırlık adımı / taban', `${formatKg(exercise.loadStepKg)} / ${formatKg(exercise.minLoadKg)}`]] as [string, string][])
       : []),
+    [
+      'İlerleme',
+      `${PROGRESSION_LABELS[rule.scheme]} · ${rule.targetMin}–${rule.targetMax} ${exercise.trackingType === 'duration' ? 'sn' : 'tekrar'}`,
+    ],
   ];
 
   const origin =
@@ -72,6 +78,7 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
                   ))}
                 </TableBody>
               </Table>
+              <p className="mt-3 text-muted-foreground">{describeRule(rule, exercise)}</p>
             </CardContent>
           </Card>
 

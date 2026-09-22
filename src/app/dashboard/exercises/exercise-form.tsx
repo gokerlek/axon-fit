@@ -22,6 +22,8 @@ import {
   FieldDescription,
   FieldError,
   FieldLabel,
+  FieldLegend,
+  FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -41,6 +43,15 @@ import {
   SECONDARY_INTENSITY,
   type MuscleIntensity,
 } from "@/lib/muscles";
+import {
+  defaultRule,
+  describeRule,
+  EQUIPMENT_LOAD_DEFAULTS,
+  progressionOf,
+  PROGRESSION_LABELS,
+  RIR_LABELS,
+  type ProgressionRule,
+} from "@/lib/progression";
 import { fetchJson } from "@/lib/query/errors";
 import { applyFieldErrors } from "@/lib/query/field-errors";
 import { useServiceMutation } from "@/lib/query/use-service";
@@ -75,14 +86,37 @@ const BLANK: ExerciseInput = {
   equipment: "barbell",
   targetMuscle: "chest",
   secondaryMuscles: [],
-  loadIncrementKg: 2.5,
-  minLoadKg: 0,
+  ...EQUIPMENT_LOAD_DEFAULTS.barbell,
+  progression: defaultRule("compound", "weight_reps"),
   videoUrl: "",
 };
 
-/** Düzenlemede kimlik forma girmez (şemada yok); video, yapıştırılan bağlantı olarak gösterilir. */
+/**
+ * Düzenlemede kimlik forma girmez (şemada yok); video, yapıştırılan bağlantı olarak
+ * gösterilir; kuralı olmayan egzersizde türünün varsayılan kuralı açık yazılır.
+ */
 function toInput({ id: _id, video, ...rest }: Exercise): ExerciseInput {
-  return { ...rest, videoUrl: video ? videoUrl(video) : "" };
+  return {
+    ...rest,
+    progression: progressionOf(rest),
+    videoUrl: video ? videoUrl(video) : "",
+  };
+}
+
+const RIR_ITEMS: Record<string, string> = Object.fromEntries(
+  Object.entries(RIR_LABELS).map(([rir, label]) => [
+    rir,
+    rir === "2" ? `${label} (önerilen)` : label,
+  ]),
+);
+
+function sameRule(a: ProgressionRule | undefined, b: ProgressionRule): boolean {
+  return (
+    a?.scheme === b.scheme &&
+    a.targetMin === b.targetMin &&
+    a.targetMax === b.targetMax &&
+    a.targetRir === b.targetRir
+  );
 }
 
 /** Açılır liste: Base UI `items` ile seçili değerin Türkçe etiketini gösterir. */
@@ -358,9 +392,13 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
                   id="equipment"
                   value={field.input}
                   labels={EQUIPMENT_LABELS}
-                  onChange={(value) =>
-                    setInput(form, { path: ["equipment"], input: value })
-                  }
+                  onChange={(value) => {
+                    setInput(form, { path: ["equipment"], input: value });
+                    // Adım ve taban ekipmana bağlı; PT sonra değiştirebilir.
+                    const load = EQUIPMENT_LOAD_DEFAULTS[value];
+                    setInput(form, { path: ["loadStepKg"], input: load.loadStepKg });
+                    setInput(form, { path: ["minLoadKg"], input: load.minLoadKg });
+                  }}
                 />
               </Field>
             )}
@@ -373,9 +411,24 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
                   id="category"
                   value={field.input}
                   labels={CATEGORY_LABELS}
-                  onChange={(value) =>
-                    setInput(form, { path: ["category"], input: value })
-                  }
+                  onChange={(value) => {
+                    const tracking = getInput(form, { path: ["trackingType"] }) ?? "weight_reps";
+                    const current = getInput(form, { path: ["progression"] }) as
+                      | ProgressionRule
+                      | undefined;
+                    const wasDefault = sameRule(
+                      current,
+                      defaultRule(field.input ?? "compound", tracking),
+                    );
+                    setInput(form, { path: ["category"], input: value });
+                    // Elle ayarlanmış kurala dokunma; varsayılansa yeni türün varsayılanı gelsin.
+                    if (wasDefault) {
+                      setInput(form, {
+                        path: ["progression"],
+                        input: defaultRule(value, tracking),
+                      });
+                    }
+                  }}
                 />
               </Field>
             )}
@@ -388,9 +441,15 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
                   id="trackingType"
                   value={field.input}
                   labels={TRACKING_LABELS}
-                  onChange={(value) =>
-                    setInput(form, { path: ["trackingType"], input: value })
-                  }
+                  onChange={(value) => {
+                    setInput(form, { path: ["trackingType"], input: value });
+                    // Birim değişir (tekrar ↔ saniye): aralık yeni türün varsayılanına döner.
+                    const category = getInput(form, { path: ["category"] }) ?? "compound";
+                    setInput(form, {
+                      path: ["progression"],
+                      input: defaultRule(category, value),
+                    });
+                  }}
                 />
               </Field>
             )}
@@ -477,46 +536,161 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
           )}
         </FormField>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField of={form} path={["loadIncrementKg"]}>
-            {(field) => (
-              <Field data-invalid={Boolean(field.errors) || undefined}>
-                <FieldLabel htmlFor="loadIncrementKg">Artış (kg)</FieldLabel>
-                <Input
-                  {...field.props}
-                  id="loadIncrementKg"
-                  type="number"
-                  step="0.5"
-                  className="tabular-nums"
-                  value={field.input ?? 0}
-                />
-                <FieldDescription>
-                  Bir sonraki sette önerilecek artış.
-                </FieldDescription>
-                <FieldError>{field.errors?.[0]}</FieldError>
-              </Field>
-            )}
-          </FormField>
-          <FormField of={form} path={["minLoadKg"]}>
-            {(field) => (
-              <Field data-invalid={Boolean(field.errors) || undefined}>
-                <FieldLabel htmlFor="minLoadKg">Taban ağırlık (kg)</FieldLabel>
-                <Input
-                  {...field.props}
-                  id="minLoadKg"
-                  type="number"
-                  step="0.5"
-                  className="tabular-nums"
-                  value={field.input ?? 0}
-                />
-                <FieldDescription>
-                  Bar ya da aletin kendi ağırlığı.
-                </FieldDescription>
-                <FieldError>{field.errors?.[0]}</FieldError>
-              </Field>
-            )}
-          </FormField>
-        </div>
+        <FormField of={form} path={["trackingType"]}>
+          {(trackingField) => (
+            <FieldSet>
+              <FieldLegend>Yük ve ilerleme</FieldLegend>
+              {trackingField.input === "weight_reps" ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField of={form} path={["loadStepKg"]}>
+                    {(field) => (
+                      <Field data-invalid={Boolean(field.errors) || undefined}>
+                        <FieldLabel htmlFor="loadStepKg">Ağırlık adımı (kg)</FieldLabel>
+                        <Input
+                          {...field.props}
+                          id="loadStepKg"
+                          type="number"
+                          // Formisch alan değerini metin verir; şema sayı bekler.
+                          onChange={(event) =>
+                            setInput(form, {
+                              path: ["loadStepKg"],
+                              input: event.currentTarget.valueAsNumber,
+                            })
+                          }
+                          step="0.5"
+                          className="tabular-nums"
+                          value={field.input ?? 0}
+                        />
+                        <FieldDescription>
+                          Aletin izin verdiği en küçük artış; öneriler bu adıma
+                          yuvarlanır.
+                        </FieldDescription>
+                        <FieldError>{field.errors?.[0]}</FieldError>
+                      </Field>
+                    )}
+                  </FormField>
+                  <FormField of={form} path={["minLoadKg"]}>
+                    {(field) => (
+                      <Field data-invalid={Boolean(field.errors) || undefined}>
+                        <FieldLabel htmlFor="minLoadKg">Taban ağırlık (kg)</FieldLabel>
+                        <Input
+                          {...field.props}
+                          id="minLoadKg"
+                          type="number"
+                          // Formisch alan değerini metin verir; şema sayı bekler.
+                          onChange={(event) =>
+                            setInput(form, {
+                              path: ["minLoadKg"],
+                              input: event.currentTarget.valueAsNumber,
+                            })
+                          }
+                          step="0.5"
+                          className="tabular-nums"
+                          value={field.input ?? 0}
+                        />
+                        <FieldDescription>
+                          Bar ya da aletin kendi ağırlığı; öneri bunun altına inmez.
+                        </FieldDescription>
+                        <FieldError>{field.errors?.[0]}</FieldError>
+                      </Field>
+                    )}
+                  </FormField>
+                </div>
+              ) : null}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField of={form} path={["progression", "scheme"]}>
+                  {(field) => (
+                    <Field>
+                      <FieldLabel htmlFor="progressionScheme">İlerleme</FieldLabel>
+                      <LabeledSelect
+                        id="progressionScheme"
+                        value={field.input}
+                        labels={PROGRESSION_LABELS}
+                        onChange={(value) =>
+                          setInput(form, {
+                            path: ["progression", "scheme"],
+                            input: value,
+                          })
+                        }
+                      />
+                    </Field>
+                  )}
+                </FormField>
+                {trackingField.input !== "duration" ? (
+                  <FormField of={form} path={["progression", "targetRir"]}>
+                    {(field) => (
+                      <Field>
+                        <FieldLabel htmlFor="targetRir">Hedef zorluk</FieldLabel>
+                        <LabeledSelect
+                          id="targetRir"
+                          value={String(field.input ?? 2)}
+                          labels={RIR_ITEMS}
+                          onChange={(value) =>
+                            setInput(form, {
+                              path: ["progression", "targetRir"],
+                              input: Number(value),
+                            })
+                          }
+                        />
+                      </Field>
+                    )}
+                  </FormField>
+                ) : null}
+                {(["targetMin", "targetMax"] as const).map((key) => (
+                  <FormField key={key} of={form} path={["progression", key]}>
+                    {(field) => (
+                      <Field data-invalid={Boolean(field.errors) || undefined}>
+                        <FieldLabel htmlFor={key}>
+                          {key === "targetMin" ? "Hedef en az" : "Hedef en çok"} (
+                          {trackingField.input === "duration" ? "sn" : "tekrar"})
+                        </FieldLabel>
+                        <Input
+                          {...field.props}
+                          id={key}
+                          type="number"
+                          onChange={(event) =>
+                            setInput(form, {
+                              path: ["progression", key],
+                              input: event.currentTarget.valueAsNumber,
+                            })
+                          }
+                          step="1"
+                          min="1"
+                          className="tabular-nums"
+                          value={field.input ?? 0}
+                        />
+                        <FieldError>{field.errors?.[0]}</FieldError>
+                      </Field>
+                    )}
+                  </FormField>
+                ))}
+              </div>
+
+              {/* Kuralın düz cümleyle anlatımı: PT neyi seçtiğini görsün. */}
+              <FormField of={form} path={["progression"]}>
+                {(ruleField) => (
+                  <FormField of={form} path={["loadStepKg"]}>
+                    {(stepField) => {
+                      const rule = ruleField.input as ProgressionRule | undefined;
+                      // Formisch alanı her zaman bir öğe döndürmeli.
+                      if (!rule?.targetMin || !rule.targetMax) return <></>;
+                      return (
+                        <FieldDescription>
+                          {describeRule(rule, {
+                            trackingType: trackingField.input ?? "weight_reps",
+                            loadStepKg: Number(stepField.input ?? 0),
+                            minLoadKg: 0,
+                          })}
+                        </FieldDescription>
+                      );
+                    }}
+                  </FormField>
+                )}
+              </FormField>
+            </FieldSet>
+          )}
+        </FormField>
       </div>
 
       {hiddenError ? (

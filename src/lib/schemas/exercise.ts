@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { PROGRESSION_SCHEMES } from '@/lib/progression';
 import { isValidVideoId, parseVideoUrl } from '@/lib/video';
 
 /**
@@ -57,6 +58,31 @@ export const TRACKING_TYPES = ['weight_reps', 'bodyweight_reps', 'duration'] as 
 export const CATEGORIES = ['compound', 'isolation', 'warmup', 'cooldown'] as const;
 export type Category = (typeof CATEGORIES)[number];
 
+const count = (max: number) =>
+  v.pipe(v.number('Sayı gir.'), v.integer('Tam sayı gir.'), v.minValue(1, 'En az 1.'), v.maxValue(max, `En fazla ${max}.`));
+
+/**
+ * İlerleme kuralı (`src/lib/progression.ts`): tür, hedef aralığı (tekrar ya da saniye)
+ * ve set sonunda yedekte kalacak tekrar. Egzersizde yoksa türüne göre varsayılan
+ * kullanılır; şablondaki satır bunu değiştirebilir.
+ */
+export const progressionSchema = v.pipe(
+  v.object({
+    scheme: v.picklist(PROGRESSION_SCHEMES, 'Geçerli bir ilerleme türü seç.'),
+    targetMin: count(3600),
+    targetMax: count(3600),
+    targetRir: v.pipe(v.number('Sayı gir.'), v.integer('Tam sayı gir.'), v.minValue(0, 'En az 0.'), v.maxValue(4, 'En fazla 4.')),
+  }),
+  v.forward(
+    v.partialCheck(
+      [['targetMin'], ['targetMax']],
+      (rule) => rule.targetMax >= rule.targetMin,
+      'Üst sınır alt sınırdan küçük olamaz.',
+    ),
+    ['targetMax'],
+  ),
+);
+
 export const exerciseSchema = v.object({
   /** Okunabilir kimlik (slug). Şablonlar ve set kayıtları buna bakar; değiştirilmez. */
   id: v.pipe(v.string(), v.regex(/^[a-z0-9-]{2,60}$/, 'Kimlik yalnız küçük harf, rakam ve tire içerebilir.')),
@@ -74,9 +100,14 @@ export const exerciseSchema = v.object({
   equipment: v.picklist(EQUIPMENT, 'Geçerli bir ekipman seç.'),
   targetMuscle: v.picklist(MUSCLES, 'Geçerli bir kas seç.'),
   secondaryMuscles: v.pipe(v.array(v.picklist(MUSCLES, 'Geçerli bir kas seç.')), v.maxLength(8, 'En fazla 8 yardımcı kas seçilebilir.')),
-  /** Bir sonraki sette önerilecek artış (kg) ve barın/aletin taban ağırlığı. */
-  loadIncrementKg: v.pipe(v.number('Sayı gir.'), v.minValue(0, 'Negatif olamaz.'), v.maxValue(50, 'En fazla 50 kg.')),
+  /**
+   * Ağırlık adımı: aletin izin verdiği en küçük artış (halter 2,5, dambıl 2, makine 5…).
+   * Ne kadar artacağını danışanın performansı belirler; öneri bu adıma yuvarlanır.
+   * Taban: barın/aletin kendi ağırlığı; öneri bunun altına inmez.
+   */
+  loadStepKg: v.pipe(v.number('Sayı gir.'), v.minValue(0, 'Negatif olamaz.'), v.maxValue(50, 'En fazla 50 kg.')),
   minLoadKg: v.pipe(v.number('Sayı gir.'), v.minValue(0, 'Negatif olamaz.'), v.maxValue(500, 'En fazla 500 kg.')),
+  progression: v.optional(progressionSchema),
   video: v.optional(
     v.pipe(
       v.object({
@@ -99,6 +130,8 @@ export type Exercise = v.InferOutput<typeof exerciseSchema>;
  */
 export const exerciseFormSchema = v.object({
   ...v.omit(exerciseSchema, ['id', 'video']).entries,
+  // Formda kural her zaman açık yazılır (varsayılan da olsa); egzersizde isteğe bağlı.
+  progression: progressionSchema,
   videoUrl: v.pipe(
     v.string(),
     v.trim(),
@@ -130,8 +163,9 @@ export const MUSCLE_GROUPS: readonly { id: string; label: string; muscles: reado
 ];
 
 /**
- * İlk sürümdeki 12'li gruptan kalan değerler. Repo'daki eski kayıtlar okunurken
- * yenisine çevrilir; yoksa şema bütün dosyayı reddeder ve PT'nin egzersizleri kaybolur.
+ * İlk sürümden kalan değerler (12'li kas grubu, `loadIncrementKg`). Repo'daki eski
+ * kayıtlar okunurken yenisine çevrilir; yoksa şema bütün dosyayı reddeder ve PT'nin
+ * egzersizleri kaybolur.
  */
 const LEGACY_MUSCLES: Record<string, Muscle> = { back: 'lats', shoulders: 'front_delts', core: 'abs' };
 
@@ -141,9 +175,11 @@ function migrateMuscle(value: unknown): unknown {
 
 function migrateStoredExercise(input: unknown): unknown {
   if (!input || typeof input !== 'object') return input;
-  const item = input as Record<string, unknown>;
+  const { loadIncrementKg, ...item } = input as Record<string, unknown>;
   return {
     ...item,
+    // İlk sürümdeki ad: "artış" aslında aletin adımıydı.
+    loadStepKg: item.loadStepKg ?? loadIncrementKg,
     targetMuscle: migrateMuscle(item.targetMuscle),
     secondaryMuscles: Array.isArray(item.secondaryMuscles)
       ? [...new Set(item.secondaryMuscles.map(migrateMuscle))]

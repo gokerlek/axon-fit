@@ -25,7 +25,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "front_delts",
       "triceps"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 2.5,
     "minLoadKg": 20.0,
     "video": {
       "provider": "youtube",
@@ -49,7 +49,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "front_delts",
       "triceps"
     ],
-    "loadIncrementKg": 2.0,
+    "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -73,7 +73,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "upper_chest",
       "front_delts"
     ],
-    "loadIncrementKg": 2.0,
+    "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -99,7 +99,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "serratus",
       "abs"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -123,7 +123,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "chest",
       "front_delts"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -149,7 +149,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "upper_traps",
       "abs"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 2.5,
     "minLoadKg": 20.0,
     "video": {
       "provider": "youtube",
@@ -173,7 +173,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "side_delts",
       "triceps"
     ],
-    "loadIncrementKg": 2.0,
+    "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -196,7 +196,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "upper_traps"
     ],
-    "loadIncrementKg": 1.0,
+    "loadStepKg": 1.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -220,7 +220,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "mid_back",
       "upper_traps"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 2.5,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -245,7 +245,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "mid_back",
       "forearms"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -269,7 +269,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "biceps",
       "mid_back"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 2.5,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -294,7 +294,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "rear_delts",
       "biceps"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 2.5,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -321,7 +321,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "lower_back",
       "hamstrings"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 2.5,
     "minLoadKg": 20.0,
     "video": {
       "provider": "youtube",
@@ -346,7 +346,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "rear_delts",
       "biceps"
     ],
-    "loadIncrementKg": 2.0,
+    "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -373,7 +373,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "upper_traps",
       "forearms"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 2.5,
     "minLoadKg": 20.0,
     "video": {
       "provider": "youtube",
@@ -398,7 +398,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "lower_back",
       "forearms"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 2.5,
     "minLoadKg": 20.0,
     "video": {
       "provider": "youtube",
@@ -424,7 +424,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "lower_back",
       "abs"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 2.5,
     "minLoadKg": 20.0,
     "video": {
       "provider": "youtube",
@@ -449,7 +449,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "adductors",
       "abs"
     ],
-    "loadIncrementKg": 2.0,
+    "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -474,7 +474,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "adductors",
       "hamstrings"
     ],
-    "loadIncrementKg": 5.0,
+    "loadStepKg": 5.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -499,7 +499,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "glute_medius",
       "adductors"
     ],
-    "loadIncrementKg": 2.0,
+    "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -525,7 +525,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "adductors",
       "hamstrings"
     ],
-    "loadIncrementKg": 2.0,
+    "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -549,7 +549,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "hamstrings",
       "glute_medius"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 2.5,
     "minLoadKg": 20.0,
     "video": {
       "provider": "youtube",
@@ -570,7 +570,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "machine",
     "targetMuscle": "quadriceps",
     "secondaryMuscles": [],
-    "loadIncrementKg": 5.0,
+    "loadStepKg": 5.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -593,7 +593,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "calves"
     ],
-    "loadIncrementKg": 5.0,
+    "loadStepKg": 5.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -614,7 +614,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "machine",
     "targetMuscle": "calves",
     "secondaryMuscles": [],
-    "loadIncrementKg": 5.0,
+    "loadStepKg": 5.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -637,7 +637,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "forearms"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 2.5,
     "minLoadKg": 10.0,
     "video": {
       "provider": "youtube",
@@ -658,7 +658,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "dumbbell",
     "targetMuscle": "biceps",
     "secondaryMuscles": [],
-    "loadIncrementKg": 2.0,
+    "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -681,7 +681,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "forearms"
     ],
-    "loadIncrementKg": 2.0,
+    "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -702,7 +702,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "targetMuscle": "triceps",
     "secondaryMuscles": [],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 2.5,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -723,7 +723,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "dumbbell",
     "targetMuscle": "triceps",
     "secondaryMuscles": [],
-    "loadIncrementKg": 2.0,
+    "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -748,7 +748,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "front_delts",
       "serratus"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -773,7 +773,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "lower_back",
       "abs"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -797,7 +797,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "obliques",
       "hip_flexors"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -822,7 +822,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "obliques",
       "forearms"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -848,7 +848,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "abs",
       "forearms"
     ],
-    "loadIncrementKg": 4.0,
+    "loadStepKg": 4.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -873,7 +873,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "abs",
       "obliques"
     ],
-    "loadIncrementKg": 2.0,
+    "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -899,7 +899,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "quadriceps",
       "glutes"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -924,7 +924,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "hamstrings",
       "calves"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 0.0,
     "minLoadKg": 0.0
   },
   {
@@ -943,7 +943,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "mid_back"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 0.0,
     "minLoadKg": 0.0
   },
   {
@@ -963,7 +963,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "abs",
       "mid_back"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -987,7 +987,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "lats",
       "glutes"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
       "provider": "youtube",
@@ -1011,7 +1011,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "upper_chest",
       "front_delts"
     ],
-    "loadIncrementKg": 2.5,
+    "loadStepKg": 0.0,
     "minLoadKg": 0.0
   }
 ];
