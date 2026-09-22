@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Plus } from '@phosphor-icons/react/dist/ssr';
 import { PageHeader } from '@/components/page-header';
+import { TrainingTabs } from '../training-tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,6 +23,7 @@ export default async function DevicesPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <TrainingTabs />
       <PageHeader
         title="Cihazlar"
         description={

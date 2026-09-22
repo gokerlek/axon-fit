@@ -1,21 +1,35 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { Barbell, ListChecks, SquaresFour, StackSimple, UsersThree } from '@phosphor-icons/react';
+import { Barbell, SquaresFour, UsersThree } from '@phosphor-icons/react';
 import { Dock, type DockEntry } from '@/components/dock/dock';
+import { TRAINING_SECTIONS } from './training-tabs';
 
-const ITEMS: Omit<DockEntry, 'active'>[] = [
+type NavItem = Omit<DockEntry, 'active'> & {
+  /** Bu adreslerin altındaki sayfalarda da aktif (bölüm sekmeleri). */
+  sections?: readonly string[];
+};
+
+const ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Genel bakış', icon: <SquaresFour /> },
   { href: '/dashboard/clients', label: 'Danışanlar', icon: <UsersThree />, disabled: true },
-  { href: '/dashboard/templates', label: 'Şablonlar', icon: <ListChecks />, disabled: true },
-  { href: '/dashboard/exercises', label: 'Egzersizler', icon: <Barbell /> },
-  { href: '/dashboard/devices', label: 'Cihazlar', icon: <StackSimple /> },
+  // Şablonlar, egzersizler ve cihazlar tek bölüm; içinde sekmeler (training-tabs.tsx).
+  {
+    href: '/dashboard/exercises',
+    label: 'Antrenman',
+    icon: <Barbell />,
+    sections: TRAINING_SECTIONS.map((section) => section.href),
+  },
 ];
 // Ayarlar ve çıkış dock'ta değil, sağ üstteki kullanıcı menüsünde (user-menu.tsx).
 
-function isActive(pathname: string, href: string): boolean {
+function matches(pathname: string, href: string): boolean {
   // Genel bakış yalnız tam eşleşmede aktif; diğerleri alt sayfalarında da.
   return href === '/dashboard' ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function isActive(pathname: string, item: NavItem): boolean {
+  return (item.sections ?? [item.href]).some((href) => matches(pathname, href));
 }
 
 /** PT gezinmesi: masaüstünde büyüyen dock, telefonda aynı dock alt çubuk görevi görür. */
@@ -24,7 +38,7 @@ export function DashboardDock() {
   return (
     <Dock
       ariaLabel="Ana menü"
-      items={ITEMS.map((item) => ({ ...item, active: isActive(pathname, item.href) }))}
+      items={ITEMS.map(({ sections, ...item }) => ({ ...item, active: isActive(pathname, { ...item, sections }) }))}
     />
   );
 }

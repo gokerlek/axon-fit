@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Heartbeat, MagnifyingGlass, Plus, X, YoutubeLogo } from '@phosphor-icons/react';
 import { MuscleMap } from '@/components/muscle-map/muscle-map';
 import { PageHeader } from '@/components/page-header';
+import { TrainingTabs } from '../training-tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -77,6 +78,7 @@ export function ExerciseList({
 
   return (
     <div className="flex flex-col gap-5">
+      <TrainingTabs />
       <PageHeader
         title="Egzersizler"
         description={
