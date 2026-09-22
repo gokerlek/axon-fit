@@ -1,5 +1,7 @@
 import * as v from 'valibot';
 import { MOVEMENT_PATTERNS } from '@/lib/alternatives';
+import { ATTACHMENTS } from '@/lib/device-loads';
+import { GRIPS, GRIP_WIDTHS } from '@/lib/grips';
 import { PROGRESSION_SCHEMES } from '@/lib/progression';
 import { isValidVideoId, parseVideoUrl } from '@/lib/video';
 
@@ -117,6 +119,11 @@ export const exerciseSchema = v.object({
    * `minLoadKg` yalnız cihazsız harekette kullanılır.
    */
   deviceId: v.optional(v.pipe(v.string(), v.regex(/^[a-z0-9-]{2,60}$/))),
+  /** Hangi aparatla yapıldığı (cihazın aparatlarından). */
+  attachment: v.optional(v.picklist(ATTACHMENTS, 'Geçerli bir aparat seç.')),
+  /** Tutuş: pronasyon/supinasyon/nötr/karışık ve genişlik (`src/lib/grips.ts`). */
+  grip: v.optional(v.picklist(GRIPS, 'Geçerli bir tutuş seç.')),
+  gripWidth: v.optional(v.picklist(GRIP_WIDTHS, 'Geçerli bir tutuş genişliği seç.')),
   /** Hareket kalıbı (yatay itiş, squat…): muadil önerisinin ilk ölçütü (`src/lib/alternatives.ts`). */
   pattern: v.optional(v.picklist(MOVEMENT_PATTERNS, 'Hareket kalıbını seç.')),
   /** PT'nin sabitlediği muadiller (egzersiz kimlikleri); önerilerde en başta gelir. */

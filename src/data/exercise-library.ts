@@ -22,6 +22,8 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "barbell",
     "deviceId": "olimpik-bar",
     "pattern": "horizontal_push",
+    "grip": "pronated",
+    "gripWidth": "shoulder",
     "primaryMuscles": [
       "chest_lower"
     ],
@@ -147,6 +149,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "bodyweight",
     "deviceId": "paralel-bar",
     "pattern": "vertical_push",
+    "grip": "neutral",
     "primaryMuscles": [
       "triceps_long",
       "triceps_lateral"
@@ -177,6 +180,8 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "barbell",
     "deviceId": "olimpik-bar",
     "pattern": "vertical_push",
+    "grip": "pronated",
+    "gripWidth": "shoulder",
     "primaryMuscles": [
       "delt_front"
     ],
@@ -270,6 +275,8 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "kablo-istasyonu",
     "pattern": "rear_delt",
+    "attachment": "rope",
+    "grip": "neutral",
     "primaryMuscles": [
       "delt_rear"
     ],
@@ -299,6 +306,8 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "bodyweight",
     "deviceId": "barfiks-bari",
     "pattern": "vertical_pull",
+    "grip": "pronated",
+    "gripWidth": "wide",
     "primaryMuscles": [
       "lats_upper",
       "lats_mid",
@@ -330,9 +339,12 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     ],
     "category": "compound",
     "trackingType": "weight_reps",
-    "equipment": "cable",
+    "equipment": "machine",
     "deviceId": "lat-pulldown-makinesi",
     "pattern": "vertical_pull",
+    "attachment": "wide_bar",
+    "grip": "pronated",
+    "gripWidth": "wide",
     "primaryMuscles": [
       "lats_upper",
       "lats_mid",
@@ -362,9 +374,12 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     ],
     "category": "compound",
     "trackingType": "weight_reps",
-    "equipment": "cable",
+    "equipment": "machine",
     "deviceId": "oturarak-row-makinesi",
     "pattern": "horizontal_pull",
+    "attachment": "v_bar",
+    "grip": "neutral",
+    "gripWidth": "narrow",
     "primaryMuscles": [
       "traps_mid",
       "traps_lower"
@@ -398,6 +413,8 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "barbell",
     "deviceId": "olimpik-bar",
     "pattern": "horizontal_pull",
+    "grip": "pronated",
+    "gripWidth": "shoulder",
     "primaryMuscles": [
       "traps_mid",
       "traps_lower"
@@ -435,6 +452,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "dumbbell",
     "deviceId": "dambil-seti",
     "pattern": "horizontal_pull",
+    "grip": "neutral",
     "primaryMuscles": [
       "lats_upper",
       "lats_mid",
@@ -468,6 +486,8 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "barbell",
     "deviceId": "olimpik-bar",
     "pattern": "hinge",
+    "grip": "pronated",
+    "gripWidth": "shoulder",
     "primaryMuscles": [
       "erectors",
       "glutes",
@@ -506,6 +526,8 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "barbell",
     "deviceId": "olimpik-bar",
     "pattern": "hinge",
+    "grip": "pronated",
+    "gripWidth": "shoulder",
     "primaryMuscles": [
       "hamstrings_medial",
       "hamstrings_lateral"
@@ -571,6 +593,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "dumbbell",
     "deviceId": "dambil-seti",
     "pattern": "squat",
+    "grip": "neutral",
     "primaryMuscles": [
       "quadriceps"
     ],
@@ -813,6 +836,8 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "barbell",
     "deviceId": "ez-bar",
     "pattern": "elbow_flexion",
+    "grip": "supinated",
+    "gripWidth": "shoulder",
     "primaryMuscles": [
       "biceps"
     ],
@@ -841,6 +866,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "dumbbell",
     "deviceId": "dambil-seti",
     "pattern": "elbow_flexion",
+    "grip": "supinated",
     "primaryMuscles": [
       "biceps"
     ],
@@ -867,6 +893,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "dumbbell",
     "deviceId": "dambil-seti",
     "pattern": "elbow_flexion",
+    "grip": "neutral",
     "primaryMuscles": [
       "biceps"
     ],
@@ -895,6 +922,8 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "kablo-istasyonu",
     "pattern": "elbow_extension",
+    "attachment": "rope",
+    "grip": "neutral",
     "primaryMuscles": [
       "triceps_lateral"
     ],
@@ -1109,6 +1138,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "dumbbell",
     "deviceId": "dambil-seti",
     "pattern": "carry",
+    "grip": "neutral",
     "primaryMuscles": [
       "forearm_flexors"
     ],
@@ -1365,6 +1395,8 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "kablo-istasyonu",
     "pattern": "chest_fly",
+    "attachment": "single_handle",
+    "grip": "neutral",
     "primaryMuscles": [
       "chest_lower"
     ],
@@ -1470,6 +1502,8 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "kablo-istasyonu",
     "pattern": "lateral_raise",
+    "attachment": "single_handle",
+    "grip": "neutral",
     "primaryMuscles": [
       "delt_side"
     ],
@@ -1519,6 +1553,8 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "machine",
     "deviceId": "t-bar-row",
     "pattern": "horizontal_pull",
+    "attachment": "v_bar",
+    "grip": "neutral",
     "primaryMuscles": [
       "traps_mid",
       "traps_lower",
@@ -1552,6 +1588,9 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "kablo-istasyonu",
     "pattern": "vertical_pull",
+    "attachment": "straight_bar",
+    "grip": "pronated",
+    "gripWidth": "shoulder",
     "primaryMuscles": [
       "lats_upper",
       "lats_mid",
@@ -1631,6 +1670,8 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "kablo-istasyonu",
     "pattern": "elbow_flexion",
+    "attachment": "straight_bar",
+    "grip": "supinated",
     "primaryMuscles": [
       "biceps"
     ],
@@ -1678,6 +1719,8 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "kablo-istasyonu",
     "pattern": "elbow_extension",
+    "attachment": "rope",
+    "grip": "neutral",
     "primaryMuscles": [
       "triceps_long"
     ],
@@ -1932,6 +1975,8 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "fonksiyonel-kablo",
     "pattern": "core_rotation",
+    "attachment": "rope",
+    "grip": "neutral",
     "primaryMuscles": [
       "obliques"
     ],
@@ -2057,6 +2102,37 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "abs_lower"
     ],
     "loadStepKg": 0,
+    "minLoadKg": 0
+  },
+  {
+    "id": "ters-tutus-lat-pulldown",
+    "title": "Ters Tutuş Lat Pulldown",
+    "description": "Lat pulldown makinesinde dar, avuç içi dönük (supinasyon) tutuşla çekiş; biceps payı artar.",
+    "cues": [
+      "Eller omuz genişliğinden dar, avuç içleri sana dönük",
+      "Barı göğüs üstüne çek, dirsekler gövdeye yakın",
+      "Yukarıda kanat kasında gerilmeyi hisset"
+    ],
+    "category": "compound",
+    "trackingType": "weight_reps",
+    "equipment": "machine",
+    "deviceId": "lat-pulldown-makinesi",
+    "pattern": "vertical_pull",
+    "attachment": "straight_bar",
+    "grip": "supinated",
+    "gripWidth": "narrow",
+    "primaryMuscles": [
+      "lats_upper",
+      "lats_mid",
+      "lats_lower"
+    ],
+    "secondaryMuscles": [
+      "biceps",
+      "traps_mid",
+      "traps_lower"
+    ],
+    "stabilizerMuscles": [],
+    "loadStepKg": 5,
     "minLoadKg": 0
   }
 ];

@@ -16,9 +16,12 @@ import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
+  ATTACHMENT_LABELS,
+  ATTACHMENTS,
   DEVICE_KIND_LABELS,
   deviceLoads,
   PULLEY_RATIOS,
+  takesAttachments,
   type DeviceKind,
   type DeviceLoadSettings,
   type PulleyRatio,
@@ -331,7 +334,7 @@ export function DeviceForm({ editing }: { editing: Device | null }) {
           return (
             <FieldSet>
               <FieldLegend>Ağırlık ayarı</FieldLegend>
-              {!hasLoads ? (
+              {!hasLoads && !takesAttachments(kind) ? (
                 <FieldDescription>
                   Bu türde ağırlık ayarı yok; ilerleme tekrar ya da süreyle olur.
                 </FieldDescription>
@@ -410,6 +413,34 @@ export function DeviceForm({ editing }: { editing: Device | null }) {
                         ))}
                       </ToggleGroup>
                       <FieldDescription>{PULLEY_HELP[(field.input ?? 1) as PulleyRatio]}</FieldDescription>
+                    </Field>
+                  )}
+                </FormField>
+              ) : null}
+
+              {takesAttachments(kind) ? (
+                <FormField of={form} path={['attachments']}>
+                  {(field) => (
+                    <Field>
+                      <FieldLabel>Aparatlar</FieldLabel>
+                      <ToggleGroup
+                        multiple
+                        variant="outline"
+                        size="sm"
+                        className="flex-wrap justify-start"
+                        aria-label="Aparatlar"
+                        value={(field.input ?? []).filter((value) => typeof value === 'string')}
+                        onValueChange={(value) => setInput(form, { path: ['attachments'], input: value as typeof ATTACHMENTS[number][] })}>
+                        {ATTACHMENTS.map((attachment) => (
+                          <ToggleGroupItem key={attachment} value={attachment}>
+                            {ATTACHMENT_LABELS[attachment]}
+                          </ToggleGroupItem>
+                        ))}
+                      </ToggleGroup>
+                      <FieldDescription>
+                        Bu cihazda bulunan tutamaçlar. Egzersizde hangisiyle yapıldığı seçilir.
+                      </FieldDescription>
+                      <FieldError>{field.errors?.[0]}</FieldError>
                     </Field>
                   )}
                 </FormField>

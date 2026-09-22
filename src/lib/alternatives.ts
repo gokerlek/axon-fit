@@ -6,8 +6,8 @@
  * - Aday, kaynakla en az bir hedef kası (ya da kas ailesini: üç kanat parçası "Kanat")
  *   paylaşmalı; kardiyo hareketi kardiyo hareketiyle eşleşir.
  * - Güç hareketleri (bileşik, izolasyon, kondisyon) ile ısınma/soğuma birbirine önerilmez.
- * - Sıra: aynı hareket kalıbı önce; sonra aynı hedef kas (tam parça), aynı kas ailesi
- *   ve bütün kas yükünün örtüşmesi.
+ * - Sıra: aynı hareket kalıbı önce; sonra aynı hedef kas (tam parça), aynı kas ailesi,
+ *   bütün kas yükünün örtüşmesi ve aynı tutuş.
  * PT'nin sabitledikleri her zaman en başta gelir.
  *
  * Saf fonksiyonlar; yol takma adıyla çalışma zamanı içe aktarması yapmaz (testler
@@ -83,6 +83,8 @@ export type AlternativeCandidate = {
   /** Hareketin yapıldığı cihaz. */
   deviceId?: string;
   pattern?: MovementPattern;
+  /** Tutuş (pronasyon/supinasyon/nötr…): aynı tutuş sıralamada küçük bir artı. */
+  grip?: string;
   primaryMuscles: readonly string[];
   secondaryMuscles: readonly string[];
   stabilizerMuscles?: readonly string[];
@@ -165,8 +167,13 @@ export function rankAlternatives<T extends AlternativeCandidate>(
     const exactOverlap = overlapOf(sourcePrimary, new Set(candidate.primaryMuscles));
 
     const samePattern = Boolean(source.pattern) && candidate.pattern === source.pattern;
+    const sameGrip = Boolean(source.grip) && candidate.grip === source.grip;
     const score =
-      (samePattern ? 2 : 0) + exactOverlap + 0.5 * familyOverlap + 0.5 * similarity(sourceLoad, load(candidate));
+      (samePattern ? 2 : 0) +
+      exactOverlap +
+      0.5 * familyOverlap +
+      0.5 * similarity(sourceLoad, load(candidate)) +
+      (sameGrip ? 0.25 : 0);
     computed.push({ exercise: candidate, pinned: false, samePattern, score });
   }
 

@@ -33,6 +33,7 @@ import { VideoEmbed } from "@/components/video-embed";
 import { MuscleMap } from "@/components/muscle-map/muscle-map";
 import { PATTERN_LABELS } from "@/lib/alternatives";
 import {
+  ATTACHMENT_LABELS,
   DEVICE_KIND_LABELS,
   DEVICE_KINDS,
   describeDeviceLoads,
@@ -40,6 +41,7 @@ import {
   KIND_EQUIPMENT,
   loadSpecFor,
 } from "@/lib/device-loads";
+import { GRIP_LABELS, GRIP_WIDTH_LABELS } from "@/lib/grips";
 import type { Device } from "@/lib/schemas/device";
 import {
   isBodyMuscle,
@@ -348,6 +350,84 @@ export function ExerciseForm({
                   }}
                 />
                 <FieldDescription>Ağırlık önerileri cihazın ayarlanabilen ağırlıklarından seçilir.</FieldDescription>
+              </Field>
+            )}
+          </FormField>
+          {/* Aparat yalnız cihazında aparat tanımlıysa görünür. */}
+          <FormField of={form} path={["deviceId"]}>
+            {(deviceField) => {
+              const attachments = deviceField.input ? (deviceById.get(deviceField.input)?.attachments ?? []) : [];
+              if (attachments.length === 0) return <></>;
+              return (
+                <FormField of={form} path={["attachment"]}>
+                  {(field) => (
+                    <Field>
+                      <FieldLabel htmlFor="attachment">Aparat</FieldLabel>
+                      <GroupedSelect
+                        id="attachment"
+                        value={field.input ?? ""}
+                        groups={[
+                          {
+                            label: "Aparatlar",
+                            options: attachments.map((attachment) => ({
+                              value: attachment,
+                              label: ATTACHMENT_LABELS[attachment],
+                            })),
+                          },
+                        ]}
+                        empty="Belirtilmemiş"
+                        onChange={(value) =>
+                          setInput(form, {
+                            path: ["attachment"],
+                            input: (value || undefined) as ExerciseInput["attachment"],
+                          })
+                        }
+                      />
+                    </Field>
+                  )}
+                </FormField>
+              );
+            }}
+          </FormField>
+          <FormField of={form} path={["grip"]}>
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor="grip">Tutuş</FieldLabel>
+                <GroupedSelect
+                  id="grip"
+                  value={field.input ?? ""}
+                  groups={[
+                    {
+                      label: "Tutuş",
+                      options: Object.entries(GRIP_LABELS).map(([value, label]) => ({ value, label })),
+                    },
+                  ]}
+                  empty="Belirtilmemiş"
+                  onChange={(value) =>
+                    setInput(form, { path: ["grip"], input: (value || undefined) as ExerciseInput["grip"] })
+                  }
+                />
+              </Field>
+            )}
+          </FormField>
+          <FormField of={form} path={["gripWidth"]}>
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor="gripWidth">Tutuş genişliği</FieldLabel>
+                <GroupedSelect
+                  id="gripWidth"
+                  value={field.input ?? ""}
+                  groups={[
+                    {
+                      label: "Genişlik",
+                      options: Object.entries(GRIP_WIDTH_LABELS).map(([value, label]) => ({ value, label })),
+                    },
+                  ]}
+                  empty="Belirtilmemiş"
+                  onChange={(value) =>
+                    setInput(form, { path: ["gripWidth"], input: (value || undefined) as ExerciseInput["gripWidth"] })
+                  }
+                />
               </Field>
             )}
           </FormField>

@@ -4,6 +4,7 @@ import { DEVICE_LIBRARY } from '@/data/device-library';
 import { listDevices, readCustomDevices, writeCustomDevices } from '@/lib/devices';
 import { slugify } from '@/lib/exercises';
 import { GithubError } from '@/lib/github/client';
+import { takesAttachments } from '@/lib/device-loads';
 import { deviceSaveSchema, needsBase, needsMax, needsStep, needsWeights, takesAddOns, type Device } from '@/lib/schemas/device';
 import { readSession } from '@/lib/session';
 
@@ -47,6 +48,7 @@ export async function POST(request: Request) {
     ...(needsMax(kind) || kind === 'plate_loaded' ? { maxKg: input.maxKg } : {}),
     ...(takesAddOns(kind) && input.addOnsKg?.length ? { addOnsKg: [...new Set(input.addOnsKg)].sort((a, b) => a - b) } : {}),
     ...(kind === 'cable' ? { pulleyRatio: input.pulleyRatio ?? 1 } : {}),
+    ...(takesAttachments(kind) && input.attachments?.length ? { attachments: [...new Set(input.attachments)] } : {}),
     ...(needsWeights(kind) ? { weightsKg: [...new Set(input.weightsKg ?? [])].sort((a, b) => a - b) } : {}),
     ...(input.notes ? { notes: input.notes } : {}),
   };

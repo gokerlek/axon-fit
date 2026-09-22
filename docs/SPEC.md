@@ -221,6 +221,8 @@ Genel cihaz listesi (salon envanteri yok): hazır katalog pakette (`src/data/dev
 - **Öneriler cihazın ağırlıklarından:** egzersiz `deviceId` ile cihaza bağlanır; öneri motoru cihazın ayarlanabilen ağırlıklarını kullanır (ara ağırlıklar dahil; setteki boşluklar atlanır: 16 → 20). Bar ve plaka yüklemelide düzenli adım. Cihazsız egzersiz kendi `loadStepKg`/`minLoadKg`'sini kullanır.
 - **Cihaza göre muadil:** `alternativeForDevice` — cihaz değişince egzersiz, o cihazla yapılan en iyi muadile geçer (PT'nin sabitledikleri önce). Egzersiz detayındaki "Cihaz değişirse" bunu gösterir; şablonda satırın cihazı değiştirilince aynısı olur (Faz 4). Muadiller kartı cihaza göre gruplu.
 - **Geçmiş cihaza göre (Faz 4):** her set kaydına cihaz kimliği de yazılır; ilerleme aynı egzersizin aynı cihazdaki geçmişine bakar (farklı makinelerin kiloları birbirini tutmaz).
+- **Aparatlar:** kabloda ve bazı makinelerde takılan tutamaçlar (düz bar, lat barı, geniş çekiş barı, V bar, halat, tek el tutamağı, EZ bar, ayak bilekliği). Cihazda hangilerinin olduğu seçilir; egzersiz hangisiyle yapıldığını söyler.
+- **Tutuş (`src/lib/grips.ts`):** egzersizde `grip` (pronasyon / supinasyon / nötr / karışık) ve `gripWidth` (dar / omuz / geniş). Kaslar belirgin değişiyorsa ayrı egzersiz açılır (ör. "Ters Tutuş Lat Pulldown"); bu alanlar küçük farkı taşır ve muadil sıralamasında aynı tutuş öne gelir.
 - **Görsel:** cihaz başına tek fotoğraf (`media/devices/<id>-<özet>.<uzantı>`, PNG/JPG/WebP, en fazla 1 MB, SVG yok). Danışan salonda makineyi tanısın diye; listede küçük, detayda büyük görünür. Egzersizlerde görsel yok (video + kas haritası yeterli).
 - Cihaz silinirse bağlı egzersizler cihazsız kalır ve kendi adımlarıyla devam eder.
 

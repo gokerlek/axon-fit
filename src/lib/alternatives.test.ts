@@ -183,3 +183,11 @@ describe('cihaza göre muadil', () => {
     assert.equal(alternativeForDevice(pinned, 'dambil-seti', pool, familyOf)?.id, 'fly');
   });
 });
+
+test('aynı tutuş küçük bir artı: eşit yakınlıkta olan önce gelir', () => {
+  const base = { pattern: 'vertical_pull' as const, primaryMuscles: ['lats_upper'], secondaryMuscles: ['biceps'] };
+  const source = exercise('pulldown-genis', { ...base, grip: 'pronated' });
+  const same = exercise('barfiks', { ...base, equipment: 'bodyweight', grip: 'pronated' });
+  const other = exercise('ters-pulldown', { ...base, equipment: 'cable', grip: 'supinated' });
+  assert.deepEqual(ids(rankAlternatives(source, [source, other, same], familyOf)), ['barfiks', 'ters-pulldown']);
+});

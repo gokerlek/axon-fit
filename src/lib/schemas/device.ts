@@ -1,5 +1,5 @@
 import * as v from 'valibot';
-import { DEVICE_KINDS, PULLEY_RATIOS, type DeviceKind } from '@/lib/device-loads';
+import { ATTACHMENTS, DEVICE_KINDS, PULLEY_RATIOS, type DeviceKind } from '@/lib/device-loads';
 
 /**
  * Cihaz şeması — sunucu ve istemci ortak.
@@ -45,6 +45,8 @@ const deviceFields = {
   maxKg: v.optional(kg(1000)),
   addOnsKg: v.optional(v.pipe(v.array(v.pipe(v.number(), v.minValue(0.25), v.maxValue(20))), v.maxLength(4, 'En fazla 4 ara ağırlık.'))),
   pulleyRatio: v.optional(v.picklist(PULLEY_RATIOS, 'Makara oranını seç.')),
+  /** Bu cihazda bulunan aparatlar (halat, V bar…); egzersiz hangisiyle yapıldığını seçer. */
+  attachments: v.optional(v.pipe(v.array(v.picklist(ATTACHMENTS, 'Geçerli bir aparat seç.')), v.maxLength(8, 'En fazla 8 aparat.'))),
   weightsKg: v.optional(v.pipe(v.array(kg(200)), v.maxLength(60, 'En fazla 60 ağırlık.'))),
   notes: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(300, 'En fazla 300 karakter.'))),
   /** Görselin uygulama repo'sundaki yolu (`media/devices/<id>-<özet>.<uzantı>`). Yalnız görsel ucu yazar. */

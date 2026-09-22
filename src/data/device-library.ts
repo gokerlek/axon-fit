@@ -22,7 +22,7 @@ export const DEVICE_LIBRARY: readonly Device[] = [
   { id: 'kettlebell-seti', name: 'Kettlebell seti', kind: 'kettlebell', weightsKg: KETTLEBELLS },
 
   // Kablo
-  { id: 'kablo-istasyonu', name: 'Kablo istasyonu (tek makara)', kind: 'cable', baseKg: 5, stepKg: 5, maxKg: 100, addOnsKg: [2.5], pulleyRatio: 1 },
+  { id: 'kablo-istasyonu', name: 'Kablo istasyonu (tek makara)', kind: 'cable', baseKg: 5, stepKg: 5, maxKg: 100, addOnsKg: [2.5], pulleyRatio: 1, attachments: ['straight_bar', 'rope', 'single_handle', 'v_bar', 'ez_bar', 'ankle_strap'] },
   {
     id: 'fonksiyonel-kablo',
     name: 'Fonksiyonel kablo (çift makara)',
@@ -32,12 +32,11 @@ export const DEVICE_LIBRARY: readonly Device[] = [
     maxKg: 100,
     addOnsKg: [2.5],
     pulleyRatio: 2,
-    notes: 'Çift makara: seçilen ağırlığın yarısı hissedilir.',
-  },
+    notes: 'Çift makara: seçilen ağırlığın yarısı hissedilir.', attachments: ['rope', 'single_handle', 'straight_bar'] },
 
   // Ağırlık bloklu makineler
-  { id: 'lat-pulldown-makinesi', name: 'Lat pulldown makinesi', kind: 'selectorized', ...STACK, maxKg: 120 },
-  { id: 'oturarak-row-makinesi', name: 'Oturarak row makinesi', kind: 'selectorized', ...STACK, maxKg: 120 },
+  { id: 'lat-pulldown-makinesi', name: 'Lat pulldown makinesi', kind: 'selectorized', ...STACK, maxKg: 120, attachments: ['wide_bar', 'lat_bar', 'v_bar', 'straight_bar'] },
+  { id: 'oturarak-row-makinesi', name: 'Oturarak row makinesi', kind: 'selectorized', ...STACK, maxKg: 120, attachments: ['v_bar', 'straight_bar', 'wide_bar', 'rope'] },
   { id: 'chest-press-makinesi', name: 'Chest press makinesi', kind: 'selectorized', ...STACK, maxKg: 100 },
   { id: 'pec-deck', name: 'Pec deck (kelebek)', kind: 'selectorized', ...STACK, maxKg: 90, notes: 'Çoğu modelde ters oturunca arka omuz için de kullanılır.' },
   { id: 'shoulder-press-makinesi', name: 'Shoulder press makinesi', kind: 'selectorized', ...STACK, maxKg: 90 },
@@ -59,7 +58,7 @@ export const DEVICE_LIBRARY: readonly Device[] = [
   { id: 'hack-squat', name: 'Hack squat makinesi', kind: 'plate_loaded', baseKg: 40, stepKg: 5, maxKg: 300 },
   { id: 'smith-makinesi', name: 'Smith makinesi', kind: 'plate_loaded', baseKg: 15, stepKg: 2.5, maxKg: 300, notes: 'Dengelenmiş barlarda bar ağırlığı daha düşüktür.' },
   { id: 'hip-thrust-makinesi', name: 'Hip thrust makinesi', kind: 'plate_loaded', baseKg: 20, stepKg: 5, maxKg: 300 },
-  { id: 't-bar-row', name: 'T-bar row', kind: 'plate_loaded', baseKg: 10, stepKg: 2.5, maxKg: 150 },
+  { id: 't-bar-row', name: 'T-bar row', kind: 'plate_loaded', baseKg: 10, stepKg: 2.5, maxKg: 150, attachments: ['v_bar', 'wide_bar'] },
 
   // Ekipmansız istasyonlar ve bant
   { id: 'barfiks-bari', name: 'Barfiks barı', kind: 'bodyweight' },

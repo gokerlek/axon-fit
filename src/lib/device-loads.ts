@@ -51,6 +51,29 @@ export const KIND_EQUIPMENT = {
   cardio: 'cardio_machine',
 } as const satisfies Record<DeviceKind, string>;
 
+/**
+ * Aparatlar: kabloda ve bazı makinelerde takılan tutamaçlar. Cihazda hangilerinin
+ * olduğu seçilir; egzersiz hangisiyle yapıldığını söyler.
+ */
+export const ATTACHMENTS = ['straight_bar', 'lat_bar', 'wide_bar', 'v_bar', 'rope', 'single_handle', 'ez_bar', 'ankle_strap'] as const;
+export type Attachment = (typeof ATTACHMENTS)[number];
+
+export const ATTACHMENT_LABELS: Record<Attachment, string> = {
+  straight_bar: 'Düz bar',
+  lat_bar: 'Lat barı',
+  wide_bar: 'Geniş çekiş barı',
+  v_bar: 'V bar (üçgen)',
+  rope: 'Halat',
+  single_handle: 'Tek el tutamağı',
+  ez_bar: 'EZ bar aparatı',
+  ankle_strap: 'Ayak bilekliği',
+};
+
+/** Aparat takılabilen cihaz türleri. */
+export function takesAttachments(kind: DeviceKind): boolean {
+  return kind === 'cable' || kind === 'selectorized' || kind === 'plate_loaded';
+}
+
 export const PULLEY_RATIOS = [1, 2, 3, 4] as const;
 export type PulleyRatio = (typeof PULLEY_RATIOS)[number];
 

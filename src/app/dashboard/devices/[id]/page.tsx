@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
-import { DEVICE_KIND_LABELS, describeDeviceLoads, deviceLoads, effectiveLoadKg } from '@/lib/device-loads';
+import { ATTACHMENT_LABELS, DEVICE_KIND_LABELS, describeDeviceLoads, deviceLoads, effectiveLoadKg } from '@/lib/device-loads';
 import { deviceImageUrl } from '@/lib/device-media';
 import { getDevice } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
@@ -32,6 +32,9 @@ export default async function DeviceDetailPage({ params }: { params: Promise<{ i
     ...(device.stepKg ? ([[device.kind === 'barbell' || device.kind === 'plate_loaded' ? 'En küçük artış' : 'Blok adımı', formatKg(device.stepKg)]] as [string, string][]) : []),
     ...(device.maxKg ? ([['En çok', formatKg(device.maxKg)]] as [string, string][]) : []),
     ...(device.addOnsKg?.length ? ([['Ara ağırlıklar', device.addOnsKg.map((kg) => `+${formatKg(kg)}`).join(', ')]] as [string, string][]) : []),
+    ...(device.attachments?.length
+      ? ([['Aparatlar', device.attachments.map((attachment) => ATTACHMENT_LABELS[attachment]).join(', ')]] as [string, string][])
+      : []),
     ...(device.kind === 'cable'
       ? ([['Makara', ratio === 1 ? 'Tek makara (1:1)' : `${ratio}:1 — 20 kg seçince kolda ${formatKg(effectiveLoadKg(device, 20))}`]] as [string, string][])
       : []),

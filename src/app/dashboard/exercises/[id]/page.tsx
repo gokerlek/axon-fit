@@ -7,7 +7,8 @@ import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { VideoEmbed } from '@/components/video-embed';
 import { getExercise, listExercises } from '@/lib/exercises';
 import { listDevices } from '@/lib/devices';
-import { DEVICE_KIND_LABELS, DEVICE_KINDS, loadSpecFor } from '@/lib/device-loads';
+import { ATTACHMENT_LABELS, DEVICE_KIND_LABELS, DEVICE_KINDS, loadSpecFor } from '@/lib/device-loads';
+import { describeGrip } from '@/lib/grips';
 import { alternativeForDevice } from '@/lib/alternatives';
 import Link from 'next/link';
 import { PATTERN_LABELS } from '@/lib/alternatives';
@@ -78,6 +79,10 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
             </Link>,
           ],
         ] as [string, React.ReactNode][])
+      : []),
+    ...(exercise.attachment ? ([['Aparat', ATTACHMENT_LABELS[exercise.attachment]]] as [string, React.ReactNode][]) : []),
+    ...(describeGrip(exercise.grip, exercise.gripWidth)
+      ? ([['Tutuş', describeGrip(exercise.grip, exercise.gripWidth)]] as [string, React.ReactNode][])
       : []),
     ...(exercise.pattern ? ([['Hareket kalıbı', PATTERN_LABELS[exercise.pattern]]] as [string, React.ReactNode][]) : []),
     ['Tür', CATEGORY_LABELS[exercise.category]],
