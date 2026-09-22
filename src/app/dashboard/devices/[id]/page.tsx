@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item';
+import { Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from '@/components/ui/item';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { DEVICE_KIND_LABELS, describeDeviceLoads, deviceLoads, effectiveLoadKg } from '@/lib/device-loads';
 import { attachmentImageUrl, deviceImageUrl } from '@/lib/device-media';
@@ -11,7 +11,6 @@ import { getDevice } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
 import { formatKg } from '@/lib/format';
 import { summarizeMuscles } from '@/lib/muscles';
-import { AttachmentsCard, type AttachmentRow } from './attachments-card';
 import { DeviceActions } from './device-actions';
 
 /** Cihaz detayı — kendi sayfası (modal değil). */
@@ -41,7 +40,7 @@ export default async function DeviceDetailPage({ params }: { params: Promise<{ i
 
   const origin = device.source === 'library' ? 'Hazır katalog' : device.overridesLibrary ? 'Senin sürümün' : 'Senin cihazın';
   const imageUrl = deviceImageUrl(device);
-  const attachments: AttachmentRow[] = (device.attachments ?? []).map((attachment) => ({
+  const attachments = (device.attachments ?? []).map((attachment) => ({
     name: attachment.name,
     imageUrl: attachmentImageUrl(device.id, attachment),
   }));
@@ -100,9 +99,36 @@ export default async function DeviceDetailPage({ params }: { params: Promise<{ i
         </Card>
 
         <div className="flex flex-col gap-6">
-          {attachments.length > 0 ? <AttachmentsCard deviceId={device.id} rows={attachments} /> : null}
-
+          {attachments.length > 0 ? (
             <Card>
+              <CardHeader>
+                <CardTitle>Aparatlar</CardTitle>
+                <CardDescription>
+                  Bu cihazdaki tutamaçlar. Aparat ve fotoğrafı eklemek için cihazı düzenle.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ItemGroup className="gap-2">
+                  {attachments.map((attachment) => (
+                    <Item key={attachment.name} variant="outline" size="sm">
+                      {attachment.imageUrl ? (
+                        <ItemMedia variant="image">
+                          {/* Özel repo'dan uygulama üzerinden gelir; Next görsel iyileştiricisi oturum çerezini taşımaz. */}
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={attachment.imageUrl} alt="" className="size-full object-cover" />
+                        </ItemMedia>
+                      ) : null}
+                      <ItemContent>
+                        <ItemTitle>{attachment.name}</ItemTitle>
+                      </ItemContent>
+                    </Item>
+                  ))}
+                </ItemGroup>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          <Card>
             <CardHeader>
               <CardTitle>Bu cihazla yapılan egzersizler</CardTitle>
               <CardDescription>
@@ -125,7 +151,7 @@ export default async function DeviceDetailPage({ params }: { params: Promise<{ i
                 </ItemGroup>
               </CardContent>
             ) : null}
-            </Card>
+          </Card>
         </div>
       </div>
     </div>

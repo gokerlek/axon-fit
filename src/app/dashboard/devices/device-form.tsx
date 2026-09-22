@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -28,7 +29,7 @@ import {
   type DeviceLoadSettings,
   type PulleyRatio,
 } from '@/lib/device-loads';
-import { deviceImageUrl } from '@/lib/device-media';
+import { attachmentImageUrl, deviceImageUrl } from '@/lib/device-media';
 import { ApiError, fetchJson } from '@/lib/query/errors';
 import { applyFieldErrors } from '@/lib/query/field-errors';
 import { useServiceMutation } from '@/lib/query/use-service';
@@ -87,6 +88,33 @@ function parseWeights(text: string): number[] {
 /** Görselde ne yapılacak: olduğu gibi kalsın, yenisi yüklensin ya da kaldırılsın. */
 type ImageChange = { kind: 'keep' } | { kind: 'upload'; file: File } | { kind: 'remove' };
 
+/** Değişiklik yokken hep aynı nesne: önizleme etkisi boş yere yeniden çalışmasın. */
+const KEEP: ImageChange = { kind: 'keep' };
+
+/** Seçilen dosya kurallara uymuyorsa nedeni; uyuyorsa `null`. Sunucu da denetler. */
+function imageProblem(file: File): string | null {
+  if (!DEVICE_IMAGE_TYPES[file.type]) return 'Yalnız PNG, JPG ya da WebP seçebilirsin.';
+  if (file.size > DEVICE_IMAGE_MAX_BYTES) {
+    const mb = (file.size / 1024 / 1024).toLocaleString('tr-TR', { maximumFractionDigits: 1 });
+    return `Görsel ${mb} MB; en fazla 1 MB olabilir. Daha küçük bir görsel seç.`;
+  }
+  return null;
+}
+
+/** Seçilen dosyanın önizleme adresi (bellekten; bırakınca geri verilir). */
+function usePreview(change: ImageChange): string | null {
+  const [preview, setPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (change.kind !== 'upload') return setPreview(null);
+    const url = URL.createObjectURL(change.file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [change]);
+
+  return change.kind === 'upload' ? preview : null;
+}
+
 /**
  * Cihaz görseli: danışan salonda makineyi tanısın diye tek görsel. Tür ve boyut
  * tarayıcıda da denetlenir (sunucu da denetler): 1 MB'tan büyüğü kabul edilmez.
@@ -106,24 +134,13 @@ function ImageField({
   onError: (error: string | null) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (change.kind !== 'upload') return setPreview(null);
-    const url = URL.createObjectURL(change.file);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [change]);
-
+  const preview = usePreview(change);
   const shown = change.kind === 'upload' ? preview : change.kind === 'keep' ? currentUrl : null;
 
   function pick(file: File | undefined) {
     if (!file) return;
-    if (!DEVICE_IMAGE_TYPES[file.type]) return onError('Yalnız PNG, JPG ya da WebP seçebilirsin.');
-    if (file.size > DEVICE_IMAGE_MAX_BYTES) {
-      const mb = (file.size / 1024 / 1024).toLocaleString('tr-TR', { maximumFractionDigits: 1 });
-      return onError(`Görsel ${mb} MB; en fazla 1 MB olabilir. Daha küçük bir görsel seç.`);
-    }
+    const problem = imageProblem(file);
+    if (problem) return onError(problem);
     onError(null);
     onChange({ kind: 'upload', file });
   }
@@ -183,11 +200,122 @@ type FormStart = Partial<DeviceInput> & Pick<DeviceInput, 'name' | 'kind'>;
 const BLANK: FormStart = { name: '', kind: 'selectorized', ...KIND_DEFAULTS.selectorized };
 
 /**
- * Cihazdaki aparatlar: hazır öneriler tek dokunuşla, kendi aparatın için yazı alanı.
- * Fotoğrafları cihaz kaydedildikten sonra cihaz sayfasından eklenir.
+ * Bir aparat satırı: fotoğrafı, adı ve düğmeleri. Fotoğraf burada seçilir, cihazla
+ * birlikte "Kaydet"te yüklenir (yeni cihazda da: kayıt olunca sırayla gönderilir).
  */
-function AttachmentsField({ form }: { form: ReturnType<typeof useForm<typeof deviceFormSchema>> }) {
+function AttachmentRow({
+  name,
+  currentUrl,
+  change,
+  onChange,
+  onError,
+  onRemove,
+}: {
+  name: string;
+  currentUrl: string | null;
+  change: ImageChange;
+  onChange: (change: ImageChange) => void;
+  onError: (error: string | null) => void;
+  onRemove: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const preview = usePreview(change);
+  const shown = change.kind === 'upload' ? preview : change.kind === 'keep' ? currentUrl : null;
+
+  function pick(file: File | undefined) {
+    if (!file) return;
+    const problem = imageProblem(file);
+    if (problem) return onError(problem);
+    onError(null);
+    onChange({ kind: 'upload', file });
+  }
+
+  return (
+    <Item variant="outline" size="sm">
+      <Button
+        type="button"
+        variant="outline"
+        // Fotoğrafın kendisi düğme: parmakla rahat dokunulacak kadar büyük, boşken kesik çizgili.
+        className={`size-12 shrink-0 overflow-hidden p-0 ${shown ? '' : 'border-dashed'}`}
+        aria-label={shown ? `${name} görselini değiştir` : `${name} için görsel seç`}
+        onClick={() => inputRef.current?.click()}>
+        {shown ? (
+          // Özel repo'dan uygulama üzerinden gelir; Next görsel iyileştiricisi oturum çerezini taşımaz.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={shown} alt="" className="size-full object-cover" />
+        ) : (
+          <ImageSquare className="size-5 text-muted-foreground" />
+        )}
+      </Button>
+      <ItemContent>
+        <ItemTitle>{name}</ItemTitle>
+        {change.kind === 'upload' ? (
+          <ItemDescription>Yeni görsel kaydedince yüklenecek.</ItemDescription>
+        ) : change.kind === 'remove' ? (
+          <ItemDescription>Görsel kaydedince kaldırılacak.</ItemDescription>
+        ) : null}
+      </ItemContent>
+      <ItemActions>
+        {shown ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            onClick={() => {
+              onError(null);
+              onChange(currentUrl ? { kind: 'remove' } : KEEP);
+            }}>
+            Görseli kaldır
+          </Button>
+        ) : null}
+        {change.kind !== 'keep' && currentUrl ? (
+          <Button type="button" variant="ghost" size="xs" onClick={() => onChange(KEEP)}>
+            Geri al
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="size-9 sm:size-7"
+          aria-label={`${name} aparatını kaldır`}
+          onClick={onRemove}>
+          <X />
+        </Button>
+      </ItemActions>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        hidden
+        onChange={(event) => {
+          pick(event.target.files?.[0]);
+          event.target.value = '';
+        }}
+      />
+    </Item>
+  );
+}
+
+/**
+ * Cihazdaki aparatlar: hazır öneriler tek dokunuşla, kendi aparatın için yazı alanı.
+ * Her aparatın fotoğrafı da burada seçilir; cihazla birlikte kaydedilir.
+ */
+function AttachmentsField({
+  form,
+  deviceId,
+  images,
+  onImage,
+}: {
+  form: ReturnType<typeof useForm<typeof deviceFormSchema>>;
+  /** Kayıtlı cihazın kimliği; yeni cihazda yok (henüz yüklü görsel olamaz). */
+  deviceId: string | null;
+  images: Record<string, ImageChange>;
+  /** `null` verilince aparatın bekleyen görsel değişikliği unutulur. */
+  onImage: (name: string, change: ImageChange | null) => void;
+}) {
   const [draft, setDraft] = useState('');
+  const [imageError, setImageError] = useState<string | null>(null);
 
   return (
     <FormField of={form} path={['attachments']}>
@@ -209,20 +337,22 @@ function AttachmentsField({ form }: { form: ReturnType<typeof useForm<typeof dev
           <Field data-invalid={Boolean(field.errors) || undefined}>
             <FieldLabel htmlFor="attachment-draft">Aparatlar</FieldLabel>
             {current.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5" aria-label="Cihazdaki aparatlar">
+              <ItemGroup className="gap-2" aria-label="Cihazdaki aparatlar">
                 {current.map((attachment) => (
-                  <Button
+                  <AttachmentRow
                     key={attachment.name}
-                    type="button"
-                    variant="secondary"
-                    size="xs"
-                    onClick={() => set(current.filter((item) => item.name !== attachment.name))}
-                    aria-label={`${attachment.name} aparatını kaldır`}>
-                    {attachment.name}
-                    <X data-icon="inline-end" />
-                  </Button>
+                    name={attachment.name}
+                    currentUrl={deviceId ? attachmentImageUrl(deviceId, attachment) : null}
+                    change={images[attachment.name] ?? KEEP}
+                    onChange={(change) => onImage(attachment.name, change)}
+                    onError={setImageError}
+                    onRemove={() => {
+                      set(current.filter((item) => item.name !== attachment.name));
+                      onImage(attachment.name, null);
+                    }}
+                  />
                 ))}
-              </div>
+              </ItemGroup>
             ) : null}
 
             <div className="flex gap-2">
@@ -256,10 +386,10 @@ function AttachmentsField({ form }: { form: ReturnType<typeof useForm<typeof dev
             </div>
 
             <FieldDescription>
-              Bu cihazdaki tutamaçlar. Egzersizde hangisiyle yapıldığı seçilir; fotoğraflarını cihaz
-              kaydedildikten sonra cihaz sayfasından ekleyebilirsin.
+              Bu cihazdaki tutamaçlar. Egzersizde hangisiyle yapıldığı seçilir. Danışan hangisini takacağını
+              görsün diye soldaki kareye dokunup fotoğraf ekleyebilirsin: PNG, JPG ya da WebP; en fazla 1 MB.
             </FieldDescription>
-            <FieldError>{field.errors?.[0]}</FieldError>
+            <FieldError>{imageError ?? field.errors?.[0]}</FieldError>
           </Field>
         );
       }}
@@ -317,9 +447,14 @@ export function DeviceForm({ editing }: { editing: Device | null }) {
   const start: FormStart = editing ? (({ id: _id, image: _image, ...rest }) => rest)(editing) : BLANK;
   const form = useForm({ schema: deviceFormSchema, initialInput: start });
   const [weightsText, setWeightsText] = useState((start.weightsKg ?? []).map(kgText).join(' '));
-  const [image, setImage] = useState<ImageChange>({ kind: 'keep' });
+  const [image, setImage] = useState<ImageChange>(KEEP);
   const [imageError, setImageError] = useState<string | null>(null);
+  // Aparat görselleri de kaydetmede uygulanır: aparat adına göre bekleyen değişiklik.
+  const [attachmentImages, setAttachmentImages] = useState<Record<string, ImageChange>>({});
   const currentImageUrl = editing ? deviceImageUrl(editing) : null;
+
+  const setAttachmentImage = (name: string, change: ImageChange | null) =>
+    setAttachmentImages(({ [name]: _dropped, ...rest }) => (change ? { ...rest, [name]: change } : rest));
 
   const save = useServiceMutation({
     fn: async (values: DeviceInput) => {
@@ -327,26 +462,46 @@ export function DeviceForm({ editing }: { editing: Device | null }) {
         method: 'POST',
         body: JSON.stringify(editing ? { ...values, id: editing.id } : values),
       });
-      // Görsel ayrı uca gider. Cihaz kaydedildiyse görsel hatası kaydı geri almaz.
-      try {
-        if (image.kind === 'upload') {
-          const body = new FormData();
-          body.set('image', image.file);
-          await fetchJson(`/api/devices/${id}/image`, { method: 'POST', body });
-        } else if (image.kind === 'remove') {
-          await fetchJson(`/api/devices/${id}/image`, { method: 'DELETE' });
+
+      // Görseller ayrı uçlardan gider; her biri repo'ya yazdığı için sırayla gönderilir.
+      // Cihaz kaydedildiyse görsel hatası kaydı geri almaz, yalnız bildirilir.
+      const failures: string[] = [];
+      const send = async (task: () => Promise<unknown>) => {
+        try {
+          await task();
+        } catch (error) {
+          failures.push(error instanceof ApiError ? error.message : 'Görsel yüklenemedi.');
         }
-      } catch (error) {
-        return { id, imageFailed: error instanceof ApiError ? error.message : 'Görsel yüklenemedi.' };
+      };
+      const upload = (path: string, file: File, fields?: Record<string, string>) => {
+        const body = new FormData();
+        body.set('image', file);
+        for (const [key, value] of Object.entries(fields ?? {})) body.set(key, value);
+        return fetchJson(path, { method: 'POST', body });
+      };
+
+      if (image.kind === 'upload') await send(() => upload(`/api/devices/${id}/image`, image.file));
+      else if (image.kind === 'remove') await send(() => fetchJson(`/api/devices/${id}/image`, { method: 'DELETE' }));
+
+      // Listeden çıkarılan aparatın bekleyen görseli boşuna gönderilmesin.
+      const kept = new Set((values.attachments ?? []).map((attachment) => attachment.name));
+      for (const [name, change] of Object.entries(attachmentImages)) {
+        if (!kept.has(name)) continue;
+        const path = `/api/devices/${id}/attachments/image`;
+        if (change.kind === 'upload') await send(() => upload(path, change.file, { name }));
+        else if (change.kind === 'remove') {
+          await send(() => fetchJson(`${path}?name=${encodeURIComponent(name)}`, { method: 'DELETE' }));
+        }
       }
-      return { id, imageFailed: null };
+
+      return { id, mediaFailed: failures[0] ?? null };
     },
     invalidate: [['devices'], ['exercises']],
     notify: { success: editing ? 'Cihaz güncellendi.' : 'Cihaz eklendi.' },
     onError: (error) => applyFieldErrors(form as never, error),
-    onSuccess: ({ id, imageFailed }) => {
-      if (imageFailed) {
-        toast.error(`Cihaz kaydedildi ama görsel yüklenemedi: ${imageFailed}`);
+    onSuccess: ({ id, mediaFailed }) => {
+      if (mediaFailed) {
+        toast.error(`Cihaz kaydedildi ama görsel yüklenemedi: ${mediaFailed}`);
         router.push(`/dashboard/devices/${id}/edit`);
       } else {
         router.push(`/dashboard/devices/${id}`);
@@ -505,7 +660,14 @@ export function DeviceForm({ editing }: { editing: Device | null }) {
                 </FormField>
               ) : null}
 
-              {takesAttachments(kind) ? <AttachmentsField form={form} /> : null}
+              {takesAttachments(kind) ? (
+                <AttachmentsField
+                  form={form}
+                  deviceId={editing?.id ?? null}
+                  images={attachmentImages}
+                  onImage={setAttachmentImage}
+                />
+              ) : null}
 
               {needsWeights(kind) ? (
                 <FormField of={form} path={['weightsKg']}>
