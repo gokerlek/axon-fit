@@ -33,7 +33,6 @@ import { VideoEmbed } from "@/components/video-embed";
 import { MuscleMap } from "@/components/muscle-map/muscle-map";
 import { PATTERN_LABELS } from "@/lib/alternatives";
 import {
-  ATTACHMENT_LABELS,
   DEVICE_KIND_LABELS,
   DEVICE_KINDS,
   describeDeviceLoads,
@@ -370,8 +369,8 @@ export function ExerciseForm({
                           {
                             label: "Aparatlar",
                             options: attachments.map((attachment) => ({
-                              value: attachment,
-                              label: ATTACHMENT_LABELS[attachment],
+                              value: attachment.name,
+                              label: attachment.name,
                             })),
                           },
                         ]}

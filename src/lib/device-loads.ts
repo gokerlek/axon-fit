@@ -53,12 +53,26 @@ export const KIND_EQUIPMENT = {
 
 /**
  * Aparatlar: kabloda ve bazı makinelerde takılan tutamaçlar. Cihazda hangilerinin
- * olduğu seçilir; egzersiz hangisiyle yapıldığını söyler.
+ * olduğu yazılır (ad olarak; PT kendi aparatını da ekleyebilir), egzersiz hangisiyle
+ * yapıldığını söyler.
  */
-export const ATTACHMENTS = ['straight_bar', 'lat_bar', 'wide_bar', 'v_bar', 'rope', 'single_handle', 'ez_bar', 'ankle_strap'] as const;
-export type Attachment = (typeof ATTACHMENTS)[number];
+export const ATTACHMENT_SUGGESTIONS = [
+  'Düz bar',
+  'Lat barı',
+  'Geniş çekiş barı',
+  'V bar (üçgen)',
+  'Halat',
+  'Tek el tutamağı',
+  'EZ bar aparatı',
+  'Ayak bilekliği',
+] as const;
 
-export const ATTACHMENT_LABELS: Record<Attachment, string> = {
+/** Aparat adı en fazla bu kadar karakter; cihazda en fazla bu kadar aparat. */
+export const ATTACHMENT_NAME_MAX = 40;
+export const ATTACHMENTS_MAX = 12;
+
+/** İlk sürümdeki sabit aparat kimlikleri → ad (eski kayıtlar okunurken çevrilir). */
+const LEGACY_ATTACHMENTS: Record<string, string> = {
   straight_bar: 'Düz bar',
   lat_bar: 'Lat barı',
   wide_bar: 'Geniş çekiş barı',
@@ -68,6 +82,38 @@ export const ATTACHMENT_LABELS: Record<Attachment, string> = {
   ez_bar: 'EZ bar aparatı',
   ankle_strap: 'Ayak bilekliği',
 };
+
+export function attachmentName(value: string): string {
+  return LEGACY_ATTACHMENTS[value] ?? value;
+}
+
+/** Cihazdaki bir aparat: adı ve (varsa) fotoğrafı. */
+export type DeviceAttachment = { name: string; image?: string };
+
+/** Eski kayıt biçimlerini ("rope", "Halat") kayda çevirir. */
+export function toAttachment(value: unknown): DeviceAttachment | null {
+  if (typeof value === 'string') return { name: attachmentName(value) };
+  if (value && typeof value === 'object' && typeof (value as DeviceAttachment).name === 'string') {
+    const { name, image } = value as DeviceAttachment;
+    return { name: attachmentName(name), ...(image ? { image } : {}) };
+  }
+  return null;
+}
+
+/** Aparat görselinin dosya adındaki parçası: "V bar (üçgen)" → "v-bar-ucgen". */
+export function attachmentSlug(name: string): string {
+  const harfler: Record<string, string> = { ı: 'i', ğ: 'g', ü: 'u', ş: 's', ö: 'o', ç: 'c', â: 'a' };
+  return (
+    name
+      .toLowerCase()
+      .replace(/[ığüşöçâ]/g, (ch) => harfler[ch] ?? ch)
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 30) || 'aparat'
+  );
+}
 
 /** Aparat takılabilen cihaz türleri. */
 export function takesAttachments(kind: DeviceKind): boolean {

@@ -9,3 +9,10 @@ export function deviceImageUrl({ id, image }: { id: string; image?: string }): s
   const version = image.split('/').pop()?.replace(/\.[a-z]+$/, '') ?? '';
   return `/api/devices/${id}/image?v=${encodeURIComponent(version)}`;
 }
+
+/** Aparat fotoğrafının adresi; dosya adındaki özet sürüm olarak gider. */
+export function attachmentImageUrl(deviceId: string, attachment: { name: string; image?: string }): string | null {
+  if (!attachment.image) return null;
+  const version = attachment.image.split('/').pop()?.replace(/\.[a-z]+$/, '') ?? '';
+  return `/api/devices/${deviceId}/attachments/image?name=${encodeURIComponent(attachment.name)}&v=${encodeURIComponent(version)}`;
+}

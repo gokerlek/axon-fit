@@ -1,6 +1,6 @@
 import * as v from 'valibot';
 import { MOVEMENT_PATTERNS } from '@/lib/alternatives';
-import { ATTACHMENTS } from '@/lib/device-loads';
+import { ATTACHMENT_NAME_MAX, attachmentName } from '@/lib/device-loads';
 import { GRIPS, GRIP_WIDTHS } from '@/lib/grips';
 import { PROGRESSION_SCHEMES } from '@/lib/progression';
 import { isValidVideoId, parseVideoUrl } from '@/lib/video';
@@ -119,8 +119,8 @@ export const exerciseSchema = v.object({
    * `minLoadKg` yalnız cihazsız harekette kullanılır.
    */
   deviceId: v.optional(v.pipe(v.string(), v.regex(/^[a-z0-9-]{2,60}$/))),
-  /** Hangi aparatla yapıldığı (cihazın aparatlarından). */
-  attachment: v.optional(v.picklist(ATTACHMENTS, 'Geçerli bir aparat seç.')),
+  /** Hangi aparatla yapıldığı (cihazın aparat adlarından). */
+  attachment: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(ATTACHMENT_NAME_MAX, `En fazla ${ATTACHMENT_NAME_MAX} karakter.`))),
   /** Tutuş: pronasyon/supinasyon/nötr/karışık ve genişlik (`src/lib/grips.ts`). */
   grip: v.optional(v.picklist(GRIPS, 'Geçerli bir tutuş seç.')),
   gripWidth: v.optional(v.picklist(GRIP_WIDTHS, 'Geçerli bir tutuş genişliği seç.')),
@@ -290,6 +290,8 @@ function migrateStoredExercise(input: unknown): unknown {
     ...item,
     // İlk sürümdeki ad: "artış" aslında aletin adımıydı.
     loadStepKg: item.loadStepKg ?? loadIncrementKg,
+    // Aparat eskiden sabit bir kimlikti; artık ad.
+    attachment: typeof item.attachment === 'string' ? attachmentName(item.attachment) : item.attachment,
     primaryMuscles: primary,
     secondaryMuscles: without(secondary, primary),
     stabilizerMuscles: without(stabilizer, primary, secondary),

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Field as FormField, Form, getDeepError, setInput, useForm } from '@formisch/react';
-import { ImageSquare, WarningCircle } from '@phosphor-icons/react';
+import { ImageSquare, Plus, WarningCircle, X } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { LabeledSelect } from '@/components/labeled-select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -16,12 +16,14 @@ import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
-  ATTACHMENT_LABELS,
-  ATTACHMENTS,
+  ATTACHMENTS_MAX,
+  ATTACHMENT_NAME_MAX,
+  ATTACHMENT_SUGGESTIONS,
   DEVICE_KIND_LABELS,
   deviceLoads,
   PULLEY_RATIOS,
   takesAttachments,
+  type DeviceAttachment,
   type DeviceKind,
   type DeviceLoadSettings,
   type PulleyRatio,
@@ -179,6 +181,91 @@ function ImageField({
 type FormStart = Partial<DeviceInput> & Pick<DeviceInput, 'name' | 'kind'>;
 
 const BLANK: FormStart = { name: '', kind: 'selectorized', ...KIND_DEFAULTS.selectorized };
+
+/**
+ * Cihazdaki aparatlar: hazır öneriler tek dokunuşla, kendi aparatın için yazı alanı.
+ * Fotoğrafları cihaz kaydedildikten sonra cihaz sayfasından eklenir.
+ */
+function AttachmentsField({ form }: { form: ReturnType<typeof useForm<typeof deviceFormSchema>> }) {
+  const [draft, setDraft] = useState('');
+
+  return (
+    <FormField of={form} path={['attachments']}>
+      {(field) => {
+        const current: DeviceAttachment[] = (field.input ?? []).flatMap((item) =>
+          item && typeof item.name === 'string' ? [{ name: item.name, ...(item.image ? { image: item.image } : {}) }] : [],
+        );
+        const names = current.map((item) => item.name);
+        const set = (next: DeviceAttachment[]) => setInput(form, { path: ['attachments'], input: next });
+        const add = (name: string) => {
+          const clean = name.trim().slice(0, ATTACHMENT_NAME_MAX);
+          if (!clean || names.some((item) => item.toLocaleLowerCase('tr') === clean.toLocaleLowerCase('tr'))) return;
+          if (current.length >= ATTACHMENTS_MAX) return;
+          set([...current, { name: clean }]);
+          setDraft('');
+        };
+
+        return (
+          <Field data-invalid={Boolean(field.errors) || undefined}>
+            <FieldLabel htmlFor="attachment-draft">Aparatlar</FieldLabel>
+            {current.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5" aria-label="Cihazdaki aparatlar">
+                {current.map((attachment) => (
+                  <Button
+                    key={attachment.name}
+                    type="button"
+                    variant="secondary"
+                    size="xs"
+                    onClick={() => set(current.filter((item) => item.name !== attachment.name))}
+                    aria-label={`${attachment.name} aparatını kaldır`}>
+                    {attachment.name}
+                    <X data-icon="inline-end" />
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="flex gap-2">
+              <Input
+                id="attachment-draft"
+                value={draft}
+                maxLength={ATTACHMENT_NAME_MAX}
+                placeholder="Kendi aparatın (ör. MAG tutamağı)"
+                onChange={(event) => setDraft(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  // Enter formu göndermesin, aparatı eklesin.
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    add(draft);
+                  }
+                }}
+              />
+              <Button type="button" variant="outline" onClick={() => add(draft)} disabled={!draft.trim()}>
+                <Plus data-icon="inline-start" />
+                Ekle
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5">
+              {ATTACHMENT_SUGGESTIONS.filter((suggestion) => !names.includes(suggestion)).map((suggestion) => (
+                <Button key={suggestion} type="button" variant="outline" size="xs" onClick={() => add(suggestion)}>
+                  <Plus data-icon="inline-start" />
+                  {suggestion}
+                </Button>
+              ))}
+            </div>
+
+            <FieldDescription>
+              Bu cihazdaki tutamaçlar. Egzersizde hangisiyle yapıldığı seçilir; fotoğraflarını cihaz
+              kaydedildikten sonra cihaz sayfasından ekleyebilirsin.
+            </FieldDescription>
+            <FieldError>{field.errors?.[0]}</FieldError>
+          </Field>
+        );
+      }}
+    </FormField>
+  );
+}
 
 /** Sayı alanı: Formisch değeri metin verir, şema sayı bekler. */
 function NumberField({
@@ -418,33 +505,7 @@ export function DeviceForm({ editing }: { editing: Device | null }) {
                 </FormField>
               ) : null}
 
-              {takesAttachments(kind) ? (
-                <FormField of={form} path={['attachments']}>
-                  {(field) => (
-                    <Field>
-                      <FieldLabel>Aparatlar</FieldLabel>
-                      <ToggleGroup
-                        multiple
-                        variant="outline"
-                        size="sm"
-                        className="flex-wrap justify-start"
-                        aria-label="Aparatlar"
-                        value={(field.input ?? []).filter((value) => typeof value === 'string')}
-                        onValueChange={(value) => setInput(form, { path: ['attachments'], input: value as typeof ATTACHMENTS[number][] })}>
-                        {ATTACHMENTS.map((attachment) => (
-                          <ToggleGroupItem key={attachment} value={attachment}>
-                            {ATTACHMENT_LABELS[attachment]}
-                          </ToggleGroupItem>
-                        ))}
-                      </ToggleGroup>
-                      <FieldDescription>
-                        Bu cihazda bulunan tutamaçlar. Egzersizde hangisiyle yapıldığı seçilir.
-                      </FieldDescription>
-                      <FieldError>{field.errors?.[0]}</FieldError>
-                    </Field>
-                  )}
-                </FormField>
-              ) : null}
+              {takesAttachments(kind) ? <AttachmentsField form={form} /> : null}
 
               {needsWeights(kind) ? (
                 <FormField of={form} path={['weightsKg']}>
