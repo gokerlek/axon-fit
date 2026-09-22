@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { DEVICE_KIND_LABELS, DEVICE_KINDS, describeDeviceLoads } from '@/lib/device-loads';
+import { deviceImageUrl } from '@/lib/device-media';
 import { listDevices } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
 
@@ -54,6 +55,15 @@ export default async function DevicesPage() {
                     className="block h-full rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
                     <Card size="sm" className="h-full transition-colors hover:bg-muted/40">
                       <CardHeader>
+                        {deviceImageUrl(device) ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={deviceImageUrl(device) as string}
+                            alt=""
+                            loading="lazy"
+                            className="mb-2 h-28 w-full rounded-lg border bg-muted object-cover"
+                          />
+                        ) : null}
                         <CardTitle>{device.name}</CardTitle>
                         <CardDescription>{describeDeviceLoads(device)}</CardDescription>
                         {device.source === 'custom' ? (

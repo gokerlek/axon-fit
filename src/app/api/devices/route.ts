@@ -58,7 +58,9 @@ export async function POST(request: Request) {
       if (index < 0 && !DEVICE_LIBRARY.some((item) => item.id === requestedId)) {
         return NextResponse.json({ error: 'Cihaz bulunamadı.' }, { status: 404 });
       }
-      const entry = { ...clean, id: requestedId };
+      // Görsel yalnız görsel ucundan yazılır; kayıtlı olan korunur.
+      const stored = items[index] ?? DEVICE_LIBRARY.find((item) => item.id === requestedId);
+      const entry = { ...clean, id: requestedId, ...(stored?.image ? { image: stored.image } : {}) };
       const next = index >= 0 ? items.map((item, i) => (i === index ? entry : item)) : [...items, entry];
       await writeCustomDevices(next, `Cihaz güncellendi: ${clean.name}`, sha);
       return NextResponse.json({ id: requestedId });

@@ -61,6 +61,7 @@ data/
   clients.json                 YALNIZ kimlik ve durum: [{ "id": "c_8f3k", "status": "active" }]
 media/
   brand/logo.png               PT'nin logosu
+  devices/<id>-<özet>.<uzantı> cihaz fotoğrafları (en fazla 1 MB)
 ```
 
 `clients.json` bilerek çıplak: isim, e-posta, not **hiçbir koşulda** buraya yazılmaz. Bir kez yazılırsa danışanı silmek için bu repo'nun geçmişini yeniden yazmak gerekir ve modelin bütün avantajı kaybolur.
@@ -220,6 +221,7 @@ Genel cihaz listesi (salon envanteri yok): hazır katalog pakette (`src/data/dev
 - **Öneriler cihazın ağırlıklarından:** egzersiz `deviceId` ile cihaza bağlanır; öneri motoru cihazın ayarlanabilen ağırlıklarını kullanır (ara ağırlıklar dahil; setteki boşluklar atlanır: 16 → 20). Bar ve plaka yüklemelide düzenli adım. Cihazsız egzersiz kendi `loadStepKg`/`minLoadKg`'sini kullanır.
 - **Cihaza göre muadil:** `alternativeForDevice` — cihaz değişince egzersiz, o cihazla yapılan en iyi muadile geçer (PT'nin sabitledikleri önce). Egzersiz detayındaki "Cihaz değişirse" bunu gösterir; şablonda satırın cihazı değiştirilince aynısı olur (Faz 4). Muadiller kartı cihaza göre gruplu.
 - **Geçmiş cihaza göre (Faz 4):** her set kaydına cihaz kimliği de yazılır; ilerleme aynı egzersizin aynı cihazdaki geçmişine bakar (farklı makinelerin kiloları birbirini tutmaz).
+- **Görsel:** cihaz başına tek fotoğraf (`media/devices/<id>-<özet>.<uzantı>`, PNG/JPG/WebP, en fazla 1 MB, SVG yok). Danışan salonda makineyi tanısın diye; listede küçük, detayda büyük görünür. Egzersizlerde görsel yok (video + kas haritası yeterli).
 - Cihaz silinirse bağlı egzersizler cihazsız kalır ve kendi adımlarıyla devam eder.
 
 ### 7.4 Şablonda gruplar ve kas yükü haritası (Faz 4)

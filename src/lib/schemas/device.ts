@@ -23,6 +23,14 @@ export const needsMax = (kind: DeviceKind) => STACK_KINDS.includes(kind);
 export const takesAddOns = (kind: DeviceKind) => STACK_KINDS.includes(kind);
 export const needsWeights = (kind: DeviceKind) => SET_KINDS.includes(kind);
 
+/** Cihaz görseli: PNG, JPG, WebP; en fazla 1 MB. SVG yok (betik taşıyabilir). */
+export const DEVICE_IMAGE_TYPES: Record<string, 'png' | 'jpg' | 'webp'> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+};
+export const DEVICE_IMAGE_MAX_BYTES = 1024 * 1024;
+
 /** Ara ağırlık seçenekleri (çoğu makinede takılan küçük ek ağırlıklar). */
 export const ADD_ON_OPTIONS = [0.5, 1, 1.25, 1.75, 2, 2.5, 5] as const;
 
@@ -39,6 +47,8 @@ const deviceFields = {
   pulleyRatio: v.optional(v.picklist(PULLEY_RATIOS, 'Makara oranını seç.')),
   weightsKg: v.optional(v.pipe(v.array(kg(200)), v.maxLength(60, 'En fazla 60 ağırlık.'))),
   notes: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(300, 'En fazla 300 karakter.'))),
+  /** Görselin uygulama repo'sundaki yolu (`media/devices/<id>-<özet>.<uzantı>`). Yalnız görsel ucu yazar. */
+  image: v.optional(v.pipe(v.string(), v.regex(/^media\/devices\/[a-z0-9-]+\.(png|jpg|webp)$/))),
 };
 
 type Fields = { kind: DeviceKind; baseKg?: number; stepKg?: number; maxKg?: number; weightsKg?: readonly number[] };

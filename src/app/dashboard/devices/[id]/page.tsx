@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { DEVICE_KIND_LABELS, describeDeviceLoads, deviceLoads, effectiveLoadKg } from '@/lib/device-loads';
+import { deviceImageUrl } from '@/lib/device-media';
 import { getDevice } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
 import { formatKg } from '@/lib/format';
@@ -37,6 +38,7 @@ export default async function DeviceDetailPage({ params }: { params: Promise<{ i
   ];
 
   const origin = device.source === 'library' ? 'Hazır katalog' : device.overridesLibrary ? 'Senin sürümün' : 'Senin cihazın';
+  const imageUrl = deviceImageUrl(device);
 
   return (
     <div className="flex flex-col gap-6">
@@ -54,6 +56,10 @@ export default async function DeviceDetailPage({ params }: { params: Promise<{ i
             <CardDescription>{origin}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4 text-sm">
+            {imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={imageUrl} alt={device.name} className="max-h-72 w-full rounded-lg border bg-muted object-contain" />
+            ) : null}
             <Table>
               <TableBody>
                 {rows.map(([label, value]) => (

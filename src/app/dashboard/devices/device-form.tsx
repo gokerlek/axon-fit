@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Field as FormField, Form, getDeepError, setInput, useForm } from '@formisch/react';
-import { WarningCircle } from '@phosphor-icons/react';
+import { ImageSquare, WarningCircle } from '@phosphor-icons/react';
+import { toast } from 'sonner';
 import { LabeledSelect } from '@/components/labeled-select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -22,11 +23,14 @@ import {
   type DeviceLoadSettings,
   type PulleyRatio,
 } from '@/lib/device-loads';
-import { fetchJson } from '@/lib/query/errors';
+import { deviceImageUrl } from '@/lib/device-media';
+import { ApiError, fetchJson } from '@/lib/query/errors';
 import { applyFieldErrors } from '@/lib/query/field-errors';
 import { useServiceMutation } from '@/lib/query/use-service';
 import {
   ADD_ON_OPTIONS,
+  DEVICE_IMAGE_MAX_BYTES,
+  DEVICE_IMAGE_TYPES,
   deviceFormSchema,
   needsBase,
   needsMax,
@@ -73,6 +77,100 @@ function parseWeights(text: string): number[] {
     .split(/[\s;]+/)
     .map((part) => Number(part.replace(',', '.')))
     .filter((value) => Number.isFinite(value) && value > 0);
+}
+
+/** Görselde ne yapılacak: olduğu gibi kalsın, yenisi yüklensin ya da kaldırılsın. */
+type ImageChange = { kind: 'keep' } | { kind: 'upload'; file: File } | { kind: 'remove' };
+
+/**
+ * Cihaz görseli: danışan salonda makineyi tanısın diye tek görsel. Tür ve boyut
+ * tarayıcıda da denetlenir (sunucu da denetler): 1 MB'tan büyüğü kabul edilmez.
+ * Dosya "Kaydet"te, cihaz kaydedildikten sonra yüklenir.
+ */
+function ImageField({
+  currentUrl,
+  change,
+  onChange,
+  error,
+  onError,
+}: {
+  currentUrl: string | null;
+  change: ImageChange;
+  onChange: (change: ImageChange) => void;
+  error: string | null;
+  onError: (error: string | null) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (change.kind !== 'upload') return setPreview(null);
+    const url = URL.createObjectURL(change.file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [change]);
+
+  const shown = change.kind === 'upload' ? preview : change.kind === 'keep' ? currentUrl : null;
+
+  function pick(file: File | undefined) {
+    if (!file) return;
+    if (!DEVICE_IMAGE_TYPES[file.type]) return onError('Yalnız PNG, JPG ya da WebP seçebilirsin.');
+    if (file.size > DEVICE_IMAGE_MAX_BYTES) {
+      const mb = (file.size / 1024 / 1024).toLocaleString('tr-TR', { maximumFractionDigits: 1 });
+      return onError(`Görsel ${mb} MB; en fazla 1 MB olabilir. Daha küçük bir görsel seç.`);
+    }
+    onError(null);
+    onChange({ kind: 'upload', file });
+  }
+
+  return (
+    <Field data-invalid={Boolean(error) || undefined}>
+      <FieldLabel htmlFor="image">Görsel</FieldLabel>
+      <div className="flex items-center gap-3">
+        {shown ? (
+          // Özel repo'dan uygulama üzerinden gelir; Next görsel iyileştiricisi oturum çerezini taşımaz.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={shown} alt="Cihaz görseli önizlemesi" className="size-24 shrink-0 rounded-lg border object-cover" />
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+            <ImageSquare data-icon="inline-start" />
+            {shown ? 'Değiştir' : 'Görsel seç'}
+          </Button>
+          {shown ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                onError(null);
+                onChange(currentUrl ? { kind: 'remove' } : { kind: 'keep' });
+              }}>
+              Kaldır
+            </Button>
+          ) : null}
+          {change.kind !== 'keep' && currentUrl ? (
+            <Button type="button" variant="ghost" size="sm" onClick={() => onChange({ kind: 'keep' })}>
+              Geri al
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <input
+        ref={inputRef}
+        id="image"
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        hidden
+        onChange={(event) => {
+          pick(event.target.files?.[0]);
+          event.target.value = '';
+        }}
+      />
+      <FieldDescription>Salonda tanınsın diye makinenin fotoğrafı. PNG, JPG ya da WebP; en fazla 1 MB.</FieldDescription>
+      <FieldError>{error}</FieldError>
+    </Field>
+  );
 }
 
 type FormStart = Partial<DeviceInput> & Pick<DeviceInput, 'name' | 'kind'>;
@@ -125,21 +223,44 @@ function NumberField({
  */
 export function DeviceForm({ editing }: { editing: Device | null }) {
   const router = useRouter();
-  const start: FormStart = editing ? (({ id: _id, ...rest }) => rest)(editing) : BLANK;
+  // Görsel formun şemasında yok; ayrı uçtan yönetilir.
+  const start: FormStart = editing ? (({ id: _id, image: _image, ...rest }) => rest)(editing) : BLANK;
   const form = useForm({ schema: deviceFormSchema, initialInput: start });
   const [weightsText, setWeightsText] = useState((start.weightsKg ?? []).map(kgText).join(' '));
+  const [image, setImage] = useState<ImageChange>({ kind: 'keep' });
+  const [imageError, setImageError] = useState<string | null>(null);
+  const currentImageUrl = editing ? deviceImageUrl(editing) : null;
 
   const save = useServiceMutation({
-    fn: (values: DeviceInput) =>
-      fetchJson<{ id: string }>('/api/devices', {
+    fn: async (values: DeviceInput) => {
+      const { id } = await fetchJson<{ id: string }>('/api/devices', {
         method: 'POST',
         body: JSON.stringify(editing ? { ...values, id: editing.id } : values),
-      }),
+      });
+      // Görsel ayrı uca gider. Cihaz kaydedildiyse görsel hatası kaydı geri almaz.
+      try {
+        if (image.kind === 'upload') {
+          const body = new FormData();
+          body.set('image', image.file);
+          await fetchJson(`/api/devices/${id}/image`, { method: 'POST', body });
+        } else if (image.kind === 'remove') {
+          await fetchJson(`/api/devices/${id}/image`, { method: 'DELETE' });
+        }
+      } catch (error) {
+        return { id, imageFailed: error instanceof ApiError ? error.message : 'Görsel yüklenemedi.' };
+      }
+      return { id, imageFailed: null };
+    },
     invalidate: [['devices'], ['exercises']],
     notify: { success: editing ? 'Cihaz güncellendi.' : 'Cihaz eklendi.' },
     onError: (error) => applyFieldErrors(form as never, error),
-    onSuccess: ({ id }) => {
-      router.push(`/dashboard/devices/${id}`);
+    onSuccess: ({ id, imageFailed }) => {
+      if (imageFailed) {
+        toast.error(`Cihaz kaydedildi ama görsel yüklenemedi: ${imageFailed}`);
+        router.push(`/dashboard/devices/${id}/edit`);
+      } else {
+        router.push(`/dashboard/devices/${id}`);
+      }
       router.refresh();
     },
   });
@@ -183,6 +304,14 @@ export function DeviceForm({ editing }: { editing: Device | null }) {
             </Field>
           )}
         </FormField>
+
+        <ImageField
+          currentUrl={currentImageUrl}
+          change={image}
+          onChange={setImage}
+          error={imageError}
+          onError={setImageError}
+        />
 
         <FormField of={form} path={['notes']}>
           {(field) => (
