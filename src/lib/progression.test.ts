@@ -236,6 +236,8 @@ describe('varsayılan kural ve anlatım', () => {
     assert.deepEqual(defaultRule('isolation', 'weight_reps'), { scheme: 'double', targetMin: 10, targetMax: 15, targetRir: 1 });
     assert.equal(defaultRule('warmup', 'duration').scheme, 'none');
     assert.equal(defaultRule('cooldown', 'bodyweight_reps').scheme, 'none');
+    assert.deepEqual(defaultRule('conditioning', 'duration'), { scheme: 'double', targetMin: 20, targetMax: 45, targetRir: 2 });
+    assert.equal(defaultRule('conditioning', 'bodyweight_reps').targetMax, 20);
   });
 
   test('egzersizin kendi kuralı varsayılanı ezer', () => {

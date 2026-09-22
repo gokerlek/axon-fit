@@ -29,6 +29,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "triceps_long",
       "triceps_lateral"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 2.5,
     "minLoadKg": 20.0,
     "video": {
@@ -57,6 +58,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "triceps_long",
       "triceps_lateral"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
@@ -83,6 +85,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "chest_upper",
       "delt_front"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
@@ -109,7 +112,9 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "chest_upper",
       "delt_front",
       "triceps_long",
-      "triceps_lateral",
+      "triceps_lateral"
+    ],
+    "stabilizerMuscles": [
       "serratus",
       "abs_upper",
       "abs_lower"
@@ -141,6 +146,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "chest_lower",
       "delt_front"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
@@ -167,9 +173,12 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "delt_side",
       "triceps_long",
       "triceps_lateral",
-      "traps_upper",
+      "traps_upper"
+    ],
+    "stabilizerMuscles": [
       "abs_upper",
-      "abs_lower"
+      "abs_lower",
+      "erectors"
     ],
     "loadStepKg": 2.5,
     "minLoadKg": 20.0,
@@ -198,6 +207,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "triceps_long",
       "triceps_lateral"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
@@ -223,6 +233,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "traps_upper"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 1.0,
     "minLoadKg": 0.0,
     "video": {
@@ -249,6 +260,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "traps_mid",
       "traps_lower"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 2.5,
     "minLoadKg": 0.0,
     "video": {
@@ -276,7 +288,9 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "biceps",
       "traps_mid",
-      "traps_lower",
+      "traps_lower"
+    ],
+    "stabilizerMuscles": [
       "forearm_flexors"
     ],
     "loadStepKg": 0.0,
@@ -308,6 +322,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "traps_mid",
       "traps_lower"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 2.5,
     "minLoadKg": 0.0,
     "video": {
@@ -338,6 +353,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "delt_rear",
       "biceps"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 2.5,
     "minLoadKg": 0.0,
     "video": {
@@ -366,7 +382,9 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "lats_mid",
       "lats_lower",
       "delt_rear",
-      "biceps",
+      "biceps"
+    ],
+    "stabilizerMuscles": [
       "erectors",
       "hamstrings_medial",
       "hamstrings_lateral"
@@ -401,6 +419,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "delt_rear",
       "biceps"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
@@ -429,9 +448,13 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "quadratus",
       "quadriceps",
-      "adductors",
+      "adductors"
+    ],
+    "stabilizerMuscles": [
       "traps_upper",
-      "forearm_flexors"
+      "forearm_flexors",
+      "abs_upper",
+      "abs_lower"
     ],
     "loadStepKg": 2.5,
     "minLoadKg": 20.0,
@@ -458,7 +481,9 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     ],
     "secondaryMuscles": [
       "glutes",
-      "erectors",
+      "erectors"
+    ],
+    "stabilizerMuscles": [
       "forearm_flexors"
     ],
     "loadStepKg": 2.5,
@@ -485,7 +510,9 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "glutes"
     ],
     "secondaryMuscles": [
-      "adductors",
+      "adductors"
+    ],
+    "stabilizerMuscles": [
       "erectors",
       "abs_upper",
       "abs_lower"
@@ -514,7 +541,9 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     ],
     "secondaryMuscles": [
       "glutes",
-      "adductors",
+      "adductors"
+    ],
+    "stabilizerMuscles": [
       "abs_upper",
       "abs_lower"
     ],
@@ -546,6 +575,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "hamstrings_medial",
       "hamstrings_lateral"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 5.0,
     "minLoadKg": 0.0,
     "video": {
@@ -570,8 +600,10 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "glutes"
     ],
     "secondaryMuscles": [
-      "glute_medius",
       "adductors"
+    ],
+    "stabilizerMuscles": [
+      "glute_medius"
     ],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
@@ -597,10 +629,12 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "glutes"
     ],
     "secondaryMuscles": [
-      "glute_medius",
       "adductors",
       "hamstrings_medial",
       "hamstrings_lateral"
+    ],
+    "stabilizerMuscles": [
+      "glute_medius"
     ],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
@@ -629,6 +663,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "hamstrings_lateral",
       "glute_medius"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 2.5,
     "minLoadKg": 20.0,
     "video": {
@@ -652,6 +687,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "quadriceps"
     ],
     "secondaryMuscles": [],
+    "stabilizerMuscles": [],
     "loadStepKg": 5.0,
     "minLoadKg": 0.0,
     "video": {
@@ -679,6 +715,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "gastroc_medial",
       "gastroc_lateral"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 5.0,
     "minLoadKg": 0.0,
     "video": {
@@ -705,6 +742,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "soleus"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 5.0,
     "minLoadKg": 0.0,
     "video": {
@@ -730,6 +768,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "forearm_flexors"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 2.5,
     "minLoadKg": 10.0,
     "video": {
@@ -753,6 +792,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "biceps"
     ],
     "secondaryMuscles": [],
+    "stabilizerMuscles": [],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
@@ -778,6 +818,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "forearm_flexors"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
@@ -803,6 +844,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "triceps_long"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 2.5,
     "minLoadKg": 0.0,
     "video": {
@@ -828,6 +870,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "triceps_lateral"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
@@ -852,7 +895,9 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "abs_lower"
     ],
     "secondaryMuscles": [
-      "obliques",
+      "obliques"
+    ],
+    "stabilizerMuscles": [
       "delt_front",
       "serratus"
     ],
@@ -880,7 +925,9 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     ],
     "secondaryMuscles": [
       "glute_medius",
-      "quadratus",
+      "quadratus"
+    ],
+    "stabilizerMuscles": [
       "abs_upper",
       "abs_lower"
     ],
@@ -911,6 +958,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "obliques",
       "hip_flexors"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
@@ -936,8 +984,11 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "abs_upper",
       "hip_flexors",
-      "obliques",
-      "forearm_flexors"
+      "obliques"
+    ],
+    "stabilizerMuscles": [
+      "forearm_flexors",
+      "lats_upper"
     ],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0,
@@ -964,7 +1015,9 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "hamstrings_medial",
       "hamstrings_lateral",
-      "erectors",
+      "erectors"
+    ],
+    "stabilizerMuscles": [
       "abs_upper",
       "abs_lower",
       "forearm_flexors"
@@ -993,10 +1046,13 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     ],
     "secondaryMuscles": [
       "forearm_extensors",
-      "traps_upper",
+      "traps_upper"
+    ],
+    "stabilizerMuscles": [
       "abs_upper",
       "abs_lower",
-      "obliques"
+      "obliques",
+      "glute_medius"
     ],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0,
@@ -1028,6 +1084,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "quadriceps",
       "glutes"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
@@ -1057,6 +1114,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "gastroc_medial",
       "gastroc_lateral"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0
   },
@@ -1079,6 +1137,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "traps_mid",
       "traps_lower"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0
   },
@@ -1102,6 +1161,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "abs_lower",
       "traps_mid"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
@@ -1131,6 +1191,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
       "lats_lower",
       "glutes"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0,
     "video": {
@@ -1157,6 +1218,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "secondaryMuscles": [
       "delt_front"
     ],
+    "stabilizerMuscles": [],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0
   }

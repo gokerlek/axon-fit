@@ -30,6 +30,9 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
     ...(exercise.secondaryMuscles.length > 0
       ? ([['Yardımcı kaslar', summarizeMuscles(exercise.secondaryMuscles).join(', ')]] as [string, string][])
       : []),
+    ...(exercise.stabilizerMuscles.length > 0
+      ? ([['Dengeleyici kaslar', summarizeMuscles(exercise.stabilizerMuscles).join(', ')]] as [string, string][])
+      : []),
     ['Ekipman', EQUIPMENT_LABELS[exercise.equipment]],
     ['Tür', CATEGORY_LABELS[exercise.category]],
     ['Kayıt', TRACKING_LABELS[exercise.trackingType]],
@@ -114,13 +117,14 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
               <CardDescription>
                 {exercise.primaryMuscles.includes('cardio')
                   ? 'Kardiyo hareketi; haritada yalnız yardımcı kaslar görünür.'
-                  : 'Hedef kas tam renkte, yardımcı kaslar açık tonda.'}
+                  : 'Hedef tam renk, yardımcı orta, dengeleyici açık ton.'}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <ExerciseMuscleMap
                 primaryMuscles={exercise.primaryMuscles}
                 secondaryMuscles={exercise.secondaryMuscles}
+                stabilizerMuscles={exercise.stabilizerMuscles}
                 bodyClassName="h-72"
               />
             </CardContent>

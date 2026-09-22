@@ -131,7 +131,8 @@ export const EQUIPMENT_LOAD_DEFAULTS: Record<Equipment, { loadStepKg: number; mi
 
 /**
  * Egzersizin türüne göre varsayılan kural. Bileşik hareketler daha ağır ve az tekrarlı,
- * izolasyonlar daha hafif ve çok tekrarlı; ısınma ve soğumada ilerleme yok.
+ * izolasyonlar daha hafif ve çok tekrarlı, kondisyon süre/tekrar odaklı; ısınma ve
+ * soğumada ilerleme yok.
  */
 export function defaultRule(category: Category, trackingType: TrackingType): ProgressionRule {
   if (category === 'warmup' || category === 'cooldown') {
@@ -141,6 +142,13 @@ export function defaultRule(category: Category, trackingType: TrackingType): Pro
         : { scheme: 'none', targetMin: 30, targetMax: 60, targetRir: 3 };
     }
     return { scheme: 'none', targetMin: 12, targetMax: 20, targetRir: 3 };
+  }
+  if (category === 'conditioning') {
+    // Kondisyonda ilerleme süre ya da tekrar üzerinden; ağırlık ikinci planda.
+    if (trackingType === 'duration') return { scheme: 'double', targetMin: 20, targetMax: 45, targetRir: 2 };
+    return trackingType === 'bodyweight_reps'
+      ? { scheme: 'double', targetMin: 10, targetMax: 20, targetRir: 2 }
+      : { scheme: 'double', targetMin: 8, targetMax: 15, targetRir: 2 };
   }
   if (trackingType === 'duration') return { scheme: 'double', targetMin: 30, targetMax: 60, targetRir: 2 };
   if (trackingType === 'bodyweight_reps') {

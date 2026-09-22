@@ -66,7 +66,8 @@ export const MUSCLES = [
 /** Set kaydının nasıl tutulacağı: ağırlık+tekrar, sadece tekrar, ya da süre. */
 export const TRACKING_TYPES = ['weight_reps', 'bodyweight_reps', 'duration'] as const;
 
-export const CATEGORIES = ['compound', 'isolation', 'warmup', 'cooldown'] as const;
+/** Kondisyon: tüm vücudu çalıştıran, kardiyoyla karışık hareketler (burpee, battle rope, kızak…). */
+export const CATEGORIES = ['compound', 'isolation', 'conditioning', 'warmup', 'cooldown'] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 const count = (max: number) =>
@@ -109,13 +110,22 @@ export const exerciseSchema = v.object({
   category: v.picklist(CATEGORIES, 'Geçerli bir tür seç.'),
   trackingType: v.picklist(TRACKING_TYPES, 'Geçerli bir kayıt türü seç.'),
   equipment: v.picklist(EQUIPMENT, 'Geçerli bir ekipman seç.'),
-  /** Hedef kaslar (en az bir). Bir kas hem hedef hem yardımcı olmaz; form ve sunucu ayırır. */
+  /**
+   * Kasın bu hareketteki payı üç seviyede: hedef, yardımcı, dengeleyici (haftalık yükte
+   * 1 / 0,5 / 0,25 set sayılır). Seviye her kas için ayrıdır: birden çok kas aynı anda
+   * hedef olabilir. Bir kas yalnız bir seviyede bulunur; form ve sunucu ayırır.
+   */
   primaryMuscles: v.pipe(
     v.array(v.picklist(MUSCLES, 'Geçerli bir kas seç.')),
     v.minLength(1, 'En az bir hedef kas seç.'),
     v.maxLength(8, 'En fazla 8 hedef kas seçilebilir.'),
   ),
   secondaryMuscles: v.pipe(v.array(v.picklist(MUSCLES, 'Geçerli bir kas seç.')), v.maxLength(10, 'En fazla 10 yardımcı kas seçilebilir.')),
+  /** Hareketi taşımayan ama gövdeyi sabit tutan kaslar (squat'ta karın, plank'ta omuz). */
+  stabilizerMuscles: v.optional(
+    v.pipe(v.array(v.picklist(MUSCLES, 'Geçerli bir kas seç.')), v.maxLength(10, 'En fazla 10 dengeleyici kas seçilebilir.')),
+    [],
+  ),
   /**
    * Ağırlık adımı: aletin izin verdiği en küçük artış (halter 2,5, dambıl 2, makine 5…).
    * Ne kadar artacağını danışanın performansı belirler; öneri bu adıma yuvarlanır.
@@ -249,15 +259,18 @@ function migrateStoredExercise(input: unknown): unknown {
   // Eskiden tek hedef kas vardı (`targetMuscle`); artık liste.
   const primary = migrateMuscles(item.primaryMuscles ?? (targetMuscle === undefined ? undefined : [targetMuscle]));
   const secondary = migrateMuscles(item.secondaryMuscles);
+  const stabilizer = migrateMuscles(item.stabilizerMuscles);
+  const without = (values: unknown, ...others: unknown[]) =>
+    Array.isArray(values)
+      ? values.filter((muscle) => !others.some((list) => Array.isArray(list) && list.includes(muscle)))
+      : values;
   return {
     ...item,
     // İlk sürümdeki ad: "artış" aslında aletin adımıydı.
     loadStepKg: item.loadStepKg ?? loadIncrementKg,
     primaryMuscles: primary,
-    secondaryMuscles:
-      Array.isArray(secondary) && Array.isArray(primary)
-        ? secondary.filter((muscle) => !primary.includes(muscle))
-        : secondary,
+    secondaryMuscles: without(secondary, primary),
+    stabilizerMuscles: without(stabilizer, primary, secondary),
   };
 }
 
@@ -278,6 +291,7 @@ export const EQUIPMENT_LABELS: Record<Equipment, string> = {
 export const CATEGORY_LABELS: Record<Category, string> = {
   compound: 'Bileşik',
   isolation: 'İzolasyon',
+  conditioning: 'Kondisyon',
   warmup: 'Isınma',
   cooldown: 'Soğuma',
 };

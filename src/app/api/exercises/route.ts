@@ -43,10 +43,14 @@ export async function POST(request: Request) {
 
   try {
     const { items, sha } = await readCustomExercises();
-    // Bir kas hem hedef hem yardımcı olmaz: hedef kazanır.
+    // Bir kas yalnız bir seviyede: hedef > yardımcı > dengeleyici.
+    const { primaryMuscles, secondaryMuscles, stabilizerMuscles } = parsed.output;
     const input = {
       ...parsed.output,
-      secondaryMuscles: parsed.output.secondaryMuscles.filter((muscle) => !parsed.output.primaryMuscles.includes(muscle)),
+      secondaryMuscles: secondaryMuscles.filter((muscle) => !primaryMuscles.includes(muscle)),
+      stabilizerMuscles: stabilizerMuscles.filter(
+        (muscle) => !primaryMuscles.includes(muscle) && !secondaryMuscles.includes(muscle),
+      ),
     };
     const taken = new Set([...items.map((item) => item.id), ...EXERCISE_LIBRARY.map((item) => item.id)]);
 

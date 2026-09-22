@@ -17,24 +17,63 @@ export function isBodyMuscle(muscle: Muscle): muscle is BodyMuscle {
 /** Haritada yoğunluk: 0 hiç, 1 tam. */
 export type MuscleIntensity = Partial<Record<BodyMuscle, number>>;
 
-/** Yardımcı kasların haritadaki yoğunluğu (birincil kas 1). */
-export const SECONDARY_INTENSITY = 0.3;
+/** Kasın bir hareketteki payı. */
+export const MUSCLE_ROLES = ['primary', 'secondary', 'stabilizer'] as const;
+export type MuscleRole = (typeof MUSCLE_ROLES)[number];
 
-type Worked = Pick<Exercise, 'primaryMuscles' | 'secondaryMuscles'>;
+export const ROLE_LABELS: Record<MuscleRole, string> = {
+  primary: 'Hedef',
+  secondary: 'Yardımcı',
+  stabilizer: 'Dengeleyici',
+};
 
-/** Bir egzersizin çalıştırdığı kaslar: hedef kaslar tam, yardımcılar açık ton. */
+/** Haritadaki tonu (0–1): hedef tam, yardımcı orta, dengeleyici açık. */
+export const ROLE_INTENSITY: Record<MuscleRole, number> = { primary: 1, secondary: 0.45, stabilizer: 0.1 };
+
+/**
+ * Haftalık yükte bir setin kasa düşen payı ("kesirli set"): hedef 1, yardımcı 0,5,
+ * dengeleyici 0,25. Şablon ve program haritası (Faz 4) bununla toplanır.
+ */
+export const ROLE_SET_WEIGHT: Record<MuscleRole, number> = { primary: 1, secondary: 0.5, stabilizer: 0.25 };
+
+/** Geriye uyumluluk: yardımcı tonu. */
+export const SECONDARY_INTENSITY = ROLE_INTENSITY.secondary;
+
+type Worked = Pick<Exercise, 'primaryMuscles' | 'secondaryMuscles'> & { stabilizerMuscles?: readonly Muscle[] };
+
+/** Kasın bu egzersizdeki payı; çalışmıyorsa `null`. */
+export function roleOf(exercise: Worked, muscle: Muscle): MuscleRole | null {
+  if (exercise.primaryMuscles.includes(muscle)) return 'primary';
+  if (exercise.secondaryMuscles.includes(muscle)) return 'secondary';
+  if (exercise.stabilizerMuscles?.includes(muscle)) return 'stabilizer';
+  return null;
+}
+
+/** Bir egzersizin çalıştırdığı kaslar, haritadaki tonlarıyla. */
 export function exerciseIntensity(exercise: Worked): MuscleIntensity {
   const intensity: MuscleIntensity = {};
-  for (const muscle of exercise.secondaryMuscles) {
-    if (isBodyMuscle(muscle)) intensity[muscle] = SECONDARY_INTENSITY;
-  }
-  for (const muscle of exercise.primaryMuscles) {
-    if (isBodyMuscle(muscle)) intensity[muscle] = 1;
+  // Düşükten yükseğe: bir kas iki listede kalmışsa yüksek seviye kazanır.
+  for (const role of ['stabilizer', 'secondary', 'primary'] as const) {
+    const list = role === 'primary' ? exercise.primaryMuscles : role === 'secondary' ? exercise.secondaryMuscles : (exercise.stabilizerMuscles ?? []);
+    for (const muscle of list) if (isBodyMuscle(muscle)) intensity[muscle] = ROLE_INTENSITY[role];
   }
   return intensity;
 }
 
-/** Egzersiz bu kası (hedef ya da yardımcı olarak) çalıştırıyor mu? */
+/** Bir setin kaslara düşen payı (kesirli set). Haftalık yük bunların toplamıdır. */
+export function exerciseSetWeights(exercise: Worked): Partial<Record<Muscle, number>> {
+  const weights: Partial<Record<Muscle, number>> = {};
+  for (const muscle of MUSCLES) {
+    const role = roleOf(exercise, muscle);
+    if (role) weights[muscle] = ROLE_SET_WEIGHT[role];
+  }
+  return weights;
+}
+
+/**
+ * Egzersiz bu kası hedef ya da yardımcı olarak çalıştırıyor mu? Süzgeç ve sayılar
+ * dengeleyiciyi saymaz: "Karın" seçince bütün squat'lar gelmesin.
+ */
 export function works(exercise: Worked, muscle: Muscle): boolean {
   return exercise.primaryMuscles.includes(muscle) || exercise.secondaryMuscles.includes(muscle);
 }
@@ -61,7 +100,7 @@ export function summarizeMuscles(muscles: readonly Muscle[]): string[] {
   return labels;
 }
 
-/** Her kası çalıştıran egzersiz sayısı (hedef ya da yardımcı). Süzgeçteki sayıyla aynı kural. */
+/** Her kası çalıştıran egzersiz sayısı (hedef ya da yardımcı; dengeleyici sayılmaz). Süzgeçle aynı kural. */
 export function countByMuscle(exercises: readonly Worked[]): Record<Muscle, number> {
   const counts = Object.fromEntries(MUSCLES.map((item) => [item, 0])) as Record<Muscle, number>;
   for (const exercise of exercises) {

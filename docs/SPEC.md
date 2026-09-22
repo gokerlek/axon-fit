@@ -164,7 +164,7 @@ Oluşturma işi (şablon kurmak, program atamak, birkaç danışanı yan yana g�
 - **Üst çubuk yok.** Sağ üstte kullanıcı menüsü (avatar): görünüm ayarları ve çıkış burada. Dock yalnız gezinme içindir.
 - Bağlantı olarak çizilen düğmelerde `nativeButton={false}` (Base UI, gerçek `<button>` olmayanı böyle bilmeli).
 - Sayılar Türkçe biçimde: `2,5 kg` (`src/lib/format.ts`).
-- **Kaslar:** 35 kas + kardiyo, kas haritasının parçalarıyla bire bir; sol ve sağ birlikte seçilir (üst/alt göğüs · ön/yan/arka omuz · üst/orta/alt trapez · üst/orta/alt kanat · bel dikleştiricileri, QL · biceps, triceps uzun/dış baş, ön kol bükücü/açıcı · üst/alt karın, yan karın, serratus · kalça, yan kalça, kalça fleksörü, ön bacak, iç bacak, arka bacak iç/dış, baldır iç/dış, soleus, kaval · boyun, ense). Egzersizde **birden çok hedef kas** (`primaryMuscles`, en az 1) ve yardımcı kaslar; bir kas ikisinde birden olmaz. Özetlerde bütün parçaları seçili kas tek adla yazılır (`MUSCLE_FAMILIES`: üç kanat parçası → "Kanat"). Formda kaslar haritadan seçilir: dokunuş boş → hedef → yardımcı → boş. Önceki sürümlerin kas adları ve tek `targetMuscle` alanı okunurken çevrilir.
+- **Kaslar:** 35 kas + kardiyo, kas haritasının parçalarıyla bire bir; sol ve sağ birlikte seçilir (üst/alt göğüs · ön/yan/arka omuz · üst/orta/alt trapez · üst/orta/alt kanat · bel dikleştiricileri, QL · biceps, triceps uzun/dış baş, ön kol bükücü/açıcı · üst/alt karın, yan karın, serratus · kalça, yan kalça, kalça fleksörü, ön bacak, iç bacak, arka bacak iç/dış, baldır iç/dış, soleus, kaval · boyun, ense). Kasın hareketteki payı **üç seviyede**: hedef (`primaryMuscles`, en az 1), yardımcı, dengeleyici (`stabilizerMuscles`: hareketi taşımayan ama gövdeyi sabit tutan, ör. squat'ta karın). Seviye her kas için ayrıdır, birden çok kas aynı anda hedef olabilir (thruster: ön bacak, kalça, ön omuz); bir kas yalnız bir seviyede bulunur. Haftalık yükte bir set hedefe 1, yardımcıya 0,5, dengeleyiciye 0,25 sayılır (kesirli set, `ROLE_SET_WEIGHT`). Süzgeç ve kas sayıları dengeleyiciyi saymaz. Özetlerde bütün parçaları seçili kas tek adla yazılır (`MUSCLE_FAMILIES`: üç kanat parçası → "Kanat"). Formda kaslar haritadan seçilir: dokunuş boş → hedef → yardımcı → dengeleyici → boş. Önceki sürümlerin kas adları ve tek `targetMuscle` alanı okunurken çevrilir.
 - **Kas haritası** (`src/components/muscle-map`): ön/arka gövde, kasları gösterir. Veri çekmez, neyin yanacağını dışarıdan alır (`intensity` 0–1, `selected`, `onToggle`, `counts`); `flip` (tek gövde, `motion` ile çevrilir) ya da `split` (yan yana). Egzersiz listesinde süzgeç (`?muscle=chest,back`), egzersiz detayında çalışan kaslar; ileride program kapsamı ve haftalık yük ısı haritası. SVG yolları body-muscles'tan (Apache-2.0, LICENSE ve NOTICE klasörde). Kaynakta ön görünümdeki karın ve omuz parçalarının adları karışıktı (ör. "abs-upper" aslında yan karın); bu yollar alt parçalarına bölünüp anatomik yerlerine göre yeniden adlandırıldı (`paths.ts` başındaki not).
 
 **PT:** giriş · danışan listesi + detayı yan yana · antrenman şablonu düzenleyici (kütüphaneden sürükle-bırak) · egzersiz kütüphanesi · davet QR ekranı · canlı görünüm · ayarlar (marka, yönetim işlemleri).
@@ -199,6 +199,13 @@ Oluşturma işi (şablon kurmak, program atamak, birkaç danışanı yan yana g�
 - **Isınma (`warmupSets`, v1 §7.8):** halterle bileşik hareket, kas grubunun ilk hareketi ve ≥ 40 kg ise boş bar × 10 + 1–3 ara set.
 - **Aşırı yük (`isOverload`, v1 K14):** hedef + max(%20, 5 kg) üstü girilen set PT'ye bildirilir; reddedilmez.
 - İlk sürümün `loadIncrementKg` alanı okunurken `loadStepKg`'ye çevrilir.
+- **Egzersiz türleri:** bileşik, izolasyon, **kondisyon** (tüm vücut, kardiyoyla karışık: burpee, battle rope, kızak; varsayılan ilerleme süre/tekrar), ısınma, soğuma. Kondisyon hareketinde "Kardiyo" ve kaslar birlikte işaretlenir.
+
+### 7.2 Şablonda gruplar ve kas yükü haritası (Faz 4)
+
+- **Gruplar:** arka arkaya yapılan hareketler tek egzersiz değil, şablonda grup olarak tutulur: süperset (2 hareket), devre (3+ hareket, tur sayısıyla), kompleks (aynı ağırlıkla ara vermeden). Her hareket kendi kaslarını ve ilerleme kuralını korur; grup yalnız sırayı ve dinlenmeyi belirler.
+- **Şablon haritası:** şablondaki bütün setlerin kesirli set toplamı (hedef 1 · yardımcı 0,5 · dengeleyici 0,25) kas başına hesaplanır; aynı kas birden çok harekette varsa değer toplanır.
+- **Haftalık yük haritası (program ve danışan):** kas başına haftalık set toplamı kademeli renkle ve açıklama kutusuyla gösterilir — gri: 0 · açık: 1–9 (az) · vurgu rengi: 10–20 (yeterli) · uyarı rengi: 20+ (fazla). Değer girilmez, set kayıtlarından hesaplanır. Renkler tema tokenlarından (PT'nin vurgu rengi korunur).
 
 ---
 
@@ -266,7 +273,7 @@ Uygulama beyaz etiketli: paketin adı `pulsecoach`, yayınlanan kurulumun adın�
 | 1 | Kurulum sihirbazı (ad, logo, renk, tema) + GitHub veri katmanı (repo koruma kuralı dahil) |
 | 2 | Egzersiz kütüphanesi ✓ · PT kabuğu (dock + sağ üstte kullanıcı menüsü) ✓ · kas haritası (süzgeç + detay) ✓ |
 | 3 | Danışan ekleme (repo açma), sağlık modülü seçimi, QR davet, danışan girişi |
-| 4 | Antrenman şablonu düzenleyici · antrenman ekranı (**set başına canlı yazma**, çevrimdışı kuyruk) · PT canlı görünüm · geçmiş |
+| 4 | Antrenman şablonu düzenleyici (gruplar: süperset/devre/kompleks, şablon kas haritası) · antrenman ekranı (**set başına canlı yazma**, çevrimdışı kuyruk, zorluk düğmeleri, §7.1 önerileri) · haftalık yük haritası · PT canlı görünüm · geçmiş |
 | 5 | Sağlık modülü ekranları, onay akışı |
 | 6 | Yönetim işlemleri (silme, dışa aktarma, yedek), JSON şeması + doğrulama, AI için PR kuralı |
 | 7 | Bağlantılar (danışanların birbirini görmesi) |
