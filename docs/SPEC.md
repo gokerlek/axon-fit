@@ -201,7 +201,17 @@ Oluşturma işi (şablon kurmak, program atamak, birkaç danışanı yan yana g�
 - İlk sürümün `loadIncrementKg` alanı okunurken `loadStepKg`'ye çevrilir.
 - **Egzersiz türleri:** bileşik, izolasyon, **kondisyon** (tüm vücut, kardiyoyla karışık: burpee, battle rope, kızak; varsayılan ilerleme süre/tekrar), ısınma, soğuma. Kondisyon hareketinde "Kardiyo" ve kaslar birlikte işaretlenir.
 
-### 7.2 Şablonda gruplar ve kas yükü haritası (Faz 4)
+### 7.2 Muadiller (alternatif hareketler)
+
+Alet doluysa, yoksa ya da danışana uygun değilse yerine ne yapılır (`src/lib/alternatives.ts`, testleri `npm test`).
+
+- Her egzersizin **hareket kalıbı** var (`pattern`: yatay/dikey itiş, yatay/dikey çekiş, squat, kalça menteşesi, tek bacak, kalça itişi, diz açma/bükme, dirsek bükme/açma, taşıma, karın bükme/sabitleme/döndürme, kardiyo, mobilite…). Formda zorunlu.
+- Muadiller elle listelenmez, **hesaplanır**: aday, kaynakla en az bir hedef kası ya da kas ailesini paylaşmalı (kardiyo kardiyoyla); güç hareketleri ile ısınma/soğuma birbirine önerilmez. Sıra: aynı kalıp → aynı hedef kas → aynı kas ailesi → bütün kas yükünün benzerliği.
+- **PT sabitleyebilir** (`alternatives`: egzersiz kimlikleri, en fazla 12): detay sayfasındaki "Muadiller" kartında iğneyle; sabitlenenler en üstte "Senin seçtiklerin". Hazır egzersizde sabitlemek PT'nin sürümünü oluşturur. Form bu alana dokunmaz.
+- Kart ekipmana göre gruplu, **ekipmansız grup en başta**.
+- Faz 4: antrenman ekranında "Değiştir" düğmesi aynı listeyi kullanır; muadilin kendi geçmişi ve ilerlemesi vardır.
+
+### 7.3 Şablonda gruplar ve kas yükü haritası (Faz 4)
 
 - **Gruplar:** arka arkaya yapılan hareketler tek egzersiz değil, şablonda grup olarak tutulur: süperset (2 hareket), devre (3+ hareket, tur sayısıyla), kompleks (aynı ağırlıkla ara vermeden). Her hareket kendi kaslarını ve ilerleme kuralını korur; grup yalnız sırayı ve dinlenmeyi belirler.
 - **Şablon haritası:** şablondaki bütün setlerin kesirli set toplamı (hedef 1 · yardımcı 0,5 · dengeleyici 0,25) kas başına hesaplanır; aynı kas birden çok harekette varsa değer toplanır.

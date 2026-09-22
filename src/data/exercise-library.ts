@@ -20,6 +20,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "pattern": "horizontal_push",
     "primaryMuscles": [
       "chest_lower"
     ],
@@ -49,6 +50,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "pattern": "horizontal_push",
     "primaryMuscles": [
       "chest_upper"
     ],
@@ -78,6 +80,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "pattern": "chest_fly",
     "primaryMuscles": [
       "chest_lower"
     ],
@@ -105,6 +108,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "bodyweight_reps",
     "equipment": "bodyweight",
+    "pattern": "horizontal_push",
     "primaryMuscles": [
       "chest_lower"
     ],
@@ -138,6 +142,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "bodyweight_reps",
     "equipment": "bodyweight",
+    "pattern": "vertical_push",
     "primaryMuscles": [
       "triceps_long",
       "triceps_lateral"
@@ -166,6 +171,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "pattern": "vertical_push",
     "primaryMuscles": [
       "delt_front"
     ],
@@ -199,6 +205,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "pattern": "vertical_push",
     "primaryMuscles": [
       "delt_front"
     ],
@@ -227,6 +234,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "pattern": "lateral_raise",
     "primaryMuscles": [
       "delt_side"
     ],
@@ -253,6 +261,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "cable",
+    "pattern": "rear_delt",
     "primaryMuscles": [
       "delt_rear"
     ],
@@ -280,6 +289,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "bodyweight_reps",
     "equipment": "bodyweight",
+    "pattern": "vertical_pull",
     "primaryMuscles": [
       "lats_upper",
       "lats_mid",
@@ -312,6 +322,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "cable",
+    "pattern": "vertical_pull",
     "primaryMuscles": [
       "lats_upper",
       "lats_mid",
@@ -342,6 +353,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "cable",
+    "pattern": "horizontal_pull",
     "primaryMuscles": [
       "traps_mid",
       "traps_lower"
@@ -373,6 +385,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "pattern": "horizontal_pull",
     "primaryMuscles": [
       "traps_mid",
       "traps_lower"
@@ -408,6 +421,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "pattern": "horizontal_pull",
     "primaryMuscles": [
       "lats_upper",
       "lats_mid",
@@ -439,6 +453,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "pattern": "hinge",
     "primaryMuscles": [
       "erectors",
       "glutes",
@@ -475,6 +490,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "pattern": "hinge",
     "primaryMuscles": [
       "hamstrings_medial",
       "hamstrings_lateral"
@@ -505,6 +521,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "pattern": "squat",
     "primaryMuscles": [
       "quadriceps",
       "glutes"
@@ -536,6 +553,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "pattern": "squat",
     "primaryMuscles": [
       "quadriceps"
     ],
@@ -566,6 +584,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "machine",
+    "pattern": "squat",
     "primaryMuscles": [
       "quadriceps"
     ],
@@ -595,6 +614,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "pattern": "lunge",
     "primaryMuscles": [
       "quadriceps",
       "glutes"
@@ -624,6 +644,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "pattern": "lunge",
     "primaryMuscles": [
       "quadriceps",
       "glutes"
@@ -655,6 +676,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "pattern": "hip_extension",
     "primaryMuscles": [
       "glutes"
     ],
@@ -683,6 +705,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "machine",
+    "pattern": "knee_extension",
     "primaryMuscles": [
       "quadriceps"
     ],
@@ -707,6 +730,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "machine",
+    "pattern": "knee_flexion",
     "primaryMuscles": [
       "hamstrings_medial",
       "hamstrings_lateral"
@@ -735,6 +759,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "machine",
+    "pattern": "calf_raise",
     "primaryMuscles": [
       "gastroc_medial",
       "gastroc_lateral"
@@ -762,6 +787,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "barbell",
+    "pattern": "elbow_flexion",
     "primaryMuscles": [
       "biceps"
     ],
@@ -788,6 +814,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "pattern": "elbow_flexion",
     "primaryMuscles": [
       "biceps"
     ],
@@ -812,6 +839,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "pattern": "elbow_flexion",
     "primaryMuscles": [
       "biceps"
     ],
@@ -838,6 +866,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "cable",
+    "pattern": "elbow_extension",
     "primaryMuscles": [
       "triceps_lateral"
     ],
@@ -864,6 +893,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
+    "pattern": "elbow_extension",
     "primaryMuscles": [
       "triceps_long"
     ],
@@ -890,6 +920,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "duration",
     "equipment": "bodyweight",
+    "pattern": "core_stability",
     "primaryMuscles": [
       "abs_upper",
       "abs_lower"
@@ -920,6 +951,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "duration",
     "equipment": "bodyweight",
+    "pattern": "core_stability",
     "primaryMuscles": [
       "obliques"
     ],
@@ -950,6 +982,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "bodyweight_reps",
     "equipment": "bodyweight",
+    "pattern": "core_stability",
     "primaryMuscles": [
       "abs_upper",
       "abs_lower"
@@ -978,6 +1011,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "bodyweight_reps",
     "equipment": "bodyweight",
+    "pattern": "core_flexion",
     "primaryMuscles": [
       "abs_lower"
     ],
@@ -1009,6 +1043,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "kettlebell",
+    "pattern": "hinge",
     "primaryMuscles": [
       "glutes"
     ],
@@ -1041,6 +1076,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "duration",
     "equipment": "dumbbell",
+    "pattern": "carry",
     "primaryMuscles": [
       "forearm_flexors"
     ],
@@ -1073,6 +1109,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "warmup",
     "trackingType": "duration",
     "equipment": "cardio_machine",
+    "pattern": "cardio",
     "primaryMuscles": [
       "cardio"
     ],
@@ -1104,6 +1141,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "warmup",
     "trackingType": "duration",
     "equipment": "cardio_machine",
+    "pattern": "cardio",
     "primaryMuscles": [
       "cardio"
     ],
@@ -1130,6 +1168,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "warmup",
     "trackingType": "bodyweight_reps",
     "equipment": "band",
+    "pattern": "rear_delt",
     "primaryMuscles": [
       "delt_rear"
     ],
@@ -1153,6 +1192,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "cooldown",
     "trackingType": "duration",
     "equipment": "bodyweight",
+    "pattern": "mobility",
     "primaryMuscles": [
       "erectors"
     ],
@@ -1181,6 +1221,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "cooldown",
     "trackingType": "duration",
     "equipment": "bodyweight",
+    "pattern": "mobility",
     "primaryMuscles": [
       "erectors"
     ],
@@ -1211,6 +1252,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "cooldown",
     "trackingType": "duration",
     "equipment": "bodyweight",
+    "pattern": "mobility",
     "primaryMuscles": [
       "chest_lower",
       "chest_upper"

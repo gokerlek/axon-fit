@@ -5,11 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Item, ItemContent, ItemGroup, ItemMedia, ItemTitle } from '@/components/ui/item';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { VideoEmbed } from '@/components/video-embed';
-import { getExercise } from '@/lib/exercises';
+import { getExercise, listExercises } from '@/lib/exercises';
+import { PATTERN_LABELS } from '@/lib/alternatives';
 import { formatKg } from '@/lib/format';
-import { summarizeMuscles } from '@/lib/muscles';
+import { exerciseAlternatives, summarizeMuscles } from '@/lib/muscles';
 import { describeRule, progressionOf, PROGRESSION_LABELS } from '@/lib/progression';
 import { CATEGORY_LABELS, EQUIPMENT_LABELS } from '@/lib/schemas/exercise';
+import { AlternativesCard, type AlternativeRow } from './alternatives-card';
 import { ExerciseActions } from './exercise-actions';
 
 const TRACKING_LABELS = {
@@ -21,8 +23,18 @@ const TRACKING_LABELS = {
 /** Egzersiz detayı — kendi sayfası (modal değil, SPEC §6). */
 export default async function ExerciseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const exercise = await getExercise(id);
+  const all = await listExercises();
+  const exercise = await getExercise(id, all);
   if (!exercise) notFound();
+
+  const alternatives: AlternativeRow[] = exerciseAlternatives(exercise, all).map(({ exercise: other, pinned, samePattern }) => ({
+    id: other.id,
+    title: other.title,
+    equipment: other.equipment,
+    muscles: summarizeMuscles(other.primaryMuscles).join(', '),
+    pattern: samePattern && other.pattern ? PATTERN_LABELS[other.pattern] : null,
+    pinned,
+  }));
 
   const rule = progressionOf(exercise);
   const summary: [string, string][] = [
@@ -34,6 +46,7 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
       ? ([['Dengeleyici kaslar', summarizeMuscles(exercise.stabilizerMuscles).join(', ')]] as [string, string][])
       : []),
     ['Ekipman', EQUIPMENT_LABELS[exercise.equipment]],
+    ...(exercise.pattern ? ([['Hareket kalıbı', PATTERN_LABELS[exercise.pattern]]] as [string, string][]) : []),
     ['Tür', CATEGORY_LABELS[exercise.category]],
     ['Kayıt', TRACKING_LABELS[exercise.trackingType]],
     ...(exercise.trackingType === 'weight_reps'
@@ -108,6 +121,8 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
               </CardContent>
             </Card>
           ) : null}
+
+          <AlternativesCard exerciseId={exercise.id} rows={alternatives} />
         </div>
 
         <div className="flex flex-col gap-6">

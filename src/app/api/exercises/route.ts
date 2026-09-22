@@ -44,9 +44,11 @@ export async function POST(request: Request) {
   try {
     const { items, sha } = await readCustomExercises();
     // Bir kas yalnız bir seviyede: hedef > yardımcı > dengeleyici.
-    const { primaryMuscles, secondaryMuscles, stabilizerMuscles } = parsed.output;
+    // Sabitlenen muadiller kendi ucundan yazılır; burada istemcinin gönderdiği yok sayılır.
+    const { primaryMuscles, secondaryMuscles, stabilizerMuscles, alternatives: _ignored, ...rest } = parsed.output;
     const input = {
-      ...parsed.output,
+      ...rest,
+      primaryMuscles,
       secondaryMuscles: secondaryMuscles.filter((muscle) => !primaryMuscles.includes(muscle)),
       stabilizerMuscles: stabilizerMuscles.filter(
         (muscle) => !primaryMuscles.includes(muscle) && !secondaryMuscles.includes(muscle),
@@ -56,7 +58,8 @@ export async function POST(request: Request) {
 
     if (input.id) {
       const index = items.findIndex((item) => item.id === input.id);
-      const entry = { ...input, id: input.id };
+      const stored = items[index] ?? EXERCISE_LIBRARY.find((item) => item.id === input.id);
+      const entry = { ...input, id: input.id, alternatives: stored?.alternatives };
       const next = index >= 0 ? items.map((item, i) => (i === index ? entry : item)) : [...items, entry];
       await writeCustomExercises(next, `Egzersiz güncellendi: ${input.title}`, sha);
       return NextResponse.json({ id: input.id });

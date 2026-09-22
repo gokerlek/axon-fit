@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { MOVEMENT_PATTERNS } from '@/lib/alternatives';
 import { PROGRESSION_SCHEMES } from '@/lib/progression';
 import { isValidVideoId, parseVideoUrl } from '@/lib/video';
 
@@ -110,6 +111,12 @@ export const exerciseSchema = v.object({
   category: v.picklist(CATEGORIES, 'Geçerli bir tür seç.'),
   trackingType: v.picklist(TRACKING_TYPES, 'Geçerli bir kayıt türü seç.'),
   equipment: v.picklist(EQUIPMENT, 'Geçerli bir ekipman seç.'),
+  /** Hareket kalıbı (yatay itiş, squat…): muadil önerisinin ilk ölçütü (`src/lib/alternatives.ts`). */
+  pattern: v.optional(v.picklist(MOVEMENT_PATTERNS, 'Hareket kalıbını seç.')),
+  /** PT'nin sabitlediği muadiller (egzersiz kimlikleri); önerilerde en başta gelir. */
+  alternatives: v.optional(
+    v.pipe(v.array(v.pipe(v.string(), v.regex(/^[a-z0-9-]{2,60}$/))), v.maxLength(12, 'En fazla 12 muadil sabitlenebilir.')),
+  ),
   /**
    * Kasın bu hareketteki payı üç seviyede: hedef, yardımcı, dengeleyici (haftalık yükte
    * 1 / 0,5 / 0,25 set sayılır). Seviye her kas için ayrıdır: birden çok kas aynı anda
@@ -155,7 +162,9 @@ export type Exercise = v.InferOutput<typeof exerciseSchema>;
  * Formda olmayan bir alanı zorunlu tutmak formu sessizce geçersiz bırakır.
  */
 export const exerciseFormSchema = v.object({
-  ...v.omit(exerciseSchema, ['id', 'video']).entries,
+  // Sabitlenen muadiller detay sayfasındaki karttan yönetilir; form onlara dokunmaz.
+  ...v.omit(exerciseSchema, ['id', 'video', 'alternatives']).entries,
+  pattern: v.picklist(MOVEMENT_PATTERNS, 'Hareket kalıbını seç.'),
   // Formda kural her zaman açık yazılır (varsayılan da olsa); egzersizde isteğe bağlı.
   progression: progressionSchema,
   videoUrl: v.pipe(

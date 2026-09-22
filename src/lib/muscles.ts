@@ -1,3 +1,4 @@
+import { rankAlternatives, type AlternativeCandidate } from '@/lib/alternatives';
 import { MUSCLE_FAMILIES, MUSCLE_LABELS, MUSCLES, type Exercise, type Muscle } from '@/lib/schemas/exercise';
 
 /**
@@ -114,4 +115,18 @@ export function parseMuscles(value: string | null | undefined): Muscle[] {
   if (!value) return [];
   const known = new Set<string>(MUSCLES);
   return [...new Set(value.split(','))].filter((item): item is Muscle => known.has(item));
+}
+
+const FAMILY_OF = new Map<string, string>(
+  MUSCLE_FAMILIES.flatMap((family) => family.muscles.map((muscle) => [muscle, family.label] as const)),
+);
+
+/** Kasın ailesi (üst kanat → "Kanat"); ailesi olmayan kas kendisidir. */
+export function familyOf(muscle: string): string {
+  return FAMILY_OF.get(muscle) ?? muscle;
+}
+
+/** Bir egzersizin muadilleri: PT'nin sabitledikleri önce, sonra hesaplananlar (`alternatives.ts`). */
+export function exerciseAlternatives<T extends AlternativeCandidate>(source: T, all: readonly T[], limit = 8) {
+  return rankAlternatives(source, all, familyOf, { limit });
 }

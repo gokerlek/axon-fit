@@ -37,6 +37,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Toggle } from "@/components/ui/toggle";
 import { VideoEmbed } from "@/components/video-embed";
 import { MuscleMap } from "@/components/muscle-map/muscle-map";
+import { PATTERN_LABELS } from "@/lib/alternatives";
 import {
   isBodyMuscle,
   ROLE_INTENSITY,
@@ -77,7 +78,12 @@ const TRACKING_LABELS: Record<(typeof TRACKING_TYPES)[number], string> = {
   duration: "Süre",
 };
 
-const BLANK: ExerciseInput = {
+/** Formun başlangıcı: yeni egzersizde hareket kalıbı boş gelir, seçilmeden kaydedilmez. */
+type FormStart = Omit<ExerciseInput, "pattern"> & {
+  pattern?: ExerciseInput["pattern"];
+};
+
+const BLANK: FormStart = {
   title: "",
   description: "",
   cues: [""],
@@ -96,7 +102,12 @@ const BLANK: ExerciseInput = {
  * Düzenlemede kimlik forma girmez (şemada yok); video, yapıştırılan bağlantı olarak
  * gösterilir; kuralı olmayan egzersizde türünün varsayılan kuralı açık yazılır.
  */
-function toInput({ id: _id, video, ...rest }: Exercise): ExerciseInput {
+function toInput({
+  id: _id,
+  video,
+  alternatives: _alternatives,
+  ...rest
+}: Exercise): FormStart {
   return {
     ...rest,
     progression: progressionOf(rest),
@@ -126,11 +137,13 @@ function LabeledSelect<T extends string>({
   value,
   labels,
   onChange,
+  placeholder,
 }: {
   id: string;
   value: T | undefined;
   labels: Record<T, string>;
   onChange: (value: T) => void;
+  placeholder?: string;
 }) {
   const items = Object.entries(labels).map(([key, label]) => ({
     value: key,
@@ -143,7 +156,7 @@ function LabeledSelect<T extends string>({
       onValueChange={(next) => next && onChange(next as T)}
     >
       <SelectTrigger id={id} className="w-full">
-        <SelectValue />
+        <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
         {items.map((item) => (
@@ -321,6 +334,24 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
       {/* Sağ sütun: sınıflandırma — kas, ekipman, tür, kayıt, yük. */}
       <div className="flex flex-col gap-5">
         <div className="grid gap-4 sm:grid-cols-2">
+          <FormField of={form} path={["pattern"]}>
+            {(field) => (
+              <Field data-invalid={Boolean(field.errors) || undefined}>
+                <FieldLabel htmlFor="pattern">Hareket kalıbı</FieldLabel>
+                <LabeledSelect
+                  id="pattern"
+                  value={field.input}
+                  labels={PATTERN_LABELS}
+                  placeholder="Seç"
+                  onChange={(value) =>
+                    setInput(form, { path: ["pattern"], input: value })
+                  }
+                />
+                <FieldDescription>Muadil önerileri buna göre sıralanır.</FieldDescription>
+                <FieldError>{field.errors?.[0]}</FieldError>
+              </Field>
+            )}
+          </FormField>
           <FormField of={form} path={["equipment"]}>
             {(field) => (
               <Field>

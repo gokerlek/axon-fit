@@ -80,8 +80,8 @@ export type ExerciseDetail = ExerciseWithSource & {
   overridesLibrary: boolean;
 };
 
-export async function getExercise(id: string): Promise<ExerciseDetail | null> {
-  const all = await listExercises();
+export async function getExercise(id: string, list?: ExerciseWithSource[]): Promise<ExerciseDetail | null> {
+  const all = list ?? (await listExercises());
   const found = all.find((item) => item.id === id);
   if (!found) return null;
   const inLibrary = EXERCISE_LIBRARY.some((item) => item.id === id);
