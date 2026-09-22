@@ -43,7 +43,11 @@ export async function POST(request: Request) {
 
   try {
     const { items, sha } = await readCustomExercises();
-    const input = parsed.output;
+    // Bir kas hem hedef hem yardımcı olmaz: hedef kazanır.
+    const input = {
+      ...parsed.output,
+      secondaryMuscles: parsed.output.secondaryMuscles.filter((muscle) => !parsed.output.primaryMuscles.includes(muscle)),
+    };
     const taken = new Set([...items.map((item) => item.id), ...EXERCISE_LIBRARY.map((item) => item.id)]);
 
     if (input.id) {

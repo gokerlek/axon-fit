@@ -13,7 +13,7 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Toggle } from '@/components/ui/toggle';
-import { countByMuscle, isBodyMuscle, parseMuscles, works } from '@/lib/muscles';
+import { countByMuscle, isBodyMuscle, parseMuscles, summarizeMuscles, works } from '@/lib/muscles';
 import { fetchJson } from '@/lib/query/errors';
 import { useServiceQuery } from '@/lib/query/use-service';
 import { EQUIPMENT_LABELS, MUSCLE_LABELS, type Exercise, type Muscle } from '@/lib/schemas/exercise';
@@ -61,7 +61,7 @@ export function ExerciseList({ initial }: { initial: ExerciseWithSource[] }) {
     );
     if (selected.length === 0) return matched;
     // Seçili kası hedef alanlar önce, yalnız yardımcı olarak çalıştıranlar sonra.
-    const isTarget = (item: ExerciseWithSource) => selected.includes(item.targetMuscle);
+    const isTarget = (item: ExerciseWithSource) => selected.some((muscle) => item.primaryMuscles.includes(muscle));
     return [...matched.filter(isTarget), ...matched.filter((item) => !isTarget(item))];
   }, [exercises, search, selected]);
 
@@ -184,7 +184,8 @@ export function ExerciseList({ initial }: { initial: ExerciseWithSource[] }) {
             <ul className="relative grid gap-3 sm:grid-cols-2">
               <AnimatePresence initial={false} mode="popLayout">
                 {visible.map((item) => {
-                  const onlySecondary = selected.length > 0 && !selected.includes(item.targetMuscle);
+                  const onlySecondary =
+                    selected.length > 0 && !selected.some((muscle) => item.primaryMuscles.includes(muscle));
                   return (
                     <motion.li
                       key={item.id}
@@ -200,7 +201,9 @@ export function ExerciseList({ initial }: { initial: ExerciseWithSource[] }) {
                           <CardHeader>
                             <CardTitle className="truncate">{item.title}</CardTitle>
                             <CardDescription className="flex items-center gap-1.5">
-                              {MUSCLE_LABELS[item.targetMuscle]} · {EQUIPMENT_LABELS[item.equipment]}
+                              <span className="truncate">
+                                {summarizeMuscles(item.primaryMuscles).join(', ')} · {EQUIPMENT_LABELS[item.equipment]}
+                              </span>
                               {item.video ? <YoutubeLogo className="size-4 shrink-0" aria-label="videolu" /> : null}
                             </CardDescription>
                             {item.source === 'custom' || onlySecondary ? (

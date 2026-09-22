@@ -13,7 +13,7 @@ import {
   setInput,
   useForm,
 } from "@formisch/react";
-import { Plus, WarningCircle, X } from "@phosphor-icons/react";
+import { Heartbeat, Plus, WarningCircle, X } from "@phosphor-icons/react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -29,13 +29,12 @@ import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Toggle } from "@/components/ui/toggle";
 import { VideoEmbed } from "@/components/video-embed";
 import { MuscleMap } from "@/components/muscle-map/muscle-map";
 import {
@@ -61,7 +60,6 @@ import {
   EQUIPMENT,
   EQUIPMENT_LABELS,
   MUSCLES,
-  MUSCLE_GROUPS,
   MUSCLE_LABELS,
   TRACKING_TYPES,
   exerciseFormSchema,
@@ -84,7 +82,7 @@ const BLANK: ExerciseInput = {
   category: "compound",
   trackingType: "weight_reps",
   equipment: "barbell",
-  targetMuscle: "chest",
+  primaryMuscles: [],
   secondaryMuscles: [],
   ...EQUIPMENT_LOAD_DEFAULTS.barbell,
   progression: defaultRule("compound", "weight_reps"),
@@ -149,46 +147,6 @@ function LabeledSelect<T extends string>({
           <SelectItem key={item.value} value={item.value}>
             {item.label}
           </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-const MUSCLE_ITEMS = MUSCLES.map((muscle) => ({
-  value: muscle,
-  label: MUSCLE_LABELS[muscle],
-}));
-
-/** Hedef kas: 24 kas bölgelere göre gruplu (Göğüs, Omuz, Sırt…). */
-function MuscleSelect({
-  id,
-  value,
-  onChange,
-}: {
-  id: string;
-  value: Muscle | undefined;
-  onChange: (value: Muscle) => void;
-}) {
-  return (
-    <Select
-      items={MUSCLE_ITEMS}
-      value={value ?? null}
-      onValueChange={(next) => next && onChange(next as Muscle)}
-    >
-      <SelectTrigger id={id} className="w-full">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {MUSCLE_GROUPS.map((group) => (
-          <SelectGroup key={group.id}>
-            <SelectLabel>{group.label}</SelectLabel>
-            {group.muscles.map((muscle) => (
-              <SelectItem key={muscle} value={muscle}>
-                {MUSCLE_LABELS[muscle]}
-              </SelectItem>
-            ))}
-          </SelectGroup>
         ))}
       </SelectContent>
     </Select>
@@ -360,30 +318,6 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
       {/* Sağ sütun: sınıflandırma — kas, ekipman, tür, kayıt, yük. */}
       <div className="flex flex-col gap-5">
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField of={form} path={["targetMuscle"]}>
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor="targetMuscle">Hedef kas</FieldLabel>
-                <MuscleSelect
-                  id="targetMuscle"
-                  value={field.input}
-                  onChange={(value) => {
-                    setInput(form, { path: ["targetMuscle"], input: value });
-                    // Hedef olan kas aynı anda yardımcı olamaz.
-                    const secondary = (getInput(form, {
-                      path: ["secondaryMuscles"],
-                    }) ?? []) as Muscle[];
-                    if (secondary.includes(value)) {
-                      setInput(form, {
-                        path: ["secondaryMuscles"],
-                        input: secondary.filter((muscle) => muscle !== value),
-                      });
-                    }
-                  }}
-                />
-              </Field>
-            )}
-          </FormField>
           <FormField of={form} path={["equipment"]}>
             {(field) => (
               <Field>
@@ -456,79 +390,130 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
           </FormField>
         </div>
 
-        <FormField of={form} path={["targetMuscle"]}>
-          {(targetField) => (
+        <FormField of={form} path={["primaryMuscles"]}>
+          {(primaryField) => (
             <FormField of={form} path={["secondaryMuscles"]}>
-              {(field) => {
-                const target = targetField.input as Muscle | undefined;
-                const bodyTarget = target && isBodyMuscle(target) ? target : null;
-                // Kardiyo yardımcı kas olamaz; haritada yeri olanlar seçilir.
-                const selected = ((field.input ?? []) as Muscle[]).filter(isBodyMuscle);
-                const intensity: MuscleIntensity = Object.fromEntries(
-                  selected.map((muscle) => [muscle, SECONDARY_INTENSITY]),
+              {(secondaryField) => {
+                const primary = (primaryField.input ?? []) as Muscle[];
+                const secondary = ((secondaryField.input ?? []) as Muscle[]).filter(
+                  (muscle) => !primary.includes(muscle),
                 );
-                if (bodyTarget) intensity[bodyTarget] = 1;
-                const set = (next: Muscle[]) =>
+                const bodyPrimary = primary.filter(isBodyMuscle);
+                const bodySecondary = secondary.filter(isBodyMuscle);
+                const intensity: MuscleIntensity = {
+                  ...Object.fromEntries(
+                    bodySecondary.map((muscle) => [muscle, SECONDARY_INTENSITY]),
+                  ),
+                  ...Object.fromEntries(bodyPrimary.map((muscle) => [muscle, 1])),
+                };
+                // Kaslar sabit sırada saklanır; bir kas hem hedef hem yardımcı olmaz.
+                const save = (nextPrimary: Muscle[], nextSecondary: Muscle[]) => {
+                  setInput(form, {
+                    path: ["primaryMuscles"],
+                    input: MUSCLES.filter((muscle) => nextPrimary.includes(muscle)),
+                  });
                   setInput(form, {
                     path: ["secondaryMuscles"],
-                    input: MUSCLES.filter((muscle) => next.includes(muscle)),
+                    input: MUSCLES.filter(
+                      (muscle) =>
+                        nextSecondary.includes(muscle) && !nextPrimary.includes(muscle),
+                    ),
                   });
+                };
+                // Dokunuş sırası: boş → hedef → yardımcı → boş.
+                const cycle = (muscle: Muscle) => {
+                  if (primary.includes(muscle)) {
+                    save(
+                      primary.filter((item) => item !== muscle),
+                      [...secondary, muscle],
+                    );
+                  } else if (secondary.includes(muscle)) {
+                    save(
+                      primary,
+                      secondary.filter((item) => item !== muscle),
+                    );
+                  } else {
+                    save([...primary, muscle], secondary);
+                  }
+                };
+                const removeMuscle = (muscle: Muscle) =>
+                  save(
+                    primary.filter((item) => item !== muscle),
+                    secondary.filter((item) => item !== muscle),
+                  );
+                const errors = primaryField.errors ?? secondaryField.errors;
 
                 return (
-                  <Field data-invalid={Boolean(field.errors) || undefined}>
-                    <FieldLabel>Yardımcı kaslar</FieldLabel>
+                  <Field data-invalid={Boolean(errors) || undefined}>
+                    <FieldLabel>Çalışan kaslar</FieldLabel>
                     <FieldDescription>
-                      Haritada dokunarak seç. Hedef kas tam renkte, yardımcılar
-                      açık tonda.
+                      Kasa dokun: ilk dokunuşta hedef olur (tam renk), ikincide
+                      yardımcı (açık ton), üçüncüde kalkar.
                     </FieldDescription>
                     <MuscleMap
                       layout="split"
                       intensity={intensity}
-                      selected={selected}
-                      disabled={bodyTarget ? [bodyTarget] : []}
-                      onToggle={(muscle) =>
-                        set(
-                          selected.includes(muscle)
-                            ? selected.filter((item) => item !== muscle)
-                            : [...selected, muscle],
-                        )
-                      }
+                      selected={[...bodyPrimary, ...bodySecondary]}
+                      onToggle={cycle}
                       describe={(muscle) =>
                         `${MUSCLE_LABELS[muscle]} · ${
-                          muscle === bodyTarget
-                            ? "hedef kas"
-                            : selected.includes(muscle)
-                              ? "yardımcı"
-                              : "seçmek için dokun"
+                          primary.includes(muscle)
+                            ? "hedef — dokun: yardımcı yap"
+                            : secondary.includes(muscle)
+                              ? "yardımcı — dokun: kaldır"
+                              : "dokun: hedef yap"
                         }`
                       }
-                      hint="Yardımcı kası seçmek için dokun"
+                      hint="Kasa dokunarak seç"
                       bodyClassName="h-[22rem] lg:h-[26rem]"
-                      label="Yardımcı kaslar"
+                      label="Çalışan kaslar"
                     />
-                    {selected.length > 0 ? (
-                      <div
-                        className="flex flex-wrap gap-1.5"
-                        aria-label="Seçili yardımcı kaslar"
-                      >
-                        {selected.map((muscle) => (
-                          <Button
-                            key={muscle}
-                            type="button"
-                            variant="secondary"
-                            size="xs"
-                            onClick={() =>
-                              set(selected.filter((item) => item !== muscle))
-                            }
-                            aria-label={`${MUSCLE_LABELS[muscle]} yardımcı kasını kaldır`}
-                          >
-                            {MUSCLE_LABELS[muscle]}
-                            <X data-icon="inline-end" />
-                          </Button>
-                        ))}
-                      </div>
-                    ) : null}
-                    <FieldError>{field.errors?.[0]}</FieldError>
+                    <Toggle
+                      variant="outline"
+                      size="sm"
+                      className="self-start"
+                      pressed={primary.includes("cardio")}
+                      onPressedChange={(pressed) =>
+                        pressed
+                          ? save([...primary, "cardio"], secondary)
+                          : removeMuscle("cardio")
+                      }
+                    >
+                      <Heartbeat data-icon="inline-start" />
+                      Kardiyo hareketi
+                    </Toggle>
+                    {(
+                      [
+                        ["Hedef", primary],
+                        ["Yardımcı", secondary],
+                      ] as const
+                    ).map(([title, list]) =>
+                      list.length > 0 ? (
+                        <div
+                          key={title}
+                          className="flex flex-wrap items-center gap-1.5"
+                          aria-label={`${title} kaslar`}
+                        >
+                          <span className="w-16 text-xs text-muted-foreground">
+                            {title}
+                          </span>
+                          {list.map((muscle) => (
+                            <Button
+                              key={muscle}
+                              type="button"
+                              variant="secondary"
+                              size="xs"
+                              onClick={() => removeMuscle(muscle)}
+                              aria-label={`${MUSCLE_LABELS[muscle]} kasını kaldır`}
+                            >
+                              {MUSCLE_LABELS[muscle]}
+                              <X data-icon="inline-end" />
+                            </Button>
+                          ))}
+                        </div>
+                      ) : null,
+                    )}
+                    <FieldError>{errors?.[0]}</FieldError>
                   </Field>
                 );
               }}

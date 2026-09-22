@@ -21,23 +21,30 @@ export const EQUIPMENT = [
 ] as const;
 
 /**
- * Kaslar — kas haritasındaki bölgelerle bire bir (fitness standardı; sol ve sağ birlikte).
+ * Kaslar — kas haritasının (body-muscles) parçalarıyla bire bir; sol ve sağ birlikte.
  * Kardiyo bir kas değil ama egzersizin neyi çalıştırdığı olarak burada durur.
  */
 export const MUSCLES = [
-  'upper_chest',
-  'chest',
-  'front_delts',
-  'side_delts',
-  'rear_delts',
-  'upper_traps',
-  'mid_back',
-  'lats',
-  'lower_back',
+  'chest_upper',
+  'chest_lower',
+  'delt_front',
+  'delt_side',
+  'delt_rear',
+  'traps_upper',
+  'traps_mid',
+  'traps_lower',
+  'lats_upper',
+  'lats_mid',
+  'lats_lower',
+  'erectors',
+  'quadratus',
   'biceps',
-  'triceps',
-  'forearms',
-  'abs',
+  'triceps_long',
+  'triceps_lateral',
+  'forearm_flexors',
+  'forearm_extensors',
+  'abs_upper',
+  'abs_lower',
   'obliques',
   'serratus',
   'glutes',
@@ -45,10 +52,14 @@ export const MUSCLES = [
   'hip_flexors',
   'quadriceps',
   'adductors',
-  'hamstrings',
-  'calves',
+  'hamstrings_medial',
+  'hamstrings_lateral',
+  'gastroc_medial',
+  'gastroc_lateral',
+  'soleus',
   'tibialis',
   'neck',
+  'nape',
   'cardio',
 ] as const;
 
@@ -98,8 +109,13 @@ export const exerciseSchema = v.object({
   category: v.picklist(CATEGORIES, 'Geçerli bir tür seç.'),
   trackingType: v.picklist(TRACKING_TYPES, 'Geçerli bir kayıt türü seç.'),
   equipment: v.picklist(EQUIPMENT, 'Geçerli bir ekipman seç.'),
-  targetMuscle: v.picklist(MUSCLES, 'Geçerli bir kas seç.'),
-  secondaryMuscles: v.pipe(v.array(v.picklist(MUSCLES, 'Geçerli bir kas seç.')), v.maxLength(8, 'En fazla 8 yardımcı kas seçilebilir.')),
+  /** Hedef kaslar (en az bir). Bir kas hem hedef hem yardımcı olmaz; form ve sunucu ayırır. */
+  primaryMuscles: v.pipe(
+    v.array(v.picklist(MUSCLES, 'Geçerli bir kas seç.')),
+    v.minLength(1, 'En az bir hedef kas seç.'),
+    v.maxLength(8, 'En fazla 8 hedef kas seçilebilir.'),
+  ),
+  secondaryMuscles: v.pipe(v.array(v.picklist(MUSCLES, 'Geçerli bir kas seç.')), v.maxLength(10, 'En fazla 10 yardımcı kas seçilebilir.')),
   /**
    * Ağırlık adımı: aletin izin verdiği en küçük artış (halter 2,5, dambıl 2, makine 5…).
    * Ne kadar artacağını danışanın performansı belirler; öneri bu adıma yuvarlanır.
@@ -146,48 +162,106 @@ export type ExerciseInput = v.InferOutput<typeof exerciseFormSchema>;
 export type Equipment = (typeof EQUIPMENT)[number];
 export type Muscle = (typeof MUSCLES)[number];
 
-/** Kasların bölgeleri: formda ve özetlerde gruplamak için. Kardiyo "Diğer"de. */
+/** Kasların bölgeleri (Göğüs, Omuz, Sırt…): kas listelerini sıralamak ve gruplamak için. */
 export const MUSCLE_GROUPS: readonly { id: string; label: string; muscles: readonly Muscle[] }[] = [
-  { id: 'chest', label: 'Göğüs', muscles: ['upper_chest', 'chest'] },
-  { id: 'shoulders', label: 'Omuz', muscles: ['front_delts', 'side_delts', 'rear_delts'] },
-  { id: 'back', label: 'Sırt', muscles: ['upper_traps', 'mid_back', 'lats', 'lower_back'] },
-  { id: 'arms', label: 'Kol', muscles: ['biceps', 'triceps', 'forearms'] },
-  { id: 'core', label: 'Karın', muscles: ['abs', 'obliques', 'serratus'] },
+  { id: 'chest', label: 'Göğüs', muscles: ['chest_upper', 'chest_lower'] },
+  { id: 'shoulders', label: 'Omuz', muscles: ['delt_front', 'delt_side', 'delt_rear'] },
+  {
+    id: 'back',
+    label: 'Sırt',
+    muscles: ['traps_upper', 'traps_mid', 'traps_lower', 'lats_upper', 'lats_mid', 'lats_lower', 'erectors', 'quadratus'],
+  },
+  { id: 'arms', label: 'Kol', muscles: ['biceps', 'triceps_long', 'triceps_lateral', 'forearm_flexors', 'forearm_extensors'] },
+  { id: 'core', label: 'Karın', muscles: ['abs_upper', 'abs_lower', 'obliques', 'serratus'] },
   {
     id: 'legs',
     label: 'Kalça ve bacak',
-    muscles: ['glutes', 'glute_medius', 'hip_flexors', 'quadriceps', 'adductors', 'hamstrings', 'calves', 'tibialis'],
+    muscles: [
+      'glutes',
+      'glute_medius',
+      'hip_flexors',
+      'quadriceps',
+      'adductors',
+      'hamstrings_medial',
+      'hamstrings_lateral',
+      'gastroc_medial',
+      'gastroc_lateral',
+      'soleus',
+      'tibialis',
+    ],
   },
-  { id: 'neck', label: 'Boyun', muscles: ['neck'] },
+  { id: 'neck', label: 'Boyun', muscles: ['neck', 'nape'] },
   { id: 'other', label: 'Diğer', muscles: ['cardio'] },
 ];
 
 /**
- * İlk sürümden kalan değerler (12'li kas grubu, `loadIncrementKg`). Repo'daki eski
- * kayıtlar okunurken yenisine çevrilir; yoksa şema bütün dosyayı reddeder ve PT'nin
- * egzersizleri kaybolur.
+ * Birden çok parçadan oluşan kaslar. Özetlerde bütün parçaları seçiliyse tek ad
+ * yazılır: "Üst kanat, Orta kanat, Alt kanat" yerine "Kanat" (`src/lib/muscles.ts`).
  */
-const LEGACY_MUSCLES: Record<string, Muscle> = { back: 'lats', shoulders: 'front_delts', core: 'abs' };
+export const MUSCLE_FAMILIES: readonly { label: string; muscles: readonly Muscle[] }[] = [
+  { label: 'Göğüs', muscles: ['chest_upper', 'chest_lower'] },
+  { label: 'Omuz', muscles: ['delt_front', 'delt_side', 'delt_rear'] },
+  { label: 'Trapez', muscles: ['traps_upper', 'traps_mid', 'traps_lower'] },
+  { label: 'Kanat', muscles: ['lats_upper', 'lats_mid', 'lats_lower'] },
+  { label: 'Bel', muscles: ['erectors', 'quadratus'] },
+  { label: 'Triceps', muscles: ['triceps_long', 'triceps_lateral'] },
+  { label: 'Ön kol', muscles: ['forearm_flexors', 'forearm_extensors'] },
+  { label: 'Karın', muscles: ['abs_upper', 'abs_lower'] },
+  { label: 'Arka bacak', muscles: ['hamstrings_medial', 'hamstrings_lateral'] },
+  { label: 'Baldır', muscles: ['gastroc_medial', 'gastroc_lateral', 'soleus'] },
+  { label: 'Boyun', muscles: ['neck', 'nape'] },
+];
 
-function migrateMuscle(value: unknown): unknown {
-  return typeof value === 'string' ? (LEGACY_MUSCLES[value] ?? value) : value;
+/**
+ * Önceki sürümlerden kalan kas değerleri (12'li grup ve 24'lü liste) → yeni parçalar.
+ * Repo'daki eski kayıtlar okunurken çevrilir; yoksa şema bütün dosyayı reddeder
+ * ve PT'nin egzersizleri kaybolur.
+ */
+const LEGACY_MUSCLES: Record<string, readonly Muscle[]> = {
+  chest: ['chest_upper', 'chest_lower'],
+  upper_chest: ['chest_upper'],
+  shoulders: ['delt_front', 'delt_side', 'delt_rear'],
+  front_delts: ['delt_front'],
+  side_delts: ['delt_side'],
+  rear_delts: ['delt_rear'],
+  back: ['lats_upper', 'lats_mid', 'lats_lower'],
+  lats: ['lats_upper', 'lats_mid', 'lats_lower'],
+  upper_traps: ['traps_upper'],
+  mid_back: ['traps_mid', 'traps_lower'],
+  lower_back: ['erectors', 'quadratus'],
+  triceps: ['triceps_long', 'triceps_lateral'],
+  forearms: ['forearm_flexors', 'forearm_extensors'],
+  core: ['abs_upper', 'abs_lower'],
+  abs: ['abs_upper', 'abs_lower'],
+  hamstrings: ['hamstrings_medial', 'hamstrings_lateral'],
+  calves: ['gastroc_medial', 'gastroc_lateral', 'soleus'],
+  neck: ['neck', 'nape'],
+};
+
+function migrateMuscles(values: unknown): unknown {
+  if (!Array.isArray(values)) return values;
+  return [...new Set(values.flatMap((value) => (typeof value === 'string' ? (LEGACY_MUSCLES[value] ?? [value]) : [value])))];
 }
 
 function migrateStoredExercise(input: unknown): unknown {
   if (!input || typeof input !== 'object') return input;
-  const { loadIncrementKg, ...item } = input as Record<string, unknown>;
+  const { loadIncrementKg, targetMuscle, ...item } = input as Record<string, unknown>;
+  // Eskiden tek hedef kas vardı (`targetMuscle`); artık liste.
+  const primary = migrateMuscles(item.primaryMuscles ?? (targetMuscle === undefined ? undefined : [targetMuscle]));
+  const secondary = migrateMuscles(item.secondaryMuscles);
   return {
     ...item,
     // İlk sürümdeki ad: "artış" aslında aletin adımıydı.
     loadStepKg: item.loadStepKg ?? loadIncrementKg,
-    targetMuscle: migrateMuscle(item.targetMuscle),
-    secondaryMuscles: Array.isArray(item.secondaryMuscles)
-      ? [...new Set(item.secondaryMuscles.map(migrateMuscle))]
-      : item.secondaryMuscles,
+    primaryMuscles: primary,
+    secondaryMuscles:
+      Array.isArray(secondary) && Array.isArray(primary)
+        ? secondary.filter((muscle) => !primary.includes(muscle))
+        : secondary,
   };
 }
 
-/** Repo'daki `data/exercises.json`: eski kas adları okunurken yenisine çevrilir. */
+/** Repo'daki `data/exercises.json`: eski alan ve kas adları okunurken yenisine çevrilir. */
 export const customExercisesSchema = v.array(v.pipe(v.unknown(), v.transform(migrateStoredExercise), exerciseSchema));
 
 export const EQUIPMENT_LABELS: Record<Equipment, string> = {
@@ -209,19 +283,26 @@ export const CATEGORY_LABELS: Record<Category, string> = {
 };
 
 export const MUSCLE_LABELS: Record<Muscle, string> = {
-  upper_chest: 'Üst göğüs',
-  chest: 'Göğüs',
-  front_delts: 'Ön omuz',
-  side_delts: 'Yan omuz',
-  rear_delts: 'Arka omuz',
-  upper_traps: 'Üst trapez',
-  mid_back: 'Orta sırt',
-  lats: 'Kanat (lat)',
-  lower_back: 'Bel',
+  chest_upper: 'Üst göğüs',
+  chest_lower: 'Alt göğüs',
+  delt_front: 'Ön omuz',
+  delt_side: 'Yan omuz',
+  delt_rear: 'Arka omuz',
+  traps_upper: 'Üst trapez',
+  traps_mid: 'Orta trapez',
+  traps_lower: 'Alt trapez',
+  lats_upper: 'Üst kanat',
+  lats_mid: 'Orta kanat',
+  lats_lower: 'Alt kanat',
+  erectors: 'Bel dikleştiricileri',
+  quadratus: 'Kuadratus (QL)',
   biceps: 'Biceps',
-  triceps: 'Triceps',
-  forearms: 'Ön kol',
-  abs: 'Karın',
+  triceps_long: 'Triceps uzun baş',
+  triceps_lateral: 'Triceps dış baş',
+  forearm_flexors: 'Ön kol bükücüleri',
+  forearm_extensors: 'Ön kol açıcıları',
+  abs_upper: 'Üst karın',
+  abs_lower: 'Alt karın',
   obliques: 'Yan karın',
   serratus: 'Serratus',
   glutes: 'Kalça',
@@ -229,9 +310,13 @@ export const MUSCLE_LABELS: Record<Muscle, string> = {
   hip_flexors: 'Kalça fleksörü',
   quadriceps: 'Ön bacak',
   adductors: 'İç bacak',
-  hamstrings: 'Arka bacak',
-  calves: 'Baldır',
+  hamstrings_medial: 'Arka bacak (iç)',
+  hamstrings_lateral: 'Arka bacak (dış)',
+  gastroc_medial: 'Baldır (iç)',
+  gastroc_lateral: 'Baldır (dış)',
+  soleus: 'Soleus',
   tibialis: 'Kaval',
-  neck: 'Boyun',
+  neck: 'Boyun (ön)',
+  nape: 'Ense',
   cardio: 'Kardiyo',
 };

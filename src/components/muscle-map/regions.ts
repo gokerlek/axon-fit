@@ -3,25 +3,33 @@ import type { BodyMuscle } from '@/lib/muscles';
 /**
  * Kaslarımızın haritadaki parçaları (`paths.ts` kimlikleri, sol/sağ eki olmadan).
  *
- * Kas listesi haritaya göre kuruldu: çoğu kas tek parça, bazıları haritada
- * birkaç parçaya bölünmüş (ör. kanat üst/orta/alt). Burada olmayan parçalar
- * (baş, yüz, el, ayak, diz, dirsek, omurga) kas değildir; gri siluet olarak
- * çizilir ve tıklanmaz.
+ * Kas listesi haritanın parçalarıyla bire bir (sol ve sağ birlikte seçilir). İstisnalar:
+ * ön görünümdeki "forearm" bükücü taraftır, bükücülerle birleşir; köprücük üstü
+ * (`traps-front`) trapezin önden görünen kısmıdır, üst trapezle birlikte yanar.
+ * Burada olmayan parçalar (baş, yüz, el, ayak, diz, dirsek, omurga) kas değildir;
+ * gri siluet olarak çizilir ve tıklanmaz.
  */
 export const MUSCLE_REGIONS: Record<BodyMuscle, readonly string[]> = {
-  upper_chest: ['chest-upper'],
-  chest: ['chest-lower'],
-  front_delts: ['shoulder-front'],
-  side_delts: ['shoulder-side'],
-  rear_delts: ['deltoid-rear'],
-  upper_traps: ['traps-upper'],
-  mid_back: ['traps-mid', 'traps-lower'],
-  lats: ['lats-upper', 'lats-mid', 'lats-lower'],
-  lower_back: ['lower-back-erectors', 'lower-back-ql'],
+  chest_upper: ['chest-upper'],
+  chest_lower: ['chest-lower'],
+  delt_front: ['deltoid-front'],
+  delt_side: ['deltoid-side'],
+  delt_rear: ['deltoid-rear'],
+  traps_upper: ['traps-upper', 'traps-front'],
+  traps_mid: ['traps-mid'],
+  traps_lower: ['traps-lower'],
+  lats_upper: ['lats-upper'],
+  lats_mid: ['lats-mid'],
+  lats_lower: ['lats-lower'],
+  erectors: ['lower-back-erectors'],
+  quadratus: ['lower-back-ql'],
   biceps: ['biceps'],
-  triceps: ['triceps-long', 'triceps-lateral'],
-  forearms: ['forearm', 'forearm-flexors', 'forearm-extensors'],
-  abs: ['abs-upper', 'abs-lower'],
+  triceps_long: ['triceps-long'],
+  triceps_lateral: ['triceps-lateral'],
+  forearm_flexors: ['forearm', 'forearm-flexors'],
+  forearm_extensors: ['forearm-extensors'],
+  abs_upper: ['abs-upper'],
+  abs_lower: ['abs-lower'],
   obliques: ['obliques'],
   serratus: ['serratus-anterior'],
   glutes: ['gluteus-maximus'],
@@ -29,10 +37,14 @@ export const MUSCLE_REGIONS: Record<BodyMuscle, readonly string[]> = {
   hip_flexors: ['hip-flexor'],
   quadriceps: ['quads'],
   adductors: ['adductors'],
-  hamstrings: ['hamstrings-medial', 'hamstrings-lateral'],
-  calves: ['calves-gastroc-medial', 'calves-gastroc-lateral', 'calves-soleus'],
+  hamstrings_medial: ['hamstrings-medial'],
+  hamstrings_lateral: ['hamstrings-lateral'],
+  gastroc_medial: ['calves-gastroc-medial'],
+  gastroc_lateral: ['calves-gastroc-lateral'],
+  soleus: ['calves-soleus'],
   tibialis: ['tibialis-anterior'],
-  neck: ['neck', 'nape'],
+  neck: ['neck'],
+  nape: ['nape'],
 };
 
 const REGION_TO_MUSCLE = new Map<string, BodyMuscle>(

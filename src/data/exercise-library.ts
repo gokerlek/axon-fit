@@ -20,10 +20,14 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
-    "targetMuscle": "chest",
+    "primaryMuscles": [
+      "chest_lower"
+    ],
     "secondaryMuscles": [
-      "front_delts",
-      "triceps"
+      "chest_upper",
+      "delt_front",
+      "triceps_long",
+      "triceps_lateral"
     ],
     "loadStepKg": 2.5,
     "minLoadKg": 20.0,
@@ -44,10 +48,14 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
-    "targetMuscle": "upper_chest",
+    "primaryMuscles": [
+      "chest_upper"
+    ],
     "secondaryMuscles": [
-      "front_delts",
-      "triceps"
+      "chest_lower",
+      "delt_front",
+      "triceps_long",
+      "triceps_lateral"
     ],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
@@ -68,10 +76,12 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
-    "targetMuscle": "chest",
+    "primaryMuscles": [
+      "chest_lower"
+    ],
     "secondaryMuscles": [
-      "upper_chest",
-      "front_delts"
+      "chest_upper",
+      "delt_front"
     ],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
@@ -92,12 +102,17 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "bodyweight_reps",
     "equipment": "bodyweight",
-    "targetMuscle": "chest",
+    "primaryMuscles": [
+      "chest_lower"
+    ],
     "secondaryMuscles": [
-      "triceps",
-      "front_delts",
+      "chest_upper",
+      "delt_front",
+      "triceps_long",
+      "triceps_lateral",
       "serratus",
-      "abs"
+      "abs_upper",
+      "abs_lower"
     ],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0,
@@ -118,10 +133,13 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "bodyweight_reps",
     "equipment": "bodyweight",
-    "targetMuscle": "triceps",
+    "primaryMuscles": [
+      "triceps_long",
+      "triceps_lateral"
+    ],
     "secondaryMuscles": [
-      "chest",
-      "front_delts"
+      "chest_lower",
+      "delt_front"
     ],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0,
@@ -142,12 +160,16 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
-    "targetMuscle": "front_delts",
+    "primaryMuscles": [
+      "delt_front"
+    ],
     "secondaryMuscles": [
-      "side_delts",
-      "triceps",
-      "upper_traps",
-      "abs"
+      "delt_side",
+      "triceps_long",
+      "triceps_lateral",
+      "traps_upper",
+      "abs_upper",
+      "abs_lower"
     ],
     "loadStepKg": 2.5,
     "minLoadKg": 20.0,
@@ -168,10 +190,13 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
-    "targetMuscle": "front_delts",
+    "primaryMuscles": [
+      "delt_front"
+    ],
     "secondaryMuscles": [
-      "side_delts",
-      "triceps"
+      "delt_side",
+      "triceps_long",
+      "triceps_lateral"
     ],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
@@ -192,9 +217,11 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
-    "targetMuscle": "side_delts",
+    "primaryMuscles": [
+      "delt_side"
+    ],
     "secondaryMuscles": [
-      "upper_traps"
+      "traps_upper"
     ],
     "loadStepKg": 1.0,
     "minLoadKg": 0.0,
@@ -215,10 +242,12 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "cable",
-    "targetMuscle": "rear_delts",
+    "primaryMuscles": [
+      "delt_rear"
+    ],
     "secondaryMuscles": [
-      "mid_back",
-      "upper_traps"
+      "traps_mid",
+      "traps_lower"
     ],
     "loadStepKg": 2.5,
     "minLoadKg": 0.0,
@@ -239,11 +268,16 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "bodyweight_reps",
     "equipment": "bodyweight",
-    "targetMuscle": "lats",
+    "primaryMuscles": [
+      "lats_upper",
+      "lats_mid",
+      "lats_lower"
+    ],
     "secondaryMuscles": [
       "biceps",
-      "mid_back",
-      "forearms"
+      "traps_mid",
+      "traps_lower",
+      "forearm_flexors"
     ],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0,
@@ -264,10 +298,15 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "cable",
-    "targetMuscle": "lats",
+    "primaryMuscles": [
+      "lats_upper",
+      "lats_mid",
+      "lats_lower"
+    ],
     "secondaryMuscles": [
       "biceps",
-      "mid_back"
+      "traps_mid",
+      "traps_lower"
     ],
     "loadStepKg": 2.5,
     "minLoadKg": 0.0,
@@ -288,10 +327,15 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "cable",
-    "targetMuscle": "mid_back",
+    "primaryMuscles": [
+      "traps_mid",
+      "traps_lower"
+    ],
     "secondaryMuscles": [
-      "lats",
-      "rear_delts",
+      "lats_upper",
+      "lats_mid",
+      "lats_lower",
+      "delt_rear",
       "biceps"
     ],
     "loadStepKg": 2.5,
@@ -313,13 +357,19 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
-    "targetMuscle": "mid_back",
+    "primaryMuscles": [
+      "traps_mid",
+      "traps_lower"
+    ],
     "secondaryMuscles": [
-      "lats",
-      "rear_delts",
+      "lats_upper",
+      "lats_mid",
+      "lats_lower",
+      "delt_rear",
       "biceps",
-      "lower_back",
-      "hamstrings"
+      "erectors",
+      "hamstrings_medial",
+      "hamstrings_lateral"
     ],
     "loadStepKg": 2.5,
     "minLoadKg": 20.0,
@@ -340,10 +390,15 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
-    "targetMuscle": "lats",
+    "primaryMuscles": [
+      "lats_upper",
+      "lats_mid",
+      "lats_lower"
+    ],
     "secondaryMuscles": [
-      "mid_back",
-      "rear_delts",
+      "traps_mid",
+      "traps_lower",
+      "delt_rear",
       "biceps"
     ],
     "loadStepKg": 2.0,
@@ -365,13 +420,18 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
-    "targetMuscle": "lower_back",
-    "secondaryMuscles": [
+    "primaryMuscles": [
+      "erectors",
       "glutes",
-      "hamstrings",
+      "hamstrings_medial",
+      "hamstrings_lateral"
+    ],
+    "secondaryMuscles": [
+      "quadratus",
       "quadriceps",
-      "upper_traps",
-      "forearms"
+      "adductors",
+      "traps_upper",
+      "forearm_flexors"
     ],
     "loadStepKg": 2.5,
     "minLoadKg": 20.0,
@@ -392,11 +452,14 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
-    "targetMuscle": "hamstrings",
+    "primaryMuscles": [
+      "hamstrings_medial",
+      "hamstrings_lateral"
+    ],
     "secondaryMuscles": [
       "glutes",
-      "lower_back",
-      "forearms"
+      "erectors",
+      "forearm_flexors"
     ],
     "loadStepKg": 2.5,
     "minLoadKg": 20.0,
@@ -417,12 +480,15 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
-    "targetMuscle": "quadriceps",
+    "primaryMuscles": [
+      "quadriceps",
+      "glutes"
+    ],
     "secondaryMuscles": [
-      "glutes",
       "adductors",
-      "lower_back",
-      "abs"
+      "erectors",
+      "abs_upper",
+      "abs_lower"
     ],
     "loadStepKg": 2.5,
     "minLoadKg": 20.0,
@@ -443,11 +509,14 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
-    "targetMuscle": "quadriceps",
+    "primaryMuscles": [
+      "quadriceps"
+    ],
     "secondaryMuscles": [
       "glutes",
       "adductors",
-      "abs"
+      "abs_upper",
+      "abs_lower"
     ],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
@@ -468,11 +537,14 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "machine",
-    "targetMuscle": "quadriceps",
+    "primaryMuscles": [
+      "quadriceps"
+    ],
     "secondaryMuscles": [
       "glutes",
       "adductors",
-      "hamstrings"
+      "hamstrings_medial",
+      "hamstrings_lateral"
     ],
     "loadStepKg": 5.0,
     "minLoadKg": 0.0,
@@ -493,9 +565,11 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
-    "targetMuscle": "quadriceps",
+    "primaryMuscles": [
+      "quadriceps",
+      "glutes"
+    ],
     "secondaryMuscles": [
-      "glutes",
       "glute_medius",
       "adductors"
     ],
@@ -518,12 +592,15 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
-    "targetMuscle": "quadriceps",
+    "primaryMuscles": [
+      "quadriceps",
+      "glutes"
+    ],
     "secondaryMuscles": [
-      "glutes",
       "glute_medius",
       "adductors",
-      "hamstrings"
+      "hamstrings_medial",
+      "hamstrings_lateral"
     ],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
@@ -544,9 +621,12 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "barbell",
-    "targetMuscle": "glutes",
+    "primaryMuscles": [
+      "glutes"
+    ],
     "secondaryMuscles": [
-      "hamstrings",
+      "hamstrings_medial",
+      "hamstrings_lateral",
       "glute_medius"
     ],
     "loadStepKg": 2.5,
@@ -568,7 +648,9 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "machine",
-    "targetMuscle": "quadriceps",
+    "primaryMuscles": [
+      "quadriceps"
+    ],
     "secondaryMuscles": [],
     "loadStepKg": 5.0,
     "minLoadKg": 0.0,
@@ -589,9 +671,13 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "machine",
-    "targetMuscle": "hamstrings",
+    "primaryMuscles": [
+      "hamstrings_medial",
+      "hamstrings_lateral"
+    ],
     "secondaryMuscles": [
-      "calves"
+      "gastroc_medial",
+      "gastroc_lateral"
     ],
     "loadStepKg": 5.0,
     "minLoadKg": 0.0,
@@ -612,8 +698,13 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "machine",
-    "targetMuscle": "calves",
-    "secondaryMuscles": [],
+    "primaryMuscles": [
+      "gastroc_medial",
+      "gastroc_lateral"
+    ],
+    "secondaryMuscles": [
+      "soleus"
+    ],
     "loadStepKg": 5.0,
     "minLoadKg": 0.0,
     "video": {
@@ -633,9 +724,11 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "barbell",
-    "targetMuscle": "biceps",
+    "primaryMuscles": [
+      "biceps"
+    ],
     "secondaryMuscles": [
-      "forearms"
+      "forearm_flexors"
     ],
     "loadStepKg": 2.5,
     "minLoadKg": 10.0,
@@ -656,7 +749,9 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
-    "targetMuscle": "biceps",
+    "primaryMuscles": [
+      "biceps"
+    ],
     "secondaryMuscles": [],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
@@ -677,9 +772,11 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
-    "targetMuscle": "biceps",
+    "primaryMuscles": [
+      "biceps"
+    ],
     "secondaryMuscles": [
-      "forearms"
+      "forearm_flexors"
     ],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
@@ -700,8 +797,12 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "cable",
-    "targetMuscle": "triceps",
-    "secondaryMuscles": [],
+    "primaryMuscles": [
+      "triceps_lateral"
+    ],
+    "secondaryMuscles": [
+      "triceps_long"
+    ],
     "loadStepKg": 2.5,
     "minLoadKg": 0.0,
     "video": {
@@ -721,8 +822,12 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "weight_reps",
     "equipment": "dumbbell",
-    "targetMuscle": "triceps",
-    "secondaryMuscles": [],
+    "primaryMuscles": [
+      "triceps_long"
+    ],
+    "secondaryMuscles": [
+      "triceps_lateral"
+    ],
     "loadStepKg": 2.0,
     "minLoadKg": 0.0,
     "video": {
@@ -742,10 +847,13 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "duration",
     "equipment": "bodyweight",
-    "targetMuscle": "abs",
+    "primaryMuscles": [
+      "abs_upper",
+      "abs_lower"
+    ],
     "secondaryMuscles": [
       "obliques",
-      "front_delts",
+      "delt_front",
       "serratus"
     ],
     "loadStepKg": 0.0,
@@ -767,11 +875,14 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "duration",
     "equipment": "bodyweight",
-    "targetMuscle": "obliques",
+    "primaryMuscles": [
+      "obliques"
+    ],
     "secondaryMuscles": [
       "glute_medius",
-      "lower_back",
-      "abs"
+      "quadratus",
+      "abs_upper",
+      "abs_lower"
     ],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0,
@@ -792,7 +903,10 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "bodyweight_reps",
     "equipment": "bodyweight",
-    "targetMuscle": "abs",
+    "primaryMuscles": [
+      "abs_upper",
+      "abs_lower"
+    ],
     "secondaryMuscles": [
       "obliques",
       "hip_flexors"
@@ -816,11 +930,14 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "isolation",
     "trackingType": "bodyweight_reps",
     "equipment": "bodyweight",
-    "targetMuscle": "abs",
+    "primaryMuscles": [
+      "abs_lower"
+    ],
     "secondaryMuscles": [
+      "abs_upper",
       "hip_flexors",
       "obliques",
-      "forearms"
+      "forearm_flexors"
     ],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0,
@@ -841,12 +958,16 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "weight_reps",
     "equipment": "kettlebell",
-    "targetMuscle": "glutes",
+    "primaryMuscles": [
+      "glutes"
+    ],
     "secondaryMuscles": [
-      "hamstrings",
-      "lower_back",
-      "abs",
-      "forearms"
+      "hamstrings_medial",
+      "hamstrings_lateral",
+      "erectors",
+      "abs_upper",
+      "abs_lower",
+      "forearm_flexors"
     ],
     "loadStepKg": 4.0,
     "minLoadKg": 0.0,
@@ -867,10 +988,14 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "compound",
     "trackingType": "duration",
     "equipment": "dumbbell",
-    "targetMuscle": "forearms",
+    "primaryMuscles": [
+      "forearm_flexors"
+    ],
     "secondaryMuscles": [
-      "upper_traps",
-      "abs",
+      "forearm_extensors",
+      "traps_upper",
+      "abs_upper",
+      "abs_lower",
       "obliques"
     ],
     "loadStepKg": 0.0,
@@ -892,10 +1017,14 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "warmup",
     "trackingType": "duration",
     "equipment": "cardio_machine",
-    "targetMuscle": "cardio",
+    "primaryMuscles": [
+      "cardio"
+    ],
     "secondaryMuscles": [
-      "lats",
-      "mid_back",
+      "lats_upper",
+      "lats_mid",
+      "lats_lower",
+      "traps_mid",
       "quadriceps",
       "glutes"
     ],
@@ -918,11 +1047,15 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "warmup",
     "trackingType": "duration",
     "equipment": "cardio_machine",
-    "targetMuscle": "cardio",
+    "primaryMuscles": [
+      "cardio"
+    ],
     "secondaryMuscles": [
       "quadriceps",
-      "hamstrings",
-      "calves"
+      "hamstrings_medial",
+      "hamstrings_lateral",
+      "gastroc_medial",
+      "gastroc_lateral"
     ],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0
@@ -939,9 +1072,12 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "warmup",
     "trackingType": "bodyweight_reps",
     "equipment": "band",
-    "targetMuscle": "rear_delts",
+    "primaryMuscles": [
+      "delt_rear"
+    ],
     "secondaryMuscles": [
-      "mid_back"
+      "traps_mid",
+      "traps_lower"
     ],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0
@@ -958,10 +1094,13 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "cooldown",
     "trackingType": "duration",
     "equipment": "bodyweight",
-    "targetMuscle": "lower_back",
+    "primaryMuscles": [
+      "erectors"
+    ],
     "secondaryMuscles": [
-      "abs",
-      "mid_back"
+      "abs_upper",
+      "abs_lower",
+      "traps_mid"
     ],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0,
@@ -982,9 +1121,14 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "cooldown",
     "trackingType": "duration",
     "equipment": "bodyweight",
-    "targetMuscle": "lower_back",
+    "primaryMuscles": [
+      "erectors"
+    ],
     "secondaryMuscles": [
-      "lats",
+      "quadratus",
+      "lats_upper",
+      "lats_mid",
+      "lats_lower",
       "glutes"
     ],
     "loadStepKg": 0.0,
@@ -1006,10 +1150,12 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "category": "cooldown",
     "trackingType": "duration",
     "equipment": "bodyweight",
-    "targetMuscle": "chest",
+    "primaryMuscles": [
+      "chest_lower",
+      "chest_upper"
+    ],
     "secondaryMuscles": [
-      "upper_chest",
-      "front_delts"
+      "delt_front"
     ],
     "loadStepKg": 0.0,
     "minLoadKg": 0.0

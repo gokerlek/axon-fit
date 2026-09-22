@@ -7,8 +7,9 @@ import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { VideoEmbed } from '@/components/video-embed';
 import { getExercise } from '@/lib/exercises';
 import { formatKg } from '@/lib/format';
+import { summarizeMuscles } from '@/lib/muscles';
 import { describeRule, progressionOf, PROGRESSION_LABELS } from '@/lib/progression';
-import { CATEGORY_LABELS, EQUIPMENT_LABELS, MUSCLE_LABELS } from '@/lib/schemas/exercise';
+import { CATEGORY_LABELS, EQUIPMENT_LABELS } from '@/lib/schemas/exercise';
 import { ExerciseActions } from './exercise-actions';
 
 const TRACKING_LABELS = {
@@ -25,9 +26,9 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
 
   const rule = progressionOf(exercise);
   const summary: [string, string][] = [
-    ['Hedef kas', MUSCLE_LABELS[exercise.targetMuscle]],
+    ['Hedef kaslar', summarizeMuscles(exercise.primaryMuscles).join(', ')],
     ...(exercise.secondaryMuscles.length > 0
-      ? ([['Yardımcı kaslar', exercise.secondaryMuscles.map((muscle) => MUSCLE_LABELS[muscle]).join(', ')]] as [string, string][])
+      ? ([['Yardımcı kaslar', summarizeMuscles(exercise.secondaryMuscles).join(', ')]] as [string, string][])
       : []),
     ['Ekipman', EQUIPMENT_LABELS[exercise.equipment]],
     ['Tür', CATEGORY_LABELS[exercise.category]],
@@ -111,14 +112,14 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
             <CardHeader>
               <CardTitle>Çalışan kaslar</CardTitle>
               <CardDescription>
-                {exercise.targetMuscle === 'cardio'
+                {exercise.primaryMuscles.includes('cardio')
                   ? 'Kardiyo hareketi; haritada yalnız yardımcı kaslar görünür.'
                   : 'Hedef kas tam renkte, yardımcı kaslar açık tonda.'}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <ExerciseMuscleMap
-                targetMuscle={exercise.targetMuscle}
+                primaryMuscles={exercise.primaryMuscles}
                 secondaryMuscles={exercise.secondaryMuscles}
                 bodyClassName="h-72"
               />
