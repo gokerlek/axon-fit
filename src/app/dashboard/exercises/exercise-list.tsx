@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
-import { Heartbeat, ImageSquare, MagnifyingGlass, Plus, X, YoutubeLogo } from '@phosphor-icons/react';
+import { Heartbeat, MagnifyingGlass, Plus, X, YoutubeLogo } from '@phosphor-icons/react';
 import { MuscleMap } from '@/components/muscle-map/muscle-map';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -202,7 +202,6 @@ export function ExerciseList({ initial }: { initial: ExerciseWithSource[] }) {
                             <CardDescription className="flex items-center gap-1.5">
                               {MUSCLE_LABELS[item.targetMuscle]} · {EQUIPMENT_LABELS[item.equipment]}
                               {item.video ? <YoutubeLogo className="size-4 shrink-0" aria-label="videolu" /> : null}
-                              {item.image ? <ImageSquare className="size-4 shrink-0" aria-label="görselli" /> : null}
                             </CardDescription>
                             {item.source === 'custom' || onlySecondary ? (
                               <CardAction className="flex gap-1">

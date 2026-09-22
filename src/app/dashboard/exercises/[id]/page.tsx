@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Item, ItemContent, ItemGroup, ItemMedia, ItemTitle } from '@/components/ui/item';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { VideoEmbed } from '@/components/video-embed';
-import { exerciseImageUrl } from '@/lib/exercise-media';
 import { getExercise } from '@/lib/exercises';
 import { formatKg } from '@/lib/format';
 import { CATEGORY_LABELS, EQUIPMENT_LABELS, MUSCLE_LABELS } from '@/lib/schemas/exercise';
@@ -35,8 +34,6 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
       ? ([['Artış / taban', `${formatKg(exercise.loadIncrementKg)} / ${formatKg(exercise.minLoadKg)}`]] as [string, string][])
       : []),
   ];
-
-  const imageUrl = exerciseImageUrl(exercise);
 
   const origin =
     exercise.source === 'library' ? 'Hazır kütüphane' : exercise.overridesLibrary ? 'Senin sürümün' : 'Senin egzersizin';
@@ -77,23 +74,6 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
               </Table>
             </CardContent>
           </Card>
-
-          {imageUrl ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Görsel</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {/* Özel repo'dan uygulama üzerinden gelir; Next görsel iyileştiricisi oturum çerezini taşımaz. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={imageUrl}
-                  alt={exercise.title}
-                  className="max-h-[28rem] w-full rounded-lg border bg-muted object-contain"
-                />
-              </CardContent>
-            </Card>
-          ) : null}
 
           {exercise.cues.length > 0 ? (
             <Card>

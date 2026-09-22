@@ -41,10 +41,12 @@ function fillOpacity(level: number) {
 }
 
 type MuscleMapProps = {
-  /** Kasın ne kadar çalıştığı (0–1). Ör. hedef 1, yardımcı 0.3, ya da haftalık set yükü. */
+  /** Kasın ne kadar çalıştığı (0–1). Ör. hedef 1, yardımcı 0.3, ya da haftalık set yükü. Rengi bu belirler. */
   intensity?: MuscleIntensity;
-  /** Seçili kaslar (süzgeç). Tam renkle çizilir. */
+  /** Seçili kaslar (süzgeç, form). `intensity`'de tonu yoksa tam renkle çizilir. */
   selected?: readonly BodyMuscle[];
+  /** Tıklanamayan kaslar (ör. formda hedef kas); rengi yine `intensity`'den gelir. */
+  disabled?: readonly BodyMuscle[];
   /** Verilirse kaslar tıklanabilir olur (klavyeyle de). */
   onToggle?: (muscle: BodyMuscle) => void;
   /** Kas başına sayı; alt satırda yazar. Sayısı 0 olan kas soluk ve tıklanamaz. */
@@ -77,6 +79,7 @@ type MuscleMapProps = {
 export function MuscleMap({
   intensity,
   selected = [],
+  disabled,
   onToggle,
   counts,
   describe,
@@ -108,6 +111,7 @@ export function MuscleMap({
       label={layout === 'flip' ? label : `${label} — ${SIDE_LABELS[face]}`}
       intensity={intensity}
       selected={selected}
+      disabled={disabled}
       counts={counts}
       onToggle={onToggle}
       highlighted={hovered}
@@ -184,6 +188,7 @@ type BodyProps = {
   label: string;
   intensity?: MuscleIntensity;
   selected: readonly BodyMuscle[];
+  disabled?: readonly BodyMuscle[];
   counts?: Partial<Record<BodyMuscle, number>>;
   onToggle?: (muscle: BodyMuscle) => void;
   highlighted: BodyMuscle | null;
@@ -216,7 +221,7 @@ function nearestMuscle(x: number, y: number, svg: SVGSVGElement): BodyMuscle | n
 }
 
 /** Tek yüzün SVG'si. Her kas bir `g`; sol ve sağ birlikte yanar. */
-function Body({ side, label, intensity, selected, counts, onToggle, highlighted, onHighlight }: BodyProps) {
+function Body({ side, label, intensity, selected, disabled: locked, counts, onToggle, highlighted, onHighlight }: BodyProps) {
   const { neutral, groups } = SHAPES[side];
   const interactive = Boolean(onToggle);
 
@@ -249,8 +254,8 @@ function Body({ side, label, intensity, selected, counts, onToggle, highlighted,
 
       {groups.map(([muscle, paths]) => {
         const isSelected = selected.includes(muscle);
-        const level = isSelected ? 1 : (intensity?.[muscle] ?? 0);
-        const disabled = interactive && counts !== undefined && !counts[muscle];
+        const level = intensity?.[muscle] ?? (isSelected ? 1 : 0);
+        const disabled = interactive && ((counts !== undefined && !counts[muscle]) || Boolean(locked?.includes(muscle)));
         const clickable = interactive && !disabled;
         const isHighlighted = highlighted === muscle;
         const count = counts?.[muscle];

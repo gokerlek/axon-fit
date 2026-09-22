@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -8,13 +7,13 @@ import {
   FieldArray,
   Form,
   getDeepError,
+  getInput,
   insert,
   remove,
   setInput,
   useForm,
 } from "@formisch/react";
-import { ImageSquare, Plus, WarningCircle, X } from "@phosphor-icons/react";
-import { toast } from "sonner";
+import { Plus, WarningCircle, X } from "@phosphor-icons/react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -35,17 +34,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { VideoEmbed } from "@/components/video-embed";
-import { exerciseImageUrl } from "@/lib/exercise-media";
-import { ApiError, fetchJson } from "@/lib/query/errors";
+import { MuscleMap } from "@/components/muscle-map/muscle-map";
+import {
+  isBodyMuscle,
+  SECONDARY_INTENSITY,
+  type MuscleIntensity,
+} from "@/lib/muscles";
+import { fetchJson } from "@/lib/query/errors";
 import { applyFieldErrors } from "@/lib/query/field-errors";
 import { useServiceMutation } from "@/lib/query/use-service";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
-  EXERCISE_IMAGE_MAX_BYTES,
-  EXERCISE_IMAGE_TYPES,
   EQUIPMENT,
   EQUIPMENT_LABELS,
   MUSCLES,
@@ -79,133 +80,9 @@ const BLANK: ExerciseInput = {
   videoUrl: "",
 };
 
-/**
- * Düzenlemede kimlik ve görsel forma girmez (şemada yok); video, yapıştırılan
- * bağlantı olarak gösterilir.
- */
-function toInput({ id: _id, image: _image, video, ...rest }: Exercise): ExerciseInput {
+/** Düzenlemede kimlik forma girmez (şemada yok); video, yapıştırılan bağlantı olarak gösterilir. */
+function toInput({ id: _id, video, ...rest }: Exercise): ExerciseInput {
   return { ...rest, videoUrl: video ? videoUrl(video) : "" };
-}
-
-/** Görselde ne yapılacak: olduğu gibi kalsın, yenisi yüklensin ya da kaldırılsın. */
-type ImageChange =
-  | { kind: "keep" }
-  | { kind: "upload"; file: File }
-  | { kind: "remove" };
-
-/**
- * Görsel seçimi. Tür ve boyut tarayıcıda denetlenir (sunucu da denetler):
- * 1 MB'tan büyük görsel kabul edilmez. Dosya "Kaydet"te, egzersiz kaydedildikten
- * sonra yüklenir.
- */
-function ImageField({
-  currentUrl,
-  change,
-  onChange,
-  error,
-  onError,
-}: {
-  currentUrl: string | null;
-  change: ImageChange;
-  onChange: (change: ImageChange) => void;
-  error: string | null;
-  onError: (error: string | null) => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-
-  // Seçilen dosyanın önizlemesi; değişince ya da çıkınca bellekten bırakılır.
-  useEffect(() => {
-    if (change.kind !== "upload") return setPreview(null);
-    const url = URL.createObjectURL(change.file);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [change]);
-
-  const shown =
-    change.kind === "upload" ? preview : change.kind === "keep" ? currentUrl : null;
-
-  function pick(file: File | undefined) {
-    if (!file) return;
-    if (!EXERCISE_IMAGE_TYPES[file.type]) {
-      onError("Yalnız PNG, JPG ya da WebP seçebilirsin.");
-      return;
-    }
-    if (file.size > EXERCISE_IMAGE_MAX_BYTES) {
-      const mb = (file.size / 1024 / 1024).toLocaleString("tr-TR", {
-        maximumFractionDigits: 1,
-      });
-      onError(`Görsel ${mb} MB; en fazla 1 MB olabilir. Daha küçük bir görsel seç.`);
-      return;
-    }
-    onError(null);
-    onChange({ kind: "upload", file });
-  }
-
-  return (
-    <Field data-invalid={Boolean(error) || undefined}>
-      <FieldLabel htmlFor="image">Görsel</FieldLabel>
-      <div className="flex items-center gap-3">
-        {shown ? (
-          // Özel repo'dan uygulama üzerinden gelir; Next görsel iyileştiricisi oturum çerezini taşımaz.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={shown}
-            alt="Egzersiz görseli önizlemesi"
-            className="size-24 shrink-0 rounded-lg border object-cover"
-          />
-        ) : null}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => inputRef.current?.click()}
-          >
-            <ImageSquare data-icon="inline-start" />
-            {shown ? "Değiştir" : "Görsel seç"}
-          </Button>
-          {shown ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                onError(null);
-                onChange(currentUrl ? { kind: "remove" } : { kind: "keep" });
-              }}
-            >
-              Kaldır
-            </Button>
-          ) : null}
-          {change.kind !== "keep" && currentUrl ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => onChange({ kind: "keep" })}
-            >
-              Geri al
-            </Button>
-          ) : null}
-        </div>
-      </div>
-      <input
-        ref={inputRef}
-        id="image"
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        hidden
-        onChange={(event) => {
-          pick(event.target.files?.[0]);
-          // Aynı dosya yeniden seçilebilsin.
-          event.target.value = "";
-        }}
-      />
-      <FieldDescription>PNG, JPG ya da WebP; en fazla 1 MB.</FieldDescription>
-      <FieldError>{error}</FieldError>
-    </Field>
-  );
 }
 
 /** Açılır liste: Base UI `items` ile seçili değerin Türkçe etiketini gösterir. */
@@ -284,9 +161,6 @@ function MuscleSelect({
   );
 }
 
-/** Yardımcı kaslar bölge bölge; kardiyo yardımcı kas olamaz. */
-const SECONDARY_GROUPS = MUSCLE_GROUPS.filter((group) => group.id !== "other");
-
 /**
  * Egzersiz ekleme/düzenleme formu — kendi sayfasında (modal değil, SPEC §6).
  * İpuçları `FieldArray` ile satır satır. Kaydedince PT'nin repo'sundaki
@@ -298,35 +172,16 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
     schema: exerciseFormSchema,
     initialInput: editing ? toInput(editing) : BLANK,
   });
-  const [image, setImage] = useState<ImageChange>({ kind: "keep" });
-  const [imageError, setImageError] = useState<string | null>(null);
-  const currentImageUrl = editing ? exerciseImageUrl(editing) : null;
 
   const save = useServiceMutation({
-    fn: async (values: ExerciseInput) => {
+    fn: (values: ExerciseInput) => {
       const { videoUrl: link, ...rest } = values;
       const video = link ? (parseVideoUrl(link) ?? undefined) : undefined;
-      const { id } = await fetchJson<{ id: string }>("/api/exercises", {
+      return fetchJson<{ id: string }>("/api/exercises", {
         method: "POST",
         // Yeni egzersizde kimlik sunucuda başlıktan üretilir; düzenlemede mevcut kimlik gider.
         body: JSON.stringify({ ...rest, video, ...(editing ? { id: editing.id } : {}) }),
       });
-
-      // Görsel ayrı uca gider. Egzersiz kaydedildiyse görsel hatası kaydı geri almaz:
-      // kullanıcı düzenleme sayfasına düşer ve yalnız görseli yeniden dener.
-      try {
-        if (image.kind === "upload") {
-          const body = new FormData();
-          body.set("image", image.file);
-          await fetchJson(`/api/exercises/${id}/image`, { method: "POST", body });
-        } else if (image.kind === "remove") {
-          await fetchJson(`/api/exercises/${id}/image`, { method: "DELETE" });
-        }
-      } catch (error) {
-        const message = error instanceof ApiError ? error.message : "Görsel yüklenemedi.";
-        return { id, imageFailed: message };
-      }
-      return { id, imageFailed: null };
     },
     invalidate: [["exercises"]],
     notify: {
@@ -334,13 +189,8 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
     },
     onError: (error) => applyFieldErrors(form as never, error),
     // Yeni kayıtta sunucunun ürettiği kimlikle detay sayfasına geçilir.
-    onSuccess: ({ id, imageFailed }) => {
-      if (imageFailed) {
-        toast.error(`Egzersiz kaydedildi ama görsel yüklenemedi: ${imageFailed}`);
-        router.push(`/dashboard/exercises/${id}/edit`);
-      } else {
-        router.push(`/dashboard/exercises/${id}`);
-      }
+    onSuccess: ({ id }) => {
+      router.push(`/dashboard/exercises/${id}`);
       router.refresh();
     },
   });
@@ -471,14 +321,6 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
             );
           }}
         </FormField>
-
-        <ImageField
-          currentUrl={currentImageUrl}
-          change={image}
-          onChange={setImage}
-          error={imageError}
-          onError={setImageError}
-        />
       </div>
 
       {/* Sağ sütun: sınıflandırma — kas, ekipman, tür, kayıt, yük. */}
@@ -491,9 +333,19 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
                 <MuscleSelect
                   id="targetMuscle"
                   value={field.input}
-                  onChange={(value) =>
-                    setInput(form, { path: ["targetMuscle"], input: value })
-                  }
+                  onChange={(value) => {
+                    setInput(form, { path: ["targetMuscle"], input: value });
+                    // Hedef olan kas aynı anda yardımcı olamaz.
+                    const secondary = (getInput(form, {
+                      path: ["secondaryMuscles"],
+                    }) ?? []) as Muscle[];
+                    if (secondary.includes(value)) {
+                      setInput(form, {
+                        path: ["secondaryMuscles"],
+                        input: secondary.filter((muscle) => muscle !== value),
+                      });
+                    }
+                  }}
                 />
               </Field>
             )}
@@ -545,54 +397,84 @@ export function ExerciseForm({ editing }: { editing: Exercise | null }) {
           </FormField>
         </div>
 
-        <FormField of={form} path={["secondaryMuscles"]}>
-          {(field) => {
-            const selected = (field.input ?? []) as Muscle[];
-            return (
-              <Field data-invalid={Boolean(field.errors) || undefined}>
-                <FieldLabel>Yardımcı kaslar</FieldLabel>
-                <div className="flex flex-col gap-3">
-                  {SECONDARY_GROUPS.map((group) => (
-                    <div key={group.id} className="flex flex-col gap-1.5">
-                      <span className="text-xs text-muted-foreground">
-                        {group.label}
-                      </span>
-                      <ToggleGroup
-                        multiple
-                        variant="outline"
-                        size="sm"
-                        className="flex-wrap justify-start"
-                        aria-label={`Yardımcı kaslar: ${group.label}`}
-                        value={selected.filter((muscle) =>
-                          group.muscles.includes(muscle),
-                        )}
-                        onValueChange={(value) => {
-                          // Bu bölgenin seçimi değişti; diğer bölgeler olduğu gibi kalır.
-                          const next = new Set([
-                            ...selected.filter(
-                              (muscle) => !group.muscles.includes(muscle),
-                            ),
-                            ...(value as Muscle[]),
-                          ]);
-                          setInput(form, {
-                            path: ["secondaryMuscles"],
-                            input: MUSCLES.filter((muscle) => next.has(muscle)),
-                          });
-                        }}
+        <FormField of={form} path={["targetMuscle"]}>
+          {(targetField) => (
+            <FormField of={form} path={["secondaryMuscles"]}>
+              {(field) => {
+                const target = targetField.input as Muscle | undefined;
+                const bodyTarget = target && isBodyMuscle(target) ? target : null;
+                // Kardiyo yardımcı kas olamaz; haritada yeri olanlar seçilir.
+                const selected = ((field.input ?? []) as Muscle[]).filter(isBodyMuscle);
+                const intensity: MuscleIntensity = Object.fromEntries(
+                  selected.map((muscle) => [muscle, SECONDARY_INTENSITY]),
+                );
+                if (bodyTarget) intensity[bodyTarget] = 1;
+                const set = (next: Muscle[]) =>
+                  setInput(form, {
+                    path: ["secondaryMuscles"],
+                    input: MUSCLES.filter((muscle) => next.includes(muscle)),
+                  });
+
+                return (
+                  <Field data-invalid={Boolean(field.errors) || undefined}>
+                    <FieldLabel>Yardımcı kaslar</FieldLabel>
+                    <FieldDescription>
+                      Haritada dokunarak seç. Hedef kas tam renkte, yardımcılar
+                      açık tonda.
+                    </FieldDescription>
+                    <MuscleMap
+                      layout="split"
+                      intensity={intensity}
+                      selected={selected}
+                      disabled={bodyTarget ? [bodyTarget] : []}
+                      onToggle={(muscle) =>
+                        set(
+                          selected.includes(muscle)
+                            ? selected.filter((item) => item !== muscle)
+                            : [...selected, muscle],
+                        )
+                      }
+                      describe={(muscle) =>
+                        `${MUSCLE_LABELS[muscle]} · ${
+                          muscle === bodyTarget
+                            ? "hedef kas"
+                            : selected.includes(muscle)
+                              ? "yardımcı"
+                              : "seçmek için dokun"
+                        }`
+                      }
+                      hint="Yardımcı kası seçmek için dokun"
+                      bodyClassName="h-[22rem] lg:h-[26rem]"
+                      label="Yardımcı kaslar"
+                    />
+                    {selected.length > 0 ? (
+                      <div
+                        className="flex flex-wrap gap-1.5"
+                        aria-label="Seçili yardımcı kaslar"
                       >
-                        {group.muscles.map((muscle) => (
-                          <ToggleGroupItem key={muscle} value={muscle}>
+                        {selected.map((muscle) => (
+                          <Button
+                            key={muscle}
+                            type="button"
+                            variant="secondary"
+                            size="xs"
+                            onClick={() =>
+                              set(selected.filter((item) => item !== muscle))
+                            }
+                            aria-label={`${MUSCLE_LABELS[muscle]} yardımcı kasını kaldır`}
+                          >
                             {MUSCLE_LABELS[muscle]}
-                          </ToggleGroupItem>
+                            <X data-icon="inline-end" />
+                          </Button>
                         ))}
-                      </ToggleGroup>
-                    </div>
-                  ))}
-                </div>
-                <FieldError>{field.errors?.[0]}</FieldError>
-              </Field>
-            );
-          }}
+                      </div>
+                    ) : null}
+                    <FieldError>{field.errors?.[0]}</FieldError>
+                  </Field>
+                );
+              }}
+            </FormField>
+          )}
         </FormField>
 
         <div className="grid gap-4 sm:grid-cols-2">
