@@ -1,5 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { ImageSquare } from '@phosphor-icons/react/dist/ssr';
+import { DeviceKindIcon } from '@/components/device-kind-icon';
+import { ImagePlaceholder } from '@/components/image-placeholder';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -67,7 +70,11 @@ export default async function DeviceDetailPage({ params }: { params: Promise<{ i
             {imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={imageUrl} alt={device.name} className="max-h-72 w-full rounded-lg border bg-muted object-contain" />
-            ) : null}
+            ) : (
+              <ImagePlaceholder className="h-40 w-full">
+                <DeviceKindIcon kind={device.kind} className="size-10" />
+              </ImagePlaceholder>
+            )}
             <Table>
               <TableBody>
                 {rows.map(([label, value]) => (
@@ -122,13 +129,17 @@ export default async function DeviceDetailPage({ params }: { params: Promise<{ i
                       variant="outline"
                       size="sm"
                       render={<Link href={`/dashboard/attachments/${attachment.id}/edit`} />}>
-                      {attachment.imageUrl ? (
-                        <ItemMedia variant="image">
-                          {/* Özel repo'dan uygulama üzerinden gelir; Next görsel iyileştiricisi oturum çerezini taşımaz. */}
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <ItemMedia variant="image">
+                        {attachment.imageUrl ? (
+                          // Özel repo'dan uygulama üzerinden gelir; Next görsel iyileştiricisi oturum çerezini taşımaz.
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img src={attachment.imageUrl} alt="" className="size-full object-cover" />
-                        </ItemMedia>
-                      ) : null}
+                        ) : (
+                          <ImagePlaceholder className="size-full">
+                            <ImageSquare className="size-4" />
+                          </ImagePlaceholder>
+                        )}
+                      </ItemMedia>
                       <ItemContent>
                         <ItemTitle>{attachment.name}</ItemTitle>
                       </ItemContent>

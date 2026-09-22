@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { Plus } from '@phosphor-icons/react/dist/ssr';
+import { DeviceKindIcon } from '@/components/device-kind-icon';
+import { ImagePlaceholder } from '@/components/image-placeholder';
 import { PageHeader } from '@/components/page-header';
 import { TrainingTabs } from '../training-tabs';
 import { Badge } from '@/components/ui/badge';
@@ -48,37 +50,39 @@ export default async function DevicesPage() {
           <section key={kind} className="flex flex-col gap-3" aria-label={DEVICE_KIND_LABELS[kind]}>
             <h2 className="text-sm font-medium text-muted-foreground">{DEVICE_KIND_LABELS[kind]}</h2>
             <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {group.map((device) => (
-                <li key={device.id}>
-                  <Link
-                    href={`/dashboard/devices/${device.id}`}
-                    className="block h-full rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                    <Card size="sm" className="h-full transition-colors hover:bg-muted/40">
-                      <CardHeader>
-                        {deviceImageUrl(device) ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={deviceImageUrl(device) as string}
-                            alt=""
-                            loading="lazy"
-                            className="mb-2 h-28 w-full rounded-lg border bg-muted object-cover"
-                          />
-                        ) : null}
-                        <CardTitle>{device.name}</CardTitle>
-                        <CardDescription>{describeDeviceLoads(device)}</CardDescription>
-                        {device.source === 'custom' ? (
-                          <CardAction>
-                            <Badge variant="secondary">senin</Badge>
-                          </CardAction>
-                        ) : null}
-                      </CardHeader>
-                      <CardFooter className="text-xs text-muted-foreground">
-                        <span className="tabular-nums">{usage.get(device.id) ?? 0}</span>&nbsp;egzersiz
-                      </CardFooter>
-                    </Card>
-                  </Link>
-                </li>
-              ))}
+              {group.map((device) => {
+                const imageUrl = deviceImageUrl(device);
+                return (
+                  <li key={device.id}>
+                    <Link
+                      href={`/dashboard/devices/${device.id}`}
+                      className="block h-full rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+                      <Card size="sm" className="h-full transition-colors hover:bg-muted/40">
+                        <CardHeader>
+                          {imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={imageUrl} alt="" loading="lazy" className="mb-2 h-28 w-full rounded-lg border bg-muted object-cover" />
+                          ) : (
+                            <ImagePlaceholder className="mb-2 h-28 w-full">
+                              <DeviceKindIcon kind={device.kind} className="size-8" />
+                            </ImagePlaceholder>
+                          )}
+                          <CardTitle>{device.name}</CardTitle>
+                          <CardDescription>{describeDeviceLoads(device)}</CardDescription>
+                          {device.source === 'custom' ? (
+                            <CardAction>
+                              <Badge variant="secondary">senin</Badge>
+                            </CardAction>
+                          ) : null}
+                        </CardHeader>
+                        <CardFooter className="text-xs text-muted-foreground">
+                          <span className="tabular-nums">{usage.get(device.id) ?? 0}</span>&nbsp;egzersiz
+                        </CardFooter>
+                      </Card>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         );

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ImageSquare, PencilSimple, Plus } from '@phosphor-icons/react/dist/ssr';
+import { ImagePlaceholder } from '@/components/image-placeholder';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -61,9 +62,9 @@ export default async function AttachmentsPage() {
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={imageUrl} alt="" loading="lazy" className="mb-2 h-28 w-full rounded-lg border bg-muted object-cover" />
                     ) : (
-                      <div className="mb-2 flex h-28 w-full items-center justify-center rounded-lg border border-dashed bg-muted/40">
-                        <ImageSquare className="size-6 text-muted-foreground" weight="fill" />
-                      </div>
+                      <ImagePlaceholder className="mb-2 h-28 w-full">
+                        <ImageSquare className="size-8" weight="fill" />
+                      </ImagePlaceholder>
                     )}
                     <CardTitle>{attachment.name}</CardTitle>
                     <CardDescription>
