@@ -223,7 +223,6 @@ export function SetupForm({
                         >
                           {selected ? (
                             <Check
-                              weight="bold"
                               className="size-4"
                               aria-hidden
                             />

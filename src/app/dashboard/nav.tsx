@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { Barbell, ListChecks, SquaresFour, Toolbox, UsersThree } from '@phosphor-icons/react';
+import { Barbell, ListChecks, SquaresFour, StackSimple, UsersThree } from '@phosphor-icons/react';
 import { Dock, type DockEntry } from '@/components/dock/dock';
 
 const ITEMS: Omit<DockEntry, 'active'>[] = [
@@ -9,7 +9,7 @@ const ITEMS: Omit<DockEntry, 'active'>[] = [
   { href: '/dashboard/clients', label: 'Danışanlar', icon: <UsersThree />, disabled: true },
   { href: '/dashboard/templates', label: 'Şablonlar', icon: <ListChecks />, disabled: true },
   { href: '/dashboard/exercises', label: 'Egzersizler', icon: <Barbell /> },
-  { href: '/dashboard/devices', label: 'Cihazlar', icon: <Toolbox /> },
+  { href: '/dashboard/devices', label: 'Cihazlar', icon: <StackSimple /> },
 ];
 // Ayarlar ve çıkış dock'ta değil, sağ üstteki kullanıcı menüsünde (user-menu.tsx).
 

@@ -32,7 +32,7 @@ export function UserMenu({ login, appName }: { login: string; appName: string })
         <Avatar size="lg">
           <AvatarImage src={`https://github.com/${encodeURIComponent(login)}.png?size=80`} alt="" />
           <AvatarFallback>
-            <User weight="bold" />
+            <User />
           </AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>

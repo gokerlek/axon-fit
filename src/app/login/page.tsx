@@ -44,7 +44,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <CardContent className="flex flex-col gap-4">
             {error ? (
               <Alert variant="destructive">
-                <WarningCircle />
+                <WarningCircle weight="fill" />
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             ) : null}
@@ -52,7 +52,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             {github ? (
               <div className="flex flex-col gap-2">
                 <Button size="lg" className="h-11 w-full" nativeButton={false} render={<a href="/api/auth/github" />}>
-                  <GithubLogo data-icon="inline-start" weight="bold" />
+                  <GithubLogo data-icon="inline-start" weight="fill" />
                   GitHub ile devam et
                 </Button>
                 <p className="text-center text-xs text-muted-foreground">

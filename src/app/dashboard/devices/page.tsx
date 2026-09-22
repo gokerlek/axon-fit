@@ -32,7 +32,7 @@ export default async function DevicesPage() {
         }
         actions={
           <Button nativeButton={false} render={<Link href="/dashboard/devices/new" />}>
-            <Plus data-icon="inline-start" />
+            <Plus data-icon="inline-start" weight="fill" />
             Yeni cihaz
           </Button>
         }
