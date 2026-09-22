@@ -6,7 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from '@/components/ui/item';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { DEVICE_KIND_LABELS, describeDeviceLoads, deviceLoads, effectiveLoadKg } from '@/lib/device-loads';
-import { attachmentImageUrl, deviceImageUrl } from '@/lib/device-media';
+import { attachmentImageUrl } from '@/lib/attachment-media';
+import { listAttachments } from '@/lib/attachments';
+import { deviceImageUrl } from '@/lib/device-media';
 import { getDevice } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
 import { formatKg } from '@/lib/format';
@@ -16,7 +18,7 @@ import { DeviceActions } from './device-actions';
 /** Cihaz detayı — kendi sayfası (modal değil). */
 export default async function DeviceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [device, exercises] = await Promise.all([getDevice(id), listExercises()]);
+  const [device, exercises, pool] = await Promise.all([getDevice(id), listExercises(), listAttachments()]);
   if (!device) notFound();
 
   const used = exercises.filter((exercise) => exercise.deviceId === id);
@@ -40,10 +42,11 @@ export default async function DeviceDetailPage({ params }: { params: Promise<{ i
 
   const origin = device.source === 'library' ? 'Hazır katalog' : device.overridesLibrary ? 'Senin sürümün' : 'Senin cihazın';
   const imageUrl = deviceImageUrl(device);
-  const attachments = (device.attachments ?? []).map((attachment) => ({
-    name: attachment.name,
-    imageUrl: attachmentImageUrl(device.id, attachment),
-  }));
+  // Aparatlar havuzda durur; cihazda yalnız kimlikleri yazılı. Havuzdan silinmiş kimlik düşer.
+  const attachments = (device.attachments ?? []).flatMap((attachmentId) => {
+    const found = pool.find((item) => item.id === attachmentId);
+    return found ? [{ id: found.id, name: found.name, imageUrl: attachmentImageUrl(found) }] : [];
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -104,13 +107,21 @@ export default async function DeviceDetailPage({ params }: { params: Promise<{ i
               <CardHeader>
                 <CardTitle>Aparatlar</CardTitle>
                 <CardDescription>
-                  Bu cihazdaki tutamaçlar. Aparat ve fotoğrafı eklemek için cihazı düzenle.
+                  Bu cihaza takılabilenler. Aparatın adı ve fotoğrafı{' '}
+                  <Link href="/dashboard/attachments" className="underline underline-offset-4">
+                    havuzda
+                  </Link>{' '}
+                  durur; hangilerinin takıldığını cihazı düzenleyerek seçersin.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <ItemGroup className="gap-2">
                   {attachments.map((attachment) => (
-                    <Item key={attachment.name} variant="outline" size="sm">
+                    <Item
+                      key={attachment.id}
+                      variant="outline"
+                      size="sm"
+                      render={<Link href={`/dashboard/attachments/${attachment.id}/edit`} />}>
                       {attachment.imageUrl ? (
                         <ItemMedia variant="image">
                           {/* Özel repo'dan uygulama üzerinden gelir; Next görsel iyileştiricisi oturum çerezini taşımaz. */}

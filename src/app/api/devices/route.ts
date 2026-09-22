@@ -3,8 +3,7 @@ import * as v from 'valibot';
 import { DEVICE_LIBRARY } from '@/data/device-library';
 import { listDevices, readCustomDevices, writeCustomDevices } from '@/lib/devices';
 import { slugify } from '@/lib/exercises';
-import { appRepo, GithubError } from '@/lib/github/client';
-import { deleteFile, getFileSha } from '@/lib/github/files';
+import { GithubError } from '@/lib/github/client';
 import { takesAttachments } from '@/lib/device-loads';
 import { deviceSaveSchema, needsBase, needsMax, needsStep, needsWeights, takesAddOns, type Device } from '@/lib/schemas/device';
 import { readSession } from '@/lib/session';
@@ -53,22 +52,9 @@ export async function POST(request: Request) {
     ...(input.notes ? { notes: input.notes } : {}),
   };
 
-  // Aynı ad iki kez girilmesin (büyük/küçük harf farkı da aynı aparattır).
-  const attachmentNames = takesAttachments(kind)
-    ? [...new Map((input.attachments ?? []).map((item) => [item.name.toLocaleLowerCase('tr'), item.name])).values()]
-    : [];
-  /** Aparat fotoğrafları yalnız görsel ucundan yazılır; adı duran aparatınki korunur. */
-  const withAttachments = (stored: Device | undefined): Omit<Device, 'id'> => {
-    const images = new Map((stored?.attachments ?? []).flatMap((item) => (item.image ? [[item.name, item.image]] : [])));
-    if (attachmentNames.length === 0) return clean;
-    return {
-      ...clean,
-      attachments: attachmentNames.map((name) => {
-        const image = images.get(name);
-        return { name, ...(image ? { image } : {}) };
-      }),
-    };
-  };
+  // Havuzdaki aparat kimlikleri; aynısı iki kez girilmesin.
+  const attachments = takesAttachments(kind) ? [...new Set(input.attachments ?? [])] : [];
+  const withAttachments = attachments.length > 0 ? { attachments } : {};
 
   try {
     const { items, sha } = await readCustomDevices();
@@ -79,26 +65,14 @@ export async function POST(request: Request) {
       }
       // Görsel yalnız görsel ucundan yazılır; kayıtlı olan korunur.
       const stored = items[index] ?? DEVICE_LIBRARY.find((item) => item.id === requestedId);
-      const entry = { ...withAttachments(stored), id: requestedId, ...(stored?.image ? { image: stored.image } : {}) };
+      const entry = { ...clean, ...withAttachments, id: requestedId, ...(stored?.image ? { image: stored.image } : {}) };
       const next = index >= 0 ? items.map((item, i) => (i === index ? entry : item)) : [...items, entry];
       await writeCustomDevices(next, `Cihaz güncellendi: ${clean.name}`, sha);
-      // Listeden çıkan aparatların fotoğrafları repo'da artıkta kalmasın.
-      const kept = new Set(attachmentNames);
-      const orphans = (stored?.attachments ?? []).flatMap((item) =>
-        item.image && !kept.has(item.name) ? [item.image] : [],
-      );
-      if (orphans.length > 0) {
-        const repo = appRepo();
-        for (const path of orphans) {
-          const fileSha = await getFileSha(repo, path).catch(() => null);
-          if (fileSha) await deleteFile(repo, path, { sha: fileSha, message: 'Aparat görseli kaldırıldı' }).catch(() => undefined);
-        }
-      }
       return NextResponse.json({ id: requestedId });
     }
     const taken = new Set([...items.map((item) => item.id), ...DEVICE_LIBRARY.map((item) => item.id)]);
     const id = slugify(clean.name, taken);
-    await writeCustomDevices([...items, { ...withAttachments(undefined), id }], `Cihaz eklendi: ${clean.name}`, sha);
+    await writeCustomDevices([...items, { ...clean, ...withAttachments, id }], `Cihaz eklendi: ${clean.name}`, sha);
     return NextResponse.json({ id });
   } catch (error) {
     return failed(error, 'Cihaz kaydedilemedi.');

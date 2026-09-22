@@ -9,10 +9,11 @@ export const TRAINING_SECTIONS = [
   { href: '/dashboard/templates', label: 'Şablonlar', ready: false },
   { href: '/dashboard/exercises', label: 'Egzersizler', ready: true },
   { href: '/dashboard/devices', label: 'Cihazlar', ready: true },
+  { href: '/dashboard/attachments', label: 'Aparatlar', ready: true },
 ] as const;
 
 /**
- * Antrenman bölümünün sekmeleri: Şablonlar · Egzersizler · Cihazlar. Her sekme kendi
+ * Antrenman bölümünün sekmeleri: Şablonlar · Egzersizler · Cihazlar · Aparatlar. Her sekme kendi
  * sayfasıdır (adres değişir, geri tuşu çalışır). Şablonlar Faz 4'e kadar pasif.
  */
 export function TrainingTabs() {

@@ -1,5 +1,7 @@
 import * as v from 'valibot';
-import { ATTACHMENTS_MAX, ATTACHMENT_NAME_MAX, DEVICE_KINDS, PULLEY_RATIOS, toAttachment, type DeviceKind } from '@/lib/device-loads';
+import { DEVICE_KINDS, PULLEY_RATIOS, type DeviceKind } from '@/lib/device-loads';
+import { IMAGE_MAX_BYTES, IMAGE_TYPES } from '@/lib/image';
+import { attachmentIdSchema, attachmentRefOf, ATTACHMENTS_MAX } from '@/lib/schemas/attachment';
 
 /**
  * Cihaz şeması — sunucu ve istemci ortak.
@@ -23,13 +25,9 @@ export const needsMax = (kind: DeviceKind) => STACK_KINDS.includes(kind);
 export const takesAddOns = (kind: DeviceKind) => STACK_KINDS.includes(kind);
 export const needsWeights = (kind: DeviceKind) => SET_KINDS.includes(kind);
 
-/** Cihaz görseli: PNG, JPG, WebP; en fazla 1 MB. SVG yok (betik taşıyabilir). */
-export const DEVICE_IMAGE_TYPES: Record<string, 'png' | 'jpg' | 'webp'> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/webp': 'webp',
-};
-export const DEVICE_IMAGE_MAX_BYTES = 1024 * 1024;
+/** Cihaz görseli için görsel kuralları (aparat fotoğrafıyla ortak). */
+export const DEVICE_IMAGE_TYPES = IMAGE_TYPES;
+export const DEVICE_IMAGE_MAX_BYTES = IMAGE_MAX_BYTES;
 
 /** Ara ağırlık seçenekleri (çoğu makinede takılan küçük ek ağırlıklar). */
 export const ADD_ON_OPTIONS = [0.5, 1, 1.25, 1.75, 2, 2.5, 5] as const;
@@ -45,24 +43,8 @@ const deviceFields = {
   maxKg: v.optional(kg(1000)),
   addOnsKg: v.optional(v.pipe(v.array(v.pipe(v.number(), v.minValue(0.25), v.maxValue(20))), v.maxLength(4, 'En fazla 4 ara ağırlık.'))),
   pulleyRatio: v.optional(v.picklist(PULLEY_RATIOS, 'Makara oranını seç.')),
-  /** Bu cihazdaki aparatlar: ad (PT kendi aparatını ekleyebilir) ve isteğe bağlı fotoğraf. */
-  attachments: v.optional(
-    v.pipe(
-      v.array(
-        v.object({
-          name: v.pipe(
-            v.string(),
-            v.trim(),
-            v.minLength(1, 'Aparat adı boş olamaz.'),
-            v.maxLength(ATTACHMENT_NAME_MAX, `En fazla ${ATTACHMENT_NAME_MAX} karakter.`),
-          ),
-          /** `media/devices/<cihaz>-<aparat>-<özet>.<uzantı>`; yalnız görsel ucu yazar. */
-          image: v.optional(v.pipe(v.string(), v.regex(/^media\/devices\/[a-z0-9-]+\.(png|jpg|webp)$/))),
-        }),
-      ),
-      v.maxLength(ATTACHMENTS_MAX, `En fazla ${ATTACHMENTS_MAX} aparat.`),
-    ),
-  ),
+  /** Bu cihaza takılabilen aparatlar: havuzdaki kimlikler (`data/attachments.json`). */
+  attachments: v.optional(v.pipe(v.array(attachmentIdSchema), v.maxLength(ATTACHMENTS_MAX, `En fazla ${ATTACHMENTS_MAX} aparat.`))),
   weightsKg: v.optional(v.pipe(v.array(kg(200)), v.maxLength(60, 'En fazla 60 ağırlık.'))),
   notes: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(300, 'En fazla 300 karakter.'))),
   /** Görselin uygulama repo'sundaki yolu (`media/devices/<id>-<özet>.<uzantı>`). Yalnız görsel ucu yazar. */
@@ -125,12 +107,12 @@ export const deviceSaveSchema = v.pipe(
   v.forward(v.partialCheck([['kind'], ['baseKg'], ['stepKg'], ['maxKg'], ['weightsKg']], check('weightsKg'), MESSAGES.weightsKg), ['weightsKg']),
 );
 
-/** Eski kayıtlarda aparat sabit bir kimlikti ya da düz metindi; kayda çevrilir. */
+/** Eski kayıtlarda aparat cihazın içinde ad ya da kayıttı; havuz kimliğine çevrilir. */
 function migrateStoredDevice(input: unknown): unknown {
   if (!input || typeof input !== 'object') return input;
   const item = input as Record<string, unknown>;
   return Array.isArray(item.attachments)
-    ? { ...item, attachments: item.attachments.map(toAttachment).filter(Boolean) }
+    ? { ...item, attachments: [...new Set(item.attachments.map(attachmentRefOf).filter(Boolean))] }
     : item;
 }
 

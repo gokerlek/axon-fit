@@ -4,39 +4,35 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Field as FormField, Form, getDeepError, setInput, useForm } from '@formisch/react';
-import { ImageSquare, Plus, WarningCircle, X } from '@phosphor-icons/react';
+import { Check, ImageSquare, Plus, WarningCircle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
+import { ImageField, KEEP, type ImageChange } from '@/components/image-field';
 import { LabeledSelect } from '@/components/labeled-select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
-  ATTACHMENTS_MAX,
-  ATTACHMENT_NAME_MAX,
-  ATTACHMENT_SUGGESTIONS,
   DEVICE_KIND_LABELS,
   deviceLoads,
   PULLEY_RATIOS,
   takesAttachments,
-  type DeviceAttachment,
   type DeviceKind,
   type DeviceLoadSettings,
   type PulleyRatio,
 } from '@/lib/device-loads';
-import { attachmentImageUrl, deviceImageUrl } from '@/lib/device-media';
+import { attachmentImageUrl } from '@/lib/attachment-media';
+import { deviceImageUrl } from '@/lib/device-media';
+import { ATTACHMENTS_MAX, type Attachment } from '@/lib/schemas/attachment';
 import { ApiError, fetchJson } from '@/lib/query/errors';
 import { applyFieldErrors } from '@/lib/query/field-errors';
 import { useServiceMutation } from '@/lib/query/use-service';
 import {
   ADD_ON_OPTIONS,
-  DEVICE_IMAGE_MAX_BYTES,
-  DEVICE_IMAGE_TYPES,
   deviceFormSchema,
   needsBase,
   needsMax,
@@ -85,312 +81,77 @@ function parseWeights(text: string): number[] {
     .filter((value) => Number.isFinite(value) && value > 0);
 }
 
-/** Görselde ne yapılacak: olduğu gibi kalsın, yenisi yüklensin ya da kaldırılsın. */
-type ImageChange = { kind: 'keep' } | { kind: 'upload'; file: File } | { kind: 'remove' };
-
-/** Değişiklik yokken hep aynı nesne: önizleme etkisi boş yere yeniden çalışmasın. */
-const KEEP: ImageChange = { kind: 'keep' };
-
-/** Seçilen dosya kurallara uymuyorsa nedeni; uyuyorsa `null`. Sunucu da denetler. */
-function imageProblem(file: File): string | null {
-  if (!DEVICE_IMAGE_TYPES[file.type]) return 'Yalnız PNG, JPG ya da WebP seçebilirsin.';
-  if (file.size > DEVICE_IMAGE_MAX_BYTES) {
-    const mb = (file.size / 1024 / 1024).toLocaleString('tr-TR', { maximumFractionDigits: 1 });
-    return `Görsel ${mb} MB; en fazla 1 MB olabilir. Daha küçük bir görsel seç.`;
-  }
-  return null;
-}
-
-/** Seçilen dosyanın önizleme adresi (bellekten; bırakınca geri verilir). */
-function usePreview(change: ImageChange): string | null {
-  const [preview, setPreview] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (change.kind !== 'upload') return setPreview(null);
-    const url = URL.createObjectURL(change.file);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [change]);
-
-  return change.kind === 'upload' ? preview : null;
-}
-
-/**
- * Cihaz görseli: danışan salonda makineyi tanısın diye tek görsel. Tür ve boyut
- * tarayıcıda da denetlenir (sunucu da denetler): 1 MB'tan büyüğü kabul edilmez.
- * Dosya "Kaydet"te, cihaz kaydedildikten sonra yüklenir.
- */
-function ImageField({
-  currentUrl,
-  change,
-  onChange,
-  error,
-  onError,
-}: {
-  currentUrl: string | null;
-  change: ImageChange;
-  onChange: (change: ImageChange) => void;
-  error: string | null;
-  onError: (error: string | null) => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const preview = usePreview(change);
-  const shown = change.kind === 'upload' ? preview : change.kind === 'keep' ? currentUrl : null;
-
-  function pick(file: File | undefined) {
-    if (!file) return;
-    const problem = imageProblem(file);
-    if (problem) return onError(problem);
-    onError(null);
-    onChange({ kind: 'upload', file });
-  }
-
-  return (
-    <Field data-invalid={Boolean(error) || undefined}>
-      <FieldLabel htmlFor="image">Görsel</FieldLabel>
-      <div className="flex items-center gap-3">
-        {shown ? (
-          // Özel repo'dan uygulama üzerinden gelir; Next görsel iyileştiricisi oturum çerezini taşımaz.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={shown} alt="Cihaz görseli önizlemesi" className="size-24 shrink-0 rounded-lg border object-cover" />
-        ) : null}
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
-            <ImageSquare data-icon="inline-start" />
-            {shown ? 'Değiştir' : 'Görsel seç'}
-          </Button>
-          {shown ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                onError(null);
-                onChange(currentUrl ? { kind: 'remove' } : { kind: 'keep' });
-              }}>
-              Kaldır
-            </Button>
-          ) : null}
-          {change.kind !== 'keep' && currentUrl ? (
-            <Button type="button" variant="ghost" size="sm" onClick={() => onChange({ kind: 'keep' })}>
-              Geri al
-            </Button>
-          ) : null}
-        </div>
-      </div>
-      <input
-        ref={inputRef}
-        id="image"
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        hidden
-        onChange={(event) => {
-          pick(event.target.files?.[0]);
-          event.target.value = '';
-        }}
-      />
-      <FieldDescription>Salonda tanınsın diye makinenin fotoğrafı. PNG, JPG ya da WebP; en fazla 1 MB.</FieldDescription>
-      <FieldError>{error}</FieldError>
-    </Field>
-  );
-}
-
 type FormStart = Partial<DeviceInput> & Pick<DeviceInput, 'name' | 'kind'>;
 
 const BLANK: FormStart = { name: '', kind: 'selectorized', ...KIND_DEFAULTS.selectorized };
 
 /**
- * Bir aparat satırı: fotoğrafı, adı ve düğmeleri. Fotoğraf burada seçilir, cihazla
- * birlikte "Kaydet"te yüklenir (yeni cihazda da: kayıt olunca sırayla gönderilir).
+ * Cihaza takılabilen aparatlar: havuzdan seçilir (`/dashboard/attachments`).
+ *
+ * Aparat cihazın içinde tanımlanmaz — fotoğrafı ve adı havuzda bir kez durur, aynı
+ * aparat birden çok cihazda kullanılabilir. Burada yalnız hangilerinin bu cihaza
+ * takıldığı işaretlenir.
  */
-function AttachmentRow({
-  name,
-  currentUrl,
-  change,
-  onChange,
-  onError,
-  onRemove,
-}: {
-  name: string;
-  currentUrl: string | null;
-  change: ImageChange;
-  onChange: (change: ImageChange) => void;
-  onError: (error: string | null) => void;
-  onRemove: () => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const preview = usePreview(change);
-  const shown = change.kind === 'upload' ? preview : change.kind === 'keep' ? currentUrl : null;
-
-  function pick(file: File | undefined) {
-    if (!file) return;
-    const problem = imageProblem(file);
-    if (problem) return onError(problem);
-    onError(null);
-    onChange({ kind: 'upload', file });
-  }
-
-  return (
-    <Item variant="outline" size="sm">
-      <Button
-        type="button"
-        variant="outline"
-        // Fotoğrafın kendisi düğme: parmakla rahat dokunulacak kadar büyük, boşken kesik çizgili.
-        className={`size-12 shrink-0 overflow-hidden p-0 ${shown ? '' : 'border-dashed'}`}
-        aria-label={shown ? `${name} görselini değiştir` : `${name} için görsel seç`}
-        onClick={() => inputRef.current?.click()}>
-        {shown ? (
-          // Özel repo'dan uygulama üzerinden gelir; Next görsel iyileştiricisi oturum çerezini taşımaz.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={shown} alt="" className="size-full object-cover" />
-        ) : (
-          <ImageSquare className="size-5 text-muted-foreground" />
-        )}
-      </Button>
-      <ItemContent>
-        <ItemTitle>{name}</ItemTitle>
-        {change.kind === 'upload' ? (
-          <ItemDescription>Yeni görsel kaydedince yüklenecek.</ItemDescription>
-        ) : change.kind === 'remove' ? (
-          <ItemDescription>Görsel kaydedince kaldırılacak.</ItemDescription>
-        ) : null}
-      </ItemContent>
-      <ItemActions>
-        {shown ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            onClick={() => {
-              onError(null);
-              onChange(currentUrl ? { kind: 'remove' } : KEEP);
-            }}>
-            Görseli kaldır
-          </Button>
-        ) : null}
-        {change.kind !== 'keep' && currentUrl ? (
-          <Button type="button" variant="ghost" size="xs" onClick={() => onChange(KEEP)}>
-            Geri al
-          </Button>
-        ) : null}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="size-9 sm:size-7"
-          aria-label={`${name} aparatını kaldır`}
-          onClick={onRemove}>
-          <X />
-        </Button>
-      </ItemActions>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        hidden
-        onChange={(event) => {
-          pick(event.target.files?.[0]);
-          event.target.value = '';
-        }}
-      />
-    </Item>
-  );
-}
-
-/**
- * Cihazdaki aparatlar: hazır öneriler tek dokunuşla, kendi aparatın için yazı alanı.
- * Her aparatın fotoğrafı da burada seçilir; cihazla birlikte kaydedilir.
- */
-function AttachmentsField({
+function AttachmentPicker({
   form,
-  deviceId,
-  images,
-  onImage,
+  pool,
 }: {
   form: ReturnType<typeof useForm<typeof deviceFormSchema>>;
-  /** Kayıtlı cihazın kimliği; yeni cihazda yok (henüz yüklü görsel olamaz). */
-  deviceId: string | null;
-  images: Record<string, ImageChange>;
-  /** `null` verilince aparatın bekleyen görsel değişikliği unutulur. */
-  onImage: (name: string, change: ImageChange | null) => void;
+  pool: Attachment[];
 }) {
-  const [draft, setDraft] = useState('');
-  const [imageError, setImageError] = useState<string | null>(null);
-
   return (
     <FormField of={form} path={['attachments']}>
       {(field) => {
-        const current: DeviceAttachment[] = (field.input ?? []).flatMap((item) =>
-          item && typeof item.name === 'string' ? [{ name: item.name, ...(item.image ? { image: item.image } : {}) }] : [],
-        );
-        const names = current.map((item) => item.name);
-        const set = (next: DeviceAttachment[]) => setInput(form, { path: ['attachments'], input: next });
-        const add = (name: string) => {
-          const clean = name.trim().slice(0, ATTACHMENT_NAME_MAX);
-          if (!clean || names.some((item) => item.toLocaleLowerCase('tr') === clean.toLocaleLowerCase('tr'))) return;
-          if (current.length >= ATTACHMENTS_MAX) return;
-          set([...current, { name: clean }]);
-          setDraft('');
+        const selected = (field.input ?? []).filter((id): id is string => typeof id === 'string');
+        const toggle = (id: string) => {
+          const next = selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id];
+          if (next.length > ATTACHMENTS_MAX) return;
+          setInput(form, { path: ['attachments'], input: next });
         };
 
         return (
-          <Field data-invalid={Boolean(field.errors) || undefined}>
-            <FieldLabel htmlFor="attachment-draft">Aparatlar</FieldLabel>
-            {current.length > 0 ? (
-              <ItemGroup className="gap-2" aria-label="Cihazdaki aparatlar">
-                {current.map((attachment) => (
-                  <AttachmentRow
-                    key={attachment.name}
-                    name={attachment.name}
-                    currentUrl={deviceId ? attachmentImageUrl(deviceId, attachment) : null}
-                    change={images[attachment.name] ?? KEEP}
-                    onChange={(change) => onImage(attachment.name, change)}
-                    onError={setImageError}
-                    onRemove={() => {
-                      set(current.filter((item) => item.name !== attachment.name));
-                      onImage(attachment.name, null);
-                    }}
-                  />
-                ))}
-              </ItemGroup>
-            ) : null}
-
-            <div className="flex gap-2">
-              <Input
-                id="attachment-draft"
-                value={draft}
-                maxLength={ATTACHMENT_NAME_MAX}
-                placeholder="Kendi aparatın (ör. MAG tutamağı)"
-                onChange={(event) => setDraft(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  // Enter formu göndermesin, aparatı eklesin.
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    add(draft);
-                  }
-                }}
-              />
-              <Button type="button" variant="outline" onClick={() => add(draft)} disabled={!draft.trim()}>
-                <Plus data-icon="inline-start" />
-                Ekle
-              </Button>
-            </div>
-
-            <div className="flex flex-wrap gap-1.5">
-              {ATTACHMENT_SUGGESTIONS.filter((suggestion) => !names.includes(suggestion)).map((suggestion) => (
-                <Button key={suggestion} type="button" variant="outline" size="xs" onClick={() => add(suggestion)}>
-                  <Plus data-icon="inline-start" />
-                  {suggestion}
-                </Button>
-              ))}
-            </div>
-
-            <FieldDescription>
-              Bu cihazdaki tutamaçlar. Egzersizde hangisiyle yapıldığı seçilir. Danışan hangisini takacağını
-              görsün diye soldaki kareye dokunup fotoğraf ekleyebilirsin: PNG, JPG ya da WebP; en fazla 1 MB.
-            </FieldDescription>
-            <FieldError>{imageError ?? field.errors?.[0]}</FieldError>
-          </Field>
+          <FieldSet className="lg:col-span-2">
+            <FieldLegend>Aparatlar</FieldLegend>
+            <Field data-invalid={Boolean(field.errors) || undefined}>
+              <FieldDescription>
+                Bu cihaza takılabilen tutamaçları havuzdan seç; egzersizde hangisiyle yapıldığı bunlardan seçilir.
+                Havuzda olmayan bir aparatın varsa{' '}
+                <Link href="/dashboard/attachments/new" className="font-medium text-foreground underline underline-offset-4">
+                  yeni aparat ekle
+                </Link>
+                .
+              </FieldDescription>
+              <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {pool.map((attachment) => {
+                  const imageUrl = attachmentImageUrl(attachment);
+                  const isOn = selected.includes(attachment.id);
+                  return (
+                    <li key={attachment.id}>
+                      <Button
+                        type="button"
+                        variant={isOn ? 'secondary' : 'outline'}
+                        aria-pressed={isOn}
+                        className={`h-auto w-full justify-start gap-3 p-2 text-left ${isOn ? 'ring-1 ring-primary/50' : ''}`}
+                        onClick={() => toggle(attachment.id)}>
+                        <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-background">
+                          {imageUrl ? (
+                            // Özel repo'dan uygulama üzerinden gelir; Next görsel iyileştiricisi oturum çerezini taşımaz.
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={imageUrl} alt="" loading="lazy" className="size-full object-cover" />
+                          ) : (
+                            <ImageSquare className="size-5 text-muted-foreground" />
+                          )}
+                        </span>
+                        <span className="flex-1 truncate font-normal">{attachment.name}</span>
+                        {isOn ? <Check className="text-primary" /> : <Plus className="text-muted-foreground" />}
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <FieldError>{field.errors?.[0]}</FieldError>
+            </Field>
+          </FieldSet>
         );
       }}
     </FormField>
@@ -441,7 +202,7 @@ function NumberField({
  * Cihaz ekleme/düzenleme formu — kendi sayfasında (modal değil). Alanlar türe göre
  * değişir; altta cihazda ayarlanabilen ağırlıkların canlı önizlemesi var.
  */
-export function DeviceForm({ editing }: { editing: Device | null }) {
+export function DeviceForm({ editing, attachments }: { editing: Device | null; attachments: Attachment[] }) {
   const router = useRouter();
   // Görsel formun şemasında yok; ayrı uçtan yönetilir.
   const start: FormStart = editing ? (({ id: _id, image: _image, ...rest }) => rest)(editing) : BLANK;
@@ -449,12 +210,7 @@ export function DeviceForm({ editing }: { editing: Device | null }) {
   const [weightsText, setWeightsText] = useState((start.weightsKg ?? []).map(kgText).join(' '));
   const [image, setImage] = useState<ImageChange>(KEEP);
   const [imageError, setImageError] = useState<string | null>(null);
-  // Aparat görselleri de kaydetmede uygulanır: aparat adına göre bekleyen değişiklik.
-  const [attachmentImages, setAttachmentImages] = useState<Record<string, ImageChange>>({});
   const currentImageUrl = editing ? deviceImageUrl(editing) : null;
-
-  const setAttachmentImage = (name: string, change: ImageChange | null) =>
-    setAttachmentImages(({ [name]: _dropped, ...rest }) => (change ? { ...rest, [name]: change } : rest));
 
   const save = useServiceMutation({
     fn: async (values: DeviceInput) => {
@@ -462,46 +218,26 @@ export function DeviceForm({ editing }: { editing: Device | null }) {
         method: 'POST',
         body: JSON.stringify(editing ? { ...values, id: editing.id } : values),
       });
-
-      // Görseller ayrı uçlardan gider; her biri repo'ya yazdığı için sırayla gönderilir.
-      // Cihaz kaydedildiyse görsel hatası kaydı geri almaz, yalnız bildirilir.
-      const failures: string[] = [];
-      const send = async (task: () => Promise<unknown>) => {
-        try {
-          await task();
-        } catch (error) {
-          failures.push(error instanceof ApiError ? error.message : 'Görsel yüklenemedi.');
+      // Görsel ayrı uca gider. Cihaz kaydedildiyse görsel hatası kaydı geri almaz.
+      try {
+        if (image.kind === 'upload') {
+          const body = new FormData();
+          body.set('image', image.file);
+          await fetchJson(`/api/devices/${id}/image`, { method: 'POST', body });
+        } else if (image.kind === 'remove') {
+          await fetchJson(`/api/devices/${id}/image`, { method: 'DELETE' });
         }
-      };
-      const upload = (path: string, file: File, fields?: Record<string, string>) => {
-        const body = new FormData();
-        body.set('image', file);
-        for (const [key, value] of Object.entries(fields ?? {})) body.set(key, value);
-        return fetchJson(path, { method: 'POST', body });
-      };
-
-      if (image.kind === 'upload') await send(() => upload(`/api/devices/${id}/image`, image.file));
-      else if (image.kind === 'remove') await send(() => fetchJson(`/api/devices/${id}/image`, { method: 'DELETE' }));
-
-      // Listeden çıkarılan aparatın bekleyen görseli boşuna gönderilmesin.
-      const kept = new Set((values.attachments ?? []).map((attachment) => attachment.name));
-      for (const [name, change] of Object.entries(attachmentImages)) {
-        if (!kept.has(name)) continue;
-        const path = `/api/devices/${id}/attachments/image`;
-        if (change.kind === 'upload') await send(() => upload(path, change.file, { name }));
-        else if (change.kind === 'remove') {
-          await send(() => fetchJson(`${path}?name=${encodeURIComponent(name)}`, { method: 'DELETE' }));
-        }
+      } catch (error) {
+        return { id, imageFailed: error instanceof ApiError ? error.message : 'Görsel yüklenemedi.' };
       }
-
-      return { id, mediaFailed: failures[0] ?? null };
+      return { id, imageFailed: null };
     },
     invalidate: [['devices'], ['exercises']],
     notify: { success: editing ? 'Cihaz güncellendi.' : 'Cihaz eklendi.' },
     onError: (error) => applyFieldErrors(form as never, error),
-    onSuccess: ({ id, mediaFailed }) => {
-      if (mediaFailed) {
-        toast.error(`Cihaz kaydedildi ama görsel yüklenemedi: ${mediaFailed}`);
+    onSuccess: ({ id, imageFailed }) => {
+      if (imageFailed) {
+        toast.error(`Cihaz kaydedildi ama görsel yüklenemedi: ${imageFailed}`);
         router.push(`/dashboard/devices/${id}/edit`);
       } else {
         router.push(`/dashboard/devices/${id}`);
@@ -660,15 +396,6 @@ export function DeviceForm({ editing }: { editing: Device | null }) {
                 </FormField>
               ) : null}
 
-              {takesAttachments(kind) ? (
-                <AttachmentsField
-                  form={form}
-                  deviceId={editing?.id ?? null}
-                  images={attachmentImages}
-                  onImage={setAttachmentImage}
-                />
-              ) : null}
-
               {needsWeights(kind) ? (
                 <FormField of={form} path={['weightsKg']}>
                   {(field) => (
@@ -696,6 +423,10 @@ export function DeviceForm({ editing }: { editing: Device | null }) {
             </FieldSet>
           );
         }}
+      </FormField>
+
+      <FormField of={form} path={['kind']}>
+        {(kindField) => (takesAttachments(kindField.input ?? 'selectorized') ? <AttachmentPicker form={form} pool={attachments} /> : <></>)}
       </FormField>
 
       {hiddenError ? (

@@ -6,6 +6,7 @@ import { Item, ItemContent, ItemGroup, ItemMedia, ItemTitle } from '@/components
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { VideoEmbed } from '@/components/video-embed';
 import { getExercise, listExercises } from '@/lib/exercises';
+import { listAttachments } from '@/lib/attachments';
 import { listDevices } from '@/lib/devices';
 import { DEVICE_KIND_LABELS, DEVICE_KINDS, loadSpecFor } from '@/lib/device-loads';
 import { describeGrip } from '@/lib/grips';
@@ -28,11 +29,12 @@ const TRACKING_LABELS = {
 /** Egzersiz detayı — kendi sayfası (modal değil, SPEC §6). */
 export default async function ExerciseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [all, devices] = await Promise.all([listExercises(), listDevices()]);
+  const [all, devices, pool] = await Promise.all([listExercises(), listDevices(), listAttachments()]);
   const exercise = await getExercise(id, all);
   if (!exercise) notFound();
   const deviceById = new Map(devices.map((device) => [device.id, device]));
   const device = exercise.deviceId ? deviceById.get(exercise.deviceId) : undefined;
+  const attachment = exercise.attachmentId ? pool.find((item) => item.id === exercise.attachmentId) : undefined;
 
   const alternatives: AlternativeRow[] = exerciseAlternatives(exercise, all).map(({ exercise: other, pinned, samePattern }) => ({
     id: other.id,
@@ -80,7 +82,16 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
           ],
         ] as [string, React.ReactNode][])
       : []),
-    ...(exercise.attachment ? ([['Aparat', exercise.attachment]] as [string, React.ReactNode][]) : []),
+    ...(attachment
+      ? ([
+          [
+            'Aparat',
+            <Link key="aparat" href={`/dashboard/attachments/${attachment.id}/edit`} className="underline underline-offset-4">
+              {attachment.name}
+            </Link>,
+          ],
+        ] as [string, React.ReactNode][])
+      : []),
     ...(describeGrip(exercise.grip, exercise.gripWidth)
       ? ([['Tutuş', describeGrip(exercise.grip, exercise.gripWidth)]] as [string, React.ReactNode][])
       : []),

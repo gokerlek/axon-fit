@@ -275,7 +275,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "kablo-istasyonu",
     "pattern": "rear_delt",
-    "attachment": "Halat",
+    "attachmentId": "halat",
     "grip": "neutral",
     "primaryMuscles": [
       "delt_rear"
@@ -342,7 +342,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "machine",
     "deviceId": "lat-pulldown-makinesi",
     "pattern": "vertical_pull",
-    "attachment": "Geniş çekiş barı",
+    "attachmentId": "genis-cekis-bari",
     "grip": "pronated",
     "gripWidth": "wide",
     "primaryMuscles": [
@@ -377,7 +377,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "machine",
     "deviceId": "oturarak-row-makinesi",
     "pattern": "horizontal_pull",
-    "attachment": "V bar (üçgen)",
+    "attachmentId": "v-bar-ucgen",
     "grip": "neutral",
     "gripWidth": "narrow",
     "primaryMuscles": [
@@ -922,7 +922,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "kablo-istasyonu",
     "pattern": "elbow_extension",
-    "attachment": "Halat",
+    "attachmentId": "halat",
     "grip": "neutral",
     "primaryMuscles": [
       "triceps_lateral"
@@ -1395,7 +1395,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "kablo-istasyonu",
     "pattern": "chest_fly",
-    "attachment": "Tek el tutamağı",
+    "attachmentId": "tek-el-tutamagi",
     "grip": "neutral",
     "primaryMuscles": [
       "chest_lower"
@@ -1502,7 +1502,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "kablo-istasyonu",
     "pattern": "lateral_raise",
-    "attachment": "Tek el tutamağı",
+    "attachmentId": "tek-el-tutamagi",
     "grip": "neutral",
     "primaryMuscles": [
       "delt_side"
@@ -1553,7 +1553,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "machine",
     "deviceId": "t-bar-row",
     "pattern": "horizontal_pull",
-    "attachment": "V bar (üçgen)",
+    "attachmentId": "v-bar-ucgen",
     "grip": "neutral",
     "primaryMuscles": [
       "traps_mid",
@@ -1588,7 +1588,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "kablo-istasyonu",
     "pattern": "vertical_pull",
-    "attachment": "Düz bar",
+    "attachmentId": "duz-bar",
     "grip": "pronated",
     "gripWidth": "shoulder",
     "primaryMuscles": [
@@ -1670,7 +1670,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "kablo-istasyonu",
     "pattern": "elbow_flexion",
-    "attachment": "Düz bar",
+    "attachmentId": "duz-bar",
     "grip": "supinated",
     "primaryMuscles": [
       "biceps"
@@ -1719,7 +1719,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "kablo-istasyonu",
     "pattern": "elbow_extension",
-    "attachment": "Halat",
+    "attachmentId": "halat",
     "grip": "neutral",
     "primaryMuscles": [
       "triceps_long"
@@ -1975,7 +1975,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "cable",
     "deviceId": "fonksiyonel-kablo",
     "pattern": "core_rotation",
-    "attachment": "Halat",
+    "attachmentId": "halat",
     "grip": "neutral",
     "primaryMuscles": [
       "obliques"
@@ -2118,7 +2118,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] = [
     "equipment": "machine",
     "deviceId": "lat-pulldown-makinesi",
     "pattern": "vertical_pull",
-    "attachment": "Düz bar",
+    "attachmentId": "duz-bar",
     "grip": "supinated",
     "gripWidth": "narrow",
     "primaryMuscles": [

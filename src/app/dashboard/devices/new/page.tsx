@@ -1,8 +1,10 @@
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
+import { listAttachments } from '@/lib/attachments';
 import { DeviceForm } from '../device-form';
 
-export default function NewDevicePage() {
+export default async function NewDevicePage() {
+  const attachments = await listAttachments();
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -12,7 +14,7 @@ export default function NewDevicePage() {
       />
       <Card>
         <CardContent>
-          <DeviceForm editing={null} />
+          <DeviceForm editing={null} attachments={attachments} />
         </CardContent>
       </Card>
     </div>

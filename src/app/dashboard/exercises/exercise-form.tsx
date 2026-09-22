@@ -41,6 +41,7 @@ import {
   loadSpecFor,
 } from "@/lib/device-loads";
 import { GRIP_LABELS, GRIP_WIDTH_LABELS } from "@/lib/grips";
+import type { Attachment } from "@/lib/schemas/attachment";
 import type { Device } from "@/lib/schemas/device";
 import {
   isBodyMuscle,
@@ -143,12 +144,16 @@ function sameRule(a: ProgressionRule | undefined, b: ProgressionRule): boolean {
 export function ExerciseForm({
   editing,
   devices,
+  attachments,
 }: {
   editing: Exercise | null;
   /** Seçilebilir cihazlar (hazır katalog + PT'nin cihazları). */
   devices: Device[];
+  /** Aparat havuzu; cihazın aparat kimlikleri buradan ada çevrilir. */
+  attachments: Attachment[];
 }) {
   const deviceById = new Map(devices.map((device) => [device.id, device]));
+  const attachmentById = new Map(attachments.map((attachment) => [attachment.id, attachment]));
   const deviceGroups = DEVICE_KINDS.map((kind) => ({
     label: DEVICE_KIND_LABELS[kind],
     options: devices
@@ -352,36 +357,34 @@ export function ExerciseForm({
               </Field>
             )}
           </FormField>
-          {/* Aparat yalnız cihazında aparat tanımlıysa görünür. */}
+          {/* Aparat yalnız cihazına aparat takılıysa görünür; adlar havuzdan gelir. */}
           <FormField of={form} path={["deviceId"]}>
             {(deviceField) => {
-              const attachments = deviceField.input ? (deviceById.get(deviceField.input)?.attachments ?? []) : [];
-              if (attachments.length === 0) return <></>;
+              const options = (deviceField.input ? (deviceById.get(deviceField.input)?.attachments ?? []) : []).flatMap((id) => {
+                const found = attachmentById.get(id);
+                return found ? [{ value: found.id, label: found.name }] : [];
+              });
+              if (options.length === 0) return <></>;
               return (
-                <FormField of={form} path={["attachment"]}>
+                <FormField of={form} path={["attachmentId"]}>
                   {(field) => (
                     <Field>
-                      <FieldLabel htmlFor="attachment">Aparat</FieldLabel>
+                      <FieldLabel htmlFor="attachmentId">Aparat</FieldLabel>
                       <GroupedSelect
-                        id="attachment"
+                        id="attachmentId"
                         value={field.input ?? ""}
-                        groups={[
-                          {
-                            label: "Aparatlar",
-                            options: attachments.map((attachment) => ({
-                              value: attachment.name,
-                              label: attachment.name,
-                            })),
-                          },
-                        ]}
+                        groups={[{ label: "Aparatlar", options }]}
                         empty="Belirtilmemiş"
                         onChange={(value) =>
                           setInput(form, {
-                            path: ["attachment"],
-                            input: (value || undefined) as ExerciseInput["attachment"],
+                            path: ["attachmentId"],
+                            input: (value || undefined) as ExerciseInput["attachmentId"],
                           })
                         }
                       />
+                      <FieldDescription>
+                        Cihaza takılı aparatlar. Listede yoksa cihazı düzenleyip havuzdan ekle.
+                      </FieldDescription>
                     </Field>
                   )}
                 </FormField>
