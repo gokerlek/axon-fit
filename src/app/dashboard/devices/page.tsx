@@ -11,12 +11,14 @@ import { DEVICE_KIND_LABELS, DEVICE_KINDS, describeDeviceLoads } from '@/lib/dev
 import { deviceImageUrl } from '@/lib/device-media';
 import { listDevices } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
+import { requirePt } from '@/lib/guards';
 
 /**
  * Cihazlar: hazır katalog + PT'nin cihazları, türe göre gruplu. Egzersizler cihaza
  * bağlanır; ağırlık önerileri cihazın ayarlanabilen ağırlıklarından seçilir.
  */
 export default async function DevicesPage() {
+  await requirePt();
   const [devices, exercises] = await Promise.all([listDevices(), listExercises()]);
   const usage = new Map<string, number>();
   for (const exercise of exercises) {

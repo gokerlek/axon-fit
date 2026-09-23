@@ -20,9 +20,19 @@ import { CLIENT_REPO_PREFIX } from '../env';
 export async function createAppRepo(): Promise<{ created: boolean }> {
   const repo = appRepo();
   try {
-    await gh().rest.repos.get({ owner: owner(), repo });
+    const { data } = await gh().rest.repos.get({ owner: owner(), repo });
+    // Kod fork'la dağıtılır ve açık bir repo'nun fork'u gizli yapılamaz. Veri repo'su
+    // kodun fork'u ya da açık bir repo olursa marka ayarı ve danışan kimlikleri herkese
+    // açık olur: kurulum burada durur.
+    if (data.fork || !data.private) {
+      throw new GithubError(
+        `"${repo}" ${data.fork ? 'bir fork' : 'herkese açık'}. Veri repo'su kodun fork'undan ayrı ve özel olmalı: APP_REPO'ya yeni bir ad ver (ör. pulsecoach-data).`,
+        409,
+      );
+    }
     return { created: false };
   } catch (error) {
+    if (error instanceof GithubError) throw error;
     if (typeof error !== 'object' || !error || !('status' in error) || error.status !== 404) {
       throw toGithubError(error, repo);
     }

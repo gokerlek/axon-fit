@@ -4,8 +4,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { getAttachment } from '@/lib/attachments';
 import { AttachmentActions } from '../../attachment-actions';
 import { AttachmentForm } from '../../attachment-form';
+import { requirePt } from '@/lib/guards';
 
 export default async function EditAttachmentPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePt();
   const { id } = await params;
   const attachment = await getAttachment(id);
   if (!attachment) notFound();

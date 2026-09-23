@@ -1,9 +1,11 @@
 import { PageHeader } from '@/components/page-header';
 import { readAppConfig } from '@/lib/config';
 import { SetupForm } from '@/app/setup/setup-form';
+import { requirePt } from '@/lib/guards';
 
 /** Ayarlar → Görünüm. Kurulum sihirbazıyla aynı form; kaydedince sayfada kalır. */
 export default async function SettingsPage() {
+  await requirePt();
   const config = await readAppConfig();
 
   return (

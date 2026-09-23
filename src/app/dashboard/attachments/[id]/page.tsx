@@ -12,9 +12,11 @@ import { listDevices } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
 import { summarizeMuscles } from '@/lib/muscles';
 import { EditButton } from '@/components/edit-button';
+import { requirePt } from '@/lib/guards';
 
 /** Aparat detayı — yalnız gösterir; değiştirmek için "Düzenle" (SPEC §6). */
 export default async function AttachmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePt();
   const { id } = await params;
   const [attachment, devices, exercises] = await Promise.all([getAttachment(id), listDevices(), listExercises()]);
   if (!attachment) notFound();

@@ -10,12 +10,14 @@ import { listAttachments } from '@/lib/attachments';
 import { listDevices } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
 import { TrainingTabs } from '../training-tabs';
+import { requirePt } from '@/lib/guards';
 
 /**
  * Aparat havuzu: hazır liste + PT'nin aparatları. Cihazlar buradan seçer, egzersiz
  * hangisiyle yapıldığını söyler; fotoğraf bir kez burada yüklenir.
  */
 export default async function AttachmentsPage() {
+  await requirePt();
   const [attachments, devices, exercises] = await Promise.all([listAttachments(), listDevices(), listExercises()]);
   const deviceCount = new Map<string, number>();
   for (const device of devices) {

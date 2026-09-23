@@ -70,7 +70,8 @@ export type CheckIn = {
   durationMin?: number;
   /** Ağrısız yürüme süresi (dakika). */
   painFreeWalkingMin?: number;
-  redFlag: RedFlagCheck;
+  /** Yalnız ağrı takibi açıksa sorulur; cevapsız soru bayrak sayılmaz. */
+  redFlag?: RedFlagCheck;
 };
 
 /**
@@ -135,7 +136,7 @@ export function assessTolerance({
 }): ToleranceResult {
   const reasons: ToleranceReason[] = [];
 
-  if (current.redFlag !== 'none') {
+  if (current.redFlag && current.redFlag !== 'none') {
     reasons.push({
       code: 'red_flag',
       action: 'stop',

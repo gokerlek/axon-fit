@@ -1,6 +1,7 @@
 import 'server-only';
 import { Octokit } from 'octokit';
 import { CLIENT_REPO_PREFIX, serverEnv } from '../env';
+import { CLIENT_ID_PATTERN } from '../schemas/client';
 
 /**
  * GitHub erişiminin tek kapısı.
@@ -28,9 +29,6 @@ export class GithubError extends Error {
     this.status = status;
   }
 }
-
-/** Danışan kimliği biçimi: `c_` + 6-24 küçük harf/rakam. Repo adına doğrudan girdiği için dar tutulur. */
-const CLIENT_ID_PATTERN = /^c_[a-z0-9]{6,24}$/;
 
 export function clientRepoName(clientId: string): string {
   if (!CLIENT_ID_PATTERN.test(clientId)) {

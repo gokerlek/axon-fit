@@ -2,8 +2,10 @@ import { PageHeader } from '@/components/page-header';
 import { listAttachments } from '@/lib/attachments';
 import { listDevices } from '@/lib/devices';
 import { ExerciseForm } from '../exercise-form';
+import { requirePt } from '@/lib/guards';
 
 export default async function NewExercisePage() {
+  await requirePt();
   const [devices, attachments] = await Promise.all([listDevices(), listAttachments()]);
   return (
     <div className="flex flex-col gap-6">

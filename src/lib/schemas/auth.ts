@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { INVITE_CODE_LENGTH } from '../client-status';
 
 /**
  * Giriş şemaları — TEK kaynak.
@@ -33,3 +34,13 @@ export type EnterCode = v.InferOutput<typeof enterCodeSchema>;
 
 /** Sunucu ucu: POST /api/auth/verify gövdesi. */
 export const verifyBodySchema = v.object({ email: emailSchema, code: codeSchema });
+
+/** Danışanın davet kodu: 8 hane; boşluk ve tire yok sayılır ("1234 5678"). */
+export const joinSchema = v.object({
+  code: v.pipe(
+    v.string(),
+    v.transform((value) => value.replace(/[\s-]/g, '')),
+    v.regex(new RegExp(`^[0-9]{${INVITE_CODE_LENGTH}}$`), `${INVITE_CODE_LENGTH} haneli kodu gir.`),
+  ),
+});
+export type JoinInput = v.InferOutput<typeof joinSchema>;

@@ -1,8 +1,10 @@
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { AttachmentForm } from '../attachment-form';
+import { requirePt } from '@/lib/guards';
 
-export default function NewAttachmentPage() {
+export default async function NewAttachmentPage() {
+  await requirePt();
   return (
     <div className="flex flex-col gap-6">
       <PageHeader

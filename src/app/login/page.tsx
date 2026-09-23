@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { readAppConfig } from '@/lib/config';
 import { githubLoginEnabled } from '@/lib/github-oauth';
+import { sessionClient } from '@/lib/guards';
 import { readSession } from '@/lib/session';
 import { LoginForm } from './login-form';
 
@@ -22,7 +23,12 @@ const errors: Record<string, string> = {
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const session = await readSession();
   if (session?.role === 'pt') redirect('/dashboard');
-  if (session?.role === 'client') redirect('/me');
+  if (session?.role === 'client') {
+    // İmzalı çerez yetmez: erişimi kapatılmış danışan /me → /join döngüsüne girmesin, PT de
+    // aynı tarayıcıda girebilsin. Giriş yapınca yeni oturum eskisinin üzerine yazılır.
+    const client = await sessionClient(session).catch(() => null);
+    if (client) redirect('/me');
+  }
 
   const config = await readAppConfig();
   const { error: code } = await searchParams;

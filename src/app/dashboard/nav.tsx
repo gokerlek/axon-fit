@@ -12,7 +12,7 @@ type NavItem = Omit<DockEntry, 'active'> & {
 
 const ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Genel bakış', icon: <SquaresFour /> },
-  { href: '/dashboard/clients', label: 'Danışanlar', icon: <UsersThree />, disabled: true },
+  { href: '/dashboard/clients', label: 'Danışanlar', icon: <UsersThree /> },
   // Şablonlar, egzersizler ve cihazlar tek bölüm; içinde sekmeler (training-tabs.tsx).
   {
     href: '/dashboard/exercises',

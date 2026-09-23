@@ -26,8 +26,12 @@ export const OTP_LENGTH = 6;
  */
 export type Session =
   | { role: 'pt'; via: 'github' | 'email'; subject: string }
-  /** Danışan oturumu: yetki her zaman buradan okunur, adresteki kimlikten değil (SPEC §5). */
-  | { role: 'client'; clientId: string };
+  /**
+   * Danışan oturumu: yetki her zaman buradan okunur, adresteki kimlikten değil (SPEC §5).
+   * `accessVersion` danışan kaydındaki `access.version` ile eşleşmezse oturum geçersizdir
+   * (PT erişimi kapattı); bu kontrol kaydı okuyan `currentClient` içinde yapılır.
+   */
+  | { role: 'client'; clientId: string; accessVersion: number };
 
 function key(): Uint8Array {
   return new TextEncoder().encode(serverEnv().authSecret);
@@ -91,8 +95,8 @@ export async function readSession(): Promise<Session | null> {
     return null;
   }
 
-  if (payload.role === 'client' && typeof payload.clientId === 'string') {
-    return { role: 'client', clientId: payload.clientId };
+  if (payload.role === 'client' && typeof payload.clientId === 'string' && typeof payload.accessVersion === 'number') {
+    return { role: 'client', clientId: payload.clientId, accessVersion: payload.accessVersion };
   }
   return null;
 }

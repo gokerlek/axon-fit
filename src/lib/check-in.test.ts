@@ -42,6 +42,10 @@ describe('yük toleransı (ağrı izleme)', () => {
     assert.equal(azArtti.action, 'progress');
   });
 
+  test('ağrı takibi kapalıyken (kırmızı bayrak sorulmadıysa) bayrak varsayılmaz', () => {
+    assert.equal(assessTolerance({ current: { date: '2026-09-23' } }).action, 'progress');
+  });
+
   test('yüksek irritabilite artışı durdurur ama yükü düşürmez', () => {
     assert.equal(assessTolerance({ current: gun('2026-09-23', { irritability: 'high' }) }).action, 'hold');
   });

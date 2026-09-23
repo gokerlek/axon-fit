@@ -5,8 +5,10 @@ import { listAttachments } from '@/lib/attachments';
 import { getDevice } from '@/lib/devices';
 import { DeviceActions } from '../device-actions';
 import { DeviceForm } from '../../device-form';
+import { requirePt } from '@/lib/guards';
 
 export default async function EditDevicePage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePt();
   const { id } = await params;
   const [device, attachments] = await Promise.all([getDevice(id), listAttachments()]);
   if (!device) notFound();

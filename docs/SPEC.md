@@ -3,7 +3,7 @@
 Tek antrenörlük (PT), GitHub'ı veritabanı olarak kullanan, mobil öncelikli web uygulaması.
 Her PT uygulamayı kendi GitHub hesabına kurar, kendi adresinde yayınlar, kendi adını ve logosunu verir.
 
-**Durum:** onay bekliyor · **Güncelleme:** 2026-09-20
+**Durum:** onay bekliyor · **Güncelleme:** 2026-09-23
 
 ---
 
@@ -11,9 +11,9 @@ Her PT uygulamayı kendi GitHub hesabına kurar, kendi adresinde yayınlar, kend
 
 | Konu | Karar |
 |---|---|
-| Dağıtım | PT kendi özel GitHub repo'sunu oluşturur, Vercel'de yayınlar |
+| Dağıtım | PT kod repo'sunu **fork'lar**, Vercel'de yayınlar. Güncelleme GitHub'daki "Sync fork" ile gelir. npm paketi şimdilik yok |
 | Veritabanı | GitHub. JSON dosyaları, yazma Octokit ile commit |
-| Veri yerleşimi | **Danışan başına ayrı özel repo** (`client-<id>`), PT'nin kişisel hesabında |
+| Veri yerleşimi | Kod fork'unda **veri yok**. Veri, uygulamanın kendi açtığı özel repolarda: bir veri repo'su (`APP_REPO`) + **danışan başına ayrı özel repo** (`client-<id>`), PT'nin kişisel hesabında |
 | Barındırma | Vercel ücretsiz plan (ticari kullanım yok) |
 | Görseller | Egzersiz görseli yok: video + kas haritası yeterli. Repo'da yalnız logo |
 | Videolar | Yalnız YouTube/Vimeo bağlantısı (liste dışı da olur); dosya yükleme R2 ile gelir (Vercel isteği ~4,5 MB ile sınırlı) |
@@ -25,31 +25,31 @@ Her PT uygulamayı kendi GitHub hesabına kurar, kendi adresinde yayınlar, kend
 | Platform | Web (mobil öncelikli), PWA. Mağaza yayını yok |
 | Arayüz | **shadcn + Base UI** (`base-nova`, preset `b3QvsSZhg`), Tailwind v4, Phosphor ikonları, Outfit + Geist Mono. Renkler temanın `globals.css`'inden; özel renk sistemi yazılmaz |
 
-npm'de boşta: `pulsecoach`, `create-pulsecoach`, `@pulsecoach/app`.
+npm'de boşta: `pulsecoach`, `create-pulsecoach`, `@pulsecoach/app` (ileride gerekirse; bkz. §12 Faz 8).
 
 ---
 
 ## 2. Kurulum akışı (PT ne yapacak)
 
-1. `npx create-pulsecoach` → kişisel hesabında özel bir uygulama repo'su oluşur.
-2. Vercel'e bağlar. Ayarlar:
+1. PulseCoach kod repo'sunu kendi hesabına **fork'lar**. Açık bir repo'nun fork'u GitHub'da gizli yapılamaz: fork herkese açık kalır, bu yüzden içine hiçbir veri yazılmaz.
+2. Fork'u Vercel'e bağlar. Ayarlar:
    - `GITHUB_TOKEN` — repo oluşturma/silme yetkisi olan token (§9.2'deki uyarı)
    - `GITHUB_OWNER` — GitHub kullanıcı adı
-   - `APP_REPO` — uygulama repo'sunun adı
+   - `APP_REPO` — **veri** repo'sunun adı (ör. `pulsecoach-data`). Fork'un adından farklı olmalı; kurulum bu repo'yu özel olarak kendisi açar, var olan repo açık ya da bir fork ise durur
    - `PT_EMAIL` — uygulamaya girebilecek tek yönetici adresi
    - `AUTH_SECRET` — oturum çerezlerini imzalamak için
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — GitHub ile giriş (OAuth uygulaması; token'ı ürettiği ekranın hemen yanında, 2 dakika)
    - `RESEND_API_KEY` — **isteğe bağlı** yedek giriş (e-posta kodu). Girilmezse e-posta yolu kapalıdır.
 3. Yayınlanır, PT girer, kurulum sihirbazı açılır (§10): ad, logo, renk, tema.
-4. Güncelleme: `pulsecoach` paketinin sürümü yükseltilir, Vercel yeniden yayınlar. Danışan verisine dokunulmaz.
+4. Güncelleme: GitHub'da fork'un sayfasında **"Sync fork"** → Vercel yeniden yayınlar. Veri repo'larına dokunulmaz.
 
-**Uygulama kodu npm paketinde, veri repo'larda.**
+**Kod fork'ta (açık olabilir), veri özel repolarda.** Kodda PT'ye özgü hiçbir şey yok: ad, renk, logo veri repo'sunda; sırlar Vercel ortam değişkenlerinde. Bu yüzden fork'u güncellemek hiçbir şeyi ezmez.
 
 ---
 
 ## 3. Veri yerleşimi
 
-İki tür repo var: **uygulama repo'su** (kişisel veri yok) ve **danışan başına bir repo**.
+Kodun fork'u dışında iki tür repo var: **uygulama (veri) repo'su** (`APP_REPO`, kişisel veri yok) ve **danışan başına bir repo**. İkisi de özeldir ve uygulama tarafından açılır.
 
 ### Uygulama repo'su — kişisel veri YOK
 
@@ -69,8 +69,8 @@ media/
 ### `client-<id>` — o danışana ait her şey (ayrı özel repo)
 
 ```
-client.json                    isim, program ataması, modüller, onaylar, bağlantı izinleri
-invite.json                    davet kodunun özeti, süresi, kullanıldı bilgisi
+client.json                    isim, not, program ataması, modüller, onaylar, oturum kuşağı, bağlantı izinleri
+invite.json                    davet kodunun anahtarlı özeti, süresi, kullanıldı bilgisi, yanlış deneme sayısı
 sessions/<tarih>-<id>.json     tamamlanmış antrenman (her biri yeni dosya)
 health.json                    yalnız sağlık modülü açık ve onaylıysa oluşur
 ```
@@ -88,23 +88,24 @@ health.json                    yalnız sağlık modülü açık ve onaylıysa ol
 **`client-<id>` içinde `client.json`**
 ```jsonc
 {
-  "id": "c_8f3k",
+  "id": "c_8f3k2m1x",                  // c_ + 8 rastgele karakter; isimden türetilmez
   "name": "Ahmet Yılmaz",
+  "note": "Hedef: 5 km koşu",          // PT'nin notu; danışan görmez
   "createdAt": "2026-09-20T10:00:00Z",
-  "status": "active",                  // active | paused | archived
-  "program": { "templateId": "t_altvucut", "assignedAt": "..." },
+  "status": "active",                  // active | paused | archived (arşivdeki giriş yapamaz)
+  "program": { "templateId": "t_altvucut", "assignedAt": "..." },   // Faz 4
   "modules": {
     "health": {                        // PT danışanı açarken seçer
       "enabled": true,
-      "fields": ["readiness", "pain", "measurements"],
-      "enabledBy": "pt",
+      "fields": ["conditions", "readiness", "check_in"],   // + "measurements", "screening"
       "enabledAt": "..."
     }
   },
-  "consents": {
-    "health": { "granted": true, "version": "2026-09", "at": "..." }
+  "consents": {                        // danışan verir; kapsadığı parçalarla birlikte
+    "health": { "granted": true, "version": "2026-09", "fields": ["conditions", "readiness"], "at": "..." }
   },
-  "visibleTo": ["c_2m1x"]              // bağlantı verilen diğer danışanlar (yalnız kimlik)
+  "access": { "version": 1 },          // oturum kuşağı: "erişimi kapat" artırır, açık oturumlar düşer
+  "visibleTo": ["c_2m1x9qa4"]          // Faz 7: bağlantı verilen diğer danışanlar (yalnız kimlik)
 }
 ```
 
@@ -124,6 +125,10 @@ health.json                    yalnız sağlık modülü açık ve onaylıysa ol
 }
 ```
 
+Sağlık modülünün parçaları (PT seçer, hepsi isteğe bağlı; ilk açılışta kısıtlar + hazır oluşluk seçili gelir): **kısıtlar** (süzgecin girdisi) · **hazır oluşluk** (antrenman öncesi uyku, enerji, kas ağrısı, stres; 1–5, serbest metin yok) · **ağrı takibi** (ağrı, belirtinin yönü, kırmızı bayrak) · **ölçümler** · **hareket taraması**. Hazır oluşluk da sağlık verisi sayılır (uyku, stres, yorgunluk); bu yüzden ayrı parçadır ve onaysız tutulmaz. Danışan onay ekranında tam olarak bu listeyi görür; onay isteği gördüğü listeyi ve metin sürümünü taşır, sunucu güncel listeyle birebir eşleşmeyen onayı reddeder.
+
+Sağlık onayının durumu (`src/lib/client-status.ts`): modül kapalı → `off`; açık ama karar yok → `pending`; onay modüldeki bütün parçaları ve güncel metin sürümünü kapsıyorsa → `granted`; kapsamıyorsa → `outdated` (danışana yeniden sorulur, o zamana kadar kayıt yok); reddettiyse → `declined`. Sağlık kaydı yalnız `granted` iken ve o parça için yazılır (`canRecordHealth`).
+
 **`health.json`** — yalnız modül açık ve danışan onaylamışsa yazılır. Kapalıysa dosya hiç oluşmaz. Şema: `src/lib/schemas/health.ts`.
 ```jsonc
 {
@@ -132,7 +137,9 @@ health.json                    yalnız sağlık modülü açık ve onaylıysa ol
   "conditions": ["lumbar_disc_herniation:acute"],      // sakatlık süzgecinin girdisi
   "surgeryDate": "2026-08-01",                         // faza bağlı kurallar (ACL haftası)
   "checkIns": [
-    { "date": "2026-09-20", "painBaseline": 3, "painPeak": 4, "returnedToBaseline": true,
+    { "date": "2026-09-20",
+      "readiness": { "sleep": 4, "energy": 3, "soreness": 4, "stress": 3 },   // yalnız hazır oluşluk açıksa
+      "painBaseline": 3, "painPeak": 4, "returnedToBaseline": true,         // yalnız ağrı takibi açıksa
       "symptomDirection": "stable", "irritability": "moderate", "redFlag": "none" }
   ],
   "measurements": [ { "date": "2026-09-01", "id": "waist_girth", "value": 82 } ],
@@ -153,14 +160,18 @@ Neden GitHub: PT zaten tanım gereği GitHub kullanıcısı (repoların sahibi o
 
 **Danışan (QR davet):**
 1. PT "danışan ekle" der, isim girer, sağlık modülünü açıp kapatır.
-2. Sunucu `client-<id>` repo'sunu açar, 8 haneli kod üretir; repo'ya **sadece kodun özeti (SHA-256)**, son kullanma tarihi ve `used: false` yazılır.
-3. PT'ye QR çıkar: `https://<adres>/katil?c=<id>&k=<kod>`. Kimlik bağlantıda taşınır ki sunucu hangi repo'ya bakacağını bilsin.
-4. Danışan QR'ı açar. Sunucu kodu doğrular, `used: true` yapar ve tarayıcıya **imzalı, httpOnly oturum çerezi** yazar (30 gün, her girişte tazelenir).
-5. Kod tek kullanımlıktır. Danışan kaybederse PT yeni QR üretir, eski kod anında geçersiz olur.
+2. Sunucu `client-<id>` özel repo'sunu açar, kaydı yazar, veri repo'sundaki listeye yalnız kimlik ve durumu ekler. Yarıda kalırsa açtığı repo'yu geri siler (öksüz repo kalmaz).
+3. PT davet ekranında "davet kodu üret" der: 8 haneli kod üretilir; repo'ya **yalnız kodun anahtarlı özeti** (HMAC-SHA256, anahtar `AUTH_SECRET`, danışan kimliği karışık), son kullanma (7 gün), `used: false` ve deneme sayacı yazılır. Kod yalnız o yanıtta vardır; sayfadan çıkınca bir daha gösterilemez.
+4. PT'ye QR çıkar: `https://<adres>/join?c=<id>&k=<kod>`. Kimlik bağlantıda taşınır ki sunucu hangi repo'ya bakacağını bilsin.
+5. Danışan QR'ı açar; kod ekranda hazır gelir, **"Giriş yap"a dokununca** (POST) kullanılır. Adresi açmak kodu harcamaz: mesajlaşma uygulamalarının bağlantı önizlemesi kodu tüketemez.
+6. Sunucu kodu doğrular, `used: true` yapar (`sha` kilidiyle: aynı kod iki cihazdan aynı anda denense yalnız biri girer) ve tarayıcıya **imzalı, httpOnly oturum çerezi** yazar (30 gün).
+7. Kod tek kullanımlıktır. 5 yanlış denemede davet kilitlenir. Deneme, kod karşılaştırılmadan **önce** `sha` kilidiyle sayılır: aynı anda gelen tahminlerden sayacı yazamayan hiç denenmez, GitHub istek sınırında da tahmin bedava olmaz. Listede olmayan kimlik GitHub'a hiç gitmez (önbellekli kimlik listesi), rastgele kimlikle istek yağdırmak saatlik sınırı tüketemez. Danışan kaybederse PT yeni kod üretir, eski kod anında geçersiz olur. Bilinmeyen kimlik ile davetsiz danışan aynı yanıtı alır.
 
 Kodun kendisi hiçbir yerde saklanmaz; `localStorage`'da yalnızca "hangi danışanım" bilgisi tutulur, yetki her zaman çerezdedir.
 
-**Kural:** girişten sonra sunucu yetkiyi **oturum çerezinden** okur, adresteki kimlikten değil. Danışan adrese başka bir kimlik yazarsa sunucu reddeder. Danışanın kendi telefonunda oturumu açık bırakması kendi tercihidir; her ekranda "oturumu kapat" düğmesi vardır ve PT istediği an erişimi iptal edip yeni QR üretebilir.
+**Kural (PT ekranları):** her PT sayfası `requirePt()`'yi kendisi çağırır; layout'taki kontrol yetmez. Next 16'da layout kardeş sayfanın çalışmasını durdurmaz ve sayfanın okuduğu veri RSC yanıtına girer (oturumsuz `RSC: 1` isteği egzersiz listesini böyle alabiliyordu).
+
+**Kural (danışan):** girişten sonra sunucu yetkiyi **oturum çerezinden** okur, adresteki kimlikten değil. Danışan adrese başka bir kimlik yazarsa sunucu reddeder. Çerez danışanın **oturum kuşağını** (`access.version`) taşır; her danışan ekranı kaydı okurken karşılaştırır. PT düzenleme sayfasında **"Erişimi kapat"** derse kuşak artar: açık bütün oturumlar bir sonraki istekte düşer ve bekleyen davet silinir (ör. telefon kayboldu). Arşivlenen ya da silinen danışan da giremez. Danışanın ekranında "Çıkış" düğmesi vardır.
 
 ---
 
@@ -179,7 +190,7 @@ Oluşturma işi (şablon kurmak, program atamak, birkaç danışanı yan yana g�
 - **Her şey shadcn bileşeni.** Yerleşim dahil: kartlar `Card`, arama `InputGroup`, boş durum `Empty`, uyarılar `Alert`, yükleniyor `Spinner`, sayfa yolu `Breadcrumb`. Elle yazılmış düğme/rol yok (istisnalar: React Bits'ten uyarlanan dock ve kas haritasının SVG'si).
 - **Detay ve oluşturma ekranları sayfadır, modal değildir.** Kendi adresi olur, geri tuşuyla dönülür (`/…/new`, `/…/[id]`, `/…/[id]/edit`). Diyalog yalnız kısa onaylar içindir (ör. silme).
 - **Üst çubuk yok.** Sağ üstte kullanıcı menüsü (avatar): görünüm ayarları ve çıkış burada. Dock yalnız gezinme içindir: Genel bakış · Danışanlar · **Antrenman**. Antrenman bölümünün içinde sekmeler: Şablonlar · Egzersizler · Cihazlar (her sekme kendi sayfası; `training-tabs.tsx`). Egzersiz ve cihaz arada bir düzenlenen başvuru kaynakları olduğu için dock'ta ayrı yer kaplamaz; şablon düzenleyicide egzersiz seçici ve satır içi cihaz değişimiyle kullanılır.
-- **Detay sayfası yerleşimi (egzersiz, cihaz, aparat — üçü de aynı):** başlıkta yolu, adı, tek cümlelik açıklaması ve **tek eylem**: "Düzenle". Altında `lg:grid-cols-2`: **solda kaydın kendisi** (görsel: kas haritası / cihaz fotoğrafı / aparat fotoğrafı, ve video), **sağda bilgisi** (özet tablosu, ipuçları, medikal etiketler / ağırlık ayarı / takılı cihazlar). Başka kayıtlara bağlanan **uzun ilişki listeleri** (muadiller, bu cihazla yapılan egzersizler, bu aparatla yapılan egzersizler) en altta **tam genişlikte** durur ve kartın içinde `sm:grid-cols-2 lg:grid-cols-3` ızgarasına döner — tek sütunda iki ekran boyu liste olmaz. Telefonda tek sütun; sıra soldaki kolonun sırasıdır.
+- **Detay sayfası yerleşimi (egzersiz, cihaz, aparat, danışan — hepsi aynı):** başlıkta yolu, adı, tek cümlelik açıklaması ve **tek eylem**: "Düzenle". Altında `lg:grid-cols-2`: **solda kaydın kendisi** (görsel: kas haritası / cihaz fotoğrafı / aparat fotoğrafı, ve video), **sağda bilgisi** (özet tablosu, ipuçları, medikal etiketler / ağırlık ayarı / takılı cihazlar). Başka kayıtlara bağlanan **uzun ilişki listeleri** (muadiller, bu cihazla yapılan egzersizler, bu aparatla yapılan egzersizler) en altta **tam genişlikte** durur ve kartın içinde `sm:grid-cols-2 lg:grid-cols-3` ızgarasına döner — tek sütunda iki ekran boyu liste olmaz. Danışanda solda profil, sağda giriş/davet ve sağlık modülü, altta antrenmanlar. Telefonda tek sütun; sıra soldaki kolonun sırasıdır.
 - **Düzenleme sayfası yerleşimi:** form bölümlere ayrılmış kartlardır (egzersizde: Hareket · Ekipman, cihaz ve tutuş · Çalışan kaslar · Yük ve ilerleme · Medikal etiketler · Muadiller). Her kartın başlığı ve tek cümlelik gerekçesi olur; kart başlığıyla içindeki alan başlığı tekrar etmez. **Yıkıcı eylemler ("Sil", "Varsayılana dön") düzenleme sayfasının başlığındadır**, detayda değil: değiştiren her şey tek yerde.
 - Bağlantı olarak çizilen düğmelerde `nativeButton={false}` (Base UI, gerçek `<button>` olmayanı böyle bilmeli).
 - Sayılar Türkçe biçimde: `2,5 kg` (`src/lib/format.ts`).
@@ -289,7 +300,7 @@ Tasarım dili, ekran akışları, Türkçe metinler, antrenman ekranı mantığ�
 1. **GitHub token tarayıcıya inmez.** Bütün GitHub çağrıları sunucu tarafında yapılır.
 2. **Token geniş yetkilidir — modelin bedeli budur.** *(Açık araştırma: GitHub App kullanılırsa bu token kısa ömürlü ve dar kapsamlı hâle gelebilir. GitHub App'in kişisel hesapta repo oluşturup oluşturamadığı doğrulanmadı; doğrulanırsa §9.2 büyük ölçüde kapanır.)* Repo oluşturup silebilmesi için hesap seviyesinde yönetici yetkisi gerekiyor; sızarsa aynı hesaptaki başka repolar da risk altında. Alınan önlemler:
    - Uygulama kodu **yalnız `client-` ile başlayan repolara** dokunur; bu kural veri katmanında tek noktada zorunludur, bir hata başka repoyu silemez.
-   - Silme iki adımlıdır: PT danışanın adını yazarak doğrular.
+   - Silme iki adımlıdır: PT danışanın adını yazarak doğrular (kontrol sunucuda da yapılır).
    - Token yalnız bu iş için üretilir, süreli olur ve sadece Vercel ortam değişkenlerinde durur.
    - İleride daralmak isterse: danışan repoları ücretsiz bir GitHub organizasyonuna taşınabilir, token o organizasyona kısılır. Veri taşınır, kod değişmez.
 3. **Repolar özel olmalı.** Oluşturma çağrısında `private: true` zorunlu; testlerle sabitlenir.
@@ -297,7 +308,8 @@ Tasarım dili, ekran akışları, Türkçe metinler, antrenman ekranı mantığ�
 5. **Silme.** Repo silinir; 90 gün boyunca yalnız hesap sahibi geri alabilir, sonra tamamen gider. Aynı işlemde diğer danışanların repo'sundaki bağlantı kayıtları ve uygulama repo'sundaki kimlik satırı da temizlenir.
 6. **GitHub veritabanı değil:** yazma gecikmesi yarım saniye civarı, saatte 5.000 istek sınırı var, eşzamanlı yazma çakışabilir (yeniden deneme ile çözülür). Bu ölçekte sorun değil; çok PT'li bir servise dönüşürse mimari değişmeli.
 7. **Danışan listesi N repo okuması ister** (30 danışan → 30 istek). Sunucu tarafı ETag önbelleğiyle tek seferlik maliyete iner.
-8. **Vercel ücretsiz plan ticari kullanıma kapalı.** Danışanlardan ücret alınmaya başlanırsa ücretli plana geçmek ya da Cloudflare'e taşımak gerekir.
+8. **Kod fork'u açıktır.** Açık bir repo'nun fork'u gizli yapılamaz. Bu yüzden uygulama kod repo'suna hiçbir şey yazmaz; `APP_REPO` fork'un adıyla çakışırsa ya da açık/fork bir repo'yu gösterirse kurulum durur (`createAppRepo`). PT'nin kodda yaptığı değişiklikler de herkese açık olur.
+9. **Vercel ücretsiz plan ticari kullanıma kapalı.** Danışanlardan ücret alınmaya başlanırsa ücretli plana geçmek ya da Cloudflare'e taşımak gerekir.
 
 ---
 
@@ -339,9 +351,9 @@ Uygulama beyaz etiketli: paketin adı `pulsecoach`, yayınlanan kurulumun adın�
 | 0 | Proje iskeleti, tasarım tokenları, PT girişi |
 | 1 | Kurulum sihirbazı (ad, logo, renk, tema) + GitHub veri katmanı (repo koruma kuralı dahil) |
 | 2 | Egzersiz kütüphanesi ✓ · PT kabuğu (dock + sağ üstte kullanıcı menüsü) ✓ · kas haritası (süzgeç + detay) ✓ |
-| 3 | Danışan ekleme (repo açma), sağlık modülü seçimi, QR davet, danışan girişi |
+| 3 | Danışan ekleme (repo açma) ✓ · sağlık modülü seçimi ✓ · QR davet ✓ · danışan girişi ✓ · sağlık onayı (ver/geri çek) ✓ · erişimi kapat ✓ · silme (adı yazarak) ✓ |
 | 4 | Antrenman şablonu düzenleyici (gruplar: süperset/devre/kompleks, şablon kas haritası) · antrenman ekranı (**set başına canlı yazma**, çevrimdışı kuyruk, zorluk düğmeleri, §7.1 önerileri) · haftalık yük haritası · PT canlı görünüm · geçmiş |
 | 5 | Sağlık modülü ekranları, onay akışı |
 | 6 | Yönetim işlemleri (silme, dışa aktarma, yedek), JSON şeması + doğrulama, AI için PR kuralı |
 | 7 | Bağlantılar (danışanların birbirini görmesi) |
-| 8 | npm paketi, `create-pulsecoach`, kurulum rehberi |
+| 8 | Fork'la kurulum: "Deploy to Vercel" düğmesi, kurulum rehberi (token, OAuth uygulaması, `APP_REPO`), güncelleme = "Sync fork". npm paketi / `create-pulsecoach` yalnız gerekirse |

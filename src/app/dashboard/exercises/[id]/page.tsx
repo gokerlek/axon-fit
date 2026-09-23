@@ -20,6 +20,7 @@ import { CATEGORY_LABELS, EQUIPMENT_LABELS } from '@/lib/schemas/exercise';
 import { AlternativesCard, type AlternativeRow, type DeviceSwap } from './alternatives-card';
 import { MedicalCard } from './medical-card';
 import { EditButton } from '@/components/edit-button';
+import { requirePt } from '@/lib/guards';
 
 const TRACKING_LABELS = {
   weight_reps: 'Ağırlık + tekrar',
@@ -29,6 +30,7 @@ const TRACKING_LABELS = {
 
 /** Egzersiz detayı — kendi sayfası (modal değil, SPEC §6). */
 export default async function ExerciseDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePt();
   const { id } = await params;
   const [all, devices, pool] = await Promise.all([listExercises(), listDevices(), listAttachments()]);
   const exercise = await getExercise(id, all);

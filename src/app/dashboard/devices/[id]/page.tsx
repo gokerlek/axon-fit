@@ -17,9 +17,11 @@ import { listExercises } from '@/lib/exercises';
 import { formatKg } from '@/lib/format';
 import { summarizeMuscles } from '@/lib/muscles';
 import { EditButton } from '@/components/edit-button';
+import { requirePt } from '@/lib/guards';
 
 /** Cihaz detayı — kendi sayfası (modal değil). */
 export default async function DeviceDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePt();
   const { id } = await params;
   const [device, exercises, pool] = await Promise.all([getDevice(id), listExercises(), listAttachments()]);
   if (!device) notFound();

@@ -22,16 +22,37 @@ const conditionRef = v.pipe(
   v.check((value) => parseCondition(value) !== null, 'Bilinmeyen kısıt kimliği.'),
 );
 
-/** Seans yoklamasının sağlık kısmı. Kırmızı bayrak sorusu her seans cevaplanır. */
+/** 1 (çok kötü) – 5 (çok iyi); v1'deki hazır oluşluk sorularıyla aynı ölçek. */
+const wellness = v.pipe(v.number('Sayı gir.'), v.integer('Tam sayı gir.'), v.minValue(1, 'En az 1.'), v.maxValue(5, 'En fazla 5.'));
+
+/**
+ * Hazır oluşluk: antrenman öncesi dört kısa soru. Yalnız sayılar tutulur, serbest metin
+ * yok (veri en aza). Modülde "Hazır oluşluk" parçası açık ve onaylıysa yazılır.
+ */
+export const readinessSchema = v.object({
+  sleep: wellness,
+  energy: wellness,
+  /** Kas ağrısı: 5 = hiç yok. */
+  soreness: wellness,
+  /** Stres: 5 = hiç yok. */
+  stress: wellness,
+});
+export type Readiness = v.InferOutput<typeof readinessSchema>;
+
+/**
+ * Seans yoklamasının sağlık kısmı. Kırmızı bayrak sorusu ağrı takibi açıksa her seans
+ * cevaplanır; hazır oluşluk ayrı bir parçadır, yalnız o açıksa sorulur.
+ */
 export const healthCheckInSchema = v.object({
   date: isoDate,
+  readiness: v.optional(readinessSchema),
   painBaseline: v.optional(nprs),
   painPeak: v.optional(nprs),
   returnedToBaseline: v.optional(v.boolean()),
   symptomDirection: v.optional(v.picklist(SYMPTOM_DIRECTIONS, 'Semptom yönünü seç.')),
   irritability: v.optional(v.picklist(IRRITABILITY_LEVELS, 'İrritabiliteyi seç.')),
   painFreeWalkingMin: v.optional(minutes),
-  redFlag: v.picklist(RED_FLAG_CHECKS, 'Kırmızı bayrak sorusunu cevapla.'),
+  redFlag: v.optional(v.picklist(RED_FLAG_CHECKS, 'Kırmızı bayrak sorusunu cevapla.')),
 });
 export type HealthCheckIn = v.InferOutput<typeof healthCheckInSchema>;
 

@@ -7,8 +7,10 @@ import { exerciseAlternatives, summarizeMuscles } from '@/lib/muscles';
 import { EQUIPMENT_LABELS } from '@/lib/schemas/exercise';
 import { ExerciseActions } from '../exercise-actions';
 import { ExerciseForm } from '../../exercise-form';
+import { requirePt } from '@/lib/guards';
 
 export default async function EditExercisePage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePt();
   const { id } = await params;
   const [all, devices, attachments] = await Promise.all([listExercises(), listDevices(), listAttachments()]);
   const exercise = await getExercise(id, all);
