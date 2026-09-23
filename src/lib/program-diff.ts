@@ -153,6 +153,12 @@ export function diffDay(before: Pick<ProgramDay, 'blocks'>, after: Pick<ProgramD
     const name = title(b);
     if (a.exerciseId !== b.exerciseId) rowLines.push(`${title(a)} → ${name}`);
 
+    // Gruptan çıkan satır (grup aynı türde sürdüğü için grup cümlesi yok): dağıtma değilse yazılır.
+    const group = afterBlocks.get(previous.block.id);
+    if (previous.block.kind !== 'single' && next.block.kind === 'single' && group && group.kind !== 'single') {
+      rowLines.push(`${name} gruptan çıkarıldı (dinlenme ${restText(next.block.restSeconds)})`);
+    }
+
     const targetChanged = targetShort(a.target, tt(a)) !== targetShort(b.target, tt(b));
     const setsChanged =
       previous.block.sets !== next.block.sets && !(roundsReported.has(next.block.id) && previous.block.id === next.block.id);

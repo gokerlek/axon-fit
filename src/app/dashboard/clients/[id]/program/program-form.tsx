@@ -114,13 +114,15 @@ export function ProgramForm({
     return {
       input,
       dropped: prepared.droppedDeviceRowIds.length,
-      missing: missingExerciseDays(initial.phases, new Set(exercises.map((exercise) => exercise.id))),
       skeletonDayId: initial.phases[0]?.days[0]?.id ?? '',
     };
   });
   const form = useForm({ schema: programFormSchema, initialInput: start.input });
   const phases = (useField(form, { path: ['phases'] }).input ?? []) as unknown as ProgramPhase[];
   const currentPhaseId = useField(form, { path: ['currentPhaseId'] }).input ?? '';
+  const exerciseIds = useMemo(() => new Set(exercises.map((exercise) => exercise.id)), [exercises]);
+  // Canlı evrelerden: değiştirilen/kaldırılan satır ya da silinen gün uyarıdan hemen düşer.
+  const missing = useMemo(() => missingExerciseDays(phases, exerciseIds), [phases, exerciseIds]);
 
   const [templateList, setTemplateList] = useState(templates);
   const [startChoice, setStartChoice] = useState(NO_TEMPLATE);
@@ -150,7 +152,7 @@ export function ProgramForm({
   // Sıradaki gün: şu anki evre kayıttakiyse rotasyon (silinen son gün uzlaştırılarak), değiştiyse yeni evrenin ilk günü.
   const rotation = stored && currentPhaseId === stored.current.phaseId ? reconcileRotation(initial.phases, phases, stored.rotation) : {};
   const next = nextDayId({ phases, current: { phaseId: currentPhaseId, startedAt: '' }, rotation });
-  const missingDayIds = useMemo(() => new Set(start.missing.map((item) => item.dayId)), [start.missing]);
+  const missingDayIds = useMemo(() => new Set(missing.map((item) => item.dayId)), [missing]);
   const templateIds = useMemo(() => new Set(templateList.map((template) => template.id)), [templateList]);
 
   const current = useCallback(() => (getInput(form, { path: ['phases'] }) ?? []) as unknown as ProgramPhase[], [form]);
@@ -329,10 +331,10 @@ export function ProgramForm({
 
   const detailHref = `/dashboard/clients/${clientId}`;
   const programHref = `${detailHref}/program`;
-  const missingRows = start.missing.reduce((sum, item) => sum + item.rowIds.length, 0);
-  const missingLabels = start.missing
+  const missingRows = missing.reduce((sum, item) => sum + item.rowIds.length, 0);
+  const missingLabels = missing
     .map((item) => {
-      const phase = initial.phases.find((entry) => entry.id === item.phaseId);
+      const phase = phases.find((entry) => entry.id === item.phaseId);
       const day = phase?.days.find((entry) => entry.id === item.dayId);
       return phase && day ? `${phase.name} · ${day.name}` : null;
     })

@@ -73,7 +73,7 @@ export async function ProgramCard({ clientId }: { clientId: string }) {
           <CardDescription>
             <span className="block">
               {phase.name}
-              {phase.weeks !== undefined ? ` · ${status.week}. hafta / ${phase.weeks}` : null}
+              {phase.weeks !== undefined ? ` · ${Math.min(status.week, phase.weeks)}. hafta / ${phase.weeks}` : null}
             </span>
             <span className="tabular-nums">{summary.rows}</span> hareket ·{' '}
             <span className="tabular-nums">{summary.workingSets}</span> set · ≈{' '}

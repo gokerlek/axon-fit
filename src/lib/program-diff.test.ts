@@ -9,7 +9,7 @@ import {
   prescriptionText,
   type DiffContext,
 } from './program-diff.ts';
-import { dissolveGroup, joinBlocks } from './template-edit.ts';
+import { dissolveGroup, joinBlocks, ungroupRow, type IdSource } from './template-edit.ts';
 import type { ProgramBody, ProgramChange, ProgramDay, ProgramPhase, ProgramState } from './program-plan.ts';
 import type { TemplateBlock, TemplateRow } from './template-plan.ts';
 
@@ -135,6 +135,48 @@ describe('gün farkı', () => {
     assert.deepEqual(diffDay(gun('d_aaaaaa', 'Gün A', [circuit]), slower, ctx), [
       'Devre (Goblet Squat + Leg Press + Leg Curl): istasyon arası 15 sn → 20 sn',
     ]);
+  });
+
+  describe('gruptan çıkarma (grup aynı türde sürer)', () => {
+    const ids: IdSource = () => 'b_new001';
+    const complex = gun('d_aaaaaa', 'Gün A', [group('b_cmplx1', 'complex', [goblet, press, curl], 4)]);
+    const circuit = gun('d_aaaaaa', 'Gün A', [group('b_circ01', 'circuit', [goblet, press, curl, hip], 3, 120, 15)]);
+    const ungroup = (day: ProgramDay, rowId: string) => gun(day.id, day.name, ungroupRow(day.blocks, rowId, kinds, ids));
+
+    test('kompleksin ilk ve son hareketi', () => {
+      const first = ungroup(complex, goblet.id);
+      assert.equal(first.blocks[1]?.kind, 'complex');
+      assert.deepEqual(diffDay(complex, first, ctx), ['Goblet Squat gruptan çıkarıldı (dinlenme 2 dk)']);
+      const last = ungroup(complex, curl.id);
+      assert.deepEqual(diffDay(complex, last, ctx), ['Leg Curl gruptan çıkarıldı (dinlenme 2 dk)']);
+
+      // Aynı kayıtta yeni tek hareketin dinlenmesi de değişirse cümlede görünür.
+      const rested = gun('d_aaaaaa', 'Gün A', last.blocks.map((block) => (block.id === 'b_new001' ? { ...block, restSeconds: 60 } : block)));
+      assert.deepEqual(diffDay(complex, rested, ctx), ['Leg Curl gruptan çıkarıldı (dinlenme 1 dk)']);
+
+      const at = '2026-09-01T00:00:00.000Z';
+      const stored: ProgramState = {
+        version: 1,
+        revision: 1,
+        createdAt: at,
+        updatedAt: at,
+        phases: [evre1([complex])],
+        current: { phaseId: 'p_evre01', startedAt: at },
+        rotation: {},
+        log: [],
+      };
+      const result = applyProgramEdit(stored, body([evre1([last])]), ctx, new Date('2026-09-24T09:00:00.000Z'));
+      assert.ok(result);
+      assert.deepEqual(result.changes, [{ scope: 'Gün A', text: 'Leg Curl gruptan çıkarıldı (dinlenme 2 dk)' }]);
+    });
+
+    test('dört hareketli devrenin ilk ve son hareketi', () => {
+      const first = ungroup(circuit, goblet.id);
+      assert.equal(first.blocks[1]?.kind, 'circuit');
+      assert.deepEqual(diffDay(circuit, first, ctx), ['Goblet Squat gruptan çıkarıldı (dinlenme 2 dk)']);
+      const last = ungroup(circuit, hip.id);
+      assert.deepEqual(diffDay(circuit, last, ctx), ['Kalça Köprüsü gruptan çıkarıldı (dinlenme 2 dk)']);
+    });
   });
 
   test('kural ve cihaz', () => {
