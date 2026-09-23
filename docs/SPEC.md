@@ -104,7 +104,9 @@ health.json                    yalnız sağlık modülü açık ve onaylıysa ol
   "consents": {                        // danışan verir; kapsadığı parçalarla birlikte
     "health": { "granted": true, "version": "2026-09", "fields": ["conditions", "readiness"], "at": "..." }
   },
-  "access": { "version": 1 },          // oturum kuşağı: "erişimi kapat" artırır, açık oturumlar düşer
+  "access": {                          // oturum kuşağı: "erişimi kapat" artırır, açık oturumlar düşer
+    "version": 1, "joinedAt": "...", "lastJoinAt": "...", "revokedAt": "..."
+  },                                   // katılım burada: invite.json her yeni kodda ezilir
   "visibleTo": ["c_2m1x9qa4"]          // Faz 7: bağlantı verilen diğer danışanlar (yalnız kimlik)
 }
 ```

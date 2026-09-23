@@ -6,7 +6,7 @@ import { readClient, readInvite } from '@/lib/clients';
 import { inviteStatus } from '@/lib/client-status';
 import { readAppConfig } from '@/lib/config';
 import { CLIENT_ID_PATTERN } from '@/lib/schemas/client';
-import { InviteBadge, inviteDetail } from '../../invite-state';
+import { AccessBadge, accessDetail, accessOf } from '../../invite-state';
 import { InvitePanel } from './invite-panel';
 import { requirePt } from '@/lib/guards';
 
@@ -21,7 +21,7 @@ export default async function InvitePage({ params }: { params: Promise<{ id: str
   const [stored, invite, config] = await Promise.all([readClient(id), readInvite(id), readAppConfig()]);
   if (!stored) notFound();
   const { client } = stored;
-  const status = inviteStatus(invite?.invite ?? null, new Date());
+  const access = accessOf(client, invite?.invite ?? null);
   const archived = client.status === 'archived';
 
   return (
@@ -45,16 +45,22 @@ export default async function InvitePage({ params }: { params: Promise<{ id: str
             </CardHeader>
           </Card>
         ) : (
-          <InvitePanel clientId={id} clientName={client.name} hasPending={status === 'pending'} timeZone={config.timeZone} />
+          <InvitePanel
+            clientId={id}
+            clientName={client.name}
+            hasPending={inviteStatus(invite?.invite ?? null, new Date()) === 'pending'}
+            joined={access === 'joined'}
+            timeZone={config.timeZone}
+          />
         )}
 
         <div className="flex flex-col gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Şu anki davet</CardTitle>
-              <CardDescription>{inviteDetail(status, invite?.invite ?? null, config.timeZone)}</CardDescription>
+              <CardTitle>Giriş durumu</CardTitle>
+              <CardDescription>{accessDetail(client, invite?.invite ?? null, config.timeZone)}</CardDescription>
               <div>
-                <InviteBadge status={status} />
+                <AccessBadge state={access} />
               </div>
             </CardHeader>
           </Card>

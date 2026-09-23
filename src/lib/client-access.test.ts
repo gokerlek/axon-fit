@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import * as v from 'valibot';
 import { checkInvite, hashInviteCode, newClientId, newInvite } from './client-access.ts';
 import {
+  accessState,
   canRecordHealth,
+  hasNewDeviceCode,
   formatInviteCode,
   healthConsentState,
   INVITE_MAX_ATTEMPTS,
@@ -80,6 +82,39 @@ describe('davet kodu', () => {
     assert.equal(inviteStatus({ ...invite, attempts: INVITE_MAX_ATTEMPTS }, sonra), 'locked');
     assert.equal(inviteStatus({ ...invite, used: true, attempts: INVITE_MAX_ATTEMPTS }, sonra), 'used');
     assert.equal(normalizeInviteCode(' 1234 - 5678 '), '12345678');
+  });
+});
+
+describe('giriş durumu', () => {
+  const saat = (hh: string) => `2026-09-23T${hh}:00:00.000Z`;
+  const davet = (createdAt: string, extra: Partial<ReturnType<typeof newInvite>['invite']> = {}) => ({
+    ...newInvite(SIR, 'c_abc12345', new Date(createdAt)).invite,
+    ...extra,
+  });
+  const an = new Date(saat('12'));
+
+  test('katılmış danışana yeni cihaz kodu üretilince "katıldı" kalır, kod ayrıca bildirilir', () => {
+    const access = { joinedAt: saat('09'), lastJoinAt: saat('09') };
+    const yeni = davet(saat('10'));
+    assert.equal(accessState(access, yeni, an), 'joined');
+    assert.equal(hasNewDeviceCode(access, yeni, an), true);
+    // Kullanılmış eski davet yeni kod sayılmaz.
+    assert.equal(hasNewDeviceCode(access, davet(saat('08'), { used: true }), an), false);
+  });
+
+  test('erişim kapatılınca "kapalı", yeniden davet edilince davetin durumu', () => {
+    const access = { joinedAt: saat('08'), lastJoinAt: saat('08'), revokedAt: saat('09') };
+    assert.equal(accessState(access, null, an), 'revoked');
+    assert.equal(accessState(access, davet(saat('07')), an), 'revoked');
+    assert.equal(accessState(access, davet(saat('10')), an), 'pending');
+    // Kapatıldıktan sonra yeniden girdi.
+    assert.equal(accessState({ ...access, lastJoinAt: saat('11') }, davet(saat('10'), { used: true }), an), 'joined');
+  });
+
+  test('hiç girmemiş danışanda davetin durumu; eski kayıtta kullanılmış davet "katıldı" demek', () => {
+    assert.equal(accessState({}, null, an), 'none');
+    assert.equal(accessState({}, davet(saat('10')), an), 'pending');
+    assert.equal(accessState({}, davet(saat('10'), { used: true }), an), 'used');
   });
 });
 

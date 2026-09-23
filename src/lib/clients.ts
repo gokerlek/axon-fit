@@ -280,7 +280,16 @@ export async function redeemInvite(
     if (error instanceof GithubError && error.status === 409) return { ok: false, reason: 'used' };
     throw error;
   }
-  return { ok: true, client: record.client };
+
+  // Katılım kayda yazılır: davet dosyası bir sonraki kodda ezilir. Yazılamazsa giriş yine
+  // geçerli (oturum kuşağı değişmedi); yalnız PT ekranındaki tarih eksik kalır.
+  const { revokedAt: _revoked, ...access } = record.client.access;
+  const joined: Client = {
+    ...record.client,
+    access: { ...access, joinedAt: access.joinedAt ?? now.toISOString(), lastJoinAt: now.toISOString() },
+  };
+  await writeClient(joined, record.sha, 'Danışan giriş yaptı').catch(() => undefined);
+  return { ok: true, client: joined };
 }
 
 /** Açık bütün oturumları düşürür ve bekleyen daveti iptal eder. */
@@ -288,7 +297,11 @@ export async function revokeAccess(id: string): Promise<void> {
   const stored = await readClient(id);
   if (!stored) throw new GithubError('Danışan bulunamadı.', 404);
   const { client, sha } = stored;
-  await writeClient({ ...client, access: { version: client.access.version + 1 } }, sha, 'Danışanın erişimi kapatıldı');
+  await writeClient(
+    { ...client, access: { ...client.access, version: client.access.version + 1, revokedAt: new Date().toISOString() } },
+    sha,
+    'Danışanın erişimi kapatıldı',
+  );
   const invite = await readJson<unknown>(clientRepoName(id), INVITE_PATH);
   if (invite) await deleteFile(clientRepoName(id), INVITE_PATH, { sha: invite.sha, message: 'Davet iptal edildi' });
 }

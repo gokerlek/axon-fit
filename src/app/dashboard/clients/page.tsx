@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { listClients, readInvite } from '@/lib/clients';
-import { healthConsentState, inviteStatus } from '@/lib/client-status';
+import { healthConsentState } from '@/lib/client-status';
 import { CLIENT_STATUS_LABELS, CLIENT_STATUSES } from '@/lib/schemas/client';
-import { InviteBadge } from './invite-state';
+import { AccessBadge, accessOf } from './invite-state';
 import { HEALTH_STATE_LABELS } from './health-state';
 import { requirePt } from '@/lib/guards';
 
@@ -102,7 +102,7 @@ export default async function ClientsPage() {
                           ) : null}
                         </CardHeader>
                         <CardFooter>
-                          <InviteBadge status={inviteStatus(invite, now)} />
+                          {entry.ok ? <AccessBadge state={accessOf(entry.client, invite, now)} /> : null}
                         </CardFooter>
                       </Card>
                     </Link>

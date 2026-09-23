@@ -31,6 +31,31 @@ export function inviteStatus(invite: Invite | null, now: Date): InviteStatus {
   return 'pending';
 }
 
+/**
+ * Danışanın giriş durumu: davetin durumu tek başına yetmez — PT katılmış bir danışana yeni
+ * cihaz için kod üretince davet dosyası "bekliyor"a döner, ama danışan zaten içeride.
+ * - `joined`: en az bir kez girdi ve sonrasında erişimi kapatılmadı
+ * - `revoked`: erişimi kapatıldı ve henüz yeni kod üretilmedi
+ * - aksi halde davetin durumu (hiç girmemiş ya da kapatıldıktan sonra yeniden davet edilmiş)
+ */
+export type AccessState = 'joined' | 'revoked' | InviteStatus;
+
+type Access = { lastJoinAt?: string | undefined; revokedAt?: string | undefined };
+
+export function accessState(access: Access, invite: Invite | null, now: Date): AccessState {
+  const status = inviteStatus(invite, now);
+  const revokedAfterJoin = Boolean(access.revokedAt && (!access.lastJoinAt || access.revokedAt > access.lastJoinAt));
+  if (access.lastJoinAt && !revokedAfterJoin) return 'joined';
+  if (revokedAfterJoin && (!invite || invite.createdAt < access.revokedAt!)) return 'revoked';
+  // Eski kayıtlar: katılım tarihi yok ama kullanılmış davet var.
+  return status;
+}
+
+/** Katılmış danışana yeni cihaz için üretilmiş, henüz kullanılmamış kod var mı. */
+export function hasNewDeviceCode(access: Access, invite: Invite | null, now: Date): boolean {
+  return Boolean(access.lastJoinAt && invite && inviteStatus(invite, now) === 'pending' && invite.createdAt > access.lastJoinAt);
+}
+
 export type HealthConsentState =
   /** Modül kapalı: hiçbir sağlık kaydı tutulmaz. */
   | 'off'

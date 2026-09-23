@@ -26,12 +26,15 @@ export function InvitePanel({
   clientId,
   clientName,
   hasPending,
+  joined,
   timeZone,
 }: {
   clientId: string;
   clientName: string;
   /** Geçerli, kullanılmamış bir davet var: yenisi onu geçersiz kılar. */
   hasPending: boolean;
+  /** Danışan zaten girdi: yeni kod yalnız yeni bir cihaz içindir, açık oturumu kapatmaz. */
+  joined: boolean;
   /** Uygulama ayarındaki saat dilimi: son kullanma saati PT'nin saatiyle yazılır. */
   timeZone: string;
 }) {
@@ -60,7 +63,7 @@ export function InvitePanel({
   const generateButton = (
     <Button onClick={() => issue.mutate()} disabled={issue.isPending}>
       {issue.isPending ? <Spinner data-icon="inline-start" /> : <QrIcon data-icon="inline-start" weight="fill" />}
-      {issued || hasPending ? 'Yeni kod üret' : 'Davet kodu üret'}
+      {joined ? 'Yeni cihaz için kod üret' : issued || hasPending ? 'Yeni kod üret' : 'Davet kodu üret'}
     </Button>
   );
 
@@ -73,11 +76,15 @@ export function InvitePanel({
               <EmptyMedia variant="icon">
                 <QrIcon weight="fill" />
               </EmptyMedia>
-              <EmptyTitle>{hasPending ? 'Bekleyen bir davet var' : 'Kare kodu üret'}</EmptyTitle>
+              <EmptyTitle>
+                {joined ? `${clientName} zaten giriş yaptı` : hasPending ? 'Bekleyen bir davet var' : 'Kare kodu üret'}
+              </EmptyTitle>
               <EmptyDescription>
-                {hasPending
-                  ? 'Kodun kendisi saklanmadığı için yeniden gösterilemez. Yeni kod üretirsen eskisi anında geçersiz olur.'
-                  : `${clientName} kodu okutunca kendi ekranına girer. Kod tek kullanımlıktır.`}
+                {joined
+                  ? 'Yeni kod yalnız yeni bir telefon ya da tarayıcı için gerekir; açık oturumunu kapatmaz. Telefonu kaybolduysa önce düzenleme sayfasından erişimi kapat.'
+                  : hasPending
+                    ? 'Kodun kendisi saklanmadığı için yeniden gösterilemez. Yeni kod üretirsen eskisi anında geçersiz olur.'
+                    : `${clientName} kodu okutunca kendi ekranına girer. Kod tek kullanımlıktır.`}
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>{generateButton}</EmptyContent>

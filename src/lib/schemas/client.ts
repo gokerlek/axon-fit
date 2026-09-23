@@ -92,7 +92,14 @@ export const clientSchema = v.object({
    * Oturum kuşağı: danışanın oturum çerezi bu sayıyı taşır. PT "erişimi kapat" deyince
    * artar ve açık bütün oturumlar bir sonraki istekte düşer.
    */
-  access: v.object({ version: v.pipe(v.number(), v.integer(), v.minValue(1)) }),
+  access: v.object({
+    version: v.pipe(v.number(), v.integer(), v.minValue(1)),
+    /** İlk ve son davetle giriş. Davet dosyası her yeni kodda ezildiği için katılım burada tutulur. */
+    joinedAt: v.optional(timestamp),
+    lastJoinAt: v.optional(timestamp),
+    /** PT'nin erişimi son kapattığı an; sonraki girişte kalkar. */
+    revokedAt: v.optional(timestamp),
+  }),
   /** Faz 7: bağlantı verilen diğer danışanlar (yalnız kimlik). */
   visibleTo: v.array(clientIdSchema),
 });

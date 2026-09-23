@@ -9,14 +9,14 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { loadClient, readInvite } from '@/lib/clients';
-import { healthConsentState, inviteStatus } from '@/lib/client-status';
+import { healthConsentState } from '@/lib/client-status';
 import { readAppConfig } from '@/lib/config';
 import { serverEnv } from '@/lib/env';
 import { formatDate } from '@/lib/format';
 import { clientRepoName } from '@/lib/github/client';
 import { CLIENT_ID_PATTERN, CLIENT_STATUS_LABELS, HEALTH_FIELD_INFO } from '@/lib/schemas/client';
 import { HEALTH_STATE_DETAILS, HEALTH_STATE_LABELS } from '../health-state';
-import { InviteBadge, inviteDetail } from '../invite-state';
+import { AccessBadge, accessDetail, accessOf } from '../invite-state';
 import { requirePt } from '@/lib/guards';
 
 /** Danışan detayı — yalnız gösterir; değiştirmek için "Düzenle" (SPEC §6). */
@@ -50,7 +50,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const { client } = loaded;
   const invite = await readInvite(id);
   const repo = clientRepoName(id);
-  const status = inviteStatus(invite?.invite ?? null, new Date());
+  const access = accessOf(client, invite?.invite ?? null);
   const health = healthConsentState(client);
   const consent = client.consents.health;
 
@@ -111,16 +111,16 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           <Card>
             <CardHeader>
               <CardTitle>Giriş</CardTitle>
-              <CardDescription>{inviteDetail(status, invite?.invite ?? null, config.timeZone)}</CardDescription>
+              <CardDescription>{accessDetail(client, invite?.invite ?? null, config.timeZone)}</CardDescription>
               <div>
-                <InviteBadge status={status} />
+                <AccessBadge state={access} />
               </div>
             </CardHeader>
             {client.status !== 'archived' ? (
               <CardFooter>
                 <Button variant="outline" nativeButton={false} render={<Link href={`/dashboard/clients/${id}/invite`} />}>
                   <QrCode data-icon="inline-start" weight="fill" />
-                  {status === 'none' ? 'Davet et' : 'Davet ekranı'}
+                  {access === 'joined' ? 'Yeni cihaz için kod' : access === 'none' ? 'Davet et' : 'Davet ekranı'}
                 </Button>
               </CardFooter>
             ) : null}
