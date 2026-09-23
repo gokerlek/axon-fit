@@ -1,5 +1,6 @@
 import * as v from 'valibot';
 import { MOVEMENT_PATTERNS } from '@/lib/alternatives';
+import { DEEP_MUSCLES } from '@/lib/deep-muscles';
 import { attachmentIdOf, attachmentIdSchema } from '@/lib/schemas/attachment';
 import { GRIPS, GRIP_WIDTHS } from '@/lib/grips';
 import { PROGRESSION_SCHEMES } from '@/lib/progression';
@@ -121,6 +122,14 @@ export const exerciseSchema = v.object({
   deviceId: v.optional(v.pipe(v.string(), v.regex(/^[a-z0-9-]{2,60}$/))),
   /** Hangi aparatla yapıldığı: havuzdaki aparatın kimliği (cihazın aparatlarından seçilir). */
   attachmentId: v.optional(attachmentIdSchema),
+  /**
+   * Derin/stabilizatör aktivasyon hedefleri (`src/lib/deep-muscles.ts`): rotator manşet,
+   * multifidus, pelvik taban… Haritada çizilmez ve **haftalık hacme girmez**; düzeltici
+   * çalışmada "bu hareket şunu uyandırır" demek için.
+   */
+  activationTargets: v.optional(
+    v.pipe(v.array(v.picklist(DEEP_MUSCLES, 'Geçerli bir derin kas seç.')), v.maxLength(8, 'En fazla 8 aktivasyon hedefi.')),
+  ),
   /** Tutuş: pronasyon/supinasyon/nötr/karışık ve genişlik (`src/lib/grips.ts`). */
   grip: v.optional(v.picklist(GRIPS, 'Geçerli bir tutuş seç.')),
   gripWidth: v.optional(v.picklist(GRIP_WIDTHS, 'Geçerli bir tutuş genişliği seç.')),
@@ -359,7 +368,7 @@ export const MUSCLE_LABELS: Record<Muscle, string> = {
   gastroc_lateral: 'Baldır (dış)',
   soleus: 'Soleus',
   tibialis: 'Kaval',
-  neck: 'Boyun (ön)',
-  nape: 'Ense',
+  neck: 'Boyun ön yüzü (SCM)',
+  nape: 'Ense (üst trapez/levator)',
   cardio: 'Kardiyo',
 };
