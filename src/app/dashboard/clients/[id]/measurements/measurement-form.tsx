@@ -74,14 +74,16 @@ function ValueInput({
               step="any"
               min="0"
               className="tabular-nums"
-              value={field.input ?? ''}
+              value={typeof field.input === 'number' && !Number.isNaN(field.input) ? field.input : ''}
               aria-invalid={Boolean(field.errors) || undefined}
               onChange={(event) => {
-                const value = event.currentTarget.valueAsNumber;
+                const el = event.currentTarget;
                 onEdit();
+                // Tarayıcının okuyamadığı sayı ("81,5") boş alan sayılmaz: NaN doğrulamada
+                // "Sayı gir." der, kayıtlı değer sessizce silinmez. Gerçekten boşaltılan alan kayıttan çıkar.
                 setInput(form, {
                   path: ['values', slot],
-                  input: event.currentTarget.value === '' || Number.isNaN(value) ? undefined : value,
+                  input: el.validity.badInput ? Number.NaN : el.value === '' ? undefined : el.valueAsNumber,
                 });
               }}
             />

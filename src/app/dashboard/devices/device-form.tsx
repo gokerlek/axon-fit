@@ -182,11 +182,16 @@ function NumberField({
             step="0.25"
             min="0"
             className="tabular-nums"
-            value={field.input ?? ''}
+            value={typeof field.input === 'number' && !Number.isNaN(field.input) ? field.input : ''}
             onChange={(event) =>
               setInput(form, {
                 path: [path],
-                input: event.currentTarget.value === '' ? undefined : event.currentTarget.valueAsNumber,
+                // Okunamayan sayı ("2,5") boş sayılmaz: NaN doğrulamada "Sayı gir." der.
+                input: event.currentTarget.validity.badInput
+                  ? Number.NaN
+                  : event.currentTarget.value === ''
+                    ? undefined
+                    : event.currentTarget.valueAsNumber,
               })
             }
           />
