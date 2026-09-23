@@ -18,6 +18,7 @@ import { CLIENT_ID_PATTERN, CLIENT_STATUS_LABELS, HEALTH_FIELD_INFO } from '@/li
 import { HEALTH_STATE_DETAILS, HEALTH_STATE_LABELS } from '../health-state';
 import { AccessBadge, accessDetail, accessOf } from '../invite-state';
 import { requirePt } from '@/lib/guards';
+import { readTemplateFile } from '@/lib/templates';
 
 /** Danışan detayı — yalnız gösterir; değiştirmek için "Düzenle" (SPEC §6). */
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -48,7 +49,10 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   }
 
   const { client } = loaded;
-  const invite = await readInvite(id);
+  const [invite, programFile] = await Promise.all([
+    readInvite(id),
+    client.program ? readTemplateFile(client.program.templateId).catch(() => null) : Promise.resolve(null),
+  ]);
   const repo = clientRepoName(id);
   const access = accessOf(client, invite?.invite ?? null);
   const health = healthConsentState(client);
@@ -83,6 +87,27 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 <TableRow>
                   <TableCell className="text-muted-foreground">Eklendi</TableCell>
                   <TableCell>{formatDate(client.createdAt, config.timeZone)}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="text-muted-foreground">Program</TableCell>
+                  <TableCell>
+                    {!client.program ? (
+                      <span className="text-muted-foreground">Atanmadı</span>
+                    ) : programFile?.template ? (
+                      <Link
+                        href={`/dashboard/templates/${programFile.template.id}`}
+                        className="font-medium underline-offset-4 hover:underline">
+                        {programFile.template.name}
+                      </Link>
+                    ) : (
+                      <span className="text-destructive">Şablon silinmiş ya da okunamıyor</span>
+                    )}
+                    {client.program ? (
+                      <span className="block text-xs text-muted-foreground">
+                        {formatDate(client.program.assignedAt, config.timeZone)} tarihinde atandı
+                      </span>
+                    ) : null}
+                  </TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="text-muted-foreground">Repo</TableCell>

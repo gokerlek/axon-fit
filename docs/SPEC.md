@@ -93,7 +93,7 @@ health.json                    yalnız sağlık modülü açık ve onaylıysa ol
   "note": "Hedef: 5 km koşu",          // PT'nin notu; danışan görmez
   "createdAt": "2026-09-20T10:00:00Z",
   "status": "active",                  // active | paused | archived (arşivdeki giriş yapamaz)
-  "program": { "templateId": "t_altvucut", "assignedAt": "..." },   // Faz 4
+  "program": { "templateId": "t_k2m9x4qa", "assignedAt": "..." },   // PT danışan formunda atar; şablon silinirse "silinmiş şablon" görünür
   "modules": {
     "health": {                        // PT danışanı açarken seçer
       "enabled": true,

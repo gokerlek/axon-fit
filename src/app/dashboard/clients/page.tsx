@@ -11,6 +11,7 @@ import { CLIENT_STATUS_LABELS, CLIENT_STATUSES } from '@/lib/schemas/client';
 import { AccessBadge, accessOf } from './invite-state';
 import { HEALTH_STATE_LABELS } from './health-state';
 import { requirePt } from '@/lib/guards';
+import { templateChoices } from '@/lib/templates';
 
 /**
  * Danışanlar: uygulama repo'sundaki kimlik listesi + her danışanın kendi repo'sundaki
@@ -18,7 +19,8 @@ import { requirePt } from '@/lib/guards';
  */
 export default async function ClientsPage() {
   await requirePt();
-  const clients = await listClients();
+  const [clients, templates] = await Promise.all([listClients(), templateChoices().catch(() => [])]);
+  const templateNames = new Map(templates.map((template) => [template.id, template.name]));
   const invites = new Map(
     await Promise.all(
       clients.map(async (entry) => [entry.id, await readInvite(entry.id).catch(() => null)] as const),
@@ -101,8 +103,13 @@ export default async function ClientsPage() {
                             </CardAction>
                           ) : null}
                         </CardHeader>
-                        <CardFooter>
+                        <CardFooter className="flex flex-wrap gap-2">
                           {entry.ok ? <AccessBadge state={accessOf(entry.client, invite, now)} /> : null}
+                          {entry.ok && entry.client.program ? (
+                            <Badge variant="outline">
+                              {templateNames.get(entry.client.program.templateId) ?? 'Silinmiş şablon'}
+                            </Badge>
+                          ) : null}
                         </CardFooter>
                       </Card>
                     </Link>

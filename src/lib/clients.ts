@@ -148,6 +148,12 @@ function healthModule(input: ClientInput, previous: Client['modules']['health'] 
   };
 }
 
+/** Program: aynı şablon yeniden kaydedilirse atama tarihi korunur. Boş seçim programı kaldırır. */
+function programOf(templateId: string, previous: Client['program'], now: string): Client['program'] {
+  if (!templateId) return undefined;
+  return previous?.templateId === templateId ? previous : { templateId, assignedAt: now };
+}
+
 /** Repo yeni açıldığında içerik ucu kısa bir süre 404/409 verebilir: birkaç kez dener. */
 async function writeFreshRepo(client: Client): Promise<void> {
   for (let attempt = 0; ; attempt += 1) {
@@ -175,6 +181,7 @@ export async function createClient(input: ClientInput): Promise<string> {
     ...(input.note ? { note: input.note } : {}),
     createdAt: now,
     status: 'active',
+    ...(input.templateId ? { program: programOf(input.templateId, undefined, now) } : {}),
     modules: { health: healthModule(input, null, now) },
     consents: {},
     access: { version: 1 },
@@ -198,11 +205,13 @@ export async function updateClient(id: string, input: ClientInput): Promise<void
   if (!stored) throw new GithubError('Danışan bulunamadı.', 404);
   const { client, sha } = stored;
   const now = new Date().toISOString();
-  const { note: _note, ...rest } = client;
+  const { note: _note, program: _program, ...rest } = client;
+  const program = programOf(input.templateId, client.program, now);
   const next: Client = {
     ...rest,
     name: input.name,
     ...(input.note ? { note: input.note } : {}),
+    ...(program ? { program } : {}),
     status: input.status,
     modules: { ...client.modules, health: healthModule(input, client.modules.health, now) },
   };

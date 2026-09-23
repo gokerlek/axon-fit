@@ -54,7 +54,10 @@ const HEALTH_FIELD_ICONS: Record<HealthField, PhosphorIcon> = {
  * Danışan ekleme/düzenleme. Yeni danışan kaydedilince sunucu özel repo'sunu açar ve
  * PT davet ekranına geçer. Sağlık modülü burada açılır; danışan ilk girişinde onaylar.
  */
-export function ClientForm({ editing }: { editing: Client | null }) {
+/** Seçicide "program yok": Base UI Select boş değeri seçilebilir saymaz. */
+const NO_PROGRAM = 'none';
+
+export function ClientForm({ editing, templates }: { editing: Client | null; templates: { id: string; name: string }[] }) {
   const router = useRouter();
   const form = useForm({
     schema: clientFormSchema,
@@ -64,8 +67,16 @@ export function ClientForm({ editing }: { editing: Client | null }) {
       status: editing?.status ?? 'active',
       healthEnabled: editing?.modules.health.enabled ?? false,
       healthFields: editing?.modules.health.fields ?? [],
+      templateId: editing?.program?.templateId ?? '',
     },
   });
+  const programLabels: Record<string, string> = {
+    [NO_PROGRAM]: 'Program yok',
+    ...Object.fromEntries(templates.map((template) => [template.id, template.name])),
+  };
+  // Atanmış şablon silindiyse seçici boş görünmesin.
+  const assigned = editing?.program?.templateId;
+  if (assigned && !programLabels[assigned]) programLabels[assigned] = 'Silinmiş şablon';
   const consented = editing?.consents.health?.granted ? editing.consents.health.fields : null;
   const consentState = editing ? healthConsentState(editing) : 'off';
 
@@ -150,6 +161,44 @@ export function ClientForm({ editing }: { editing: Client | null }) {
                   onChange={(event) => setInput(form, { path: ['note'], input: event.currentTarget.value })}
                 />
                 <FieldDescription>Senin için; danışan görmez.</FieldDescription>
+                <FieldError>{field.errors?.[0]}</FieldError>
+              </Field>
+            )}
+          </FormField>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Program</CardTitle>
+          <CardDescription>
+            Danışanın antrenman ekranında bu şablon açılır. Şablonu değiştirmek geçmiş antrenmanlarını etkilemez.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FormField of={form} path={['templateId']}>
+            {(field) => (
+              <Field data-invalid={Boolean(field.errors) || undefined} className="max-w-sm">
+                <FieldLabel htmlFor="templateId">Şablon</FieldLabel>
+                <LabeledSelect
+                  id="templateId"
+                  value={field.input || NO_PROGRAM}
+                  labels={programLabels}
+                  onChange={(value) => setInput(form, { path: ['templateId'], input: value === NO_PROGRAM ? '' : value })}
+                />
+                <FieldDescription>
+                  {templates.length === 0 ? (
+                    <>
+                      Henüz şablon yok.{' '}
+                      <Link href="/dashboard/templates/new" className="font-medium text-foreground underline underline-offset-4">
+                        Şablon oluştur
+                      </Link>
+                      .
+                    </>
+                  ) : (
+                    'Sonra da değiştirebilirsin.'
+                  )}
+                </FieldDescription>
                 <FieldError>{field.errors?.[0]}</FieldError>
               </Field>
             )}

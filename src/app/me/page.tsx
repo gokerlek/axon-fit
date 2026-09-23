@@ -1,11 +1,10 @@
-import { Barbell, SignOut } from '@phosphor-icons/react/dist/ssr';
+import { SignOut } from '@phosphor-icons/react/dist/ssr';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { healthConsentState } from '@/lib/client-status';
 import { readAppConfig } from '@/lib/config';
 import { currentClient } from '@/lib/guards';
 import { ConsentCard } from './consent-card';
+import { ProgramCard } from './program-card';
 
 /**
  * Danışan alanı. PT ekranlarıyla hiçbir adres paylaşmaz (SPEC §5). Telefon odaklı.
@@ -37,22 +36,7 @@ export default async function MePage() {
       {/* Onay bekliyorsa ilk iş o: karar verilmeden sağlık ekranları açılmaz. */}
       {asking ? <ConsentCard state={health} fields={client.modules.health.fields} /> : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Bugünün antrenmanı</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Empty className="border">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <Barbell weight="fill" />
-              </EmptyMedia>
-              <EmptyTitle>Henüz program yok</EmptyTitle>
-              <EmptyDescription>Antrenörün program atadığında bugünün antrenmanı burada görünecek.</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        </CardContent>
-      </Card>
+      <ProgramCard program={client.program} />
 
       {health === 'granted' || health === 'declined' ? (
         <ConsentCard state={health} fields={client.modules.health.fields} />

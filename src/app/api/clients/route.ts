@@ -4,6 +4,7 @@ import { createClient, updateClient } from '@/lib/clients';
 import { GithubError } from '@/lib/github/client';
 import { clientSaveSchema } from '@/lib/schemas/client';
 import { readSession } from '@/lib/session';
+import { readTemplateFile } from '@/lib/templates';
 
 /**
  * Yeni danışan ya da (kimlikle) güncelleme. Yeni danışanda sunucu `client-<id>` özel
@@ -25,6 +26,13 @@ export async function POST(request: Request) {
 
   const { id, ...input } = parsed.output;
   try {
+    // Atanan şablon gerçekten var ve okunabilir olmalı.
+    if (input.templateId) {
+      const file = await readTemplateFile(input.templateId);
+      if (!file?.template) {
+        return NextResponse.json({ error: 'Bilgileri kontrol et.', fields: { templateId: 'Şablon bulunamadı.' } }, { status: 400 });
+      }
+    }
     if (id) {
       await updateClient(id, input);
       return NextResponse.json({ id });
