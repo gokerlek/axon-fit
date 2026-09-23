@@ -103,30 +103,32 @@ export function AlternativesCard({ exerciseId, rows, swaps }: { exerciseId: stri
         {sections.length === 0 ? (
           <p className="text-sm text-muted-foreground">Aynı kasları çalıştıran başka hareket bulunamadı.</p>
         ) : (
-          sections.map(([label, items]) => (
-            <section key={label} className="flex flex-col gap-2" aria-label={label}>
-              <h3 className="text-xs font-medium text-muted-foreground">{label}</h3>
-              <ItemGroup className="gap-2">
-                {items.map((row) => (
-                  <Item key={row.id} variant="outline" size="sm" render={<Link href={`/dashboard/exercises/${row.id}`} />}>
-                    <ItemContent>
-                      <ItemTitle>{row.title}</ItemTitle>
-                      <ItemDescription>
-                        {row.muscles}
-                        {row.pinned ? ` · ${row.device ?? EQUIPMENT_LABELS[row.equipment]}` : ''}
-                        {row.pattern ? ` · ${row.pattern}` : ''}
-                      </ItemDescription>
-                    </ItemContent>
-                    {row.pinned ? (
-                      <ItemActions>
-                        <PushPin weight="fill" className="size-4 text-primary" aria-label="Senin sabitlediğin" />
-                      </ItemActions>
-                    ) : null}
-                  </Item>
-                ))}
-              </ItemGroup>
-            </section>
-          ))
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {sections.map(([label, items]) => (
+              <section key={label} className="flex flex-col gap-2" aria-label={label}>
+                <h3 className="text-xs font-medium text-muted-foreground">{label}</h3>
+                <ItemGroup className="gap-2">
+                  {items.map((row) => (
+                    <Item key={row.id} variant="outline" size="sm" render={<Link href={`/dashboard/exercises/${row.id}`} />}>
+                      <ItemContent>
+                        <ItemTitle>{row.title}</ItemTitle>
+                        <ItemDescription>
+                          {row.muscles}
+                          {row.pinned ? ` · ${row.device ?? EQUIPMENT_LABELS[row.equipment]}` : ''}
+                          {row.pattern ? ` · ${row.pattern}` : ''}
+                        </ItemDescription>
+                      </ItemContent>
+                      {row.pinned ? (
+                        <ItemActions>
+                          <PushPin weight="fill" className="size-4 text-primary" aria-label="Senin sabitlediğin" />
+                        </ItemActions>
+                      ) : null}
+                    </Item>
+                  ))}
+                </ItemGroup>
+                </section>
+            ))}
+          </div>
         )}
       </CardContent>
     </Card>

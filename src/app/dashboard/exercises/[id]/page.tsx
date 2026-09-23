@@ -120,7 +120,43 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
         actions={<EditButton href={`/dashboard/exercises/${exercise.id}/edit`} />}
       />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+      {/* Solda hareketin kendisi (görsel), sağda bilgisi; ilişki listesi altta tam genişlikte. */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Çalışan kaslar</CardTitle>
+              <CardDescription>
+                {exercise.primaryMuscles.includes('cardio')
+                  ? 'Kardiyo hareketi; haritada yalnız yardımcı kaslar görünür.'
+                  : 'Hedef tam renk, yardımcı orta, dengeleyici açık ton.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ExerciseMuscleMap
+                primaryMuscles={exercise.primaryMuscles}
+                secondaryMuscles={exercise.secondaryMuscles}
+                stabilizerMuscles={exercise.stabilizerMuscles}
+                bodyClassName="h-72"
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Video</CardTitle>
+              <CardDescription>
+                {exercise.video ? 'Hareketin doğru yapılışı.' : 'Bu egzersize henüz video bağlanmamış.'}
+              </CardDescription>
+            </CardHeader>
+            {exercise.video ? (
+              <CardContent>
+                <VideoEmbed provider={exercise.video.provider} id={exercise.video.id} title={exercise.title} />
+              </CardContent>
+            ) : null}
+          </Card>
+        </div>
+
         <div className="flex flex-col gap-6">
           <Card>
             <CardHeader>
@@ -166,45 +202,10 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
           ) : null}
 
           <MedicalCard exercise={exercise} />
-
-          <AlternativesCard exerciseId={exercise.id} rows={alternatives} swaps={swaps} />
-        </div>
-
-        <div className="flex flex-col gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Çalışan kaslar</CardTitle>
-              <CardDescription>
-                {exercise.primaryMuscles.includes('cardio')
-                  ? 'Kardiyo hareketi; haritada yalnız yardımcı kaslar görünür.'
-                  : 'Hedef tam renk, yardımcı orta, dengeleyici açık ton.'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ExerciseMuscleMap
-                primaryMuscles={exercise.primaryMuscles}
-                secondaryMuscles={exercise.secondaryMuscles}
-                stabilizerMuscles={exercise.stabilizerMuscles}
-                bodyClassName="h-72"
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Video</CardTitle>
-              <CardDescription>
-                {exercise.video ? 'Hareketin doğru yapılışı.' : 'Bu egzersize henüz video bağlanmamış.'}
-              </CardDescription>
-            </CardHeader>
-            {exercise.video ? (
-              <CardContent>
-                <VideoEmbed provider={exercise.video.provider} id={exercise.video.id} title={exercise.title} />
-              </CardContent>
-            ) : null}
-          </Card>
         </div>
       </div>
+
+      <AlternativesCard exerciseId={exercise.id} rows={alternatives} swaps={swaps} />
     </div>
   );
 }

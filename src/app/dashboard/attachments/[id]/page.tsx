@@ -78,32 +78,33 @@ export default async function AttachmentDetailPage({ params }: { params: Promise
             ) : null}
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Bu aparatla yapılan egzersizler</CardTitle>
-              <CardDescription>
-                {usedByExercises.length > 0
-                  ? 'Egzersizi düzenleyerek aparatını değiştirebilirsin.'
-                  : 'Henüz bağlı egzersiz yok.'}
-              </CardDescription>
-            </CardHeader>
-            {usedByExercises.length > 0 ? (
-              <CardContent>
-                <ItemGroup className="gap-2">
-                  {usedByExercises.map((exercise) => (
-                    <Item key={exercise.id} variant="outline" size="sm" render={<Link href={`/dashboard/exercises/${exercise.id}`} />}>
-                      <ItemContent>
-                        <ItemTitle>{exercise.title}</ItemTitle>
-                        <ItemDescription>{summarizeMuscles(exercise.primaryMuscles).join(', ')}</ItemDescription>
-                      </ItemContent>
-                    </Item>
-                  ))}
-                </ItemGroup>
-              </CardContent>
-            ) : null}
-          </Card>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Bu aparatla yapılan egzersizler</CardTitle>
+          <CardDescription>
+            {usedByExercises.length > 0
+              ? 'Egzersizi düzenleyerek aparatını değiştirebilirsin.'
+              : 'Henüz bağlı egzersiz yok.'}
+          </CardDescription>
+        </CardHeader>
+        {usedByExercises.length > 0 ? (
+          <CardContent>
+            <ItemGroup className="gap-2 sm:grid sm:grid-cols-2 lg:grid-cols-3">
+              {usedByExercises.map((exercise) => (
+                <Item key={exercise.id} variant="outline" size="sm" render={<Link href={`/dashboard/exercises/${exercise.id}`} />}>
+                  <ItemContent>
+                    <ItemTitle>{exercise.title}</ItemTitle>
+                    <ItemDescription>{summarizeMuscles(exercise.primaryMuscles).join(', ')}</ItemDescription>
+                  </ItemContent>
+                </Item>
+              ))}
+            </ItemGroup>
+          </CardContent>
+        ) : null}
+      </Card>
     </div>
   );
 }
