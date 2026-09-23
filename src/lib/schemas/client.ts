@@ -1,5 +1,4 @@
 import * as v from 'valibot';
-import { TEMPLATE_ID_PATTERN } from '../template-plan.ts';
 
 /**
  * Danışan şeması — sunucu ve istemci ortak (SPEC §3, §4).
@@ -120,12 +119,6 @@ export const inviteSchema = v.object({
 });
 export type Invite = v.InferOutput<typeof inviteSchema>;
 
-/** Başlangıç şablonu; boş metin = şablonsuz. */
-const templateChoiceSchema = v.union(
-  [v.literal(''), v.pipe(v.string(), v.regex(TEMPLATE_ID_PATTERN))],
-  'Şablonu seç.',
-);
-
 /** PT'nin formu. Durum yalnız düzenlemede görünür; yeni danışan aktif başlar. */
 export const clientFormSchema = v.pipe(
   v.object({
@@ -134,7 +127,6 @@ export const clientFormSchema = v.pipe(
     status: v.picklist(CLIENT_STATUSES, 'Durumu seç.'),
     healthEnabled: v.boolean(),
     healthFields: healthFieldsSchema,
-    startTemplateId: templateChoiceSchema,
   }),
   v.forward(
     v.partialCheck(
@@ -156,7 +148,6 @@ export const clientSaveSchema = v.pipe(
     status: v.picklist(CLIENT_STATUSES, 'Durumu seç.'),
     healthEnabled: v.boolean(),
     healthFields: healthFieldsSchema,
-    startTemplateId: templateChoiceSchema,
   }),
   v.forward(
     v.partialCheck(

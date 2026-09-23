@@ -177,6 +177,33 @@ export function lineOutlook(points: readonly Point[], rule: NoiseRule | null): L
   return { status, forecast: forecast(points) };
 }
 
+export type MeasurementAlert = {
+  id: MeasurementId;
+  key: LineKey;
+  /** Gerileme en önde, sonra durağan, sonra gelişme. */
+  kind: 'declining' | 'plateau' | 'improving';
+  change: number;
+};
+
+const ALERT_ORDER: Record<MeasurementAlert['kind'], number> = { declining: 0, plateau: 1, improving: 2 };
+
+/**
+ * Danışan sayfası ve genel bakış için: son 4 haftada kararı verilebilen ölçümler. Yalnız
+ * eşiği ve iyi yönü kaynaklı olanlar (kalçada yön tanımsız: uyarı üretmez).
+ */
+export function measurementAlerts(entries: readonly MeasurementEntry[]): MeasurementAlert[] {
+  const alerts: MeasurementAlert[] = [];
+  for (const trend of measurementTrends(entries)) {
+    if (!trend.rule?.better) continue;
+    for (const line of trend.lines) {
+      const status = lineOutlook(line.points, trend.rule).status;
+      if (!status || status.kind === 'insufficient' || status.change === null) continue;
+      alerts.push({ id: trend.id, key: line.key, kind: status.kind, change: status.change });
+    }
+  }
+  return alerts.sort((a, b) => ALERT_ORDER[a.kind] - ALERT_ORDER[b.kind]);
+}
+
 /** Tarih aralığındaki kayıtlar (uçlar dahil); süzgeç grafiklere ve eğilime uygulanır. */
 export function entriesInRange(entries: readonly MeasurementEntry[], from?: string, to?: string): MeasurementEntry[] {
   return entries.filter((entry) => (!from || entry.date >= from) && (!to || entry.date <= to));

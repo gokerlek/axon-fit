@@ -24,6 +24,8 @@ import { templateSummary } from '@/lib/template-plan';
 import { HEALTH_STATE_DETAILS, HEALTH_STATE_LABELS } from '../health-state';
 import { AccessBadge, accessDetail, accessOf } from '../invite-state';
 import { requirePt } from '@/lib/guards';
+import { loadMeasurements } from '@/lib/health';
+import { MeasurementsCard } from './measurements-card';
 
 /**
  * Programın özeti: şu anki evre, günleri (sıradaki işaretli), son değişiklik. Program
@@ -168,11 +170,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   }
 
   const { client } = loaded;
-  const [invite, programFile, exercises] = await Promise.all([
+  const [invite, programFile, exercises, measurements] = await Promise.all([
     readInvite(id),
     // undefined: GitHub'dan okunamadı; sayfa yine açılır.
     readProgramFile(id).catch(() => undefined),
     listExercises(),
+    loadMeasurements(client).catch(() => undefined),
   ]);
   const exerciseById = new Map(exercises.map((exercise) => [exercise.id, exercise]));
   const log = programFile?.program?.log ?? [];
@@ -276,6 +279,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               </CardContent>
             ) : null}
           </Card>
+
+          <MeasurementsCard clientId={id} view={measurements} />
         </div>
       </div>
 

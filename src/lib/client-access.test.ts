@@ -163,7 +163,7 @@ describe('sağlık onayı', () => {
 });
 
 describe('danışan formu', () => {
-  const temel = { name: 'Ayşe Demir', note: '', status: 'active' as const, healthEnabled: false, healthFields: [], startTemplateId: '' };
+  const temel = { name: 'Ayşe Demir', note: '', status: 'active' as const, healthEnabled: false, healthFields: [] };
 
   test('modül kapalıyken parça seçmek gerekmez', () => {
     assert.equal(v.safeParse(clientFormSchema, temel).success, true);
@@ -178,10 +178,6 @@ describe('danışan formu', () => {
     );
   });
 
-  test('başlangıç şablonu boş olabilir ya da geçerli bir şablon kimliği olmalı', () => {
-    assert.equal(v.safeParse(clientFormSchema, { ...temel, startTemplateId: 't_ab12cd34' }).success, true);
-    assert.equal(v.safeParse(clientFormSchema, { ...temel, startTemplateId: '../clients' }).success, false);
-  });
 
   test('ad kırpılır ve boş olamaz', () => {
     assert.equal(v.safeParse(clientFormSchema, { ...temel, name: '   ' }).success, false);

@@ -144,7 +144,7 @@ export async function listClients(): Promise<ClientSummary[]> {
 /* --- oluşturma, güncelleme, silme --- */
 
 /** Kayda giren alanlar: başlangıç şablonu kayda değil, programa gider. */
-type ClientFields = Omit<ClientInput, 'startTemplateId'>;
+type ClientFields = ClientInput;
 
 function healthModule(input: ClientFields, previous: Client['modules']['health'] | null, now: string) {
   if (!input.healthEnabled) return { enabled: false, fields: [] };

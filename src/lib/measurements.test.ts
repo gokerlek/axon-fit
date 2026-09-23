@@ -85,3 +85,24 @@ describe('hareket taraması', () => {
     assert.deepEqual(fmsSummary({ deep_squat: { score: 0 } }).painFlags, ['deep_squat']);
   });
 });
+
+describe('ölçüm uyarıları', () => {
+  test('yalnız eşiği ve yönü kaynaklı ölçümler; gerileme önde', async () => {
+    const { measurementAlerts } = await import('./measurement-trends.ts');
+    const hafta = (i: number) => new Date(Date.UTC(2026, 7, 4 + i * 7)).toISOString().slice(0, 10);
+    const entries = [
+      ...[92, 91.2, 90.4, 89.8, 88.6].map((value, i) => ({ date: hafta(i), id: 'waist_girth' as const, value })),
+      ...[11, 12, 13, 14, 15].map((value, i) => ({ date: hafta(i), id: 'sit_to_stand_5x' as const, value })),
+      ...[101, 100.6, 100.9, 100.4, 100.2].map((value, i) => ({ date: hafta(i), id: 'hip_girth' as const, value })),
+      ...[84, 83, 82, 81, 80].map((value, i) => ({ date: hafta(i), id: 'body_mass' as const, value })),
+    ];
+    const alerts = measurementAlerts(entries);
+    assert.deepEqual(
+      alerts.map((alert) => [alert.id, alert.kind]),
+      [
+        ['sit_to_stand_5x', 'declining'],
+        ['waist_girth', 'improving'],
+      ],
+    );
+  });
+});

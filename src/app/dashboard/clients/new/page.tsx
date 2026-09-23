@@ -1,7 +1,6 @@
 import { PageHeader } from '@/components/page-header';
 import { ClientForm } from '../client-form';
 import { requirePt } from '@/lib/guards';
-import { templateChoices } from '@/lib/templates';
 
 export default async function NewClientPage() {
   await requirePt();
@@ -12,7 +11,7 @@ export default async function NewClientPage() {
         title="Yeni danışan"
         description="Kaydettiğinde hesabında bu danışana özel, gizli bir repo açılır. Repo adında isim geçmez, yalnız kimlik."
       />
-      <ClientForm editing={null} templates={await templateChoices()} />
+      <ClientForm editing={null} />
     </div>
   );
 }

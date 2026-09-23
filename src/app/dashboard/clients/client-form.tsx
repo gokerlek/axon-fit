@@ -50,16 +50,12 @@ const HEALTH_FIELD_ICONS: Record<HealthField, PhosphorIcon> = {
   screening: PersonSimpleWalk,
 };
 
-/** Seçicide "şablonsuz": Base UI Select boş değeri seçilebilir saymaz. */
-const NO_TEMPLATE = 'none';
-
 /**
- * Danışan ekleme/düzenleme. Yeni danışan kaydedilince sunucu özel repo'sunu açar ve
- * PT davet ekranına geçer. Sağlık modülü burada açılır; danışan ilk girişinde onaylar.
- * Yeni danışanda başlangıç şablonu seçilirse program o şablondan kurulur; program sonra
- * danışanın sayfasından düzenlenir.
+ * Danışan ekleme/düzenleme: yalnız kişisel bilgiler ve izinler (sağlık modülü). Yeni danışan
+ * kaydedilince sunucu özel repo'sunu açar ve PT davet ekranına geçer. Program ve ölçümler
+ * danışanın bir özelliği değil, yapılan iştir: danışanın sayfasından yönetilir.
  */
-export function ClientForm({ editing, templates = [] }: { editing: Client | null; templates?: { id: string; name: string }[] }) {
+export function ClientForm({ editing }: { editing: Client | null }) {
   const router = useRouter();
   const form = useForm({
     schema: clientFormSchema,
@@ -69,13 +65,8 @@ export function ClientForm({ editing, templates = [] }: { editing: Client | null
       status: editing?.status ?? 'active',
       healthEnabled: editing?.modules.health.enabled ?? false,
       healthFields: editing?.modules.health.fields ?? [],
-      startTemplateId: '',
     },
   });
-  const templateLabels: Record<string, string> = {
-    [NO_TEMPLATE]: 'Şablonsuz',
-    ...Object.fromEntries(templates.map((template) => [template.id, template.name])),
-  };
   const consented = editing?.consents.health?.granted ? editing.consents.health.fields : null;
   const consentState = editing ? healthConsentState(editing) : 'off';
 
@@ -166,47 +157,6 @@ export function ClientForm({ editing, templates = [] }: { editing: Client | null
           </FormField>
         </CardContent>
       </Card>
-
-      {editing ? null : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Program</CardTitle>
-            <CardDescription>
-              Her danışanın programı kendi repo&apos;sunda tutulur. Şablon yalnız başlangıçtır: sonra bu danışana göre
-              değiştirirsin, şablonda yapılan değişiklikler programa yansımaz.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <FormField of={form} path={['startTemplateId']}>
-              {(field) => (
-                <Field data-invalid={Boolean(field.errors) || undefined} className="max-w-sm">
-                  <FieldLabel htmlFor="startTemplateId">Başlangıç şablonu</FieldLabel>
-                  <LabeledSelect
-                    id="startTemplateId"
-                    value={field.input || NO_TEMPLATE}
-                    labels={templateLabels}
-                    onChange={(value) => setInput(form, { path: ['startTemplateId'], input: value === NO_TEMPLATE ? '' : value })}
-                  />
-                  <FieldDescription>
-                    {templates.length === 0 ? (
-                      <>
-                        Henüz şablon yok.{' '}
-                        <Link href="/dashboard/templates/new" className="font-medium text-foreground underline underline-offset-4">
-                          Şablon oluştur
-                        </Link>
-                        . Programı sonra danışanın sayfasından oluşturabilirsin.
-                      </>
-                    ) : (
-                      'Seçersen program "Evre 1 · Gün A" olarak bu şablondan kurulur. Boş bırakırsan programı sonra danışanın sayfasından oluşturursun.'
-                    )}
-                  </FieldDescription>
-                  <FieldError>{field.errors?.[0]}</FieldError>
-                </Field>
-              )}
-            </FormField>
-          </CardContent>
-        </Card>
-      )}
 
       <FormField of={form} path={['healthEnabled']}>
         {(enabledField) => (
