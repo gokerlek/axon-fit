@@ -13,9 +13,9 @@ type NavItem = Omit<DockEntry, 'active'> & {
 const ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Genel bakış', icon: <SquaresFour /> },
   { href: '/dashboard/clients', label: 'Danışanlar', icon: <UsersThree /> },
-  // Şablonlar, egzersizler ve cihazlar tek bölüm; içinde sekmeler (training-tabs.tsx).
+  // Şablonlar, egzersizler ve cihazlar tek bölüm; içinde sekmeler (training-tabs.tsx). Giriş ilk sekme.
   {
-    href: '/dashboard/exercises',
+    href: '/dashboard/templates',
     label: 'Antrenman',
     icon: <Barbell />,
     sections: TRAINING_SECTIONS.map((section) => section.href),

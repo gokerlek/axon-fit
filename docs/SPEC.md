@@ -258,10 +258,14 @@ Genel cihaz listesi (salon envanteri yok): hazır katalog pakette (`src/data/dev
 - **Görsel:** cihaz başına tek fotoğraf (`media/devices/<id>-<özet>.<uzantı>`, PNG/JPG/WebP, en fazla 1 MB, SVG yok). Danışan salonda makineyi tanısın diye; listede küçük, detayda büyük görünür. Egzersizlerde görsel yok (video + kas haritası yeterli).
 - Cihaz silinirse bağlı egzersizler cihazsız kalır ve kendi adımlarıyla devam eder.
 
-### 7.4 Şablonda gruplar ve kas yükü haritası (Faz 4)
+### 7.4 Şablonlar: gruplar ve kas yükü haritası (Faz 4)
 
-- **Gruplar:** arka arkaya yapılan hareketler tek egzersiz değil, şablonda grup olarak tutulur: süperset (2 hareket), devre (3+ hareket, tur sayısıyla), kompleks (aynı ağırlıkla ara vermeden). Her hareket kendi kaslarını ve ilerleme kuralını korur; grup yalnız sırayı ve dinlenmeyi belirler.
-- **Şablon haritası:** şablondaki bütün setlerin kesirli set toplamı (hedef 1 · yardımcı 0,5 · dengeleyici 0,25) kas başına hesaplanır; aynı kas birden çok harekette varsa değer toplanır.
+- **Dosya:** her şablon uygulama repo'sunda ayrı dosya: `data/templates/<id>.json`. Kimlik `t_` + 8 rastgele karakter; addan türetilmez, ad değişse de kimlik ve dosya aynı kalır. Şablonda kişisel veri yok (danışan adı, sağlık bilgisi yazılmaz); program ataması danışanın kendi repo'sundadır. Sayfalar: `/dashboard/templates` (liste, detay, ekleme, düzenleme; "Antrenman" bölümünün ilk sekmesi).
+- **Bloklar ve satırlar:** şablon sıralı bloklardan oluşur; blok tek hareket ya da gruptur. Her hareket bir **satırdır** ve kalıcı kimliği vardır (`r_` + 6 karakter): sıralama, gruplama, hareket ya da cihaz değişimi kimliği değiştirmez, antrenman kayıtları satıra bu kimlikle bağlanır. Satırda egzersiz, hedef (tekrar aralığı; süreli harekette saniye), isteğe bağlı kural değişikliği (ilerleme türü, yedekte tekrar), isteğe bağlı cihaz ve not durur; set sayısı ve dinlenme bloktadır. Isınma setleri saklanmaz, antrenmanda `warmupSets` ile hesaplanır.
+- **Gruplar:** arka arkaya yapılan hareketler tek egzersiz değil, şablonda grup olarak tutulur: süperset (2 hareket), devre (3–8 hareket, istasyonlar arası kısa geçişle), kompleks (2–6 hareket, aynı ağırlıkla ara vermeden). Grupta her hareket turda bir set yapar; tur sayısı ve tur sonu dinlenme gruptadır. Her hareket kendi kaslarını ve ilerleme kuralını korur; grup yalnız sırayı ve dinlenmeyi belirler. Hareket sayısı değişince tür kendiliğinden uyar (üçüncü hareket eklenen süperset devre olur).
+- **Düzenleyici:** hareket kütüphaneden (ada ya da kasa göre arayarak) eklenir, sürükle-bırakla ya da ok tuşlarıyla sıralanır; gruplama satırın menüsünden yapılır. Satırın cihazı değiştirilince hareket o cihazdaki aynı kalıptaki muadile geçer (`alternativeForDevice`, PT'nin sabitledikleri önce); yoksa ve ekipman aynıysa hareket aynı kalır, satıra yalnız cihaz yazılır; o da olmazsa başka bir muadile geçer.
+- **Şablon haritası:** şablondaki bütün çalışma setlerinin kesirli set toplamı (hedef 1 · yardımcı 0,5 · dengeleyici 0,25) kas başına hesaplanır; aynı kas birden çok harekette varsa değer toplanır. Isınma ve soğuma türündeki hareketler ve ısınma setleri sayılmaz. Haritanın tonu şablonun en çok çalışan kasına göredir.
+- **Kütüphaneden silinen egzersiz** şablonda uyarıyla kalır, haritaya ve sayılara girmez; kaydetmeden önce değiştirilmesi ya da kaldırılması gerekir. Silinen cihaza yazılmış satır, egzersizin kendi cihazına döner.
 - **Haftalık yük haritası (program ve danışan):** kas başına haftalık set toplamı kademeli renkle ve açıklama kutusuyla gösterilir — gri: 0 · açık: 1–9 (az) · vurgu rengi: 10–20 (yeterli) · uyarı rengi: 20+ (fazla). Değer girilmez, set kayıtlarından hesaplanır. Renkler tema tokenlarından (PT'nin vurgu rengi korunur).
 
 ---
@@ -354,7 +358,7 @@ Uygulama beyaz etiketli: paketin adı `pulsecoach`, yayınlanan kurulumun adın�
 | 1 | Kurulum sihirbazı (ad, logo, renk, tema) + GitHub veri katmanı (repo koruma kuralı dahil) |
 | 2 | Egzersiz kütüphanesi ✓ · PT kabuğu (dock + sağ üstte kullanıcı menüsü) ✓ · kas haritası (süzgeç + detay) ✓ |
 | 3 | Danışan ekleme (repo açma) ✓ · sağlık modülü seçimi ✓ · QR davet ✓ · danışan girişi ✓ · sağlık onayı (ver/geri çek) ✓ · erişimi kapat ✓ · silme (adı yazarak) ✓ |
-| 4 | Antrenman şablonu düzenleyici (gruplar: süperset/devre/kompleks, şablon kas haritası) · antrenman ekranı (**set başına canlı yazma**, çevrimdışı kuyruk, zorluk düğmeleri, §7.1 önerileri) · haftalık yük haritası · PT canlı görünüm · geçmiş |
+| 4 | **4a** Antrenman şablonları ✓: düzenleyici (kütüphaneden ekleme, sürükle-bırak sıralama, gruplar: süperset/devre/kompleks, satırda kural ve cihaz değişimi), şablon kas haritası · **4b** antrenman ekranı (**set başına canlı yazma**, çevrimdışı kuyruk, zorluk düğmeleri, §7.1 önerileri) · program atama · haftalık yük haritası · PT canlı görünüm · geçmiş |
 | 5 | Sağlık modülü ekranları, onay akışı |
 | 6 | Yönetim işlemleri (silme, dışa aktarma, yedek), JSON şeması + doğrulama, AI için PR kuralı |
 | 7 | Bağlantılar (danışanların birbirini görmesi) |

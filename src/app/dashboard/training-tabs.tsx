@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 /** Antrenman bölümünün sayfaları; dock'ta tek "Antrenman" öğesi bunlara açılır. */
 export const TRAINING_SECTIONS = [
-  { href: '/dashboard/templates', label: 'Şablonlar', ready: false },
+  { href: '/dashboard/templates', label: 'Şablonlar', ready: true },
   { href: '/dashboard/exercises', label: 'Egzersizler', ready: true },
   { href: '/dashboard/devices', label: 'Cihazlar', ready: true },
   { href: '/dashboard/attachments', label: 'Aparatlar', ready: true },
@@ -14,11 +14,11 @@ export const TRAINING_SECTIONS = [
 
 /**
  * Antrenman bölümünün sekmeleri: Şablonlar · Egzersizler · Cihazlar · Aparatlar. Her sekme kendi
- * sayfasıdır (adres değişir, geri tuşu çalışır). Şablonlar Faz 4'e kadar pasif.
+ * sayfasıdır (adres değişir, geri tuşu çalışır). Bölümün girişi Şablonlar.
  */
 export function TrainingTabs() {
   const pathname = usePathname();
-  const current = TRAINING_SECTIONS.find((section) => pathname.startsWith(section.href))?.href ?? '/dashboard/exercises';
+  const current = TRAINING_SECTIONS.find((section) => pathname.startsWith(section.href))?.href ?? '/dashboard/templates';
 
   return (
     <Tabs value={current}>
