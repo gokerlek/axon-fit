@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { ATTACHMENT_LIBRARY } from './attachment-library.ts';
 import { DEVICE_LIBRARY } from './device-library.ts';
 import { EXERCISE_LIBRARY } from './exercise-library.ts';
+import { parseCondition } from '../lib/conditions.ts';
+import { isDeepMuscle } from '../lib/deep-muscles.ts';
 
 /** Hazır kataloglar birbirine kimlikle bağlı; kopuk bağ sessizce boş liste demek. */
 describe('hazır kataloglardaki bağlar', () => {
@@ -32,6 +34,31 @@ describe('hazır kataloglardaki bağlar', () => {
         device?.attachments?.includes(exercise.attachmentId),
         `${exercise.id}: ${exercise.attachmentId} cihazında (${exercise.deviceId}) takılı değil`,
       );
+    }
+  });
+
+  test('medikal etiketlerdeki kısıt kimlikleri sözlükte var', () => {
+    for (const exercise of EXERCISE_LIBRARY) {
+      for (const value of [...(exercise.contraindications ?? []), ...(exercise.safeFor ?? [])]) {
+        assert.ok(parseCondition(value), `${exercise.id} → ${value} çözülemedi`);
+      }
+    }
+  });
+
+  test('aktivasyon hedefleri derin kas sözlüğünden', () => {
+    for (const exercise of EXERCISE_LIBRARY) {
+      for (const muscle of exercise.activationTargets ?? []) {
+        assert.ok(isDeepMuscle(muscle), `${exercise.id} → ${muscle} derin kas değil`);
+      }
+    }
+  });
+
+  test('bir hareket hem yasak hem güvenli listesinde olamaz', () => {
+    for (const exercise of EXERCISE_LIBRARY) {
+      const yasak = new Set((exercise.contraindications ?? []).map((value) => value.split(':')[0]));
+      for (const value of exercise.safeFor ?? []) {
+        assert.ok(!yasak.has(value.split(':')[0]), `${exercise.id} → ${value} iki listede birden`);
+      }
     }
   });
 });
