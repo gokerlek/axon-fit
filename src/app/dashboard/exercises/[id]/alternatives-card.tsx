@@ -79,7 +79,8 @@ export function AlternativesCard({ exerciseId, rows, swaps }: { exerciseId: stri
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {swaps.length > 0 ? (
-          <Field>
+          // Kart tam genişlikte; seçici onunla birlikte uzamasın.
+          <Field className="max-w-sm">
             <FieldLabel htmlFor="swap-device">Cihaz değişirse</FieldLabel>
             <GroupedSelect id="swap-device" value={swapDevice} groups={swapGroups} empty="Cihaz seç" onChange={setSwapDevice} />
             {swap ? (
