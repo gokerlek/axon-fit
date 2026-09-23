@@ -49,6 +49,13 @@ import { LogoPicker } from "./logo-picker";
 const THEME_PRIMARY =
   "[--primary:oklch(0.841_0.238_128.85)] [--primary-foreground:oklch(0.405_0.101_131.063)] dark:[--primary:oklch(0.768_0.233_130.85)]";
 
+/**
+ * "Tema" seçeneğinin düğme değeri. Formda `null`dır; düğmede boş olmayan bir değer
+ * gerekir: Base UI `Toggle` boş değeri (`""`) kendi ürettiği bir kimlikle değiştirir,
+ * o zaman seçenek hiç seçili görünmez ve seçilince forma geçersiz renk gider.
+ */
+const THEME_ACCENT = "theme";
+
 const THEMES = [
   { value: "dark", label: "Koyu" },
   { value: "light", label: "Açık" },
@@ -189,13 +196,13 @@ export function SetupForm({
                     aria-label="Ana renk"
                     spacing={2}
                     className="grid w-full grid-cols-8"
-                    // "Tema" seçeneği null değer taşır; ToggleGroup string ister → '' ile temsil edilir.
-                    value={[field.input ?? ""]}
+                    // "Tema" seçeneği formda null; düğmede THEME_ACCENT ile temsil edilir.
+                    value={[field.input ?? THEME_ACCENT]}
                     onValueChange={(value) => {
                       if (value[0] === undefined) return;
                       setInput(form, {
                         path: ["accent"],
-                        input: value[0] === "" ? null : value[0],
+                        input: value[0] === THEME_ACCENT ? null : value[0],
                       });
                     }}
                   >
@@ -204,13 +211,14 @@ export function SetupForm({
                       return (
                         <ToggleGroupItem
                           key={preset.label}
-                          value={preset.value ?? ""}
+                          value={preset.value ?? THEME_ACCENT}
                           aria-label={preset.label}
                           title={preset.label}
                           className={cn(
                             "aspect-square h-auto w-full border-2 border-transparent p-0 data-pressed:border-foreground",
                             preset.value === null &&
-                              `${THEME_PRIMARY} bg-primary text-primary-foreground hover:bg-primary`,
+                              // Basılı düğmenin `bg-muted`'u temanın rengini ezmesin.
+                              `${THEME_PRIMARY} bg-primary text-primary-foreground hover:bg-primary aria-pressed:bg-primary`,
                           )}
                           style={
                             preset.value
