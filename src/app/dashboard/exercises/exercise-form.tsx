@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Field as FormField,
@@ -13,7 +14,8 @@ import {
   setInput,
   useForm,
 } from "@formisch/react";
-import { Heartbeat, Plus, WarningCircle, X } from "@phosphor-icons/react";
+import { Heartbeat, Plus, PushPin, WarningCircle, X } from "@phosphor-icons/react";
+import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -59,7 +61,7 @@ import {
   RIR_LABELS,
   type ProgressionRule,
 } from "@/lib/progression";
-import { fetchJson } from "@/lib/query/errors";
+import { ApiError, fetchJson } from "@/lib/query/errors";
 import { applyFieldErrors } from "@/lib/query/field-errors";
 import { useServiceMutation } from "@/lib/query/use-service";
 import {
@@ -103,6 +105,57 @@ const BLANK: FormStart = {
   videoUrl: "",
 };
 
+/** Formda gösterilecek muadil adayı (sunucuda sıralanır). */
+export type AlternativeOption = { id: string; title: string; detail: string };
+
+/**
+ * Muadiller: PT'nin sabitledikleri. Egzersiz sayfasında "Senin seçtiklerin" olarak
+ * en üstte çıkar; şablonda cihaz değişince önce bunlara bakılır. Sıra, seçim sırasıdır.
+ */
+function AlternativesField({
+  options,
+  pinned,
+  onToggle,
+}: {
+  options: AlternativeOption[];
+  pinned: string[];
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <FieldSet className="lg:col-span-2">
+      <FieldLegend>Muadiller</FieldLegend>
+      <Field>
+        <FieldDescription>
+          Alet doluysa ya da danışana uygun değilse yerine yapılacaklar. Seçmezsen uygulama zaten
+          benzerlerini önerir; seçtiklerin listenin başında çıkar (en fazla 12).
+        </FieldDescription>
+        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {options.map((option) => {
+            const isOn = pinned.includes(option.id);
+            return (
+              <li key={option.id}>
+                <Button
+                  type="button"
+                  variant={isOn ? "secondary" : "outline"}
+                  aria-pressed={isOn}
+                  className={`h-auto w-full justify-start gap-3 p-2 text-left ${isOn ? "ring-1 ring-primary/50" : ""}`}
+                  onClick={() => onToggle(option.id)}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-normal">{option.title}</span>
+                    <span className="block truncate text-xs font-normal text-muted-foreground">{option.detail}</span>
+                  </span>
+                  {isOn ? <PushPin weight="fill" className="text-primary" /> : <Plus className="text-muted-foreground" />}
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+      </Field>
+    </FieldSet>
+  );
+}
+
 /**
  * Düzenlemede kimlik forma girmez (şemada yok); video, yapıştırılan bağlantı olarak
  * gösterilir; kuralı olmayan egzersizde türünün varsayılan kuralı açık yazılır.
@@ -145,12 +198,15 @@ export function ExerciseForm({
   editing,
   devices,
   attachments,
+  alternativeOptions = [],
 }: {
   editing: Exercise | null;
   /** Seçilebilir cihazlar (hazır katalog + PT'nin cihazları). */
   devices: Device[];
   /** Aparat havuzu; cihazın aparat kimlikleri buradan ada çevrilir. */
   attachments: Attachment[];
+  /** Sabitlenebilecek muadiller (yalnız düzenlemede; yeni egzersizde henüz sıralanamaz). */
+  alternativeOptions?: AlternativeOption[];
 }) {
   const deviceById = new Map(devices.map((device) => [device.id, device]));
   const attachmentById = new Map(attachments.map((attachment) => [attachment.id, attachment]));
@@ -165,16 +221,34 @@ export function ExerciseForm({
     schema: exerciseFormSchema,
     initialInput: editing ? toInput(editing) : BLANK,
   });
+  // Muadiller şemada yok; kendi ucundan yazılır (sıra korunur).
+  const [pinned, setPinned] = useState<string[]>(editing?.alternatives ?? []);
+  const togglePinned = (id: string) =>
+    setPinned((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : current.length >= 12 ? current : [...current, id],
+    );
 
   const save = useServiceMutation({
-    fn: (values: ExerciseInput) => {
+    fn: async (values: ExerciseInput) => {
       const { videoUrl: link, ...rest } = values;
       const video = link ? (parseVideoUrl(link) ?? undefined) : undefined;
-      return fetchJson<{ id: string }>("/api/exercises", {
+      const { id } = await fetchJson<{ id: string }>("/api/exercises", {
         method: "POST",
         // Yeni egzersizde kimlik sunucuda başlıktan üretilir; düzenlemede mevcut kimlik gider.
         body: JSON.stringify({ ...rest, video, ...(editing ? { id: editing.id } : {}) }),
       });
+      // Muadiller ayrı uçtan yazılır. Egzersiz kaydedildiyse buradaki hata kaydı geri almaz.
+      const changed = pinned.join() !== (editing?.alternatives ?? []).join();
+      if (!changed) return { id, pinsFailed: null };
+      try {
+        await fetchJson(`/api/exercises/${id}/alternatives`, {
+          method: "PUT",
+          body: JSON.stringify({ alternatives: pinned }),
+        });
+      } catch (error) {
+        return { id, pinsFailed: error instanceof ApiError ? error.message : "Muadiller kaydedilemedi." };
+      }
+      return { id, pinsFailed: null };
     },
     invalidate: [["exercises"]],
     notify: {
@@ -182,8 +256,13 @@ export function ExerciseForm({
     },
     onError: (error) => applyFieldErrors(form as never, error),
     // Yeni kayıtta sunucunun ürettiği kimlikle detay sayfasına geçilir.
-    onSuccess: ({ id }) => {
-      router.push(`/dashboard/exercises/${id}`);
+    onSuccess: ({ id, pinsFailed }) => {
+      if (pinsFailed) {
+        toast.error(`Egzersiz kaydedildi ama muadiller güncellenemedi: ${pinsFailed}`);
+        router.push(`/dashboard/exercises/${id}/edit`);
+      } else {
+        router.push(`/dashboard/exercises/${id}`);
+      }
       router.refresh();
     },
   });
@@ -836,6 +915,10 @@ export function ExerciseForm({
           )}
         </FormField>
       </div>
+
+      {alternativeOptions.length > 0 ? (
+        <AlternativesField options={alternativeOptions} pinned={pinned} onToggle={togglePinned} />
+      ) : null}
 
       {hiddenError ? (
         <Alert variant="destructive" className="lg:col-span-2">

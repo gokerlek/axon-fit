@@ -2,18 +2,14 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { PushPin } from '@phosphor-icons/react';
 import { GroupedSelect } from '@/components/labeled-select';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item';
-import { fetchJson } from '@/lib/query/errors';
-import { useServiceMutation } from '@/lib/query/use-service';
 import { EQUIPMENT_LABELS, type Equipment } from '@/lib/schemas/exercise';
 
-/** Sunucuda hesaplanmış muadil satırı (kart yalnız gösterir ve sabitler). */
+/** Sunucuda hesaplanmış muadil satırı (kart yalnız gösterir; sabitleme düzenlemede). */
 export type AlternativeRow = {
   id: string;
   title: string;
@@ -45,38 +41,16 @@ function groupOf(row: AlternativeRow): string {
 /**
  * Muadiller: alet doluysa, yoksa ya da danışana uygun değilse yerine yapılabilecekler.
  * PT'nin sabitledikleri en üstte; diğerleri ekipmana göre gruplu (ekipmansız önce).
+ *
+ * Detay sayfası yalnız gösterir: sabitleme egzersizin düzenleme formundadır.
  */
-export function AlternativesCard({
-  exerciseId,
-  rows,
-  swaps,
-}: {
-  exerciseId: string;
-  rows: AlternativeRow[];
-  swaps: DeviceSwap[];
-}) {
-  const router = useRouter();
+export function AlternativesCard({ exerciseId, rows, swaps }: { exerciseId: string; rows: AlternativeRow[]; swaps: DeviceSwap[] }) {
   const [swapDevice, setSwapDevice] = useState('');
   const swap = swaps.find((item) => item.deviceId === swapDevice);
   const swapGroups = [...new Set(swaps.map((item) => item.kindLabel))].map((label) => ({
     label,
     options: swaps.filter((item) => item.kindLabel === label).map((item) => ({ value: item.deviceId, label: item.deviceName })),
   }));
-  const pinnedIds = rows.filter((row) => row.pinned).map((row) => row.id);
-
-  const save = useServiceMutation({
-    fn: (alternatives: string[]) =>
-      fetchJson<{ alternatives: string[] }>(`/api/exercises/${exerciseId}/alternatives`, {
-        method: 'PUT',
-        body: JSON.stringify({ alternatives }),
-      }),
-    invalidate: [['exercises']],
-    notify: { success: 'Muadiller güncellendi.' },
-    onSuccess: () => router.refresh(),
-  });
-
-  const toggle = (id: string) =>
-    save.mutate(pinnedIds.includes(id) ? pinnedIds.filter((item) => item !== id) : [...pinnedIds, id]);
 
   const pinned = rows.filter((row) => row.pinned);
   const groups = new Map<string, AlternativeRow[]>();
@@ -96,7 +70,11 @@ export function AlternativesCard({
       <CardHeader>
         <CardTitle>Muadiller</CardTitle>
         <CardDescription>
-          Alet doluysa ya da yoksa yerine yapılabilecekler. İğneyle sabitlediğin en üstte çıkar.
+          Alet doluysa ya da yoksa yerine yapılabilecekler.{' '}
+          <Link href={`/dashboard/exercises/${exerciseId}/edit`} className="underline underline-offset-4">
+            Düzenle
+          </Link>{' '}
+          diyerek kendi seçtiklerini sabitleyebilirsin; sabitlediklerin en üstte çıkar.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -130,30 +108,20 @@ export function AlternativesCard({
               <h3 className="text-xs font-medium text-muted-foreground">{label}</h3>
               <ItemGroup className="gap-2">
                 {items.map((row) => (
-                  <Item key={row.id} variant="outline" size="sm">
+                  <Item key={row.id} variant="outline" size="sm" render={<Link href={`/dashboard/exercises/${row.id}`} />}>
                     <ItemContent>
-                      <ItemTitle>
-                        <Link href={`/dashboard/exercises/${row.id}`} className="hover:underline">
-                          {row.title}
-                        </Link>
-                      </ItemTitle>
+                      <ItemTitle>{row.title}</ItemTitle>
                       <ItemDescription>
                         {row.muscles}
                         {row.pinned ? ` · ${row.device ?? EQUIPMENT_LABELS[row.equipment]}` : ''}
                         {row.pattern ? ` · ${row.pattern}` : ''}
                       </ItemDescription>
                     </ItemContent>
-                    <ItemActions>
-                      <Button
-                        variant={row.pinned ? 'secondary' : 'ghost'}
-                        size="icon-sm"
-                        aria-pressed={row.pinned}
-                        aria-label={row.pinned ? `${row.title} sabitlemesini kaldır` : `${row.title} muadil olarak sabitle`}
-                        disabled={save.isPending}
-                        onClick={() => toggle(row.id)}>
-                        <PushPin weight={row.pinned ? 'fill' : 'regular'} />
-                      </Button>
-                    </ItemActions>
+                    {row.pinned ? (
+                      <ItemActions>
+                        <PushPin weight="fill" className="size-4 text-primary" aria-label="Senin sabitlediğin" />
+                      </ItemActions>
+                    ) : null}
                   </Item>
                 ))}
               </ItemGroup>

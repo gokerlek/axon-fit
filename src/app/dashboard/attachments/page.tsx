@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ImageSquare, PencilSimple, Plus } from '@phosphor-icons/react/dist/ssr';
+import { ImageSquare, Plus } from '@phosphor-icons/react/dist/ssr';
 import { ImagePlaceholder } from '@/components/image-placeholder';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -54,7 +54,7 @@ export default async function AttachmentsPage() {
           return (
             <li key={attachment.id}>
               <Link
-                href={`/dashboard/attachments/${attachment.id}/edit`}
+                href={`/dashboard/attachments/${attachment.id}`}
                 className="block h-full rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
                 <Card size="sm" className="h-full transition-colors hover:bg-muted/40">
                   <CardHeader>
@@ -80,9 +80,7 @@ export default async function AttachmentsPage() {
                     <span>
                       <span className="tabular-nums">{exercisesUsing}</span>&nbsp;egzersiz
                     </span>
-                    <span className="inline-flex items-center gap-1">
-                      <PencilSimple weight="fill" /> Düzenle
-                    </span>
+                    <span>{attachment.source === 'library' ? 'Hazır havuz' : 'Senin aparatın'}</span>
                   </CardFooter>
                 </Card>
               </Link>

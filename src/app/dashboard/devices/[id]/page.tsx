@@ -128,7 +128,7 @@ export default async function DeviceDetailPage({ params }: { params: Promise<{ i
                       key={attachment.id}
                       variant="outline"
                       size="sm"
-                      render={<Link href={`/dashboard/attachments/${attachment.id}/edit`} />}>
+                      render={<Link href={`/dashboard/attachments/${attachment.id}`} />}>
                       <ItemMedia variant="image">
                         {attachment.imageUrl ? (
                           // Özel repo'dan uygulama üzerinden gelir; Next görsel iyileştiricisi oturum çerezini taşımaz.

@@ -86,7 +86,7 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
       ? ([
           [
             'Aparat',
-            <Link key="aparat" href={`/dashboard/attachments/${attachment.id}/edit`} className="underline underline-offset-4">
+            <Link key="aparat" href={`/dashboard/attachments/${attachment.id}`} className="underline underline-offset-4">
               {attachment.name}
             </Link>,
           ],
