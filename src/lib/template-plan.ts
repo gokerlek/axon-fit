@@ -475,11 +475,11 @@ const UNBIASED_LIMIT = 252;
 const MAX_ATTEMPTS = 20;
 
 /**
- * Rastgele kimlik (`t_k3m9x2qa`, `r_q2m8xk`): a-z ve 0-9, eşit dağılımlı. Alınmış
+ * Rastgele kimlik (`t_k3m9x2qa`, `r_q2m8xk`; programda evre `p_`, gün `d_`): a-z ve 0-9, eşit dağılımlı. Alınmış
  * kimliklerle çakışırsa yeniden dener; 20 denemede bulamazsa hata fırlatır.
  */
 export function randomId(
-  prefix: 't' | 'b' | 'r',
+  prefix: 't' | 'b' | 'r' | 'p' | 'd',
   length: number,
   taken: ReadonlySet<string>,
   random: (n: number) => Uint8Array = (n) => crypto.getRandomValues(new Uint8Array(n)),

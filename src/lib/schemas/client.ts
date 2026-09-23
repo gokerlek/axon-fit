@@ -78,8 +78,6 @@ export const clientSchema = v.object({
   note: v.optional(noteSchema),
   createdAt: timestamp,
   status: v.picklist(CLIENT_STATUSES),
-  /** Faz 4: şablon ataması. */
-  program: v.optional(v.object({ templateId: v.string(), assignedAt: timestamp })),
   modules: v.object({
     health: v.object({
       enabled: v.boolean(),
@@ -122,7 +120,7 @@ export const inviteSchema = v.object({
 });
 export type Invite = v.InferOutput<typeof inviteSchema>;
 
-/** Atanan şablon; boş metin = program yok. */
+/** Başlangıç şablonu; boş metin = şablonsuz. */
 const templateChoiceSchema = v.union(
   [v.literal(''), v.pipe(v.string(), v.regex(TEMPLATE_ID_PATTERN))],
   'Şablonu seç.',
@@ -136,7 +134,7 @@ export const clientFormSchema = v.pipe(
     status: v.picklist(CLIENT_STATUSES, 'Durumu seç.'),
     healthEnabled: v.boolean(),
     healthFields: healthFieldsSchema,
-    templateId: templateChoiceSchema,
+    startTemplateId: templateChoiceSchema,
   }),
   v.forward(
     v.partialCheck(
@@ -158,7 +156,7 @@ export const clientSaveSchema = v.pipe(
     status: v.picklist(CLIENT_STATUSES, 'Durumu seç.'),
     healthEnabled: v.boolean(),
     healthFields: healthFieldsSchema,
-    templateId: templateChoiceSchema,
+    startTemplateId: templateChoiceSchema,
   }),
   v.forward(
     v.partialCheck(

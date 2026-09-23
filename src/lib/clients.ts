@@ -7,6 +7,9 @@ import { serverEnv } from './env';
 import { appRepo, clientRepoName, GithubError } from './github/client';
 import { deleteFile, readJson, writeJson } from './github/files';
 import { clientRepoExists, createClientRepo, deleteClientRepo } from './github/repos';
+import { commitMessage } from './program-diff';
+import type { ProgramState } from './program-plan';
+import { writeProgramFile } from './programs';
 import {
   clientIndexSchema,
   clientSchema,
@@ -24,7 +27,8 @@ import {
  * Danışanlar (SPEC §3, §5).
  *
  * Her danışan kendi özel repo'sunda: `client.json` kaydın kendisi, `invite.json` davetin
- * özeti. Uygulama repo'sundaki `data/clients.json` yalnız kimlik ve durum tutar; liste
+ * özeti, `program.json` danışana özel program (`src/lib/programs.ts`). Uygulama
+ * repo'sundaki `data/clients.json` yalnız kimlik ve durum tutar; liste
  * önce oradan, sonra her danışanın kendi repo'sundan okunur (30 danışan → 30 istek).
  */
 
@@ -139,19 +143,16 @@ export async function listClients(): Promise<ClientSummary[]> {
 
 /* --- oluşturma, güncelleme, silme --- */
 
-function healthModule(input: ClientInput, previous: Client['modules']['health'] | null, now: string) {
+/** Kayda giren alanlar: başlangıç şablonu kayda değil, programa gider. */
+type ClientFields = Omit<ClientInput, 'startTemplateId'>;
+
+function healthModule(input: ClientFields, previous: Client['modules']['health'] | null, now: string) {
   if (!input.healthEnabled) return { enabled: false, fields: [] };
   return {
     enabled: true,
     fields: [...new Set(input.healthFields)],
     enabledAt: previous?.enabled ? (previous.enabledAt ?? now) : now,
   };
-}
-
-/** Program: aynı şablon yeniden kaydedilirse atama tarihi korunur. Boş seçim programı kaldırır. */
-function programOf(templateId: string, previous: Client['program'], now: string): Client['program'] {
-  if (!templateId) return undefined;
-  return previous?.templateId === templateId ? previous : { templateId, assignedAt: now };
 }
 
 /** Repo yeni açıldığında içerik ucu kısa bir süre 404/409 verebilir: birkaç kez dener. */
@@ -168,7 +169,11 @@ async function writeFreshRepo(client: Client): Promise<void> {
   }
 }
 
-export async function createClient(input: ClientInput): Promise<string> {
+/**
+ * Yeni danışan: özel repo açılır, kayıt yazılır; başlangıç şablonu seçildiyse program da
+ * aynı adımda yazılır. Herhangi biri yazılamazsa repo silinir — ya hepsi ya hiçbiri.
+ */
+export async function createClient(input: ClientFields, options: { program?: ProgramState } = {}): Promise<string> {
   let id = newClientId();
   // 36⁸ uzayında çakışma pratikte olmaz; yine de var olan bir repo'nun üzerine gidilmez.
   if (await clientRepoExists(id)) id = newClientId();
@@ -181,7 +186,6 @@ export async function createClient(input: ClientInput): Promise<string> {
     ...(input.note ? { note: input.note } : {}),
     createdAt: now,
     status: 'active',
-    ...(input.templateId ? { program: programOf(input.templateId, undefined, now) } : {}),
     modules: { health: healthModule(input, null, now) },
     consents: {},
     access: { version: 1 },
@@ -190,28 +194,29 @@ export async function createClient(input: ClientInput): Promise<string> {
 
   try {
     await writeFreshRepo(client);
+    if (options.program) {
+      await writeProgramFile(id, options.program, { message: commitMessage('create', options.program.log[0]?.changes ?? []) });
+    }
     // Listeye YALNIZ kimlik ve durum girer (SPEC §3).
     await updateIndex((items) => [...items.filter((item) => item.id !== id), { id, status: 'active' }], 'Danışan eklendi');
   } catch (error) {
-    // Yarım kalan kayıt öksüz repo bırakmasın: repo'da henüz yalnız bu kayıt var.
+    // Yarım kalan kayıt öksüz repo bırakmasın: repo'da henüz yalnız bu kayıt (ve program) var.
     await deleteClientRepo(id).catch(() => undefined);
     throw error;
   }
   return id;
 }
 
-export async function updateClient(id: string, input: ClientInput): Promise<void> {
+export async function updateClient(id: string, input: ClientFields): Promise<void> {
   const stored = await readClient(id);
   if (!stored) throw new GithubError('Danışan bulunamadı.', 404);
   const { client, sha } = stored;
   const now = new Date().toISOString();
-  const { note: _note, program: _program, ...rest } = client;
-  const program = programOf(input.templateId, client.program, now);
+  const { note: _note, ...rest } = client;
   const next: Client = {
     ...rest,
     name: input.name,
     ...(input.note ? { note: input.note } : {}),
-    ...(program ? { program } : {}),
     status: input.status,
     modules: { ...client.modules, health: healthModule(input, client.modules.health, now) },
   };

@@ -1,24 +1,143 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowSquareOut, Barbell, QrCode } from '@phosphor-icons/react/dist/ssr';
+import { ArrowSquareOut, Barbell, ListChecks, Plus, QrCode } from '@phosphor-icons/react/dist/ssr';
 import { EditButton } from '@/components/edit-button';
 import { PageHeader } from '@/components/page-header';
+import { ChangeLog } from '@/components/program/change-log';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { loadClient, readInvite } from '@/lib/clients';
 import { healthConsentState } from '@/lib/client-status';
 import { readAppConfig } from '@/lib/config';
 import { serverEnv } from '@/lib/env';
-import { formatDate } from '@/lib/format';
+import { listExercises, type ExerciseWithSource } from '@/lib/exercises';
+import { formatDate, formatNumber } from '@/lib/format';
 import { clientRepoName } from '@/lib/github/client';
+import { currentPhaseOf, nextDayId, phaseStatus, phaseStatusLabel } from '@/lib/program-plan';
+import { readProgramFile, type ProgramFile } from '@/lib/programs';
 import { CLIENT_ID_PATTERN, CLIENT_STATUS_LABELS, HEALTH_FIELD_INFO } from '@/lib/schemas/client';
+import { templateSummary } from '@/lib/template-plan';
 import { HEALTH_STATE_DETAILS, HEALTH_STATE_LABELS } from '../health-state';
 import { AccessBadge, accessDetail, accessOf } from '../invite-state';
 import { requirePt } from '@/lib/guards';
-import { readTemplateFile } from '@/lib/templates';
+
+/**
+ * Programın özeti: şu anki evre, günleri (sıradaki işaretli), son değişiklik. Program
+ * yoksa "Program oluştur"; okunamıyorsa sorunu. `undefined`: GitHub'dan okunamadı.
+ */
+function ProgramCard({
+  clientId,
+  file,
+  exercises,
+  timeZone,
+}: {
+  clientId: string;
+  file: ProgramFile | null | undefined;
+  exercises: ReadonlyMap<string, ExerciseWithSource>;
+  timeZone: string;
+}) {
+  const href = `/dashboard/clients/${clientId}/program`;
+  const openButton = (
+    <CardFooter>
+      <Button variant="outline" nativeButton={false} render={<Link href={href} />}>
+        <ListChecks data-icon="inline-start" weight="fill" />
+        Programı aç
+      </Button>
+    </CardFooter>
+  );
+
+  if (file === undefined) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Program</CardTitle>
+          <CardDescription>Program şu an okunamadı. Sayfayı yenile.</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+  if (file === null) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Program</CardTitle>
+          <CardDescription>
+            Henüz program yok. Bir şablondan başlayıp bu danışana göre düzenleyebilir ya da boş başlayabilirsin.
+          </CardDescription>
+        </CardHeader>
+        <CardFooter>
+          <Button nativeButton={false} render={<Link href={`${href}/new`} />}>
+            <Plus data-icon="inline-start" weight="fill" />
+            Program oluştur
+          </Button>
+        </CardFooter>
+      </Card>
+    );
+  }
+  if (!file.program) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Program</CardTitle>
+          <CardDescription className="text-destructive">program.json okunamadı: {file.problem}</CardDescription>
+        </CardHeader>
+        {openButton}
+      </Card>
+    );
+  }
+
+  const program = file.program;
+  const current = currentPhaseOf(program);
+  const status = phaseStatus(program, new Date());
+  const next = nextDayId(program);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Program</CardTitle>
+        <CardDescription>
+          {current?.phase.name} · {phaseStatusLabel(status)}
+        </CardDescription>
+        {status.kind === 'due' ? (
+          <CardAction>
+            <Badge variant="outline">Evre süresi doldu</Badge>
+          </CardAction>
+        ) : null}
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Şu anki evrenin günleri">
+          {current?.phase.days.map((day) => {
+            const summary = templateSummary({ blocks: day.blocks }, exercises);
+            const isNext = day.id === next;
+            return (
+              <li key={day.id}>
+                <Item variant="outline" size="sm" className={isNext ? 'bg-primary/5 ring-2 ring-primary/50' : undefined}>
+                  <ItemContent>
+                    <ItemTitle>{day.name}</ItemTitle>
+                    <ItemDescription className="tabular-nums">
+                      {formatNumber(summary.rows)} hareket · {formatNumber(summary.workingSets)} set · ≈{' '}
+                      {formatNumber(summary.minutes)} dk
+                    </ItemDescription>
+                  </ItemContent>
+                  {isNext ? (
+                    <ItemActions>
+                      <Badge>Sıradaki</Badge>
+                    </ItemActions>
+                  ) : null}
+                </Item>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="text-sm text-muted-foreground">Son değişiklik: {formatDate(program.updatedAt, timeZone)}</p>
+      </CardContent>
+      {openButton}
+    </Card>
+  );
+}
 
 /** Danışan detayı — yalnız gösterir; değiştirmek için "Düzenle" (SPEC §6). */
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -49,10 +168,14 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   }
 
   const { client } = loaded;
-  const [invite, programFile] = await Promise.all([
+  const [invite, programFile, exercises] = await Promise.all([
     readInvite(id),
-    client.program ? readTemplateFile(client.program.templateId).catch(() => null) : Promise.resolve(null),
+    // undefined: GitHub'dan okunamadı; sayfa yine açılır.
+    readProgramFile(id).catch(() => undefined),
+    listExercises(),
   ]);
+  const exerciseById = new Map(exercises.map((exercise) => [exercise.id, exercise]));
+  const log = programFile?.program?.log ?? [];
   const repo = clientRepoName(id);
   const access = accessOf(client, invite?.invite ?? null);
   const health = healthConsentState(client);
@@ -87,27 +210,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 <TableRow>
                   <TableCell className="text-muted-foreground">Eklendi</TableCell>
                   <TableCell>{formatDate(client.createdAt, config.timeZone)}</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell className="text-muted-foreground">Program</TableCell>
-                  <TableCell>
-                    {!client.program ? (
-                      <span className="text-muted-foreground">Atanmadı</span>
-                    ) : programFile?.template ? (
-                      <Link
-                        href={`/dashboard/templates/${programFile.template.id}`}
-                        className="font-medium underline-offset-4 hover:underline">
-                        {programFile.template.name}
-                      </Link>
-                    ) : (
-                      <span className="text-destructive">Şablon silinmiş ya da okunamıyor</span>
-                    )}
-                    {client.program ? (
-                      <span className="block text-xs text-muted-foreground">
-                        {formatDate(client.program.assignedAt, config.timeZone)} tarihinde atandı
-                      </span>
-                    ) : null}
-                  </TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="text-muted-foreground">Repo</TableCell>
@@ -176,6 +278,27 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           </Card>
         </div>
       </div>
+
+      <ProgramCard clientId={id} file={programFile} exercises={exerciseById} timeZone={config.timeZone} />
+
+      {log.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Program geçmişi</CardTitle>
+            <CardDescription>Her kayıtta otomatik yazılır; tamamı danışanın repo&apos;sunun git geçmişinde.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ChangeLog entries={log.slice(0, 5)} timeZone={config.timeZone} />
+          </CardContent>
+          {log.length > 5 ? (
+            <CardFooter>
+              <Button variant="ghost" size="sm" nativeButton={false} render={<Link href={`/dashboard/clients/${id}/program#gecmis`} />}>
+                Tüm geçmiş
+              </Button>
+            </CardFooter>
+          ) : null}
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

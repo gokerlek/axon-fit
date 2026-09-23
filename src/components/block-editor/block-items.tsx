@@ -32,13 +32,12 @@ import { DEVICE_KIND_LABELS, DEVICE_KINDS, loadSpecFor } from '@/lib/device-load
 import { familyOf, summarizeMuscles } from '@/lib/muscles';
 import { describeRule, PROGRESSION_LABELS, RIR_LABELS, type ProgressionScheme } from '@/lib/progression';
 import { EQUIPMENT_LABELS } from '@/lib/schemas/exercise';
-import type { templateFormSchema } from '@/lib/schemas/template';
+import type { blocksHostSchema } from '@/lib/schemas/template';
 import {
   canJoin,
   deviceChoices,
   dissolveGroup,
   duplicateRow,
-  idSource,
   joinBlocks,
   moveBlock,
   moveRowInGroup,
@@ -49,6 +48,7 @@ import {
   ungroupRow,
   changeKind,
   type EditorDevice,
+  type IdSource,
   type PickerExercise,
 } from '@/lib/template-edit';
 import {
@@ -64,11 +64,26 @@ import {
 } from '@/lib/template-plan';
 import { cn } from '@/lib/utils';
 
-export type TemplateFormStore = FormStore<typeof templateFormSchema>;
+/** Blokları kökte tutan form tipi. Gerçek form başka şekilde olabilir (program); yol öneki `path`'tedir. */
+export type BlocksFormStore = FormStore<typeof blocksHostSchema>;
 
-/** Düzenleyicinin ortak durumu: form, bloklar ve yapısal işlemler (template-form.tsx sağlar). */
+/** Blok dizisinin formdaki yolu (sonu her zaman 'blocks'). */
+export type BlocksPath = readonly ['blocks'] | readonly ['phases', number, 'days', number, 'blocks'];
+
+/** Formisch yolu: tip, blokları kökte tutan forma göre denetlenir; çalışma zamanında gerçek önek kullanılır. */
+export function blockField<const T extends readonly (string | number)[]>(path: BlocksPath, ...rest: T): ['blocks', ...T] {
+  return [...path, ...rest] as unknown as ['blocks', ...T];
+}
+
+/** Düzenleyicinin ortak durumu: form, bloklar ve yapısal işlemler (block-editor.tsx sağlar). */
 export type Editor = {
-  form: TemplateFormStore;
+  form: BlocksFormStore;
+  /** Blok dizisinin formdaki yolu (şablonda `['blocks']`, programda günün blokları). */
+  path: BlocksPath;
+  /** Yeni blok ve satır kimlikleri: şablonda şablonun, programda bütün programın kimliklerini bilir. */
+  newIds: (blocks: readonly TemplateBlock[]) => IdSource;
+  /** Satır notunun altındaki açıklama. */
+  noteHint: string;
   /** Ekrandaki bloklar (çizim için). İşlemler `update` ile olay anındaki güncel bloklara uygulanır. */
   blocks: TemplateBlock[];
   /** Blokları günceller ve forma tek seferde yazar; satır vurgusu ve ekran okuyucu duyurusu isteğe bağlı. */
@@ -90,7 +105,7 @@ export const EditorContext = createContext<Editor | null>(null);
 
 function useEditor(): Editor {
   const editor = useContext(EditorContext);
-  if (!editor) throw new Error('Şablon düzenleyicinin içinde kullanılmalı.');
+  if (!editor) throw new Error('Hareket düzenleyicinin içinde kullanılmalı.');
   return editor;
 }
 
@@ -229,11 +244,10 @@ function BlockNumberField({
   disabled?: boolean;
   className?: string;
 }) {
-  const { form } = useEditor();
-  const field = useField(form, { path: ['blocks', blockIndex, name] });
+  const { form, path } = useEditor();
+  const field = useField(form, { path: blockField(path, blockIndex, name) });
   const id = `${name}-${blockId}`;
-  const onValue = (value: number | undefined) =>
-    setInput(form, { path: ['blocks', blockIndex, name], input: value as number });
+  const onValue = (value: number | undefined) => setInput(form, { path: blockField(path, blockIndex, name), input: value as number });
   const Control = seconds ? SecondsInput : NumberInput;
   return (
     <Field data-invalid={Boolean(field.errors) || undefined} className={cn('gap-1.5', className)}>
@@ -260,9 +274,9 @@ function TargetField({
   exercise: PickerExercise | undefined;
   className?: string;
 }) {
-  const { form } = useEditor();
-  const minField = useField(form, { path: ['blocks', blockIndex, 'rows', rowIndex, 'target', 'min'] });
-  const maxField = useField(form, { path: ['blocks', blockIndex, 'rows', rowIndex, 'target', 'max'] });
+  const { form, path } = useEditor();
+  const minField = useField(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'target', 'min') });
+  const maxField = useField(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'target', 'max') });
   const isDuration = exercise?.trackingType === 'duration';
   const max = isDuration ? TEMPLATE_LIMITS.secondsMax : TEMPLATE_LIMITS.repsMax;
   const step = isDuration ? 5 : 1;
@@ -282,7 +296,7 @@ function TargetField({
           step={step}
           disabled={!exercise}
           className="w-16"
-          onValue={(value) => setInput(form, { path: ['blocks', blockIndex, 'rows', rowIndex, 'target', 'min'], input: value as number })}
+          onValue={(value) => setInput(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'target', 'min'), input: value as number })}
         />
         <span className="text-muted-foreground" aria-hidden>
           –
@@ -296,7 +310,7 @@ function TargetField({
           step={step}
           disabled={!exercise}
           className="w-16"
-          onValue={(value) => setInput(form, { path: ['blocks', blockIndex, 'rows', rowIndex, 'target', 'max'], input: value as number })}
+          onValue={(value) => setInput(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'target', 'max'), input: value as number })}
         />
         <span className="text-sm text-muted-foreground">{isDuration ? 'sn' : 'tekrar'}</span>
       </div>
@@ -310,8 +324,8 @@ const RIR_ITEMS: Record<string, string> = Object.fromEntries(Object.entries(RIR_
 /** Satırın ayrıntıları: ilerleme kuralı, cihaz ve not. */
 function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: number; rowIndex: number; row: TemplateRow; exercise: PickerExercise }) {
   const editor = useEditor();
-  const { form, devices, deviceList, exerciseList, exercises } = editor;
-  const noteField = useField(form, { path: ['blocks', blockIndex, 'rows', rowIndex, 'note'] });
+  const { form, path, devices, deviceList, exerciseList, exercises } = editor;
+  const noteField = useField(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'note') });
   const rule = ruleFor(row, exercise);
   const deviceId = row.deviceId ?? exercise.deviceId;
   const device = deviceId ? devices.get(deviceId) : undefined;
@@ -331,7 +345,7 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
   }, [row.exerciseId, row.deviceId, swapContext, deviceList, devices]);
 
   const writeRule = (next: { scheme: ProgressionScheme; targetRir: number }) =>
-    setInput(form, { path: ['blocks', blockIndex, 'rows', rowIndex, 'rule'], input: next });
+    setInput(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'rule'), input: next });
 
   const changeDevice = (value: string) => {
     const result = swapDevice(row, value || null, swapContext);
@@ -370,7 +384,7 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
             variant="ghost"
             size="sm"
             className="self-start"
-            onClick={() => setInput(form, { path: ['blocks', blockIndex, 'rows', rowIndex, 'rule'], input: undefined })}>
+            onClick={() => setInput(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'rule'), input: undefined })}>
             Egzersizin kuralına dön
           </Button>
         ) : null}
@@ -399,7 +413,7 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
           placeholder="Dizleri içe kaçırma"
           value={typeof noteField.input === 'string' ? noteField.input : ''}
         />
-        <FieldDescription>Danışan antrenmanda görür. Kişisel bilgi yazma.</FieldDescription>
+        <FieldDescription>{editor.noteHint}</FieldDescription>
         <FieldError>{noteField.errors?.[0]}</FieldError>
       </Field>
     </div>
@@ -436,7 +450,7 @@ function RowMenu({ block, blockIndex, row, rowIndex, title }: { block: TemplateB
         </DropdownMenuItem>
         <DropdownMenuItem
           disabled={missing || full}
-          onClick={() => editor.update((before) => duplicateRow(before, row.id, idSource(before)), { announce: `${title} kopyalandı` })}>
+          onClick={() => editor.update((before) => duplicateRow(before, row.id, editor.newIds(before)), { announce: `${title} kopyalandı` })}>
           <Copy />
           Kopyala
         </DropdownMenuItem>
@@ -453,7 +467,7 @@ function RowMenu({ block, blockIndex, row, rowIndex, title }: { block: TemplateB
           <DropdownMenuItem
             disabled={missing || blocksFull}
             onClick={() =>
-              editor.updateWithUndo((before) => ungroupRow(before, row.id, exercises, idSource(before)), `${title} gruptan çıkarıldı`)
+              editor.updateWithUndo((before) => ungroupRow(before, row.id, exercises, editor.newIds(before)), `${title} gruptan çıkarıldı`)
             }>
             <LinkBreak />
             Gruptan çıkar
@@ -511,8 +525,8 @@ function RowEditor({
   handle: React.ReactNode;
 }) {
   const editor = useEditor();
-  const { form, exercises, devices, labels, expanded, highlight } = editor;
-  const exerciseField = useField(form, { path: ['blocks', blockIndex, 'rows', rowIndex, 'exerciseId'] });
+  const { form, path, exercises, devices, labels, expanded, highlight } = editor;
+  const exerciseField = useField(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'exerciseId') });
   const exercise = exercises.get(row.exerciseId);
   const title = rowTitle(row, exercises);
   const single = block.kind === 'single';
@@ -667,7 +681,7 @@ function GroupMenu({ block, blockIndex, title }: { block: TemplateBlock; blockIn
         <DropdownMenuItem
           disabled={blocks.length - 1 + block.rows.length > TEMPLATE_LIMITS.blocks}
           onClick={() =>
-            editor.updateWithUndo((before) => dissolveGroup(before, block.id, exercises, idSource(before)), `${title} dağıtıldı`)
+            editor.updateWithUndo((before) => dissolveGroup(before, block.id, exercises, editor.newIds(before)), `${title} dağıtıldı`)
           }>
           <LinkBreak />
           Grubu dağıt
@@ -687,7 +701,7 @@ function GroupMenu({ block, blockIndex, title }: { block: TemplateBlock; blockIn
 /** Grubun başlığı ve satırları: tür, tur, tur sonu dinlenme, (devrede) istasyon geçişi. */
 function GroupBlock({ block, blockIndex, handle, title }: { block: TemplateBlock; blockIndex: number; handle: React.ReactNode; title: string }) {
   const editor = useEditor();
-  const rowsArray = useFieldArray(editor.form, { path: ['blocks', blockIndex, 'rows'] });
+  const rowsArray = useFieldArray(editor.form, { path: blockField(editor.path, blockIndex, 'rows') });
   const options = kindOptions(block.rows.length);
   const kindLabels = Object.fromEntries(options.map((kind) => [kind, BLOCK_KIND_LABELS[kind]])) as Record<BlockKind, string>;
   const kind = block.kind === 'single' ? 'superset' : block.kind;

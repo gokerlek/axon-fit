@@ -3,7 +3,6 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { loadClient } from '@/lib/clients';
 import { requirePt } from '@/lib/guards';
-import { templateChoices } from '@/lib/templates';
 import { CLIENT_ID_PATTERN } from '@/lib/schemas/client';
 import { ClientForm } from '../../client-form';
 import { ClientActions } from './client-actions';
@@ -48,7 +47,7 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
         title="Danışanı düzenle"
         actions={<ClientActions id={id} name={client.name} />}
       />
-      <ClientForm editing={client} templates={await templateChoices()} />
+      <ClientForm editing={client} />
     </div>
   );
 }

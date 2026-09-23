@@ -29,7 +29,7 @@ function muscleNames(muscle: string): string[] {
 export type ReplaceTarget = { rowId: string; label: string; title: string; exerciseId: string };
 
 /**
- * Kütüphane paneli: ada ya da kasa göre arama, bölge süzgeci; dokununca şablonun sonuna
+ * Kütüphane paneli: ada ya da kasa göre arama, bölge süzgeci; dokununca listenin sonuna
  * eklenir. Değiştirme kipinde seçilen hareket satırın yerine geçer ve önce muadiller önerilir.
  */
 export function ExercisePicker({

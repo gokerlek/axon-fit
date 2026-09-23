@@ -123,7 +123,7 @@ export async function listTemplates(): Promise<TemplateFile[]> {
   ];
 }
 
-/** Seçiciler için geçerli şablonların kimliği ve adı (ör. danışana program atama). */
+/** Seçiciler için geçerli şablonların kimliği ve adı (ör. danışanın başlangıç şablonu). */
 export async function templateChoices(): Promise<{ id: string; name: string }[]> {
   return (await listTemplates()).flatMap((file) => (file.template ? [{ id: file.template.id, name: file.template.name }] : []));
 }

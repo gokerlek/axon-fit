@@ -1,5 +1,5 @@
 import * as v from 'valibot';
-import { PROGRESSION_SCHEMES } from '@/lib/progression';
+import { PROGRESSION_SCHEMES } from '../progression.ts';
 import {
   BLOCK_ID_PATTERN,
   BLOCK_KINDS,
@@ -9,9 +9,9 @@ import {
   blockShapeProblem,
   countRows,
   duplicateIds,
-} from '@/lib/template-plan';
+} from '../template-plan.ts';
 
-export { BLOCK_KINDS, BLOCK_KIND_LABELS, TEMPLATE_ID_PATTERN, type BlockKind } from '@/lib/template-plan';
+export { BLOCK_KINDS, BLOCK_KIND_LABELS, TEMPLATE_ID_PATTERN, type BlockKind } from '../template-plan.ts';
 
 /**
  * Antrenman şablonu şeması — sunucu ve istemci ortak (SPEC §7.4).
@@ -84,19 +84,33 @@ export const templateBlockSchema = v.pipe(
   ),
 );
 
+/** Şablon adı (program gününü şablon olarak kaydederken de). */
+export const templateNameSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(2, 'Şablon adı çok kısa.'),
+  v.maxLength(L.name, `En fazla ${L.name} karakter.`),
+);
+
+/** Şablonun blokları: en az bir hareket, 30 blok, 40 hareket, benzersiz kimlikler. */
+export const templateBlocksSchema = v.pipe(
+  v.array(templateBlockSchema),
+  v.minLength(1, 'En az bir hareket ekle.'),
+  v.maxLength(L.blocks, `En fazla ${L.blocks} blok.`),
+  v.check((blocks) => countRows(blocks) <= L.rows, `Bir şablonda en fazla ${L.rows} hareket olur.`),
+  v.check((blocks) => duplicateIds(blocks).length === 0, 'Satır ve blok kimlikleri benzersiz olmalı.'),
+);
+
+/** Yalnız blok düzenleyicinin form tipi için: blokları kökte tutan form. */
+export const blocksHostSchema = v.object({ blocks: templateBlocksSchema });
+
 const templateFields = {
-  name: v.pipe(v.string(), v.trim(), v.minLength(2, 'Şablon adı çok kısa.'), v.maxLength(L.name, `En fazla ${L.name} karakter.`)),
+  name: templateNameSchema,
   description: v.optional(
     v.pipe(v.string(), v.trim(), v.maxLength(L.description, `Açıklama en fazla ${L.description} karakter.`)),
     '',
   ),
-  blocks: v.pipe(
-    v.array(templateBlockSchema),
-    v.minLength(1, 'En az bir hareket ekle.'),
-    v.maxLength(L.blocks, `En fazla ${L.blocks} blok.`),
-    v.check((blocks) => countRows(blocks) <= L.rows, `Bir şablonda en fazla ${L.rows} hareket olur.`),
-    v.check((blocks) => duplicateIds(blocks).length === 0, 'Satır ve blok kimlikleri benzersiz olmalı.'),
-  ),
+  blocks: templateBlocksSchema,
 };
 
 /** Düzenleyicinin şeması (kimlik ve tarihler yok). */

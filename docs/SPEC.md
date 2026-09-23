@@ -69,7 +69,8 @@ media/
 ### `client-<id>` — o danışana ait her şey (ayrı özel repo)
 
 ```
-client.json                    isim, not, program ataması, modüller, onaylar, oturum kuşağı, bağlantı izinleri
+client.json                    isim, not, modüller, onaylar, oturum kuşağı, bağlantı izinleri
+program.json                   danışanın kendi programı: evreler, günler, rotasyon, program geçmişi (§7.4)
 invite.json                    davet kodunun anahtarlı özeti, süresi, kullanıldı bilgisi, yanlış deneme sayısı
 sessions/<tarih>-<id>.json     tamamlanmış antrenman (her biri yeni dosya)
 health.json                    yalnız sağlık modülü açık ve onaylıysa oluşur
@@ -80,6 +81,8 @@ health.json                    yalnız sağlık modülü açık ve onaylıysa ol
 **Neden ayrı repo:** danışan "verilerimi sil" dediğinde repo silinir; 90 gün geri alma penceresinden sonra tamamen gider. Başka hiçbir verinin geçmişine dokunulmaz.
 
 **Neden her antrenman ayrı dosya:** aynı dosyaya eşzamanlı yazma olmaz, çakışma riski sıfıra iner, geçmiş doğal olarak birikir.
+
+**Neden program danışanın repo'sunda:** program kişiye özeldir, şikâyet ve isteklere göre değişir; uygulama repo'sundaki şablon yalnız başlangıç noktasıdır. Program değişikliklerinin tam kaydı bu repo'nun git geçmişidir.
 
 ---
 
@@ -93,7 +96,6 @@ health.json                    yalnız sağlık modülü açık ve onaylıysa ol
   "note": "Hedef: 5 km koşu",          // PT'nin notu; danışan görmez
   "createdAt": "2026-09-20T10:00:00Z",
   "status": "active",                  // active | paused | archived (arşivdeki giriş yapamaz)
-  "program": { "templateId": "t_k2m9x4qa", "assignedAt": "..." },   // PT danışan formunda atar; şablon silinirse "silinmiş şablon" görünür
   "modules": {
     "health": {                        // PT danışanı açarken seçer
       "enabled": true,
@@ -108,6 +110,32 @@ health.json                    yalnız sağlık modülü açık ve onaylıysa ol
     "version": 1, "joinedAt": "...", "lastJoinAt": "...", "revokedAt": "..."
   },                                   // katılım burada: invite.json her yeni kodda ezilir
   "visibleTo": ["c_2m1x9qa4"]          // Faz 7: bağlantı verilen diğer danışanlar (yalnız kimlik)
+}
+```
+
+**`client-<id>` içinde `program.json`** — danışana özel program; şema `src/lib/schemas/program.ts`.
+```jsonc
+{
+  "version": 1,
+  "revision": 7,                       // PT'nin her kaydında +1; düzenleyici çakışmayı bununla yakalar
+  "createdAt": "2026-09-24T09:00:00.000Z",
+  "updatedAt": "2026-10-02T18:12:00.000Z",
+  "phases": [
+    { "id": "p_k2m9x4", "name": "Uyum", "weeks": 2,   // isteğe bağlı (1–52); yoksa süresiz
+      "days": [
+        { "id": "d_q2m8xk", "name": "Gün A",
+          "source": { "templateId": "t_k2m9x4qa", "templateName": "Alt vücut A", "at": "..." },   // günün geldiği şablon ve o anki adı; şablon değişse ya da silinse de program değişmez
+          "blocks": [ … ] },           // şablondakiyle aynı bloklar (§7.4); kimlikler bütün programda benzersiz
+        { "id": "d_7h2k9m", "name": "Gün B", "blocks": [ … ] }
+      ] },
+    { "id": "p_x8c1v0", "name": "Güç", "weeks": 6, "days": [ … ] }
+  ],
+  "current": { "phaseId": "p_k2m9x4", "startedAt": "2026-09-24T09:00:00.000Z" },   // şu anki evre ve başladığı an
+  "rotation": { "lastDayId": "d_q2m8xk", "lastCompletedAt": "..." },               // antrenman ekranı yazar; revision artmaz
+  "log": [                             // en yenisi üstte, en fazla 200; tamamı git geçmişinde
+    { "at": "2026-10-02T18:12:00.000Z", "revision": 7, "kind": "edit",   // create | edit | phase
+      "changes": [ { "scope": "Uyum · Gün A", "text": "Goblet Squat 3×8–12 → 4×6–10" }, { "text": "Evre 'Güç' eklendi (6 hafta)" } ] }
+  ]
 }
 ```
 
@@ -258,9 +286,16 @@ Genel cihaz listesi (salon envanteri yok): hazır katalog pakette (`src/data/dev
 - **Görsel:** cihaz başına tek fotoğraf (`media/devices/<id>-<özet>.<uzantı>`, PNG/JPG/WebP, en fazla 1 MB, SVG yok). Danışan salonda makineyi tanısın diye; listede küçük, detayda büyük görünür. Egzersizlerde görsel yok (video + kas haritası yeterli).
 - Cihaz silinirse bağlı egzersizler cihazsız kalır ve kendi adımlarıyla devam eder.
 
-### 7.4 Şablonlar: gruplar ve kas yükü haritası (Faz 4)
+### 7.4 Şablonlar, programlar ve kas yükü haritası (Faz 4)
 
-- **Dosya:** her şablon uygulama repo'sunda ayrı dosya: `data/templates/<id>.json`. Kimlik `t_` + 8 rastgele karakter; addan türetilmez, ad değişse de kimlik ve dosya aynı kalır. Şablonda kişisel veri yok (danışan adı, sağlık bilgisi yazılmaz); program ataması danışanın kendi repo'sundadır. Sayfalar: `/dashboard/templates` (liste, detay, ekleme, düzenleme; "Antrenman" bölümünün ilk sekmesi).
+- **Dosya:** her şablon uygulama repo'sunda ayrı dosya: `data/templates/<id>.json`. Kimlik `t_` + 8 rastgele karakter; addan türetilmez, ad değişse de kimlik ve dosya aynı kalır. Şablonda kişisel veri yok (danışan adı, sağlık bilgisi yazılmaz); program danışanın kendi repo'sundadır (`program.json`). Sayfalar: `/dashboard/templates` (liste, detay, ekleme, düzenleme; "Antrenman" bölümünün ilk sekmesi).
+- **Şablon ≠ program.** Şablon yalnız başlangıç noktasıdır. Her danışanın programı kendi repo'sunda `program.json`: şablondan ya da boş oluşturulur, yalnız o danışan için düzenlenir; şablonda sonradan yapılan değişiklik programa yansımaz (gün, geldiği şablonun kimliğini ve o anki adını `source`'ta saklar). Yeni danışan formunda "Başlangıç şablonu" seçilirse program "Evre 1 · Gün A" olarak o şablondan kurulur; mevcut danışanda "Program oluştur" düzenleyiciyi açar (şablonla ya da boş).
+- **Evreler ve günler:** program sıralı evrelerden oluşur (ad, isteğe bağlı süre: 1–52 hafta). Her evrede 1–7 gün ("Gün A", "Gün B"…); günün yapısı şablonla aynıdır (bloklar, satırlar, gruplar). En fazla 12 evre, toplam 28 gün; evre adları programda, gün adları evrede benzersiz. Kimlikler: evre `p_`, gün `d_` + 6 karakter; blok ve satır kimlikleri bütün programda benzersiz.
+- **Rotasyon:** şu anki evrenin günleri sırayla döner: sıradaki gün, son tamamlanan günün arkasındaki gündür (hiç antrenman yoksa ilk gün; `nextDayId`). Danışan başka bir günü seçebilir (PT'ye bildirilir; antrenman ekranıyla gelir). Son tamamlanan gün silinirse rotasyon eski sırada ondan önceki günden devam eder, sıradaki gün değişmez. Evre değişince yeni evrenin ilk günüyle başlar.
+- **Evre geçişini PT onaylar:** şu anki evrenin süresi başladığı andan itibaren dolunca program sayfası "Sonraki evreye geç" önerir; PT onaylar. Süresiz evre öneri üretmez. Düzenleme sayfasında geçiş kayıtla birlikte olur. Her geçiş program geçmişine yazılır.
+- **Program geçmişi:** PT'nin her kaydında eski ve yeni program karşılaştırılır, okunur bir Türkçe özet otomatik yazılır (ör. "Gün A: Goblet Squat 3×8–12 → 4×6–10 · Leg Press çıkarıldı · Kalça Köprüsü eklendi · Evre 'Güç' eklendi"); gerekçe alanı yok. Özet `program.json`'daki geçmişe (en yenisi üstte, 200 kayıt) ve commit mesajına girer; tam kayıt git geçmişidir. Değişiklik yoksa hiçbir şey yazılmaz. Seans başına otomatik ayarlar (hazır oluşluk, ilerleme önerileri) programı değiştirmez; seans dosyasına aittir.
+- **Günü şablon olarak kaydet:** programdaki bir gün yeni şablon olarak kaydedilebilir; şablonda kişisel veri olmaması için satır notları kopyalanmaz (sunucu da siler), adı PT verir.
+- **Çakışma:** düzenleyici programın `revision`'ını taşır; o arada program başka yerde kaydedildiyse kayıt yapılmaz (412). Rotasyon yazımı `revision`'ı artırmaz: antrenman bitince PT'nin açık düzenlemesi boşa düşmez.
 - **Bloklar ve satırlar:** şablon sıralı bloklardan oluşur; blok tek hareket ya da gruptur. Her hareket bir **satırdır** ve kalıcı kimliği vardır (`r_` + 6 karakter): sıralama, gruplama, hareket ya da cihaz değişimi kimliği değiştirmez, antrenman kayıtları satıra bu kimlikle bağlanır. Satırda egzersiz, hedef (tekrar aralığı; süreli harekette saniye), isteğe bağlı kural değişikliği (ilerleme türü, yedekte tekrar), isteğe bağlı cihaz ve not durur; set sayısı ve dinlenme bloktadır. Isınma setleri saklanmaz, antrenmanda `warmupSets` ile hesaplanır.
 - **Gruplar:** arka arkaya yapılan hareketler tek egzersiz değil, şablonda grup olarak tutulur: süperset (2 hareket), devre (3–8 hareket, istasyonlar arası kısa geçişle), kompleks (2–6 hareket, aynı ağırlıkla ara vermeden). Grupta her hareket turda bir set yapar; tur sayısı ve tur sonu dinlenme gruptadır. Her hareket kendi kaslarını ve ilerleme kuralını korur; grup yalnız sırayı ve dinlenmeyi belirler. Hareket sayısı değişince tür kendiliğinden uyar (üçüncü hareket eklenen süperset devre olur).
 - **Düzenleyici:** hareket kütüphaneden (ada ya da kasa göre arayarak) eklenir, sürükle-bırakla ya da ok tuşlarıyla sıralanır; gruplama satırın menüsünden yapılır. Satırın cihazı değiştirilince hareket o cihazdaki aynı kalıptaki muadile geçer (`alternativeForDevice`, PT'nin sabitledikleri önce); yoksa ve ekipman aynıysa hareket aynı kalır, satıra yalnız cihaz yazılır; o da olmazsa başka bir muadile geçer.
@@ -366,7 +401,7 @@ Uygulama beyaz etiketli: paketin adı `pulsecoach`, yayınlanan kurulumun adın�
 | 1 | Kurulum sihirbazı (ad, logo, renk, tema) + GitHub veri katmanı (repo koruma kuralı dahil) |
 | 2 | Egzersiz kütüphanesi ✓ · PT kabuğu (dock + sağ üstte kullanıcı menüsü) ✓ · kas haritası (süzgeç + detay) ✓ |
 | 3 | Danışan ekleme (repo açma) ✓ · sağlık modülü seçimi ✓ · QR davet ✓ · danışan girişi ✓ · sağlık onayı (ver/geri çek) ✓ · erişimi kapat ✓ · silme (adı yazarak) ✓ |
-| 4 | **4a** Antrenman şablonları ✓: düzenleyici (kütüphaneden ekleme, sürükle-bırak sıralama, gruplar: süperset/devre/kompleks, satırda kural ve cihaz değişimi), şablon kas haritası · **4b** antrenman ekranı (**set başına canlı yazma**, çevrimdışı kuyruk, zorluk düğmeleri, §7.1 önerileri) · program atama · haftalık yük haritası · PT canlı görünüm · geçmiş |
+| 4 | **4a** Antrenman şablonları ✓: düzenleyici (kütüphaneden ekleme, sürükle-bırak sıralama, gruplar: süperset/devre/kompleks, satırda kural ve cihaz değişimi), şablon kas haritası · **4b** Kişiye özel program ✓: şablondan ya da boş, evreler ve günler, A → B → C rotasyonu, PT onaylı evre geçişi, otomatik program geçmişi, günü şablon olarak kaydetme · **4c** antrenman ekranı (**set başına canlı yazma**, çevrimdışı kuyruk, zorluk düğmeleri, §7.1 önerileri, rotasyon ve başka gün seçiminin PT'ye bildirimi) · haftalık yük haritası · PT canlı görünüm · geçmiş |
 | 5 | **5a** Ölçümler ✓: giriş (gün, cinsiyet, grup kartları, Sol/Sağ), günü düzenleme ve silme, ölçüm başına grafik, değişimin ölçüm hatasına göre sınıflanması (yalnız kaynaklı eşikler), bel-kalça oranı · otur-kalk bayrağı · yan köprü asimetrisi, yeniden kullanılabilir grafik bileşeni · **5b** kısıtlar, hazır oluşluk ve ağrı takibi (seans yoklaması), hareket taraması ekranları; danışan sayfasından ölçümlere bağlantı |
 | 6 | Yönetim işlemleri (silme, dışa aktarma, yedek), JSON şeması + doğrulama, AI için PR kuralı |
 | 7 | Bağlantılar (danışanların birbirini görmesi) |

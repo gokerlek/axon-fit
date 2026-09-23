@@ -36,7 +36,7 @@ export default async function MePage() {
       {/* Onay bekliyorsa ilk iş o: karar verilmeden sağlık ekranları açılmaz. */}
       {asking ? <ConsentCard state={health} fields={client.modules.health.fields} /> : null}
 
-      <ProgramCard program={client.program} />
+      <ProgramCard clientId={client.id} />
 
       {health === 'granted' || health === 'declined' ? (
         <ConsentCard state={health} fields={client.modules.health.fields} />

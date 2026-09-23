@@ -1,0 +1,157 @@
+import 'server-only';
+import * as v from 'valibot';
+import type { DeviceWithSource } from './devices';
+import type { ExerciseWithSource } from './exercises';
+import { clientRepoName, GithubError } from './github/client';
+import { deleteFile, getFileSha, readJson, writeJson } from './github/files';
+import { applyProgramEdit, commitMessage, type DiffContext } from './program-diff';
+import { createProgramRecord, startPhase, type ProgramBody, type ProgramState } from './program-plan';
+import { programSchema, type Program } from './schemas/program';
+
+/**
+ * Danışana özel program (SPEC §3, §7.4): danışanın kendi repo'sunda `program.json`.
+ *
+ * Çakışma denetimi dosyanın sha'sıyla değil `revision` ile: PT'nin her içerik yazımı
+ * (oluşturma, kayıt, evre geçişi) revision'ı bir artırır; antrenman ekranının rotasyon
+ * yazımı artırmaz. Düzenleyici yüklediği revision'ı gönderir; sunucu dosyayı taze okur,
+ * revision tutmuyorsa kaydetmez (412), tutuyorsa taze sha ile yazar. Arada rotasyon
+ * yazıldıysa GitHub 409 verir, sunucu bir kez yeniden okuyup dener — PT'nin açık
+ * düzenlemesi antrenman bitti diye boşa düşmez.
+ *
+ * Her kayıtta değişikliklerin özeti hem dosyadaki geçmişe hem commit mesajına girer.
+ */
+
+export const PROGRAM_PATH = 'program.json';
+export const PROGRAM_DELETE_MESSAGE = 'Program silindi';
+
+export type ProgramFile =
+  | { sha: string; program: Program; problem: null }
+  /** Okunamayan dosya (bozuk JSON ya da şemaya uymuyor): silinebilsin diye sha'sıyla. */
+  | { sha: string; program: null; problem: string };
+
+/** Taze okuma. `null`: dosya yok. Bozuk dosya hata değil, sorunuyla döner. */
+export async function readProgramFile(clientId: string): Promise<ProgramFile | null> {
+  const repo = clientRepoName(clientId);
+  let stored: Awaited<ReturnType<typeof readJson<unknown>>>;
+  try {
+    stored = await readJson<unknown>(repo, PROGRAM_PATH);
+  } catch (error) {
+    // Bozuk JSON: silinebilsin ya da üzerine yazılabilsin diye sha ayrıca alınır.
+    if (error instanceof GithubError && error.status === 500) {
+      const sha = await getFileSha(repo, PROGRAM_PATH);
+      return sha ? { sha, program: null, problem: 'Dosya JSON olarak okunamadı.' } : null;
+    }
+    throw error;
+  }
+  if (!stored) return null;
+  const parsed = v.safeParse(programSchema, stored.content);
+  if (!parsed.success) {
+    const issue = parsed.issues[0];
+    return { sha: stored.sha, program: null, problem: `${v.getDotPath(issue) ?? 'dosya'}: ${issue.message}` };
+  }
+  return { sha: stored.sha, program: parsed.output, problem: null };
+}
+
+/** Yazmadan önce şemadan geçirir: geçersiz program hiçbir koşulda dosyaya yazılmaz. */
+export async function writeProgramFile(
+  clientId: string,
+  program: ProgramState,
+  options: { sha?: string; message: string },
+): Promise<{ sha: string }> {
+  const parsed = v.safeParse(programSchema, program);
+  if (!parsed.success) {
+    const issue = parsed.issues[0];
+    throw new GithubError(`Program kaydı geçersiz: ${v.getDotPath(issue) ?? 'dosya'}: ${issue.message}`, 500);
+  }
+  return writeJson(clientRepoName(clientId), PROGRAM_PATH, parsed.output, { sha: options.sha, message: options.message });
+}
+
+/** Farkın cümleleri için egzersiz adları ve kayıt türleri, cihaz adları. */
+export function programDiffContext(exercises: readonly ExerciseWithSource[], devices: readonly DeviceWithSource[]): DiffContext {
+  return {
+    exercises: new Map(exercises.map((exercise) => [exercise.id, { title: exercise.title, trackingType: exercise.trackingType }])),
+    devices: new Map(devices.map((device) => [device.id, { name: device.name }])),
+  };
+}
+
+export type SaveProgramResult =
+  | { status: 'created' | 'saved' | 'unchanged'; revision: number }
+  /** missing: düzenlenen program silinmiş · stale: o arada başka yerde kaydedilmiş · exists: oluştururken başkası oluşturmuş. */
+  | { status: 'missing' | 'stale' | 'exists' };
+
+function isConflict(error: unknown): boolean {
+  return error instanceof GithubError && error.status === 409;
+}
+
+/**
+ * Oluşturma (`baseRevision` null) ya da kayıt. Gövde sunucuda denetlenmiş ve
+ * sadeleştirilmiş olmalı (`normalizeProgram`). Değişiklik yoksa hiçbir şey yazılmaz.
+ */
+export async function saveProgram(
+  clientId: string,
+  body: ProgramBody,
+  baseRevision: number | null,
+  ctx: DiffContext,
+): Promise<SaveProgramResult> {
+  for (let attempt = 0; ; attempt += 1) {
+    const stored = await readProgramFile(clientId);
+    const now = new Date();
+    try {
+      if (baseRevision === null) {
+        if (stored) return { status: 'exists' };
+        const program = createProgramRecord(body, now);
+        await writeProgramFile(clientId, program, { message: commitMessage('create', program.log[0]?.changes ?? []) });
+        return { status: 'created', revision: program.revision };
+      }
+      if (!stored) return { status: 'missing' };
+      if (!stored.program || stored.program.revision !== baseRevision) return { status: 'stale' };
+      const result = applyProgramEdit(stored.program, body, ctx, now);
+      if (!result) return { status: 'unchanged', revision: stored.program.revision };
+      await writeProgramFile(clientId, result.program, {
+        sha: stored.sha,
+        message: commitMessage(result.program.log[0]?.kind ?? 'edit', result.changes),
+      });
+      return { status: 'saved', revision: result.program.revision };
+    } catch (error) {
+      // Arada başka bir yazım (ör. rotasyon) oldu: taze okuyup bir kez daha; revision yine denetlenir.
+      if (attempt === 0 && isConflict(error)) continue;
+      throw error;
+    }
+  }
+}
+
+export type SwitchPhaseResult =
+  | { status: 'saved' | 'unchanged'; revision: number }
+  | { status: 'missing' | 'stale' | 'unknown' };
+
+/** PT onaylı evre geçişi (program sayfasındaki öneri). */
+export async function switchPhase(clientId: string, phaseId: string, baseRevision: number): Promise<SwitchPhaseResult> {
+  for (let attempt = 0; ; attempt += 1) {
+    const stored = await readProgramFile(clientId);
+    if (!stored) return { status: 'missing' };
+    if (!stored.program || stored.program.revision !== baseRevision) return { status: 'stale' };
+    const program = stored.program;
+    const next = startPhase(program, phaseId, new Date());
+    if (!next) {
+      return program.phases.some((phase) => phase.id === phaseId)
+        ? { status: 'unchanged', revision: program.revision }
+        : { status: 'unknown' };
+    }
+    try {
+      await writeProgramFile(clientId, next, { sha: stored.sha, message: commitMessage('phase', next.log[0]?.changes ?? []) });
+      return { status: 'saved', revision: next.revision };
+    } catch (error) {
+      if (attempt === 0 && isConflict(error)) continue;
+      throw error;
+    }
+  }
+}
+
+/** Programı siler (bozuk dosya da silinir). Geçmişi git'te durur. `false`: dosya yoktu. */
+export async function deleteProgram(clientId: string): Promise<boolean> {
+  const repo = clientRepoName(clientId);
+  const sha = await getFileSha(repo, PROGRAM_PATH);
+  if (!sha) return false;
+  await deleteFile(repo, PROGRAM_PATH, { sha, message: PROGRAM_DELETE_MESSAGE });
+  return true;
+}
