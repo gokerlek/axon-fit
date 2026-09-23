@@ -1,0 +1,78 @@
+import { formatDay, formatNumber, formatWithUnit } from '@/lib/format';
+import type { ChangeKind, NoiseRule, SideBridgeIndicator, SitToStandIndicator, WaistHipIndicator } from '@/lib/measurement-trends';
+import type { MeasurementDef } from '@/lib/measurements';
+
+/** Ölçüm ekranlarının ortak metinleri (PT tarafı). */
+
+/** Katalog birimi → ekranda görünen ("s" Türkçede "sn"). */
+export const UNIT_LABELS: Record<MeasurementDef['unit'], string> = { kg: 'kg', cm: 'cm', s: 'sn', '%': '%', puan: 'puan' };
+
+export const GROUP_INFO: Record<MeasurementDef['group'], { title: string; description: string }> = {
+  anthropometry: {
+    title: 'Antropometri',
+    description: 'Ağırlık, boy ve çevre ölçüleri. Takip ölçümlerini mümkünse hep aynı kişi alır.',
+  },
+  performance: {
+    title: 'Performans',
+    description: 'Otur-kalk ve gövde dayanıklılık testleri, saniye olarak.',
+  },
+  mobility: {
+    title: 'Hareketlilik',
+    description: 'Ayak bileği dorsifleksiyonu; sağ ve sol ayrı ölçülür.',
+  },
+  questionnaire: {
+    title: 'Anketler',
+    description: 'Skoru sen girersin; anketlerin metni lisanslı olabildiği için uygulamada yok.',
+  },
+};
+
+export const CHANGE_LABELS: Record<ChangeKind, string> = {
+  improved: 'Gerçek gelişme',
+  declined: 'Gerileme',
+  increased: 'Gerçek artış',
+  decreased: 'Gerçek azalma',
+  no_real_change: 'Ölçüm hatası içinde',
+};
+
+/** Eşiğin ekrandaki açıklaması: "2 cm altındaki değişim gerçek sayılmaz (…)". */
+export function describeRule(rule: NoiseRule, unit: string): string {
+  const size = rule.relative ? `%${formatNumber(rule.threshold * 100)}` : formatWithUnit(rule.threshold, unit);
+  const direction =
+    rule.better === 'lower'
+      ? ' Düşüş iyidir.'
+      : rule.better === 'higher'
+        ? ' Artış iyidir.'
+        : ' İyi yön tanımlı değil; gerçek değişim artış ya da azalma diye gösterilir.';
+  return `${size} altındaki değişim ölçüm hatası sayılır (${rule.source}).${direction}`;
+}
+
+export const NO_RULE_TEXT =
+  'Bu ölçümün hata payı kaynaklarda yok: değişim gösterilir ama gelişme ya da gerileme diye yorumlanmaz.';
+
+export function describeWaistHip(indicator: WaistHipIndicator): string {
+  if (indicator.sex === null) {
+    return 'Bel-kalça oranının eşiği cinsiyete göre; oranı görmek için ölçüm girerken cinsiyeti seç.';
+  }
+  const cutoff = indicator.sex === 'male' ? 'erkekte 0,90' : 'kadında 0,85';
+  return `Bel-kalça oranı ${formatNumber(indicator.ratio)} (${formatDay(indicator.date)}): ${
+    indicator.elevatedRisk ? 'artmış metabolik risk eşiğinde ya da üstünde' : 'artmış metabolik risk eşiğinin altında'
+  } (${cutoff}, WHO).`;
+}
+
+export function describeSitToStand(indicator: SitToStandIndicator): string {
+  const value = formatWithUnit(indicator.seconds, 'sn');
+  switch (indicator.flag) {
+    case 'recurrent_fall_risk':
+      return `Son ölçüm ${value}: 15 sn üstü, tekrarlayan düşme riski işareti. Değerlendirme önerilir.`;
+    case 'fall_risk_assessment':
+      return `Son ölçüm ${value}: 12 sn üstü, düşme riski değerlendirmesi önerilir.`;
+    default:
+      return `Son ölçüm ${value}: 12 sn ve altı, düşme riski işareti yok.`;
+  }
+}
+
+export function describeSideBridge(indicator: SideBridgeIndicator): string {
+  return `Sağ-sol farkı %${indicator.differencePercent} (${formatDay(indicator.date)}): ${
+    indicator.flagged ? '%25 ölçüm hatası bandını aşıyor, asimetri var.' : '%25 ölçüm hatası bandında, asimetri sayılmaz.'
+  }`;
+}

@@ -10,6 +10,7 @@ import {
   SIT_TO_STAND_MCID,
   sideBridgeAsymmetry,
   sitToStandFlag,
+  WAIST_HIP_GIRTH_NOISE_CM,
   waistHipRatio,
 } from './measurements.ts';
 
@@ -46,6 +47,13 @@ describe('yorumlayıcılar', () => {
     const dayaniklilik = { threshold: ENDURANCE_NOISE, relative: true, better: 'higher' as const };
     assert.equal(realChange(100, 120, dayaniklilik), 'no_real_change');
     assert.equal(realChange(100, 130, dayaniklilik), 'improved');
+  });
+
+  test('tam eşikteki fark ondalık kaymasına rağmen gerçek sayılır', () => {
+    // 82,1 − 80,1 kayan noktada 1,99999… çıkar.
+    const bel = { threshold: WAIST_HIP_GIRTH_NOISE_CM, relative: false, better: 'lower' as const };
+    assert.equal(realChange(82.1, 80.1, bel), 'improved');
+    assert.equal(realChange(12.5, 10.2, { threshold: SIT_TO_STAND_MCID, relative: false, better: 'lower' }), 'improved');
   });
 
   test('yan köprü asimetrisi yalnız %25 bandını aşınca işaretlenir', () => {

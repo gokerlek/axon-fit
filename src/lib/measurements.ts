@@ -103,6 +103,14 @@ export const SIT_TO_STAND_MCID = 2.3;
 /** Gövde dayanıklılık testlerinde tipik hata %12–24: %25 altındaki değişim gerçek sayılmaz. */
 export const ENDURANCE_NOISE = 0.25;
 
+/**
+ * Bel ve kalça çevresinde ölçüm hatasını aşan en küçük değişim (cm). Teknik ölçüm hatası
+ * belde ölçümcü içi ~1,31, ölçümcüler arası ~1,56 cm; kalçada ~1,23 ve ~1,38 cm (WHO bel
+ * çevresi ve bel-kalça oranı uzman raporu). Yalnız bu iki çevre için kaynaklı: kol, uyluk ve
+ * baldıra aynen uygulanmaz.
+ */
+export const WAIST_HIP_GIRTH_NOISE_CM = 2;
+
 export type Change = 'improved' | 'declined' | 'no_real_change';
 
 /**
@@ -115,7 +123,9 @@ export function realChange(
   { threshold, relative, better }: { threshold: number; relative: boolean; better: 'higher' | 'lower' },
 ): Change {
   const delta = after - before;
-  const size = relative ? Math.abs(delta) / Math.max(Math.abs(before), Number.EPSILON) : Math.abs(delta);
+  const raw = relative ? Math.abs(delta) / Math.max(Math.abs(before), Number.EPSILON) : Math.abs(delta);
+  // Ondalık çıkarma kayar (82,1 − 80,1 = 1,99999…): tam eşikteki fark gürültü sayılmasın.
+  const size = Math.round(raw * 1e9) / 1e9;
   if (size < threshold) return 'no_real_change';
   const up = delta > 0;
   return (better === 'higher') === up ? 'improved' : 'declined';
