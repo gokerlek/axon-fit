@@ -12,6 +12,7 @@ import {
   type Sex,
 } from './measurements.ts';
 import type { MeasurementEntry } from './schemas/health.ts';
+import { forecast, trendStatus, type Forecast, type TrendStatus } from './trend.ts';
 
 /**
  * Ölçümlerin zaman içindeki seyri — grafik serileri, son iki ölçüm arasındaki değişim ve
@@ -148,6 +149,37 @@ export function measurementTrends(entries: readonly MeasurementEntry[]): Measure
     trends.push({ id, lines, rule, lastDate });
   }
   return trends;
+}
+
+/* --- eğilim ve tahmin (`trend.ts`) --- */
+
+export type LineOutlook = {
+  /**
+   * Son 4 haftanın eğilimi, çizginin değişimi ölçüm hatası payıyla karşılaştırılarak.
+   * Eşiği olmayan ölçümde null: plato ya da gerileme denmez.
+   */
+  status: { kind: TrendStatus; change: number | null } | null;
+  /** Tahmin eşik gerektirmez; az veride `ok: false` ve nedeni. */
+  forecast: Forecast;
+};
+
+/**
+ * Tek iki ölçüm arasındaki fark gürültüde kalabilir (haftada 0,7 cm) ama birkaç haftanın
+ * eğilimi gerçektir (5 haftada 4 cm): kart ikisini ayrı gösterir.
+ */
+export function lineOutlook(points: readonly Point[], rule: NoiseRule | null): LineOutlook {
+  const status = rule
+    ? (() => {
+        const result = trendStatus(points, { threshold: rule.threshold, relative: rule.relative, better: rule.better ?? 'higher' });
+        return { kind: result.status, change: result.change };
+      })()
+    : null;
+  return { status, forecast: forecast(points) };
+}
+
+/** Tarih aralığındaki kayıtlar (uçlar dahil); süzgeç grafiklere ve eğilime uygulanır. */
+export function entriesInRange(entries: readonly MeasurementEntry[], from?: string, to?: string): MeasurementEntry[] {
+  return entries.filter((entry) => (!from || entry.date >= from) && (!to || entry.date <= to));
 }
 
 /* --- türetilmiş göstergeler (en son uygun ölçüm günü) --- */

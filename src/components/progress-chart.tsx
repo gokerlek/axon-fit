@@ -1,6 +1,6 @@
 'use client';
 
-import { CartesianGrid, Line, LineChart, XAxis, YAxis, type DotItemDotProps } from 'recharts';
+import { Area, CartesianGrid, ComposedChart, Line, XAxis, YAxis, type DotItemDotProps } from 'recharts';
 import { ChartContainer, ChartTooltip, type ChartConfig } from '@/components/ui/chart';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { niceScale } from '@/lib/chart-scale';
@@ -17,6 +17,8 @@ import { cn } from '@/lib/utils';
  */
 
 export type ProgressPoint = { date: string; value: number };
+/** Tahmin noktası: çizgi değeri ve ≈%80 bant (`src/lib/trend.ts`). İlk nokta son ölçümdür. */
+export type ForecastPoint = ProgressPoint & { low: number; high: number };
 export type ProgressSeries = {
   /** CSS değişken adına girer (`--color-<key>`): harf, rakam, tire. */
   key: string;
@@ -42,10 +44,10 @@ const MAX_TICKS = 6;
 const toTime = (date: string) => Date.parse(`${date}T00:00:00Z`);
 const toDay = (time: number) => new Date(time).toISOString().slice(0, 10);
 
-type Row = { time: number } & Record<string, number | undefined>;
+type Row = { time: number; band?: [number, number] } & Record<string, number | [number, number] | undefined>;
 
 /** Serileri tarihe göre tek tabloya birleştirir; bir seride olmayan gün boş kalır. */
-function mergeRows(series: readonly ProgressSeries[]): Row[] {
+function mergeRows(series: readonly ProgressSeries[], forecast?: readonly ForecastPoint[]): Row[] {
   const rows = new Map<number, Row>();
   for (const { key, points } of series) {
     for (const { date, value } of points) {
@@ -55,8 +57,17 @@ function mergeRows(series: readonly ProgressSeries[]): Row[] {
       rows.set(time, row);
     }
   }
+  for (const { date, value, low, high } of forecast ?? []) {
+    const time = toTime(date);
+    const row = rows.get(time) ?? { time };
+    row[FORECAST_KEY] = value;
+    row.band = [low, high];
+    rows.set(time, row);
+  }
   return [...rows.values()].sort((a, b) => a.time - b.time);
 }
+
+const FORECAST_KEY = 'forecast';
 
 /** Eksen etiketleri ölçüm günlerine oturur; çoksa eşit aralıkla seyreltilir (ilk ve son kalır). */
 function pickTicks(times: readonly number[]): number[] {
@@ -88,6 +99,14 @@ const SquareDot = square(8);
 const ActiveSquareDot = square(10);
 
 function SeriesMark({ slot, className }: { slot: number; className?: string }) {
+  if (slot < 0) {
+    // Tahmin: kesikli çizgi, işaretsiz.
+    return (
+      <svg viewBox="0 0 20 10" className={cn('h-2.5 w-5 shrink-0', className)} aria-hidden>
+        <line x1="0" y1="5" x2="20" y2="5" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" />
+      </svg>
+    );
+  }
   return (
     <svg viewBox="0 0 20 10" className={cn('h-2.5 w-5 shrink-0', className)} aria-hidden>
       <line x1="0" y1="5" x2="20" y2="5" stroke="currentColor" strokeWidth="2" />
@@ -101,6 +120,7 @@ export function ProgressChart({
   unit,
   series,
   minSpan,
+  forecast,
   className,
 }: {
   /** Neyin çizildiği: ekran okuyucu özetinde ve tablo başlığında. */
@@ -114,37 +134,54 @@ export function ProgressChart({
    * payının iki katı verilir: gürültü içindeki oynama grafikte büyük görünmesin.
    */
   minSpan?: number;
+  /**
+   * Tek serili grafikte ileriye tahmin: kesikli çizgi ve belirsizlik bandı. Son ölçümden
+   * başlar; gerçek değerlerden ayrı çizilir ve tabloda ayrı satırda yazılır.
+   */
+  forecast?: readonly ForecastPoint[];
   className?: string;
 }) {
-  const config: ChartConfig = Object.fromEntries(
-    series.map((item, slot) => [item.key, { label: item.label, theme: SLOT_COLORS[slot] ?? SLOT_COLORS[0] }]),
-  );
-  const rows = mergeRows(series);
+  const projected = series.length === 1 && forecast && forecast.length > 1 ? forecast : undefined;
+  const config: ChartConfig = {
+    ...Object.fromEntries(
+      series.map((item, slot) => [item.key, { label: item.label, theme: SLOT_COLORS[slot] ?? SLOT_COLORS[0] }]),
+    ),
+    ...(projected ? { [FORECAST_KEY]: { label: 'Tahmin', theme: SLOT_COLORS[0] } } : {}),
+  };
+  const rows = mergeRows(series, projected);
+  const actualTimes = mergeRows(series).map((row) => row.time);
   const times = rows.map((row) => row.time);
   const first = times[0] ?? 0;
   const last = times.at(-1) ?? 0;
   // Tek gün ya da çok kısa aralıkta eksen çökmesin; kenardaki noktalar da kırpılmasın.
   const pad = Math.max((last - first) * 0.04, DAY_MS);
   const withYear = new Date(first).getUTCFullYear() !== new Date(last).getUTCFullYear();
-  const values = series.flatMap((item) => item.points.map((point) => point.value));
+  const values = [
+    ...series.flatMap((item) => item.points.map((point) => point.value)),
+    ...(projected ?? []).flatMap((point) => [point.low, point.high]),
+  ];
   const scale = niceScale(Math.min(...values), Math.max(...values), { minSpan });
   const format = (value: number) => formatWithUnit(value, unit);
   const labelOf = (key: string) => series.find((item) => item.key === key)?.label ?? key;
 
   const latest = series.map((item) => ({ item, point: item.points.at(-1) }));
-  const summary = `${title}: ${rows.length} ölçüm günü. ${latest
+  const summary = `${title}: ${actualTimes.length} ölçüm günü. ${latest
     .map(({ item, point }) =>
       point ? `${series.length > 1 ? `${item.label} son değer` : 'Son değer'} ${format(point.value)}, ${formatDay(point.date)}` : '',
     )
     .filter(Boolean)
-    .join('; ')}.`;
+    .join('; ')}.${
+    projected
+      ? ` Tahmin ${formatDay(projected.at(-1)!.date)}: ${format(projected.at(-1)!.value)} (${format(projected.at(-1)!.low)}–${format(projected.at(-1)!.high)}).`
+      : ''
+  }`;
 
   return (
     <figure className={cn('flex flex-col gap-2', className)}>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground" aria-hidden>
         {/* Eksen etiketleri yalnız sayı; birim eksenin üstünde bir kez. */}
         <span>{unit}</span>
-        {series.length > 1 ? (
+        {series.length > 1 || projected ? (
           <ul className="flex flex-wrap gap-x-4 gap-y-1">
             {series.map((item, slot) => (
               <li key={item.key} className="flex items-center gap-1.5">
@@ -152,19 +189,25 @@ export function ProgressChart({
                 {item.label}
               </li>
             ))}
+            {projected ? (
+              <li className="flex items-center gap-1.5">
+                <SeriesMark slot={-1} className={SLOT_TEXT[0]} />
+                Tahmin ve olası aralık
+              </li>
+            ) : null}
           </ul>
         ) : null}
       </div>
 
       <ChartContainer config={config} className="aspect-auto h-52 w-full" role="img" aria-label={summary}>
-        <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }} accessibilityLayer={false}>
+        <ComposedChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }} accessibilityLayer={false}>
           <CartesianGrid vertical={false} />
           <XAxis
             dataKey="time"
             type="number"
             scale="time"
             domain={[first - pad, last + pad]}
-            ticks={pickTicks(times)}
+            ticks={pickTicks(projected ? [...actualTimes, times.at(-1) ?? last] : times)}
             tickFormatter={(time: number) => formatDayShort(toDay(time), withYear)}
             tickLine={false}
             axisLine={false}
@@ -190,6 +233,22 @@ export function ProgressChart({
                   <div className="font-medium">{formatDay(toDay(label))}</div>
                   {payload.map((item) => {
                     const key = String(item.dataKey);
+                    if (key === 'band') return null;
+                    if (key === FORECAST_KEY) {
+                      const band = (item.payload as Row | undefined)?.band;
+                      return typeof item.value === 'number' ? (
+                        <div key={key} className="flex items-center justify-between gap-3">
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <SeriesMark slot={-1} className={SLOT_TEXT[0]} />
+                            Tahmin
+                          </span>
+                          <span className="font-medium text-foreground tabular-nums">
+                            {format(item.value)}
+                            {band ? <span className="font-normal text-muted-foreground"> ({formatNumber(band[0])}–{formatNumber(band[1])})</span> : null}
+                          </span>
+                        </div>
+                      ) : null;
+                    }
                     const slot = series.findIndex((entry) => entry.key === key);
                     return typeof item.value === 'number' ? (
                       <div key={key} className="flex items-center justify-between gap-3">
@@ -205,6 +264,31 @@ export function ProgressChart({
               );
             }}
           />
+          {projected ? (
+            <Area
+              dataKey="band"
+              stroke="none"
+              fill={`var(--color-${FORECAST_KEY})`}
+              fillOpacity={0.12}
+              isAnimationActive={false}
+              activeDot={false}
+              connectNulls
+            />
+          ) : null}
+          {projected ? (
+            <Line
+              dataKey={FORECAST_KEY}
+              name="Tahmin"
+              type="linear"
+              stroke={`var(--color-${FORECAST_KEY})`}
+              strokeWidth={2}
+              strokeDasharray="5 4"
+              dot={false}
+              activeDot={false}
+              connectNulls
+              isAnimationActive={false}
+            />
+          ) : null}
           {series.map((item, slot) => (
             <Line
               key={item.key}
@@ -223,7 +307,7 @@ export function ProgressChart({
               }
             />
           ))}
-        </LineChart>
+        </ComposedChart>
       </ChartContainer>
 
       <details className="group text-sm">
@@ -243,14 +327,24 @@ export function ProgressChart({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {[...rows].reverse().map((row) => (
+            {projected
+              ? projected.slice(1).reverse().map((point) => (
+                  <TableRow key={`tahmin-${point.date}`} className="text-muted-foreground">
+                    <TableCell>{formatDay(point.date)} (tahmin)</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {format(point.value)} ({formatNumber(point.low)}–{formatNumber(point.high)})
+                    </TableCell>
+                  </TableRow>
+                ))
+              : null}
+            {[...rows].filter((row) => actualTimes.includes(row.time)).reverse().map((row) => (
               <TableRow key={row.time}>
                 <TableCell>{formatDay(toDay(row.time))}</TableCell>
                 {series.map((item) => {
                   const value = row[item.key];
                   return (
                     <TableCell key={item.key} className="text-right tabular-nums">
-                      {value === undefined ? '—' : format(value)}
+                      {typeof value === 'number' ? format(value) : '—'}
                     </TableCell>
                   );
                 })}

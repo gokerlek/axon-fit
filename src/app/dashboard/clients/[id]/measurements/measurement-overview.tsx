@@ -8,7 +8,9 @@ import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/comp
 import { formatDay, formatNumber, formatSignedWithUnit, formatWithUnit } from '@/lib/format';
 import { measurementDays, SIDE_LABELS } from '@/lib/measurement-log';
 import {
+  entriesInRange,
   latestSideBridgeAsymmetry,
+  lineOutlook,
   latestSitToStand,
   latestWaistHip,
   measurementTrends,
@@ -21,12 +23,14 @@ import { MEASUREMENTS, type MeasurementDef } from '@/lib/measurements';
 import type { HealthRecord } from '@/lib/schemas/health';
 import {
   CHANGE_LABELS,
+  describeForecast,
   describeRule,
   describeSideBridge,
   describeSitToStand,
   describeWaistHip,
   GROUP_INFO,
   NO_RULE_TEXT,
+  outlookLabel,
   UNIT_LABELS,
 } from './measurement-text';
 
@@ -34,7 +38,18 @@ import {
  * Ölçümlerin genel bakışı: katalog grubuna göre ölçüm başına grafik kartı (seyir, son değer,
  * değişimin gerçek olup olmadığı, yorum satırları) ve tam genişlikte ölçüm günleri.
  */
-export function MeasurementOverview({ record, base }: { record: HealthRecord; base: string }) {
+export function MeasurementOverview({
+  record,
+  base,
+  from,
+  to,
+}: {
+  record: HealthRecord;
+  base: string;
+  /** Tarih süzgeci (uçlar dahil); grafikler, değişim, eğilim ve tahmin bu aralıkla hesaplanır. */
+  from?: string;
+  to?: string;
+}) {
   if (record.measurements.length === 0) {
     return (
       <Empty className="border">
@@ -51,11 +66,26 @@ export function MeasurementOverview({ record, base }: { record: HealthRecord; ba
     );
   }
 
-  const trends = measurementTrends(record.measurements);
+  const inRange = entriesInRange(record.measurements, from, to);
+  if (inRange.length === 0) {
+    return (
+      <Empty className="border">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <Ruler weight="fill" />
+          </EmptyMedia>
+          <EmptyTitle>Bu aralıkta ölçüm yok</EmptyTitle>
+          <EmptyDescription>Tarih aralığını genişlet ya da “Tümü”nü seç.</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
+
+  const trends = measurementTrends(inRange);
   const groups = (Object.keys(GROUP_INFO) as MeasurementDef['group'][])
     .map((group) => ({ group, trends: trends.filter((trend) => MEASUREMENTS[trend.id].group === group) }))
     .filter((entry) => entry.trends.length > 0);
-  const days = measurementDays(record.measurements);
+  const days = measurementDays(inRange);
 
   return (
     <>
@@ -120,6 +150,14 @@ function TrendCard({ trend, record }: { trend: MeasurementTrend; record: HealthR
   const unit = UNIT_LABELS[def.unit];
   const sided = trend.lines.some((line) => line.key !== 'value');
   const charted = trend.lines.some((line) => line.points.length > 1);
+  const outlooks = new Map(trend.lines.map((line) => [line.key, lineOutlook(line.points, trend.rule)]));
+  // Tahmin tek çizgili ölçümde: sol/sağda iki bant grafiği okunmaz kılar.
+  const single = trend.lines.length === 1 ? trend.lines[0] : undefined;
+  const singleForecast = single ? outlooks.get(single.key)?.forecast : undefined;
+  const outlookFor = (key: LineKey) => {
+    const status = outlooks.get(key)?.status;
+    return status && trend.rule ? outlookLabel(status, trend.rule) : null;
+  };
   const series = trend.lines.slice(0, 2).map(
     (line): ProgressSeries => ({ key: line.key, label: LINE_LABELS[line.key], points: line.points }),
   ) as [ProgressSeries] | [ProgressSeries, ProgressSeries];
@@ -153,12 +191,24 @@ function TrendCard({ trend, record }: { trend: MeasurementTrend; record: HealthR
               unit={unit}
               relative={trend.rule?.relative ?? false}
               label={sided ? LINE_LABELS[line.key] : 'Son değer'}
+              outlook={outlookFor(line.key)}
             />
           ))}
         </dl>
 
         {/* Tek ölçümde grafik yok: "ilk ölçüm" notu yeterli. */}
-        {charted ? <ProgressChart title={def.label} unit={unit} series={series} minSpan={noiseSpan(trend)} /> : null}
+        {charted ? (
+          <ProgressChart
+            title={def.label}
+            unit={unit}
+            series={series}
+            minSpan={noiseSpan(trend)}
+            forecast={singleForecast?.ok ? singleForecast.points : undefined}
+          />
+        ) : null}
+        {singleForecast && single && single.points.length > 1 ? (
+          <p className="text-sm text-muted-foreground">{describeForecast(singleForecast, unit)}</p>
+        ) : null}
 
         <ul className="flex list-disc flex-col gap-1 pl-4 text-sm text-muted-foreground">
           {notes.map((note) => (
@@ -175,12 +225,15 @@ function LatestValue({
   unit,
   relative,
   label,
+  outlook,
 }: {
   line: MeasurementLine;
   unit: string;
   /** Eşik göreliyse (dayanıklılık) yüzde değişim de yazılır. */
   relative: boolean;
   label: string;
+  /** Son 4 haftanın eğilimi; son iki ölçümün farkından ayrı. */
+  outlook: ReturnType<typeof outlookLabel>;
 }) {
   const latest = line.points.at(-1);
   if (!latest) return null;
@@ -190,6 +243,7 @@ function LatestValue({
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="flex flex-col gap-1.5">
         <span className="text-2xl font-semibold">{formatWithUnit(latest.value, unit)}</span>
+        {outlook ? <OutlookBadge text={outlook.text} tone={outlook.tone} /> : null}
         {change ? (
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             {change.kind ? <ChangeBadge kind={change.kind} /> : null}
@@ -227,6 +281,24 @@ function ChangeBadge({ kind }: { kind: ChangeKind }) {
     <Badge variant={variant}>
       {icon}
       {CHANGE_LABELS[kind]}
+    </Badge>
+  );
+}
+
+function OutlookBadge({ text, tone }: { text: string; tone: 'good' | 'bad' | 'flat' | 'neutral' }) {
+  const icon =
+    tone === 'good' ? (
+      <CheckCircle weight="fill" data-icon="inline-start" />
+    ) : tone === 'bad' ? (
+      <WarningCircle weight="fill" data-icon="inline-start" />
+    ) : (
+      <Equals weight="fill" data-icon="inline-start" />
+    );
+  const variant = tone === 'good' ? 'default' : tone === 'bad' ? 'destructive' : tone === 'flat' ? 'outline' : 'secondary';
+  return (
+    <Badge variant={variant} className="w-fit">
+      {icon}
+      {text}
     </Badge>
   );
 }

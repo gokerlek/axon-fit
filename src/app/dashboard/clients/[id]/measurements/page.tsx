@@ -4,7 +4,10 @@ import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { requirePt } from '@/lib/guards';
 import { loadMeasurements } from '@/lib/health';
+import { readAppConfig } from '@/lib/config';
+import { todayIn } from '@/lib/format';
 import { MeasurementOverview } from './measurement-overview';
+import { parseRange, RangeFilter } from './range-filter';
 import { MeasurementLockAlert, MeasurementProblemAlert, measurementClient } from './measurement-page';
 
 /**
@@ -12,7 +15,13 @@ import { MeasurementLockAlert, MeasurementProblemAlert, measurementClient } from
  * şey için bir grafik kartı: seyir, son değer, son iki ölçüm arasındaki değişimin gerçek olup
  * olmadığı ve yorum satırları. Altta tam genişlikte ölçüm günleri; güne dokununca düzenleme.
  */
-export default async function MeasurementsPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function MeasurementsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ aralik?: string; bas?: string; bit?: string }>;
+}) {
   await requirePt();
   const { id } = await params;
   const loaded = await measurementClient(id);
@@ -31,7 +40,8 @@ export default async function MeasurementsPage({ params }: { params: Promise<{ i
   }
 
   const { client } = loaded;
-  const view = await loadMeasurements(client);
+  const [view, config] = await Promise.all([loadMeasurements(client), readAppConfig()]);
+  const range = parseRange(await searchParams, todayIn(config.timeZone));
 
   return (
     <div className="flex flex-col gap-6">
@@ -60,7 +70,8 @@ export default async function MeasurementsPage({ params }: { params: Promise<{ i
           problem={`${view.problem} Danışanın repo'sundaki dosya elle değiştirilmiş olabilir; düzeltilene kadar ölçüm yazılmaz.`}
         />
       ) : null}
-      {view.state === 'ok' ? <MeasurementOverview record={view.record} base={base} /> : null}
+      {view.state === 'ok' && view.record.measurements.length > 0 ? <RangeFilter base={base} range={range} /> : null}
+      {view.state === 'ok' ? <MeasurementOverview record={view.record} base={base} from={range.from} to={range.to} /> : null}
     </div>
   );
 }

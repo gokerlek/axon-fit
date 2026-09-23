@@ -1,5 +1,6 @@
-import { formatDay, formatNumber, formatWithUnit } from '@/lib/format';
-import type { ChangeKind, NoiseRule, SideBridgeIndicator, SitToStandIndicator, WaistHipIndicator } from '@/lib/measurement-trends';
+import { formatDay, formatNumber, formatSignedWithUnit, formatWithUnit } from '@/lib/format';
+import type { ChangeKind, LineOutlook, NoiseRule, SideBridgeIndicator, SitToStandIndicator, WaistHipIndicator } from '@/lib/measurement-trends';
+import type { Forecast } from '@/lib/trend';
 import type { MeasurementDef } from '@/lib/measurements';
 
 /** Ölçüm ekranlarının ortak metinleri (PT tarafı). */
@@ -75,4 +76,39 @@ export function describeSideBridge(indicator: SideBridgeIndicator): string {
   return `Sağ-sol farkı %${indicator.differencePercent} (${formatDay(indicator.date)}): ${
     indicator.flagged ? '%25 ölçüm hatası bandını aşıyor, asimetri var.' : '%25 ölçüm hatası bandında, asimetri sayılmaz.'
   }`;
+}
+
+/**
+ * Son 4 haftanın eğilimi: tek iki ölçümün farkından ayrı. Yönü tanımsız ölçümde (kalça)
+ * gelişme/gerileme yerine artış/azalma. Veri yetmiyorsa null (etiket yok).
+ */
+export function outlookLabel(
+  status: NonNullable<LineOutlook['status']>,
+  rule: NoiseRule,
+): { text: string; tone: 'good' | 'bad' | 'flat' | 'neutral' } | null {
+  if (status.kind === 'insufficient') return null;
+  if (status.kind === 'plateau') return { text: 'Son 4 hafta: durağan', tone: 'flat' };
+  if (!rule.better) {
+    const up = (status.change ?? 0) > 0;
+    return { text: `Son 4 hafta: gerçek ${up ? 'artış' : 'azalma'}`, tone: 'neutral' };
+  }
+  return status.kind === 'improving'
+    ? { text: 'Son 4 hafta: gerçek gelişme', tone: 'good' }
+    : { text: 'Son 4 hafta: gerileme', tone: 'bad' };
+}
+
+/** Tahminin tek satırlık özeti; veri yetmiyorsa ne kadar gerektiği. */
+export function describeForecast(forecast: Forecast, unit: string): string {
+  if (!forecast.ok) {
+    return forecast.reason === 'too_few_points'
+      ? 'Tahmin için en az 4 ölçüm gerekir.'
+      : 'Tahmin için ölçümler en az 3 haftaya yayılmalı.';
+  }
+  const end = forecast.points.at(-1)!;
+  const weeks = Math.round(forecast.horizonDays / 7);
+  return `Eğilim haftada ${formatSignedWithUnit(Math.round(forecast.slopePerWeek * 10) / 10, unit)}. Böyle giderse son ölçümden ${weeks} hafta sonra (${formatDay(
+    end.date,
+  )}) ≈ ${formatWithUnit(Math.round(end.value * 10) / 10, unit)}; olası aralık ${formatNumber(Math.round(end.low * 10) / 10)}–${formatNumber(
+    Math.round(end.high * 10) / 10,
+  )}. Tahmin eğilimin süreceğini varsayar.`;
 }
