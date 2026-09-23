@@ -17,7 +17,8 @@ export default async function EditExercisePage({ params }: { params: Promise<{ i
   const { source: _source, overridesLibrary: _override, ...editable } = exercise;
   // Sabitlenebilecek muadiller detaydakiyle aynı sırada gelir (önerinin sırası).
   const deviceById = new Map(devices.map((device) => [device.id, device]));
-  const alternativeOptions = exerciseAlternatives(exercise, all).map(({ exercise: other }) => ({
+  // Detayda ilk 8 öneri görünür; burada seçim havuzu geniş tutulur.
+  const alternativeOptions = exerciseAlternatives(exercise, all, 20).map(({ exercise: other }) => ({
     id: other.id,
     title: other.title,
     detail: [

@@ -798,14 +798,21 @@ export function ExerciseForm({
         </CardContent>
       </Card>
 
-      {alternativeOptions.length > 0 ? (
+      {editing ? (
         <Card>
           <CardHeader>
             <CardTitle>Muadiller</CardTitle>
             <CardDescription>Alet doluysa ya da danışana uygun değilse yerine yapılacaklar.</CardDescription>
           </CardHeader>
           <CardContent>
-            <AlternativesField options={alternativeOptions} pinned={pinned} onToggle={togglePinned} />
+            {alternativeOptions.length > 0 ? (
+              <AlternativesField options={alternativeOptions} pinned={pinned} onToggle={togglePinned} />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Aynı kas ailesini çalıştıran başka hareket bulunamadı, o yüzden sabitlenecek bir şey yok.
+                Hedef kasları ya da hareket kalıbını değiştirirsen liste yeniden hesaplanır.
+              </p>
+            )}
           </CardContent>
         </Card>
       ) : null}
