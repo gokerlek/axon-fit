@@ -1,6 +1,17 @@
 import * as v from 'valibot';
 import { MOVEMENT_PATTERNS } from '@/lib/alternatives';
 import { DEEP_MUSCLES } from '@/lib/deep-muscles';
+import { parseCondition } from '@/lib/conditions';
+import {
+  AXIAL_LOADS,
+  CONTRACTION_TYPES,
+  JOINT_WINDOWS,
+  KINETIC_CHAINS,
+  LOAD_VECTORS,
+  RESISTANCE_PROFILES,
+  SHEAR_LEVELS,
+  SPINAL_ALIGNMENTS,
+} from '@/lib/exercise-filter';
 import { attachmentIdOf, attachmentIdSchema } from '@/lib/schemas/attachment';
 import { GRIPS, GRIP_WIDTHS } from '@/lib/grips';
 import { PROGRESSION_SCHEMES } from '@/lib/progression';
@@ -99,6 +110,12 @@ export const progressionSchema = v.pipe(
   ),
 );
 
+/** "lumbar_disc_herniation" ya da "lumbar_disc_herniation:acute"; sözlükte olmalı. */
+const conditionRef = v.pipe(
+  v.string(),
+  v.check((value) => parseCondition(value) !== null, 'Bilinmeyen kısıt kimliği.'),
+);
+
 export const exerciseSchema = v.object({
   /** Okunabilir kimlik (slug). Şablonlar ve set kayıtları buna bakar; değiştirilmez. */
   id: v.pipe(v.string(), v.regex(/^[a-z0-9-]{2,60}$/, 'Kimlik yalnız küçük harf, rakam ve tire içerebilir.')),
@@ -122,6 +139,25 @@ export const exerciseSchema = v.object({
   deviceId: v.optional(v.pipe(v.string(), v.regex(/^[a-z0-9-]{2,60}$/))),
   /** Hangi aparatla yapıldığı: havuzdaki aparatın kimliği (cihazın aparatlarından seçilir). */
   attachmentId: v.optional(attachmentIdSchema),
+  /**
+   * Biyomekanik etiketler — sakatlık süzgeci bunlara bakar (`src/lib/exercise-filter.ts`).
+   * Hepsi isteğe bağlı: etiketlenmemiş hareket süzülmez, uygulama bunu açıkça söyler.
+   */
+  kineticChain: v.optional(v.picklist(KINETIC_CHAINS, 'Zincir tipini seç.')),
+  axialLoading: v.optional(v.picklist(AXIAL_LOADS, 'Eksenel yükü seç.')),
+  shearForce: v.optional(v.picklist(SHEAR_LEVELS, 'Kesme kuvvetini seç.')),
+  spinalAlignment: v.optional(v.picklist(SPINAL_ALIGNMENTS, 'Omurga hizasını seç.')),
+  /** Hareketin geçtiği kritik açı pencereleri: hareketi yasaklamak yerine aralığı kısmak için. */
+  jointWindows: v.optional(v.pipe(v.array(v.picklist(JOINT_WINDOWS)), v.maxLength(6, 'En fazla 6 açı penceresi.'))),
+  loadVector: v.optional(v.picklist(LOAD_VECTORS, 'Yük vektörünü seç.')),
+  contractionType: v.optional(v.picklist(CONTRACTION_TYPES, 'Kasılma tipini seç.')),
+  resistanceProfile: v.optional(v.picklist(RESISTANCE_PROFILES, 'Direnç profilini seç.')),
+  /** Yük altında omuz iç rotasyonda mı (upright row, empty can). */
+  internalRotationUnderLoad: v.optional(v.boolean()),
+  /** Bu hareketin yaptırılmayacağı kısıtlar ("lumbar_disc_herniation:acute"). */
+  contraindications: v.optional(v.pipe(v.array(conditionRef), v.maxLength(12, 'En fazla 12 kısıt.'))),
+  /** PT'nin "bunda sorun yok" dediği kısıtlar: uyarıyı susturur, yasağı susturmaz. */
+  safeFor: v.optional(v.pipe(v.array(conditionRef), v.maxLength(12, 'En fazla 12 kısıt.'))),
   /**
    * Derin/stabilizatör aktivasyon hedefleri (`src/lib/deep-muscles.ts`): rotator manşet,
    * multifidus, pelvik taban… Haritada çizilmez ve **haftalık hacme girmez**; düzeltici

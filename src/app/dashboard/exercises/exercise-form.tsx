@@ -33,6 +33,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Toggle } from "@/components/ui/toggle";
 import { VideoEmbed } from "@/components/video-embed";
 import { MuscleMap } from "@/components/muscle-map/muscle-map";
+import { MedicalFields } from "./medical-fields";
 import { PATTERN_LABELS } from "@/lib/alternatives";
 import {
   DEVICE_KIND_LABELS,
@@ -915,6 +916,8 @@ export function ExerciseForm({
           )}
         </FormField>
       </div>
+
+      <MedicalFields form={form} />
 
       {alternativeOptions.length > 0 ? (
         <AlternativesField options={alternativeOptions} pinned={pinned} onToggle={togglePinned} />

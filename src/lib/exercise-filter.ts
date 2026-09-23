@@ -520,3 +520,79 @@ export function evaluateExercise(
 export function requiresClearance(conditions: readonly ClientCondition[]): ClientCondition[] {
   return conditions.filter((condition) => conditionInfo(condition.id).redFlag);
 }
+
+/* --- Ekranda görünen adlar --- */
+
+export const KINETIC_CHAIN_LABELS: Record<KineticChain, string> = {
+  open: 'Açık zincir (uç serbest)',
+  closed: 'Kapalı zincir (ayak/el sabit)',
+  semi_closed: 'Yarı kapalı',
+};
+
+export const AXIAL_LOAD_LABELS: Record<AxialLoad, string> = {
+  none: 'Yok (omurgaya binmiyor)',
+  low: 'Düşük',
+  moderate: 'Orta',
+  high: 'Yüksek (bar omurga üstünde)',
+};
+
+export const SHEAR_LEVEL_LABELS: Record<ShearLevel, string> = {
+  low: 'Düşük',
+  moderate: 'Orta',
+  high: 'Yüksek',
+};
+
+export const SPINAL_ALIGNMENT_LABELS: Record<SpinalAlignment, string> = {
+  neutral: 'Nötr',
+  flexion: 'Fleksiyon (öne bükülme)',
+  extension: 'Ekstansiyon (geriye)',
+  flexion_with_rotation: 'Fleksiyon + rotasyon',
+  extension_with_rotation: 'Ekstansiyon + rotasyon',
+  lateral_flexion: 'Yana eğilme',
+  unloaded: 'Yüksüz (omurga çalışmıyor)',
+};
+
+export const JOINT_WINDOW_LABELS: Record<JointWindow, string> = {
+  knee_flexion_0_45: 'Diz 0–45°',
+  knee_flexion_45_90: 'Diz 45–90°',
+  knee_flexion_over_90: 'Diz 90° üstü',
+  knee_terminal_extension_0_30: 'Diz terminal ekstansiyon (0–30°)',
+  shoulder_elevation_60_90: 'Omuz 60–90°',
+  shoulder_elevation_over_90: 'Omuz 90° üstü',
+  shoulder_abduction_90_end_range_er: 'Omuz 90° abduksiyon + son aralık dış rotasyon',
+  glenohumeral_extension_beyond_neutral: 'Dirsek gövde hizasının arkasında',
+  spine_end_range: 'Omurga son aralık',
+  hip_flexion_over_90: 'Kalça 90° üstü',
+};
+
+export const LOAD_VECTOR_LABELS: Record<LoadVector, string> = {
+  vertical_axial: 'Dikey (eksenel)',
+  anterior_posterior_shear: 'Ön-arka kesme',
+  frontal_lateral: 'Yana',
+  diagonal_scapular_plane: 'Skapular düzlem (çapraz)',
+  horizontal: 'Yatay',
+  horizontal_adduction: 'Yatay adduksiyon (göğüste kapanma)',
+};
+
+export const CONTRACTION_TYPE_LABELS: Record<ContractionType, string> = {
+  isometric: 'İzometrik (tutuş)',
+  concentric_emphasis: 'Konsantrik ağırlıklı',
+  eccentric_emphasis: 'Eksantrik ağırlıklı',
+  isotonic_balanced: 'Dengeli izotonik',
+  energy_storage_ballistic: 'Balistik (enerji depolayan)',
+};
+
+export const RESISTANCE_PROFILE_LABELS: Record<ResistanceProfile, string> = {
+  bodyweight: 'Vücut ağırlığı',
+  constant_resistance: 'Sabit direnç',
+  variable_resistance_cam: 'Kam (değişken direnç)',
+  elastic: 'Elastik bant',
+  free_weight: 'Serbest ağırlık',
+  machine_guided: 'Makine (yönlendirilmiş)',
+};
+
+export const DECISION_LABELS: Record<Decision, string> = {
+  block: 'Yaptırma',
+  warn: 'Dikkat',
+  cue: 'İpucu ver',
+};

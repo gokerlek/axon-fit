@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     const fields: Record<string, string> = {};
     for (const issue of parsed.issues) {
-      const key = issue.path?.map((segment) => String(segment.key)).join('.');
+      const key = issue.path?.map((segment) => String(segment.key as PropertyKey)).join('.');
       if (key && !fields[key]) fields[key] = issue.message;
     }
     return NextResponse.json({ error: 'Bilgileri kontrol et.', fields }, { status: 400 });

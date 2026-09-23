@@ -18,6 +18,7 @@ import { exerciseAlternatives, familyOf, summarizeMuscles } from '@/lib/muscles'
 import { describeRule, progressionOf, PROGRESSION_LABELS } from '@/lib/progression';
 import { CATEGORY_LABELS, EQUIPMENT_LABELS } from '@/lib/schemas/exercise';
 import { AlternativesCard, type AlternativeRow, type DeviceSwap } from './alternatives-card';
+import { MedicalCard } from './medical-card';
 import { ExerciseActions } from './exercise-actions';
 
 const TRACKING_LABELS = {
@@ -170,6 +171,8 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
               </CardContent>
             </Card>
           ) : null}
+
+          <MedicalCard exercise={exercise} />
 
           <AlternativesCard exerciseId={exercise.id} rows={alternatives} swaps={swaps} />
         </div>
