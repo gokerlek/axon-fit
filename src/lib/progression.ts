@@ -95,7 +95,11 @@ export type SuggestionReason =
   | 'decrease'
   | 'deload'
   | 'harder_variant'
-  | 'no_progression';
+  | 'no_progression'
+  // Yük toleransı (ağrı izleme) öneriyi geri çektiğinde — `src/lib/check-in.ts`.
+  | 'pain_hold'
+  | 'pain_reduce'
+  | 'paused';
 
 export type Suggestion = Plan & { reason: SuggestionReason };
 
@@ -109,6 +113,9 @@ export const REASON_LABELS: Record<SuggestionReason, string> = {
   deload: 'Üst üste tıkandı: hafif bir antrenman.',
   harder_variant: 'Aralığın tepesine ulaşıldı: ağırlık ekle ya da zor bir varyasyona geç.',
   no_progression: 'Bu hareket için ilerleme yok.',
+  pain_hold: 'Ağrı ya da irritabilite yükselmiş: artırma yok, aynı yükte kal.',
+  pain_reduce: 'Ağrı eşiği aşıldı ya da 24 saatte geçmedi: yük %15 azaldı.',
+  paused: 'Bugün yük verilmiyor: önce değerlendirme gerekli.',
 };
 
 /** Kaç antrenman üst üste tıkanınca hafifletilir. */

@@ -119,11 +119,27 @@ health.json                    yalnız sağlık modülü açık ve onaylıysa ol
       { "type": "working", "kg": 80, "reps": 8, "effort": "good" }   // effort: easy | good | hard | fail
     ] }                                                              // süreli harekette "reps" yerine "seconds"
   ],
-  "notes": "", "water": 3
+  "notes": "", "water": 3,
+  "effort": { "sessionRpe": 6, "durationMin": 55 }   // CR-10, bitişten ~10 dk sonra; antrenman verisi
 }
 ```
 
-**`health.json`** — yalnız modül açık ve danışan onaylamışsa yazılır. Kapalıysa dosya hiç oluşmaz.
+**`health.json`** — yalnız modül açık ve danışan onaylamışsa yazılır. Kapalıysa dosya hiç oluşmaz. Şema: `src/lib/schemas/health.ts`.
+```jsonc
+{
+  "sex": "female",
+  "toleranceMode": "pain_free",                       // pain_free (≤3/10) | pain_monitoring (≤5/10)
+  "conditions": ["lumbar_disc_herniation:acute"],      // sakatlık süzgecinin girdisi
+  "surgeryDate": "2026-08-01",                         // faza bağlı kurallar (ACL haftası)
+  "checkIns": [
+    { "date": "2026-09-20", "painBaseline": 3, "painPeak": 4, "returnedToBaseline": true,
+      "symptomDirection": "stable", "irritability": "moderate", "redFlag": "none" }
+  ],
+  "measurements": [ { "date": "2026-09-01", "id": "waist_girth", "value": 82 } ],
+  "movementScreens": [ { "date": "2026-09-01", "entries": { "hurdle_step": { "left": 2, "right": 1 } } } ]
+}
+```
+Ağrı, semptom, kırmızı bayrak, beden ölçüleri ve tarama sağlık verisidir (KVKK'da özel nitelikli) → `health.json`. Seansın zorluğu ve süresi antrenman verisidir → seans dosyası. Yük toleransı motoru ikisini okurken birleştirir; onay yoksa yalnız antrenman tarafıyla çalışır.
 
 ---
 
@@ -236,6 +252,29 @@ Genel cihaz listesi (salon envanteri yok): hazır katalog pakette (`src/data/dev
 - **Haftalık yük haritası (program ve danışan):** kas başına haftalık set toplamı kademeli renkle ve açıklama kutusuyla gösterilir — gri: 0 · açık: 1–9 (az) · vurgu rengi: 10–20 (yeterli) · uyarı rengi: 20+ (fazla). Değer girilmez, set kayıtlarından hesaplanır. Renkler tema tokenlarından (PT'nin vurgu rengi korunur).
 
 ---
+
+### 7.5 Ölçüm ve yük toleransı (`src/lib/check-in.ts`, `src/lib/measurements.ts`)
+
+Kaynak: `docs/research/medical-fitness/`. Ölçüm ayrı bir modül değil, **öneri motorunun girdisidir**.
+
+**Seans yoklaması (her seans, tek ekran):** son 24 saat ağrısı (0–10), seans içi en yüksek ağrı, önceki seansın ağrısı ertesi sabah geçti mi, semptom yönü (merkeze çekiliyor / değişmedi / aşağı yayılıyor), irritabilite, seans RPE (CR-10) ve süresi, ağrısız yürüme süresi, **kırmızı bayrak sorusu** (her seans cevaplanır; "yok" da cevaptır). Tolere edilen en yüksek set ve uyum seans kayıtlarından hesaplanır, elle girilmez.
+
+**Ağrı izleme kuralı** (Silbernagel 2007; ağrısız/ağrılı egzersiz RKÇ'si):
+| Koşul | Karar | Öneriye etkisi |
+|---|---|---|
+| Kırmızı bayrak ya da semptom aşağı yayılıyor | `stop` | Yük yok, "önce değerlendirme" (`paused`) |
+| Ağrı ertesi sabah geçmedi | `reduce` | Son ağırlıktan %15 aşağı, adıma yuvarlı (`pain_reduce`) |
+| Seans içi ağrı tavanı aştı (varsayılan 3/10; tendinopatide PT 5/10 seçebilir) | `reduce` | Aynı |
+| Haftalık ortalama ağrı ≥2 puan arttı (NPRS'de en küçük anlamlı fark) | `hold` | Artış geri çekilir (`pain_hold`) |
+| İrritabilite yüksek | `hold` | Aynı; izometrik ve ağrısız aralık önerilir |
+
+En ağır karar kazanır, gerekçelerin hepsi listelenir. Varsayılan tavan tutucudur: ağrıya girerek çalışmanın üstünlüğü gösterilmedi.
+
+**İç yük:** sRPE = RPE × dakika (AU); haftalık toplam ve önceki haftaya göre değişim saklanır. **Akut:kronik iş yükü oranı (ACWR) bilinçli olarak kodlanmaz** — eşikleri doğrulanmamış, matematiksel eşleşmeden sahte ilişki üretiyor. Eşik yok; yorumu PT yapar.
+
+**Periyodik ölçümler:** önerilen — vücut ağırlığı, boy, bel ve kalça çevresi (ISAK), 5 tekrar otur-kalk, ayak bileği lunge testi, bölgeye göre anket skoru (ODI / SPADI / VISA-P); isteğe bağlı — kol/uyluk/baldır çevresi, gövde dayanıklılık bataryası (fleksör, Biering-Sørensen, yan köprü). Yorumlayıcılar: bel-kalça oranı (erkek ≥0,90, kadın ≥0,85 artmış risk), otur-kalk (>12 sn değerlendirme, >15 sn tekrarlayan düşme riski). **Ölçüm hatasının altındaki değişim "gelişme" diye raporlanmaz:** otur-kalkta 2,3 sn, gövde dayanıklılığında %25 (tipik hata %12–24); yan köprü asimetrisi de bu bant aşılmadan işaretlenmez.
+
+**Hareket taraması (FMS):** yalnız PT'nin girdiği patern puanları (0–3, gerekirse sağ/sol) ve clearing testi ağrısı. **Toplam skor saklanmaz** (sakatlık öngörüsü çelişkili); asimetri, ağrı bayrağı (0 puan ya da ağrılı clearing → tıbbi değerlendirme) ve en düşük patern gösterilir. Test yönergeleri ve puanlama tablosu tescilli olduğu için uygulamada yer almaz.
 
 ## 8. v1'den taşınacaklar
 
