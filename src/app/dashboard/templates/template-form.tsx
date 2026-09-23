@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Field as FormField, Form, getDeepError, getInput, setErrors, setInput, useField, useFieldArray, useForm } from '@formisch/react';
@@ -121,14 +121,31 @@ export function TemplateForm({
     [current, write],
   );
 
+  const undoToast = useRef<string | number | null>(null);
+
   const updateWithUndo = useCallback<Editor['updateWithUndo']>(
     (change, message) => {
       const before = current();
       const next = change(before);
       if (next === before) return;
       write(next);
+      // Geri al yalnız bu işlemden sonra başka değişiklik yoksa geçerli; yoksa sonraki düzenlemeler silinirdi.
+      const after = JSON.stringify(current());
       setAnnouncement(message);
-      toast(message, { action: { label: 'Geri al', onClick: () => write(before) }, duration: 8000 });
+      if (undoToast.current !== null) toast.dismiss(undoToast.current);
+      undoToast.current = toast(message, {
+        action: {
+          label: 'Geri al',
+          onClick: () => {
+            if (JSON.stringify(current()) !== after) {
+              toast.error('Sonrasında başka değişiklik yapıldı; geri alınamadı.');
+              return;
+            }
+            write(before);
+          },
+        },
+        duration: 8000,
+      });
     },
     [current, write],
   );

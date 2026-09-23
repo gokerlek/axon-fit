@@ -218,6 +218,13 @@ describe('kural ve cihaz', () => {
     assert.equal(effectiveDeviceId({}, curl), undefined);
     assert.equal(effectiveDeviceId({ deviceId: 'x' }), 'x');
   });
+
+  test('satırdaki cihaz silindiyse egzersizin kendi cihazına düşer', () => {
+    const known = new Set(['leg-press-a']);
+    assert.equal(effectiveDeviceId({ deviceId: 'leg-press-b' }, legPress, known), 'leg-press-a');
+    assert.equal(effectiveDeviceId({ deviceId: 'leg-press-a' }, legPress, known), 'leg-press-a');
+    assert.equal(effectiveDeviceId({ deviceId: 'leg-press-b' }, curl, known), undefined);
+  });
 });
 
 describe('set sırası', () => {

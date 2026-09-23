@@ -48,7 +48,7 @@ export default async function TemplateDetailPage({ params }: { params: Promise<{
   const byId = new Map(exercises.map((exercise) => [exercise.id, exercise]));
   const deviceById = new Map(devices.map((device) => [device.id, device]));
   const { load } = templateMuscleLoad(template, byId, exerciseSetWeights);
-  const summary = templateSummary(template, byId);
+  const summary = templateSummary(template, byId, new Set(deviceById.keys()));
   const counted = Object.values(load).some((value) => value > 0);
 
   const groupParts = [

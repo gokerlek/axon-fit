@@ -118,6 +118,10 @@ export function ExercisePicker({
           type="search"
           value={query}
           onChange={(event) => setQuery(event.currentTarget.value)}
+          // Arama kutusu şablon formunun içinde: Enter formu göndermesin.
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.nativeEvent.isComposing) event.preventDefault();
+          }}
           placeholder="Egzersiz ya da kas ara"
           aria-label="Egzersiz ya da kas ara"
           autoComplete="off"

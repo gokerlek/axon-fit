@@ -193,9 +193,14 @@ export function ruleFor(row: Pick<TemplateRow, 'rule' | 'target'>, exercise: Rul
   };
 }
 
-/** Satırın cihazı: şablonda değiştirildiyse o, yoksa egzersizin kendi cihazı. */
-export function effectiveDeviceId(row: Pick<TemplateRow, 'deviceId'>, exercise?: Pick<PlanExercise, 'deviceId'>): string | undefined {
-  return row.deviceId ?? exercise?.deviceId;
+/** Satırın cihazı: şablonda değiştirildiyse ve cihaz hâlâ varsa o, yoksa egzersizin kendi cihazı (SPEC §7.4). */
+export function effectiveDeviceId(
+  row: Pick<TemplateRow, 'deviceId'>,
+  exercise?: Pick<PlanExercise, 'deviceId'>,
+  knownDeviceIds?: ReadonlySet<string>,
+): string | undefined {
+  if (row.deviceId !== undefined && (!knownDeviceIds || knownDeviceIds.has(row.deviceId))) return row.deviceId;
+  return exercise?.deviceId;
 }
 
 /**
@@ -334,7 +339,11 @@ export type TemplateSummary = {
 };
 
 /** Liste kartı ve detaydaki özet: hareket, set, grup, cihaz ve tahmini süre. */
-export function templateSummary(template: TemplateBody, exercises: ReadonlyMap<string, PlanExercise>): TemplateSummary {
+export function templateSummary(
+  template: TemplateBody,
+  exercises: ReadonlyMap<string, PlanExercise>,
+  knownDeviceIds?: ReadonlySet<string>,
+): TemplateSummary {
   const groups = { superset: 0, circuit: 0, complex: 0 };
   const missingRowIds: string[] = [];
   const deviceIds: string[] = [];
@@ -350,7 +359,7 @@ export function templateSummary(template: TemplateBody, exercises: ReadonlyMap<s
       }
       rows += 1;
       workingSets += block.sets;
-      const deviceId = effectiveDeviceId(row, exercise);
+      const deviceId = effectiveDeviceId(row, exercise, knownDeviceIds);
       if (deviceId && !deviceIds.includes(deviceId)) deviceIds.push(deviceId);
     }
   }
