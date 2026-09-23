@@ -14,6 +14,9 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Toggle } from '@/components/ui/toggle';
+import { ConstraintPicker, formatConstraints, parseConstraints } from './constraint-picker';
+import { conditionInfo } from '@/lib/conditions';
+import { DECISION_LABELS, evaluateExercise, type Decision } from '@/lib/exercise-filter';
 import { countByMuscle, isBodyMuscle, parseMuscles, summarizeMuscles, works } from '@/lib/muscles';
 import { fetchJson } from '@/lib/query/errors';
 import { useServiceQuery } from '@/lib/query/use-service';
@@ -39,7 +42,9 @@ export function ExerciseList({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const selected = useMemo(() => parseMuscles(searchParams.get('muscle')), [searchParams]);
+  const constraints = useMemo(() => parseConstraints(searchParams.get('limit')), [searchParams]);
   const [search, setSearch] = useState('');
+  const [hideBlocked, setHideBlocked] = useState(false);
 
   const { data } = useServiceQuery({
     key: ['exercises'],
@@ -52,9 +57,17 @@ export function ExerciseList({
   const counts = useMemo(() => countByMuscle(exercises), [exercises]);
 
   // Sunucuya gitmeden adresi günceller; Next yönlendiricisi `useSearchParams`'ı eşitler.
-  function setSelected(next: Muscle[]) {
-    window.history.replaceState(null, '', next.length > 0 ? `${pathname}?muscle=${next.join(',')}` : pathname);
+  function setParams(next: { muscle?: Muscle[]; limit?: ReturnType<typeof parseConstraints> }) {
+    const params = new URLSearchParams();
+    const muscles = next.muscle ?? selected;
+    const limits = next.limit ?? constraints;
+    if (muscles.length > 0) params.set('muscle', muscles.join(','));
+    if (limits.length > 0) params.set('limit', formatConstraints(limits));
+    const query = params.toString();
+    window.history.replaceState(null, '', query ? `${pathname}?${query}` : pathname);
   }
+
+  const setSelected = (next: Muscle[]) => setParams({ muscle: next });
 
   function toggle(muscle: Muscle) {
     setSelected(selected.includes(muscle) ? selected.filter((item) => item !== muscle) : [...selected, muscle]);
@@ -73,7 +86,27 @@ export function ExerciseList({
     return [...matched.filter(isTarget), ...matched.filter((item) => !isTarget(item))];
   }, [exercises, search, selected]);
 
+  // Kısıt seçiliyse her hareket süzgeçten geçer; sonuç kartta rozet olur.
+  const decisions = useMemo(() => {
+    if (constraints.length === 0) return new Map<string, { decision: Decision; message: string }>();
+    const map = new Map<string, { decision: Decision; message: string }>();
+    for (const item of exercises) {
+      const result = evaluateExercise(item, constraints);
+      const first = result.findings[0];
+      if (result.decision && first) map.set(item.id, { decision: result.decision, message: first.message });
+    }
+    return map;
+  }, [exercises, constraints]);
+
+  const blockedCount = [...decisions.values()].filter((item) => item.decision === 'block').length;
+  const untaggedCount = useMemo(
+    () => (constraints.length === 0 ? 0 : exercises.filter((item) => evaluateExercise(item, constraints).untagged).length),
+    [exercises, constraints],
+  );
+
   const selectedBody = selected.filter(isBodyMuscle);
+  // "Yasakları gizle" yalnız görünümü daraltır; sayım hep tam liste üstünden.
+  const shown = hideBlocked ? visible.filter((item) => decisions.get(item.id)?.decision !== 'block') : visible;
   const filtering = selected.length > 0 || search.trim().length > 0;
 
   return (
@@ -152,6 +185,45 @@ export function ExerciseList({
         </Card>
 
         <div className="flex flex-col gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Kısıtlar</CardTitle>
+              <CardDescription>
+                Danışanın sakatlığını seç; uygun olmayan hareketler işaretlenir. Etiketlenmemiş hareket
+                değerlendirilemez, listede sessizce kalır.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <div className="max-w-sm">
+                <ConstraintPicker value={constraints} onChange={(next) => setParams({ limit: next })} />
+              </div>
+
+              {constraints.length > 0 ? (
+                <div className="flex flex-col gap-2 text-sm">
+                  <p className="text-muted-foreground" aria-live="polite">
+                    <span className="tabular-nums text-destructive">{blockedCount}</span> hareket yasak ·{' '}
+                    <span className="tabular-nums">{decisions.size - blockedCount}</span> uyarı ·{' '}
+                    <span className="tabular-nums">{untaggedCount}</span> etiketsiz
+                  </p>
+                  {constraints.some((item) => conditionInfo(item.id).redFlag) ? (
+                    <p className="text-destructive">
+                      Kırmızı bayrak: bu kısıtta program yazmadan önce tıbbi izin gerekir.
+                    </p>
+                  ) : null}
+                  <Toggle
+                    variant="outline"
+                    size="sm"
+                    className="self-start"
+                    pressed={hideBlocked}
+                    onPressedChange={setHideBlocked}
+                    disabled={blockedCount === 0}>
+                    Yasakları gizle
+                  </Toggle>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+
           <InputGroup>
             <InputGroupAddon>
               <MagnifyingGlass />
@@ -167,11 +239,11 @@ export function ExerciseList({
 
           {filtering ? (
             <p className="text-sm text-muted-foreground" aria-live="polite">
-              <span className="tabular-nums">{visible.length}</span> sonuç
+              <span className="tabular-nums">{shown.length}</span> sonuç
             </p>
           ) : null}
 
-          {visible.length === 0 ? (
+          {shown.length === 0 ? (
             <Empty className="border">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
@@ -192,7 +264,8 @@ export function ExerciseList({
             // `popLayout`: çıkan kart mutlak konuma alınır; konum listeye göre hesaplansın diye `relative`.
             <ul className="relative grid gap-3 sm:grid-cols-2">
               <AnimatePresence initial={false} mode="popLayout">
-                {visible.map((item) => {
+                {shown.map((item) => {
+                  const verdict = decisions.get(item.id);
                   const onlySecondary =
                     selected.length > 0 && !selected.some((muscle) => item.primaryMuscles.includes(muscle));
                   return (
@@ -205,8 +278,13 @@ export function ExerciseList({
                       transition={{ type: 'spring', stiffness: 400, damping: 34 }}>
                       <Link
                         href={`/dashboard/exercises/${item.id}`}
+                        title={verdict?.message}
                         className="block h-full rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                        <Card size="sm" className="h-full transition-colors hover:bg-muted/40">
+                        <Card
+                          size="sm"
+                          className={`h-full transition-colors hover:bg-muted/40 ${
+                            verdict?.decision === 'block' ? 'border-destructive/50 bg-destructive/5' : ''
+                          }`}>
                           <CardHeader>
                             <CardTitle className="truncate">{item.title}</CardTitle>
                             <CardDescription className="flex items-center gap-1.5">
@@ -216,8 +294,13 @@ export function ExerciseList({
                               </span>
                               {item.video ? <YoutubeLogo className="size-4 shrink-0" aria-label="videolu" /> : null}
                             </CardDescription>
-                            {item.source === 'custom' || onlySecondary ? (
+                            {item.source === 'custom' || onlySecondary || verdict ? (
                               <CardAction className="flex gap-1">
+                                {verdict ? (
+                                  <Badge variant={verdict.decision === 'block' ? 'destructive' : 'outline'}>
+                                    {DECISION_LABELS[verdict.decision].toLocaleLowerCase('tr')}
+                                  </Badge>
+                                ) : null}
                                 {onlySecondary ? <Badge variant="outline">yardımcı</Badge> : null}
                                 {item.source === 'custom' ? <Badge variant="secondary">senin</Badge> : null}
                               </CardAction>

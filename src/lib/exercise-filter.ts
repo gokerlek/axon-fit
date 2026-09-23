@@ -98,6 +98,9 @@ export type ExerciseTags = {
   resistanceProfile?: ResistanceProfile;
   /** Yük altında omuz iç rotasyonda mı (upright row, empty can). */
   internalRotationUnderLoad?: boolean;
+  /** Hareketin çalıştırdığı kaslar: kuralın ilgili eklemi tutup tutmadığını anlamak için. */
+  primaryMuscles?: readonly string[];
+  secondaryMuscles?: readonly string[];
   /** PT'nin elle işaretlediği kısıtlar ("lumbar_disc_herniation:acute"). */
   contraindications?: readonly string[];
   /** PT'nin "bunda sorun yok" dediği kısıtlar; uyarıyı susturur, yasağı susturmaz. */
@@ -148,6 +151,23 @@ const has = (windows: readonly JointWindow[] | undefined, window: JointWindow) =
 
 const loaded = (tags: ExerciseTags) =>
   tags.axialLoading === undefined ? null : tags.axialLoading === 'moderate' || tags.axialLoading === 'high';
+
+const KNEE_MUSCLES = ['quadriceps', 'hamstrings_medial', 'hamstrings_lateral', 'gastroc_medial', 'gastroc_lateral'];
+const SHOULDER_MUSCLES = ['delt_front', 'delt_side', 'delt_rear', 'chest_upper', 'chest_lower', 'lats_upper', 'lats_mid', 'lats_lower', 'traps_upper', 'traps_mid', 'traps_lower', 'serratus'];
+
+/**
+ * Kural ilgili eklemi tutuyor mu? Diz kuralı face pull'u, omuz kuralı squat'ı
+ * yasaklamasın diye. Bilgi yoksa `null` → kural atlanır (sessiz yanlış karar yok).
+ */
+function touches(tags: ExerciseTags, joint: 'knee' | 'shoulder'): boolean | null {
+  const windows = tags.jointWindows;
+  const muscles = [...(tags.primaryMuscles ?? []), ...(tags.secondaryMuscles ?? [])];
+  const onar = joint === 'knee' ? KNEE_MUSCLES : SHOULDER_MUSCLES;
+  const pencere = joint === 'knee' ? 'knee' : 'shoulder';
+  if (windows?.some((item) => item.startsWith(pencere) || (joint === 'shoulder' && item.startsWith('glenohumeral')))) return true;
+  if (muscles.some((muscle) => onar.includes(muscle))) return true;
+  return windows === undefined && muscles.length === 0 ? null : false;
+}
 
 /** İki bilinmeyene dayanan kurallarda: biri bilinmiyorsa kural atlanır. */
 const and = (...values: (boolean | null)[]): boolean | null =>
@@ -241,6 +261,7 @@ export const RULES: readonly Rule[] = [
     message: 'Açık zincir sabit dirençte patellofemoral basınç tepe yapar; kapalı zincir bir varyanta geç.',
     match: (tags) =>
       and(
+        touches(tags, 'knee'),
         tags.kineticChain === undefined ? null : tags.kineticChain === 'open',
         tags.resistanceProfile === undefined ? null : tags.resistanceProfile === 'constant_resistance',
       ),
@@ -266,6 +287,7 @@ export const RULES: readonly Rule[] = [
     message: 'İlk 4 haftada açık zincir diz ekstansiyonu greft üzerinde anterior kayma üretir.',
     match: (tags, context) =>
       and(
+        touches(tags, 'knee'),
         tags.kineticChain === undefined ? null : tags.kineticChain === 'open',
         context.weeksPostOp === undefined ? null : context.weeksPostOp < 4,
       ),
@@ -289,6 +311,7 @@ export const RULES: readonly Rule[] = [
     message: 'Hamstring grefti ilk 12 haftada yüklü açık zincir diz fleksiyonunu kaldırmaz.',
     match: (tags, context) =>
       and(
+        touches(tags, 'knee'),
         tags.kineticChain === undefined ? null : tags.kineticChain === 'open',
         context.graftType === undefined ? null : context.graftType === 'hamstring',
         context.weeksPostOp === undefined ? null : context.weeksPostOp < 12,
@@ -301,6 +324,7 @@ export const RULES: readonly Rule[] = [
     message: 'Enerji depolayan (balistik) yükleme erken evrede ağrıyı azdırır; izometrik/izotonik evreyi tamamla.',
     match: (tags, context) =>
       and(
+        touches(tags, 'knee'),
         tags.contractionType === undefined ? null : tags.contractionType === 'energy_storage_ballistic',
         context.tendinopathyStage === undefined ? true : context.tendinopathyStage <= 2,
       ),
@@ -322,7 +346,7 @@ export const RULES: readonly Rule[] = [
     condition: 'acute_knee_effusion',
     decision: 'warn',
     message: 'Efüzyon kuadrisepsi inhibe eder; yükü artırma, şişlik geçene kadar hacmi koru.',
-    match: (tags) => (tags.axialLoading === undefined ? null : tags.axialLoading !== 'none'),
+    match: (tags) => and(touches(tags, 'knee'), tags.axialLoading === undefined ? null : tags.axialLoading !== 'none'),
   },
 
   // --- Omuz ---
@@ -380,8 +404,13 @@ export const RULES: readonly Rule[] = [
     id: 'mdi-end-range',
     condition: 'multidirectional_shoulder_instability',
     decision: 'block',
-    message: 'Pasif son aralık germe ve son aralık yükleme kapsülü daha da gevşetir.',
-    match: (tags) => has(tags.jointWindows, 'spine_end_range'),
+    message: 'Son aralık omuz yüklemesi ve pasif kapsül germesi gevşekliği artırır.',
+    match: (tags) => {
+      const abd = has(tags.jointWindows, 'shoulder_abduction_90_end_range_er');
+      const ext = has(tags.jointWindows, 'glenohumeral_extension_beyond_neutral');
+      if (abd === true || ext === true) return true;
+      return abd === null || ext === null ? null : false;
+    },
   },
   {
     id: 'ac-horizontal-adduction',

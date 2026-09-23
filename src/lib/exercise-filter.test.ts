@@ -138,4 +138,39 @@ describe('egzersiz süzgeci', () => {
     assert.equal(sonuc.decision, 'block');
     assert.deepEqual([...new Set(sonuc.findings.map((f) => f.decision))], ['block', 'warn']);
   });
+
+  test('diz kuralı diz dışı hareketi yasaklamaz (face pull, PFP kısıtında serbest)', () => {
+    const facePull: ExerciseTags = {
+      kineticChain: 'open',
+      axialLoading: 'none',
+      shearForce: 'low',
+      spinalAlignment: 'neutral',
+      resistanceProfile: 'constant_resistance',
+      jointWindows: ['shoulder_elevation_60_90'],
+      primaryMuscles: ['delt_rear', 'traps_mid'],
+    };
+    assert.equal(evaluateExercise(facePull, [of('patellofemoral_pain')]).decision, null);
+    // Aynı etiketler dizi çalıştıran bir harekette yasak üretir.
+    const legExt: ExerciseTags = { ...facePull, jointWindows: ['knee_terminal_extension_0_30'], primaryMuscles: ['quadriceps'] };
+    assert.equal(evaluateExercise(legExt, [of('patellofemoral_pain')]).decision, 'block');
+  });
+
+  test('ACL erken dönem üst vücut hareketini yasaklamaz', () => {
+    const bench: ExerciseTags = { kineticChain: 'open', primaryMuscles: ['chest_lower'], axialLoading: 'none' };
+    assert.equal(evaluateExercise(bench, [of('acl_reconstruction_early')], { weeksPostOp: 2 }).decision, null);
+  });
+
+  test('balistik kural yalnız dizi ilgilendiren harekette çalışır', () => {
+    const swing: ExerciseTags = { contractionType: 'energy_storage_ballistic', primaryMuscles: ['glutes', 'hamstrings_lateral'] };
+    const slam: ExerciseTags = { contractionType: 'energy_storage_ballistic', primaryMuscles: ['delt_front', 'abs_upper'] };
+    assert.equal(evaluateExercise(swing, [of('patellar_tendinopathy')]).decision, 'block');
+    assert.equal(evaluateExercise(slam, [of('patellar_tendinopathy')]).decision, null);
+  });
+
+  test('kas ve pencere bilgisi yoksa eklem kuralı karar vermez, atlar', () => {
+    const etiketsizAma: ExerciseTags = { kineticChain: 'open', resistanceProfile: 'constant_resistance' };
+    const sonuc = evaluateExercise(etiketsizAma, [of('patellofemoral_pain')]);
+    assert.equal(sonuc.decision, null);
+    assert.ok(sonuc.skipped > 0);
+  });
 });
