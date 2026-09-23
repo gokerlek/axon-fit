@@ -1,11 +1,11 @@
 import { notFound } from 'next/navigation';
 import { PageHeader } from '@/components/page-header';
-import { Card, CardContent } from '@/components/ui/card';
 import { listAttachments } from '@/lib/attachments';
 import { listDevices } from '@/lib/devices';
 import { getExercise, listExercises } from '@/lib/exercises';
 import { exerciseAlternatives, summarizeMuscles } from '@/lib/muscles';
 import { EQUIPMENT_LABELS } from '@/lib/schemas/exercise';
+import { ExerciseActions } from '../exercise-actions';
 import { ExerciseForm } from '../../exercise-form';
 
 export default async function EditExercisePage({ params }: { params: Promise<{ id: string }> }) {
@@ -35,22 +35,26 @@ export default async function EditExercisePage({ params }: { params: Promise<{ i
           { label: 'Düzenle' },
         ]}
         title="Egzersizi düzenle"
+        actions={
+          <ExerciseActions
+            id={id}
+            title={exercise.title}
+            source={exercise.source}
+            overridesLibrary={exercise.overridesLibrary}
+          />
+        }
         description={
           exercise.source === 'library'
             ? 'Hazır kütüphaneden bir egzersiz: kaydettiğinde yalnız senin kurulumunda geçerli bir sürüm oluşur. İstediğin zaman varsayılana dönebilirsin.'
             : undefined
         }
       />
-      <Card>
-        <CardContent>
-          <ExerciseForm
+      <ExerciseForm
             editing={editable}
             devices={devices}
             attachments={attachments}
             alternativeOptions={alternativeOptions}
-          />
-        </CardContent>
-      </Card>
+      />
     </div>
   );
 }

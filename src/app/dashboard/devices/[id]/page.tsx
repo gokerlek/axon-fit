@@ -16,7 +16,7 @@ import { getDevice } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
 import { formatKg } from '@/lib/format';
 import { summarizeMuscles } from '@/lib/muscles';
-import { DeviceActions } from './device-actions';
+import { EditButton } from '@/components/edit-button';
 
 /** Cihaz detayı — kendi sayfası (modal değil). */
 export default async function DeviceDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -57,7 +57,7 @@ export default async function DeviceDetailPage({ params }: { params: Promise<{ i
         crumbs={[{ label: 'Cihazlar', href: '/dashboard/devices' }, { label: device.name }]}
         title={device.name}
         description={describeDeviceLoads(device)}
-        actions={<DeviceActions id={device.id} title={device.name} source={device.source} overridesLibrary={device.overridesLibrary} />}
+        actions={<EditButton href={`/dashboard/devices/${device.id}/edit`} />}
       />
 
       <div className="grid gap-6 lg:grid-cols-2">

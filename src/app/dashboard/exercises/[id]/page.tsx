@@ -19,7 +19,7 @@ import { describeRule, progressionOf, PROGRESSION_LABELS } from '@/lib/progressi
 import { CATEGORY_LABELS, EQUIPMENT_LABELS } from '@/lib/schemas/exercise';
 import { AlternativesCard, type AlternativeRow, type DeviceSwap } from './alternatives-card';
 import { MedicalCard } from './medical-card';
-import { ExerciseActions } from './exercise-actions';
+import { EditButton } from '@/components/edit-button';
 
 const TRACKING_LABELS = {
   weight_reps: 'Ağırlık + tekrar',
@@ -117,14 +117,7 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
         crumbs={[{ label: 'Egzersizler', href: '/dashboard/exercises' }, { label: exercise.title }]}
         title={exercise.title}
         description={exercise.description || undefined}
-        actions={
-          <ExerciseActions
-            id={exercise.id}
-            title={exercise.title}
-            source={exercise.source}
-            overridesLibrary={exercise.overridesLibrary}
-          />
-        }
+        actions={<EditButton href={`/dashboard/exercises/${exercise.id}/edit`} />}
       />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">

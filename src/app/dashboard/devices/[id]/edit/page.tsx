@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { listAttachments } from '@/lib/attachments';
 import { getDevice } from '@/lib/devices';
+import { DeviceActions } from '../device-actions';
 import { DeviceForm } from '../../device-form';
 
 export default async function EditDevicePage({ params }: { params: Promise<{ id: string }> }) {
@@ -20,6 +21,14 @@ export default async function EditDevicePage({ params }: { params: Promise<{ id:
           { label: 'Düzenle' },
         ]}
         title="Cihazı düzenle"
+        actions={
+          <DeviceActions
+            id={id}
+            title={device.name}
+            source={device.source}
+            overridesLibrary={device.overridesLibrary}
+          />
+        }
         description={
           device.source === 'library'
             ? 'Hazır katalogdan bir cihaz: kaydettiğinde yalnız senin kurulumunda geçerli bir sürüm oluşur. İstediğin zaman varsayılana dönebilirsin.'

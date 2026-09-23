@@ -1,5 +1,4 @@
 import { PageHeader } from '@/components/page-header';
-import { Card, CardContent } from '@/components/ui/card';
 import { listAttachments } from '@/lib/attachments';
 import { listDevices } from '@/lib/devices';
 import { ExerciseForm } from '../exercise-form';
@@ -13,11 +12,7 @@ export default async function NewExercisePage() {
         title="Yeni egzersiz"
         description="Kendi egzersizlerin repo'nda ayrı durur; hazır kütüphane güncellense de silinmez."
       />
-      <Card>
-        <CardContent>
-          <ExerciseForm editing={null} devices={devices} attachments={attachments} />
-        </CardContent>
-      </Card>
+      <ExerciseForm editing={null} devices={devices} attachments={attachments} />
     </div>
   );
 }

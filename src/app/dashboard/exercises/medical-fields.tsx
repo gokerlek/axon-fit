@@ -4,7 +4,7 @@ import { Field as FormField, setInput, type useForm } from '@formisch/react';
 import { Plus, X } from '@phosphor-icons/react';
 import { GroupedSelect } from '@/components/labeled-select';
 import { Button } from '@/components/ui/button';
-import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
+import { Field, FieldDescription, FieldError, FieldLabel, FieldSet } from '@/components/ui/field';
 import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
@@ -188,8 +188,7 @@ function ConditionField({
 
 export function MedicalFields({ form }: { form: Form }) {
   return (
-    <FieldSet className="lg:col-span-2">
-      <FieldLegend>Medikal etiketler</FieldLegend>
+    <FieldSet>
       <FieldDescription>
         Sakatlık süzgeci bunlara bakar. Hiçbiri zorunlu değil; boş bırakılan hareket süzgeçten sessizce
         geçer ve uygulama bunu “değerlendirilemedi” diye söyler. Emin olmadığın alanı boş bırak.

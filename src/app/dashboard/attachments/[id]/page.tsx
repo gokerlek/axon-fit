@@ -11,7 +11,7 @@ import { DEVICE_KIND_LABELS } from '@/lib/device-loads';
 import { listDevices } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
 import { summarizeMuscles } from '@/lib/muscles';
-import { AttachmentActions } from '../attachment-actions';
+import { EditButton } from '@/components/edit-button';
 
 /** Aparat detayı — yalnız gösterir; değiştirmek için "Düzenle" (SPEC §6). */
 export default async function AttachmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -31,15 +31,7 @@ export default async function AttachmentDetailPage({ params }: { params: Promise
         crumbs={[{ label: 'Aparatlar', href: '/dashboard/attachments' }, { label: attachment.name }]}
         title={attachment.name}
         description={origin}
-        actions={
-          <AttachmentActions
-            id={attachment.id}
-            title={attachment.name}
-            source={attachment.source}
-            overridesLibrary={attachment.overridesLibrary}
-            showEdit
-          />
-        }
+        actions={<EditButton href={`/dashboard/attachments/${attachment.id}/edit`} />}
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
