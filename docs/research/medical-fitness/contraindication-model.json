@@ -1,0 +1,1499 @@
+{
+  "condition_taxonomy": [
+    {
+      "id": "lumbar_disc_herniation",
+      "label_tr": "Lomber disk hernisi (radikülopatisiz)",
+      "region": "spine",
+      "red_flag": false,
+      "severity_levels": [
+        "acute",
+        "subacute",
+        "chronic",
+        "asymptomatic_imaging_finding"
+      ],
+      "avoid_patterns": [
+        "spinal_flexion + spinal_rotation (kombine)",
+        "yüklü tam ROM spinal fleksiyon",
+        "yüksek tekrarlı (>15) yüklü fleksiyon siklüsü",
+        "uyanmadan sonraki ilk 2 saatte yüklü fleksiyon",
+        "tek taraflı bulge tarafına lateral fleksiyonlu asimetrik fleksiyon"
+      ],
+      "prefer_patterns": [
+        "nötr omurga izometrik kor (curl_up_mcgill, side_bridge, bird_dog)",
+        "hip_hinge (nötr omurga)",
+        "progresif yürüyüş",
+        "suitcase/farmer carry",
+        "yüksüz cat_camel"
+      ]
+    },
+    {
+      "id": "lumbar_disc_herniation_with_radiculopathy",
+      "label_tr": "Radikülopatili lomber disk hernisi (bacağa yayılan ağrı/nörolojik bulgu)",
+      "region": "spine",
+      "red_flag": true,
+      "severity_levels": [
+        "with_neuro_deficit",
+        "without_neuro_deficit"
+      ],
+      "avoid_patterns": [
+        "yüklü spinal fleksiyon (her derece)",
+        "spinal_flexion + rotation",
+        "periferizasyon üreten her egzersiz",
+        "ağır deadlift/back squat"
+      ],
+      "prefer_patterns": [
+        "kısa ve sık yürüyüş seansları",
+        "nötr omurga izometrik stabilizasyon",
+        "nöral slider (faz 2+)",
+        "klinik yönlendirme"
+      ]
+    },
+    {
+      "id": "cauda_equina_or_progressive_neuro_deficit",
+      "label_tr": "Kauda ekina şüphesi / ilerleyici nörolojik defisit",
+      "region": "systemic",
+      "red_flag": true,
+      "severity_levels": [
+        "suspected"
+      ],
+      "avoid_patterns": [
+        "tüm egzersiz reçetesi (program üretilmez)"
+      ],
+      "prefer_patterns": [
+        "acil klinik yönlendirme"
+      ]
+    },
+    {
+      "id": "flexion_intolerant_back",
+      "label_tr": "Fleksiyon intoleranslı bel (postür-modüle kompresyon testi pozitif)",
+      "region": "spine",
+      "red_flag": false,
+      "severity_levels": [
+        "mild",
+        "moderate",
+        "severe"
+      ],
+      "avoid_patterns": [
+        "end-range spinal fleksiyon (yüklü ya da yüksüz)",
+        "knee_to_chest germe",
+        "gym ball üzerinde curl_up / oturarak hareket",
+        "derin squat ile yere inme geçişi"
+      ],
+      "prefer_patterns": [
+        "nötr omurga izometrik kor",
+        "lunge ile yere inme",
+        "golfers lift",
+        "yürüyüş",
+        "stir_the_pot"
+      ]
+    },
+    {
+      "id": "lumbar_spondylolisthesis",
+      "label_tr": "Lomber spondilolistezis / shear duyarlı omurga",
+      "region": "spine",
+      "red_flag": false,
+      "severity_levels": [
+        "grade_1",
+        "grade_2_plus"
+      ],
+      "avoid_patterns": [
+        "yüklü end-range spinal ekstansiyon",
+        "roman chair / prone hyperextension",
+        "loaded good morning, jefferson curl",
+        "shear_force_level = high"
+      ],
+      "prefer_patterns": [
+        "nötr omurga izometrik kor",
+        "hafif hip_hinge",
+        "glute_bridge",
+        "yürüyüş",
+        "suitcase carry"
+      ]
+    },
+    {
+      "id": "chronic_nonspecific_low_back_pain",
+      "label_tr": "Kronik non-spesifik bel ağrısı",
+      "region": "spine",
+      "red_flag": false,
+      "severity_levels": [
+        "low_irritability",
+        "high_irritability"
+      ],
+      "avoid_patterns": [
+        "abdominal hollowing motor stratejisi",
+        "yüksek hacimli sit_up/crunch/russian_twist",
+        "postür açısı düzeltmeyi birincil hedef alan program",
+        "pasif-only program"
+      ],
+      "prefer_patterns": [
+        "motor kontrol + genel kuvvet",
+        "abdominal bracing",
+        "progresif yürüyüş (zorunlu kardiyovasküler bileşen)",
+        "günlük düşük yük-yüksek tekrar dayanıklılık",
+        "hareket hızı ve pozisyon hissi çalışmaları"
+      ]
+    },
+    {
+      "id": "subacromial_pain_syndrome",
+      "label_tr": "Subakromiyal ağrı sendromu / sıkışma",
+      "region": "shoulder",
+      "red_flag": false,
+      "severity_levels": [
+        "irritable",
+        "non_irritable"
+      ],
+      "avoid_patterns": [
+        "behind_neck press / lat pulldown",
+        "dar tutuş upright row (dirsek omuz üstü)",
+        "empty can (internal rotasyonlu) elevasyon",
+        "tekrarlı/ağır 90° üstü elevasyon"
+      ],
+      "prefer_patterns": [
+        "skapular planda elevasyon (30-45° anterior)",
+        "landmine press",
+        "front lat pulldown",
+        "nötr tutuş dumbbell press",
+        "serratus anterior ve alt trapez odaklı çalışma",
+        "progresif dirençli konsantrik kuvvetlendirme"
+      ]
+    },
+    {
+      "id": "rotator_cuff_tendinopathy",
+      "label_tr": "Rotator manşet tendinopatisi",
+      "region": "shoulder",
+      "red_flag": false,
+      "severity_levels": [
+        "reactive",
+        "persistent"
+      ],
+      "avoid_patterns": [
+        "progresif olmayan / dirençsiz program",
+        "behind_neck varyantları",
+        "empty can",
+        "NPRS>3 üreten yükleme"
+      ],
+      "prefer_patterns": [
+        "konsantrik dirençli ER/IR",
+        "side_lying external rotation",
+        "skapsiyon full can",
+        "8-12 hafta progresif yükleme",
+        "ev programı + ilerleme takibi"
+      ]
+    },
+    {
+      "id": "anterior_shoulder_instability",
+      "label_tr": "Anterior omuz instabilitesi",
+      "region": "shoulder",
+      "red_flag": true,
+      "severity_levels": [
+        "post_dislocation_acute",
+        "post_surgical",
+        "chronic_atraumatic"
+      ],
+      "avoid_patterns": [
+        "90° abduksiyon + end-range eksternal rotasyon (90-90)",
+        "yüklü glenohumeral ekstansiyon (tam ROM dip, derin bench, derin fly)",
+        "behind_neck press",
+        "balistik overhead atış drilleri"
+      ],
+      "prefer_patterns": [
+        "0° abduksiyonda izotonik ER/IR",
+        "skapular planda <30° elevasyonda ritmik stabilizasyon",
+        "kapalı kinetik zincir duvar itme",
+        "floor_press / board_press",
+        "landmine press"
+      ]
+    },
+    {
+      "id": "multidirectional_shoulder_instability",
+      "label_tr": "Multidireksiyonel / atravmatik omuz instabilitesi",
+      "region": "shoulder",
+      "red_flag": false,
+      "severity_levels": [
+        "mild",
+        "moderate"
+      ],
+      "avoid_patterns": [
+        "end-range pasif kapsül germe",
+        "90-90 pozisyonu",
+        "balistik overhead yükleme",
+        "tam ROM dip"
+      ],
+      "prefer_patterns": [
+        "orta ROM kontrollü dirençli çalışma",
+        "skapular kontrol drilleri",
+        "kapalı kinetik zincir yük aktarımı",
+        "0° abduksiyonda izometrik ER/IR"
+      ]
+    },
+    {
+      "id": "ac_joint_injury",
+      "label_tr": "Akromioklaviküler eklem sorunu (distal klavikula osteolizi dahil)",
+      "region": "shoulder",
+      "red_flag": false,
+      "severity_levels": [
+        "acute",
+        "chronic_osteolysis"
+      ],
+      "avoid_patterns": [
+        "yüklü horizontal adduksiyon (cross_body fly, pec deck)",
+        "tutuş genişliği > 1.5 biakromiyal genişlik bench press",
+        "tam ROM dip",
+        "ağır overhead press"
+      ],
+      "prefer_patterns": [
+        "<1.5 BAW tutuş + sürekli skapular retraksiyonlu bench",
+        "floor press",
+        "landmine press",
+        "nötr tutuş row",
+        "ağrısız ROM egzersizleri"
+      ]
+    },
+    {
+      "id": "scapular_dyskinesis",
+      "label_tr": "Skapular diskinezi / kolların öne düşmesi (bulgu)",
+      "region": "shoulder",
+      "red_flag": false,
+      "severity_levels": [
+        "asymptomatic",
+        "symptomatic"
+      ],
+      "avoid_patterns": [
+        "tek başına bu bulguya dayanarak overhead/pres yasaklamak",
+        "üst trapez baskın shrug/dar tutuş upright row'u öne çıkarmak"
+      ],
+      "prefer_patterns": [
+        "serratus anterior ve alt trapez dayanıklılığı",
+        "ısınma içinde skapular kontrol drilleri",
+        "teknik ipucu ile kademeli overhead yükleme"
+      ]
+    },
+    {
+      "id": "upper_crossed_pattern",
+      "label_tr": "Üst çapraz patern (öne baş, yuvarlak omuz)",
+      "region": "neck",
+      "red_flag": false,
+      "severity_levels": [
+        "pattern_only",
+        "with_neck_pain"
+      ],
+      "avoid_patterns": [
+        "behind_the_neck press/pulldown",
+        "90° üstü elevasyonlu upright row",
+        "skapular kontrol olmadan yüksek hacimli overhead press"
+      ],
+      "prefer_patterns": [
+        "chin tuck / derin servikal fleksör",
+        "prone Y-T-W, band pull apart",
+        "wall slide, serratus protraksiyon",
+        "kas grubu başına <60 sn pektoral germe"
+      ]
+    },
+    {
+      "id": "lower_crossed_pattern",
+      "label_tr": "Alt çapraz patern (anterior pelvik tilt + kalça fleksör kısalığı + gluteal zayıflık)",
+      "region": "hip",
+      "red_flag": false,
+      "severity_levels": [
+        "pattern_only",
+        "with_low_back_pain"
+      ],
+      "avoid_patterns": [
+        "tek postür fotoğrafından tanı koymak",
+        "pelvik tilt açısını tek başına egzersiz filtresi yapmak",
+        "kontrolsüz lomber ekstansiyonlu ağır overhead press"
+      ],
+      "prefer_patterns": [
+        "modifiye Thomas testi ile doğrulama",
+        "<60 sn kalça fleksör germe",
+        "glute bridge / hip thrust",
+        "dead bug, pallof press",
+        "hip hinge patern öğretimi"
+      ]
+    },
+    {
+      "id": "patellofemoral_pain",
+      "label_tr": "Patellofemoral ağrı (ön diz ağrısı)",
+      "region": "knee",
+      "red_flag": false,
+      "severity_levels": [
+        "high_irritability",
+        "low_irritability"
+      ],
+      "avoid_patterns": [
+        "sabit dirençli (ayak bileği ağırlığı) diz ekstansiyonu — tüm ROM'da >4 MPa",
+        "yüklü 60-90° squat derinliği (irritabl fazda)",
+        "sadece diz hedefli program",
+        "breys/NMES/kuru iğneleme tek başına"
+      ],
+      "prefer_patterns": [
+        "squat 0-45°",
+        "değişken dirençli leg extension 45-90°",
+        "kalça (posterolateral) + diz kombine egzersiz, 3x30+ tekrar, haftada 3 gün",
+        "6 basamaklı squat progresyonu"
+      ]
+    },
+    {
+      "id": "patellar_tendinopathy",
+      "label_tr": "Patellar tendinopati",
+      "region": "knee",
+      "red_flag": false,
+      "severity_levels": [
+        "stage_1_isometric",
+        "stage_2_isotonic",
+        "stage_3_energy_storage",
+        "stage_4_return_to_sport"
+      ],
+      "avoid_patterns": [
+        "erken fazda enerji-depolama/balistik yükleme",
+        "stage 2'de >90° diz fleksiyonu ve tam ekstansiyonda provokatif yükleme",
+        "NRS>3 üreten yükleme"
+      ],
+      "prefer_patterns": [
+        "30-60° izometrik diz ekstansiyonu veya 70-90° Spanish squat, 5x45 sn",
+        "izotonik 3-4 set 15RM→6RM, gün aşırı",
+        "10-60° ROM ile başlangıç",
+        "progresif tendon yükleme (PTLE)"
+      ]
+    },
+    {
+      "id": "acl_reconstruction_early",
+      "label_tr": "ACL rekonstrüksiyonu erken dönem (0-12 hafta)",
+      "region": "knee",
+      "red_flag": true,
+      "severity_levels": [
+        "week_0_4",
+        "week_4_8",
+        "week_8_12"
+      ],
+      "avoid_patterns": [
+        "4. haftadan önce açık kinetik zincir diz ekstansiyonu",
+        "90-45° penceresi dışında OKC",
+        "hamstring greftte ilk 12 haftada OKC'ye dış ağırlık",
+        "terminal ekstansiyonda ayak bileğine yakın dirençli ped",
+        "topuk kalkık squat"
+      ],
+      "prefer_patterns": [
+        "1. haftadan itibaren izometrik kuadriseps",
+        "2. haftadan CKC konsantrik, 3. haftadan CKC eksantrik",
+        "çift bacak squat → tek bacak progresyonu",
+        "gövde 30-40° öne eğimli squat",
+        "leg press 0-45° → 0-90°"
+      ]
+    },
+    {
+      "id": "dynamic_knee_valgus",
+      "label_tr": "Dinamik diz valgusu / medial diz kayması (bulgu)",
+      "region": "knee",
+      "red_flag": false,
+      "severity_levels": [
+        "observed_unloaded",
+        "observed_loaded"
+      ],
+      "avoid_patterns": [
+        "topuk yükseltmesiz ağır derin back squat",
+        "maksimal çift bacak sıçrama inişi",
+        "yüklü derin tek bacak squat",
+        "sadece gluteus medius kuvvetlendirmeye dayanan program"
+      ],
+      "prefer_patterns": [
+        "topuk yükseltme testi (2.5-5 cm) ile ayak bileği/kalça ayrımı",
+        "bükülü diz (soleus) germe + ağırlık taşıyan lunge mobilizasyonu",
+        "band lateral walk",
+        "video/ayna geri bildirimli split squat",
+        "nöromusküler antrenman bloğu >15 dk"
+      ]
+    },
+    {
+      "id": "ankle_dorsiflexion_restriction",
+      "label_tr": "Ayak bileği dorsifleksiyon kısıtı",
+      "region": "ankle",
+      "red_flag": false,
+      "severity_levels": [
+        "yellow",
+        "red"
+      ],
+      "avoid_patterns": [
+        "topuk desteksiz yüklü derin squat",
+        "topuk desteksiz derin lunge",
+        "tam derinlikte overhead squat"
+      ],
+      "prefer_patterns": [
+        "topuk yükseltmeli squat",
+        "bükülü diz soleus germe",
+        "weight-bearing lunge mobilizasyonu",
+        "eksantrik calf raise",
+        "box squat (paralel)"
+      ]
+    },
+    {
+      "id": "knee_osteoarthritis",
+      "label_tr": "Diz osteoartriti",
+      "region": "knee",
+      "red_flag": false,
+      "severity_levels": [
+        "kl_1_2",
+        "kl_3_4"
+      ],
+      "avoid_patterns": [
+        "yüksek hacimli tekrarlı derin çömelme",
+        "varsayılan olarak yüksek şiddetli (%75-90 1RM) yükleme"
+      ],
+      "prefer_patterns": [
+        "yapılandırılmış kara temelli egzersiz (kuvvet + nöromusküler)",
+        "düşük-orta şiddet varsayılan yük",
+        "yürüyüş ve fonksiyonel kapasite çalışması"
+      ]
+    },
+    {
+      "id": "degenerative_meniscal_tear",
+      "label_tr": "Dejeneratif menisküs yırtığı (kilitlenme yok)",
+      "region": "knee",
+      "red_flag": false,
+      "severity_levels": [
+        "non_obstructive"
+      ],
+      "avoid_patterns": [
+        "yüksek hacimli tekrarlı derin çömelme",
+        "kilitlenme/blokaj varken egzersiz programı üretmek"
+      ],
+      "prefer_patterns": [
+        "12 hafta, haftada 2-3 seans nöromusküler + kuvvet programı",
+        "kademeli yük artışı",
+        "fonksiyonel alt ekstremite kuvvetlendirme"
+      ]
+    },
+    {
+      "id": "meniscus_repair_postop",
+      "label_tr": "Menisküs onarımı sonrası dönem",
+      "region": "knee",
+      "red_flag": true,
+      "severity_levels": [
+        "week_0_6",
+        "week_6_16",
+        "after_month_4"
+      ],
+      "avoid_patterns": [
+        "cerrahi protokol dışında ROM ve yük",
+        "erken dönemde >90° yüklü fleksiyon",
+        "cerrah izni olmadan spora dönüş"
+      ],
+      "prefer_patterns": [
+        "cerrahın verdiği ROM/yük penceresine bağlı program",
+        "izometrik kuadriseps",
+        "kademeli kapalı kinetik zincir ilerleme"
+      ]
+    },
+    {
+      "id": "movement_screen_pain_flag",
+      "label_tr": "Hareket taramasında ağrı (FMS final skor 0 / clearing testi pozitif)",
+      "region": "systemic",
+      "red_flag": true,
+      "severity_levels": [
+        "single_pattern",
+        "multiple_patterns"
+      ],
+      "avoid_patterns": [
+        "ağrılı paterni yükleyen tüm egzersizler",
+        "o patern için egzersiz önerisi üretmek",
+        "plyometrik, olimpik kaldırış, maksimal kuvvet"
+      ],
+      "prefer_patterns": [
+        "klinik yönlendirme / SFMA yapabilen klinisyen",
+        "ağrısız aralıkta yüksüz ROM",
+        "solunum drilleri"
+      ]
+    },
+    {
+      "id": "any_movement_compensation_flag",
+      "label_tr": "Herhangi bir kompansasyon bulgusu (genel kural)",
+      "region": "systemic",
+      "red_flag": false,
+      "severity_levels": [
+        "single_flag",
+        "multiple_flags"
+      ],
+      "avoid_patterns": [
+        "%85-100 1RM maksimal kuvvet ve maksimal güç fazları",
+        "tek değerlendirmeye dayalı kalıcı etiketleme",
+        "kuvvet setlerinden hemen önce kas grubu başına >60 sn statik germe",
+        "SMR'yi tek düzeltici müdahale saymak"
+      ],
+      "prefer_patterns": [
+        "OPT Faz 1: 12-20 tekrar, yavaş tempo, azaltılmış yük",
+        "inhibit → lengthen → activate → integrate sırası",
+        "germe sonrası dinamik ısınma bloğu",
+        "4 haftada bir yeniden değerlendirme"
+      ]
+    }
+  ],
+  "exercise_axes": [
+    {
+      "field": "kinetic_chain",
+      "values": [
+        "open",
+        "closed",
+        "mixed"
+      ],
+      "why": "Aynı eklem için yük profili ters çalışır: OKC diz ekstansiyonunda ACL gerinimi 10-30°'de tepe yaparken patellofemoral stres 0°'de tepe yapar; CKC squat'ta ikisi de ters seyreder. Filtre bu ekseni bilmeden açı kuralı uygulayamaz."
+    },
+    {
+      "field": "joint_action",
+      "values": [
+        "hip_flexion",
+        "hip_extension",
+        "hip_abduction",
+        "knee_flexion",
+        "knee_extension",
+        "ankle_dorsiflexion",
+        "ankle_plantarflexion",
+        "shoulder_flexion",
+        "shoulder_abduction",
+        "shoulder_extension",
+        "shoulder_external_rotation",
+        "shoulder_internal_rotation",
+        "scapular_upward_rotation",
+        "scapular_retraction",
+        "scapular_protraction",
+        "spinal_flexion",
+        "spinal_extension",
+        "spinal_rotation",
+        "spinal_lateral_flexion",
+        "isometric_hold"
+      ],
+      "why": "Kural motorunun atomik girdisi. Kritik kombinasyonlar (spinal_flexion + spinal_rotation; shoulder_abduction + shoulder_external_rotation) ancak çok değerli bu eksende yakalanabilir."
+    },
+    {
+      "field": "movement_pattern",
+      "values": [
+        "squat",
+        "hinge",
+        "lunge",
+        "push_horizontal",
+        "push_vertical",
+        "pull_horizontal",
+        "pull_vertical",
+        "carry",
+        "rotation",
+        "anti_rotation",
+        "anti_extension",
+        "anti_lateral_flexion",
+        "gait",
+        "isolation",
+        "plyometric"
+      ],
+      "why": "FMS düzeltici algoritması ve egzersiz havuzu patern düzeyinde çalışır; kısıtlar toplam skordan değil patern skorundan türetilir."
+    },
+    {
+      "field": "axial_loading",
+      "values": [
+        "none",
+        "low",
+        "moderate",
+        "high"
+      ],
+      "why": "Kompresyon eşiği sayısaldır: L5/S1 için NIOSH eylem limiti 3400 N. Düz bacak sit-up ~3500 N ile eşiği aşarken McGill curl-up ~2000 N'da kalır; aynı ayrım squat'ta vücut ağırlığı (~1700 N) ile 12RM barbell (4500-4700 N) arasında da geçerlidir."
+    },
+    {
+      "field": "shear_force_level",
+      "values": [
+        "low",
+        "moderate",
+        "high"
+      ],
+      "why": "Shear toleransı kompresyondan bağımsızdır: seyrek yüklemede 1000 N, tekrarlı yüklemede 700 N; faset bütünlüğü bozulduğunda nihai dayanım 2065 N'den 1537 N'e düşer. Spondilolistezis filtresi bu ekseni kullanır."
+    },
+    {
+      "field": "spinal_alignment",
+      "values": [
+        "neutral",
+        "flexion",
+        "extension",
+        "flexion_with_rotation",
+        "extension_with_rotation",
+        "lateral_flexion",
+        "uncontrolled"
+      ],
+      "why": "Rotasyon tek başına herniasyon başlatmaz; fleksiyonla birleştiğinde 3000 siklüste herniasyon oranı %29'dan %71'e çıkar. Yani yasak, hizalama durumuna koşullu kodlanmalıdır."
+    },
+    {
+      "field": "joint_angle_window",
+      "values": [
+        "knee_flexion_0_45",
+        "knee_flexion_45_90",
+        "knee_flexion_over_90",
+        "knee_terminal_extension_0_30",
+        "shoulder_elevation_under_60",
+        "shoulder_elevation_60_90",
+        "shoulder_elevation_over_90",
+        "glenohumeral_extension_beyond_neutral",
+        "shoulder_abduction_90_with_end_range_er",
+        "hip_flexion_beyond_neutral_pelvis",
+        "spine_end_range"
+      ],
+      "why": "EKLENEN EKSEN (ROM sınırı). Kanıtın çoğu 'egzersiz' değil 'açı penceresi' düzeyindedir: PF stres eğrileri 45°'de kesişir, ACL yükü 50-100°'de sıfıra yakındır, akromiohumeral mesafe 90° fleksiyonda en dardır. Egzersizi yasaklamak yerine ROM'unu daraltmak, progresyonu koruyan tek yoldur."
+    },
+    {
+      "field": "load_vector",
+      "values": [
+        "vertical_axial",
+        "anterior_posterior_shear",
+        "frontal_lateral",
+        "diagonal_scapular_plane",
+        "horizontal_adduction",
+        "traction_decompression",
+        "rotational_torque"
+      ],
+      "why": "EKLENEN EKSEN (yük vektörü). Aynı hareket paterni farklı vektörde farklı dokuyu yükler: landmine press skapsiyon düzleminde diyagonal vektör üretirken dik overhead press saf vertikal vektör üretir; AC eklem asıl olarak horizontal_adduction vektöründen etkilenir, tutuş genişliği (>1.5 biakromiyal) bu vektörü doğrudan büyütür."
+    },
+    {
+      "field": "stability_demand",
+      "values": [
+        "low_supported",
+        "moderate_bilateral",
+        "high_unilateral",
+        "unstable_surface"
+      ],
+      "why": "EKLENEN EKSEN (stabilite talebi). FMS eğitim döngüsü mobility → static motor control → dynamic motor control → performance sırasını zorunlu kılar; OPT Faz 1 de yükten önce stabiliteyi hedefler. Bu eksen olmadan 'regresyon' önerisi keyfî kalır."
+    },
+    {
+      "field": "contraction_type",
+      "values": [
+        "isometric",
+        "concentric_emphasis",
+        "eccentric_emphasis",
+        "isotonic_balanced",
+        "energy_storage_ballistic"
+      ],
+      "why": "Tendinopati evrelemesi doğrudan bu eksene bağlıdır (Stage 1 izometrik 5x45 sn; balistik yükleme geç faz). Omuzda da konsantrik dirençli kuvvetlendirme ağ meta-analizinde ilk sırada yer alır (SUCRA %92-99)."
+    },
+    {
+      "field": "symmetry",
+      "values": [
+        "bilateral_symmetric",
+        "unilateral_loaded",
+        "contralateral_asymmetric"
+      ],
+      "why": "Rotary stability bozukken asimetrik yüklenen hareketler (tek kol snatch, renegade row) kontralateral gövde talebini kompansasyonla karşılatır; ayrıca ACL progresyonu çift bacaktan tek bacağa (0 N → 59 N) ilerler."
+    },
+    {
+      "field": "external_resistance_profile",
+      "values": [
+        "bodyweight",
+        "constant_resistance",
+        "variable_resistance_cam",
+        "elastic",
+        "free_weight",
+        "machine_guided"
+      ],
+      "why": "Direnç profili aynı açıda farklı stres üretir: sabit dirençli diz ekstansiyonu 0-90° boyunca 5.0-7.9 MPa ile eşiğin üstünde kalırken değişken dirençli makine 90°'de 0.5 MPa'ya iner. Egzersiz adı aynı, karar farklıdır."
+    },
+    {
+      "field": "contraindications",
+      "values": [
+        "condition_taxonomy id listesi + opsiyonel severity/faz niteleyicisi"
+      ],
+      "why": "Filtre motorunun doğrudan eşleştiği alan; her giriş bir taxonomy id'sine referans vermeli, serbest metin olmamalıdır."
+    },
+    {
+      "field": "safe_for",
+      "values": [
+        "condition_taxonomy id listesi"
+      ],
+      "why": "Yalnızca yasaklamak PT'yi çıkmaza sokar; her kısıt için pozitif öneri havuzu şart (FMS green list mantığı)."
+    },
+    {
+      "field": "regressions",
+      "values": [
+        "exercise_id listesi (stability_demand veya joint_angle_window bir kademe düşük)"
+      ],
+      "why": "Kısıt tetiklendiğinde sistem boş liste değil alternatif üretmeli; regresyon zinciri stabilite ve ROM eksenlerinden türetilebilir olmalıdır."
+    },
+    {
+      "field": "progressions",
+      "values": [
+        "exercise_id listesi + geçiş kriteri (ör. patern retest ≥2 ve simetri, NPRS ≤3, LSI ≥%90)"
+      ],
+      "why": "İlerleme basamak atlamamalı ve ölçülebilir kriterle doğrulanmalıdır; kriter alanı olmadan progresyon PT'nin sezgisine kalır."
+    },
+    {
+      "field": "cues",
+      "values": [
+        "kısa Türkçe teknik ipucu listesi (nötr omurga, skapular retraksiyon, topuk yerde, nefes tutma, dirsek omuz altında, gövde 30-40° öne)"
+      ],
+      "why": "Kanıtın bir kısmı yasak değil teknik ayarıdır: gövdeyi 30-40° öne eğmek ACL kuvvetini %24 azaltır, skapular retraksiyon glenohumeral reaksiyon kuvvetini düşürür, ayak 30° dışa dönüş valgus momentini %50 azaltır."
+    },
+    {
+      "field": "dose_defaults",
+      "values": [
+        "set x tekrar / tutuş süresi / haftalık sıklık / hedef ağrı eşiği"
+      ],
+      "why": "Doz kanıtı egzersize gömülü olmalı: Big 3 için 7-8 sn tutuş ve azalan piramit, PFP için 3x30+ tekrar haftada 3 gün, tendinopati için 5x45 sn, nöromusküler blok için >15 dk ve haftada 2-3 seans."
+    }
+  ],
+  "filter_rules": [
+    {
+      "condition": "lumbar_disc_herniation",
+      "when": "spinal_alignment in (flexion, flexion_with_rotation) && joint_action includes spinal_rotation",
+      "decision": "block",
+      "message_tr": "Fleksiyon + rotasyon kombinasyonu bu profilde kapalı. Tekrarlı fleksiyona yalnızca 5 Nm aksiyel tork eklenmesi 3000 siklüste herniasyon oranını %29'dan %71'e çıkarmıştır. Nötr omurgada anti-rotasyon (pallof press) veya yüksüz rotasyon alternatifini kullanın.",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/16098646/"
+    },
+    {
+      "condition": "lumbar_disc_herniation",
+      "when": "spinal_alignment == flexion && axial_loading in (moderate, high)",
+      "decision": "block",
+      "message_tr": "Yüklü lomber fleksiyon kapalı. Düz bacak sit-up tek tekrarda ~3500 N ile L5/S1 için 3400 N'lik biyomekanik eylem limitini aşarken McGill curl-up ~2000 N'da kalır; curl_up_mcgill'e yönlendirildi.",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/8339717/"
+    },
+    {
+      "condition": "lumbar_disc_herniation",
+      "when": "spinal_alignment == flexion && axial_loading == low && planned_reps > 15",
+      "decision": "warn",
+      "message_tr": "Fleksiyon siklüs bütçesi: 1472 N gibi mütevazı kompresyon altında 4400-14400 siklüs kadavra modelinde herniasyon üretmiştir ve hasar erken evrede semptom vermez. Tekrar sayısını düşürün ya da nötr omurga varyantına geçin.",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/18246010/"
+    },
+    {
+      "condition": "lumbar_disc_herniation",
+      "when": "spinal_alignment == flexion && hours_since_waking < 2",
+      "decision": "warn",
+      "message_tr": "Sabah kuralı: uyanma sonrası ilk saatlerde öne eğilme diskte yaklaşık %300 daha yüksek bükülme stresi üretir. Seansı erteleyin veya fleksiyon içermeyen bloğa geçin.",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/3589804/"
+    },
+    {
+      "condition": "lumbar_disc_herniation",
+      "when": "spinal_alignment == lateral_flexion && lateral_direction == bulge_side && joint_action includes spinal_flexion",
+      "decision": "block",
+      "message_tr": "Tek taraflı posterolateral bulgede aynı tarafa lateral bend içeren asimetrik fleksiyon kapalı: 30° lateral bend 16 örneğin 15'inde nükleusu karşı posterolateral yöne itmiştir.",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/15621315/"
+    },
+    {
+      "condition": "flexion_intolerant_back",
+      "when": "spinal_alignment == flexion && joint_angle_window == spine_end_range",
+      "decision": "block",
+      "message_tr": "Postür-modüle kompresyon testi pozitif olduğu için end-range fleksiyon kapalı. Terapötik egzersiz en toleranslı postürde başlatılır.",
+      "source_url": "https://www.backfitpro.com/pdf/selecting_back_exercises.pdf"
+    },
+    {
+      "condition": "flexion_intolerant_back",
+      "when": "exercise_id in (knee_to_chest_stretch, seated_forward_fold, standing_toe_touch)",
+      "decision": "warn",
+      "message_tr": "Bu germeler anlık rahatlama hissi verse de kümülatif fleksiyon yükünü artırır (düşük kanıt). Alternatif: yüksüz cat_camel ve kalça odaklı mobilite.",
+      "source_url": "https://www.backfitpro.com/pdf/selecting_back_exercises.pdf"
+    },
+    {
+      "condition": "chronic_nonspecific_low_back_pain",
+      "when": "motor_strategy == abdominal_hollowing",
+      "decision": "allow_with_cue",
+      "message_tr": "Hollowing yerine bracing kullanın: bracing stabiliteyi %32 artırırken transversus abdominis'in bu paterne katkısı %0,14'te kalır.",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/17207676/"
+    },
+    {
+      "condition": "chronic_nonspecific_low_back_pain",
+      "when": "program_has_no_gait_component == true",
+      "decision": "warn",
+      "message_tr": "Programa progresif yürüyüş ekleyin: 701 kişilik RKÇ'de bireyselleştirilmiş yürüyüş + eğitim nüks riskini azaltmıştır (HR 0,72; ilk nükse medyan 208 güne karşı 112 gün).",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/38908392/"
+    },
+    {
+      "condition": "chronic_nonspecific_low_back_pain",
+      "when": "filter_input == static_posture_angle (lordoz/pelvik tilt)",
+      "decision": "warn",
+      "message_tr": "Postür açısını filtre girdisi yapmayın: 43 çalışmalık meta-analizde ayakta lordoz ağrılı ve ağrısız grupta farksızdır (SMD 0,01; p=0,89). Bunun yerine ROM, hareket hızı ve pozisyon hissi ölçün.",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4096432/"
+    },
+    {
+      "condition": "lumbar_spondylolisthesis",
+      "when": "shear_force_level == high || (spinal_alignment == extension && axial_loading in (moderate, high))",
+      "decision": "block",
+      "message_tr": "Shear duyarlı omurga: tekrarlı yüklemede önerilen limit 700 N, seyrek yüklemede 1000 N; fasetler yetersizse nihai dayanım 1537 N'e düşer. Yüklü end-range ekstansiyon ve roman chair kapalı.",
+      "source_url": "https://spine.osu.edu/sites/default/files/uploads/Publications/2012/ClinicalBiomechanics_2012_27_973-978.pdf"
+    },
+    {
+      "condition": "lumbar_disc_herniation_with_radiculopathy",
+      "when": "any_exercise_prescription",
+      "decision": "warn",
+      "message_tr": "Bu profilde yapılandırılmış egzersizin TEK BAŞINA tedavi olarak kullanımı için yeterli kanıt yoktur (NASS Grade I). Program kapsamlı tedavi planının parçası olarak sunulmalı ve klinik yönlendirme gösterilmelidir.",
+      "source_url": "https://www.spine.org/portals/0/assets/downloads/researchclinicalcare/guidelines/lumbardischerniation.pdf"
+    },
+    {
+      "condition": "lumbar_disc_herniation_with_radiculopathy",
+      "when": "last_session_symptom_direction == peripheralizing",
+      "decision": "block",
+      "message_tr": "Periferizasyon (ağrının bacağa yayılması) üreten egzersiz o seansta kaldırılır; ilerleme NPRS ve ODI eşiklerine bağlıdır (Faz 1→2 için NPRS<6, Faz 2→3 için NPRS<3).",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13459522/"
+    },
+    {
+      "condition": "cauda_equina_or_progressive_neuro_deficit",
+      "when": "any",
+      "decision": "block",
+      "message_tr": "Nörolojik defisit (kuvvet/his kaybı, mesane-bağırsak değişikliği) varlığında egzersiz önerisi üretilmez; doğrudan acil klinik yönlendirme yapılır.",
+      "source_url": "https://www.spine.org/portals/0/assets/downloads/researchclinicalcare/guidelines/lumbardischerniation.pdf"
+    },
+    {
+      "condition": "any",
+      "when": "exercise_family == mcgill_big3 && hold_seconds > 10",
+      "decision": "allow_with_cue",
+      "message_tr": "Tutuşu 7-8 saniyeye indirin (üst sınır 10 sn); dayanıklılık tutuşu uzatarak değil tekrar sayısını artırarak geliştirilir. Azalan piramit: 8-6-4 → 10-8-6 → 12-10-8.",
+      "source_url": "https://readwise-assets.s3.amazonaws.com/media/wisereads/articles/enhancing-low-back-health-through-stabilization-exercise/Enhancing-Lo_vLfzGjZ.pdf"
+    },
+    {
+      "condition": "patellofemoral_pain",
+      "when": "kinetic_chain == open && external_resistance_profile == constant_resistance",
+      "decision": "block",
+      "message_tr": "Ayak bileği ağırlığı / sabit moment kollu diz ekstansiyonu 0-90° boyunca 5,0-7,9 MPa ile merdiven çıkışının ~4 MPa eşiğinin üstünde kalır. Değişken dirençli makineye geçin.",
+      "source_url": "https://www.rehabeducation.com/wp-content/uploads/2015/02/PowersPFStressExercises.pdf"
+    },
+    {
+      "condition": "patellofemoral_pain",
+      "when": "kinetic_chain == closed && joint_angle_window == knee_flexion_over_90",
+      "decision": "warn",
+      "message_tr": "Squat'ı 0-45° ile sınırlayın: CKC'de PF stresi 45°'de 3,9 MPa iken 90°'de 12,3 MPa'ya çıkar. 45-90° aralığını değişken dirençli leg extension ile kapatın.",
+      "source_url": "https://www.rehabeducation.com/wp-content/uploads/2015/02/PowersPFStressExercises.pdf"
+    },
+    {
+      "condition": "patellofemoral_pain",
+      "when": "kinetic_chain == open && joint_angle_window == knee_terminal_extension_0_30",
+      "decision": "warn",
+      "message_tr": "OKC ekstansiyonu 45-90° penceresinde çalıştırın; 0-30° aralığında PF stresi anlamlı olarak daha yüksektir (0°'de 8,4 MPa). Kanıt çelişkilidir, bu yüzden yasak değil pencere sınırı uygulanır.",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/11476390/"
+    },
+    {
+      "condition": "patellofemoral_pain",
+      "when": "program_targets == knee_only",
+      "decision": "warn",
+      "message_tr": "Programa posterolateral kalça hedefli egzersiz ekleyin: kalça + diz kombine egzersiz Grade A'dır (3 set x 30+ tekrar, haftada 3 gün). Breys, NMES, kuru iğneleme ve izole manuel terapi tek başına önerilmez.",
+      "source_url": "https://ifspt.org/wp-content/uploads/2025/05/Patellofemoral-Pain.pdf"
+    },
+    {
+      "condition": "acl_reconstruction_early",
+      "when": "kinetic_chain == open && weeks_post_op < 4",
+      "decision": "block",
+      "message_tr": "OKC diz ekstansiyonu postoperatif 4. haftadan önce açılmaz. Bu dönemde izometrik kuadriseps (1. hafta), CKC konsantrik (2. hafta) ve CKC eksantrik (3. hafta) kullanılır.",
+      "source_url": "https://braceworks.ca/wp-content/uploads/2017/01/Br-J-Sports-Med-2016-van-Melick-1506-15.pdf"
+    },
+    {
+      "condition": "acl_reconstruction_early",
+      "when": "kinetic_chain == open && weeks_post_op >= 4 && rom_window outside (90-45 @4hf, 90-30 @5hf, 90-20 @6hf, 90-10 @7hf)",
+      "decision": "block",
+      "message_tr": "OKC ROM penceresi haftaya bağlıdır: 4. hafta 90-45°, 5. hafta 90-30°, 6. hafta 90-20°, 7. hafta 90-10°, 8. hafta tam ROM. Pencere dışında tepe ACL gerinimi 10-30° arasında oluşur.",
+      "source_url": "https://braceworks.ca/wp-content/uploads/2017/01/Br-J-Sports-Med-2016-van-Melick-1506-15.pdf"
+    },
+    {
+      "condition": "acl_reconstruction_early",
+      "when": "graft_type == hamstring && kinetic_chain == open && external_load_kg > 0 && weeks_post_op < 12",
+      "decision": "block",
+      "message_tr": "Hamstring greftte ilk 12 hafta OKC'ye dış ağırlık eklenmez; 4. haftada başlanan yüklü OKC 7. ayda ortalama 1,2 mm fazla ön laksite ile ilişkilendirilmiştir. BPTB greftte bu kısıt uygulanmaz.",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/17219226/"
+    },
+    {
+      "condition": "acl_reconstruction_early",
+      "when": "kinetic_chain == open && pad_position == ankle",
+      "decision": "allow_with_cue",
+      "message_tr": "Dirençli pedi dize yaklaştırın: aynı dış torkta 30°'de ACL kuvveti ~400 N'den ~200 N'e iner.",
+      "source_url": "https://rehabeducation.com/wp-content/uploads/2015/02/ACLStrainExercise.pdf"
+    },
+    {
+      "condition": "acl_reconstruction_early",
+      "when": "movement_pattern == squat && (trunk_lean_deg < 30 || heel_contact == false)",
+      "decision": "allow_with_cue",
+      "message_tr": "Gövdeyi 30-40° öne eğin (ACL kuvveti -%24, gerinim -%16, hamstring +%35) ve topukları yerde tutun; topuk kalkık squat 3 kattan fazla ACL yükü üretir.",
+      "source_url": "https://rehabeducation.com/wp-content/uploads/2015/02/ACLStrainExercise.pdf"
+    },
+    {
+      "condition": "dynamic_knee_valgus",
+      "when": "ankle_heel_raise_test == not_performed",
+      "decision": "warn",
+      "message_tr": "Önce topuk yükseltme testi yapın (2,5-5 cm): dorsifleksiyon 12° kısıtlandığında medial diz kayması çok büyük etki büyüklüğüyle artar (ES 2,92) ve kalça kinematiği hiç değişmez. Valgus için doğrudan gluteus medius programı atamayın.",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/22100617/"
+    },
+    {
+      "condition": "dynamic_knee_valgus",
+      "when": "neuromuscular_block_minutes <= 15 || sessions_per_week < 2 || adherence_percent < 75",
+      "decision": "warn",
+      "message_tr": "Nöromusküler blok eşik altında: ≤15 dk seans etkisizdir (RR 0,98), >15 dk RR 0,74; haftada 2-3 seans ve ≥%75 uyum gerekir (uyumla RR 0,67).",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12581765/"
+    },
+    {
+      "condition": "ankle_dorsiflexion_restriction",
+      "when": "movement_pattern == squat && joint_angle_window == knee_flexion_over_90 && heel_elevation == none && axial_loading in (moderate, high)",
+      "decision": "block",
+      "message_tr": "Topuk desteksiz yüklü derin çömelme kapalı. Kısıt soleus kaynaklıdır; önce bükülü diz germe ve ağırlık taşıyan lunge mobilizasyonu, sonra topuk yükseltmeli squat.",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/18586134/"
+    },
+    {
+      "condition": "patellar_tendinopathy",
+      "when": "contraction_type == energy_storage_ballistic && stage in (stage_1_isometric, stage_2_isotonic)",
+      "decision": "block",
+      "message_tr": "Enerji-depolama/balistik yükleme bu evrede kapalı. Stage 1: 30-60° izometrik diz ekstansiyonu veya 70-90° Spanish squat, 5 tekrar x 45 sn, günde 2-3 kez. Stage 2: 3-4 set, 15RM→6RM, gün aşırı.",
+      "source_url": "https://mtitx.com/wp-content/uploads/2016/05/Journal-of-orthopaedic-and-Sports-Physical-Therapy-2015-Malliaras.pdf"
+    },
+    {
+      "condition": "patellar_tendinopathy",
+      "when": "stage == stage_2_isotonic && joint_angle_window in (knee_flexion_over_90, knee_terminal_extension_0_30)",
+      "decision": "warn",
+      "message_tr": "Erken izotonik fazda ROM'u 10-60° ile sınırlayın; ağrı izin verdikçe 90°'ye açın. Egzersiz sırasında NRS ≤3/10 olmalı ve tek bacak decline squat ağrısı 24 saatte bazale dönmelidir.",
+      "source_url": "https://mtitx.com/wp-content/uploads/2016/05/Journal-of-orthopaedic-and-Sports-Physical-Therapy-2015-Malliaras.pdf"
+    },
+    {
+      "condition": "patellar_tendinopathy",
+      "when": "comorbid_condition == patellofemoral_pain",
+      "decision": "warn",
+      "message_tr": "Ön diz ağrısı patellofemoral kaynaklıysa ağır diz ekstansiyonu ve Spanish squat yüksek patellofemoral reaksiyon kuvveti nedeniyle semptomu artırabilir; tendinopati protokolünü körlemesine uygulamayın.",
+      "source_url": "https://mtitx.com/wp-content/uploads/2016/05/Journal-of-orthopaedic-and-Sports-Physical-Therapy-2015-Malliaras.pdf"
+    },
+    {
+      "condition": "lumbar_disc_herniation",
+      "when": "exercise_family == leg_press && depth > pelvis_lift_point",
+      "decision": "warn",
+      "message_tr": "Leg press derinliğini pelvis sırt pedinden kalkmadan (posterior pelvik tilt başlamadan) önce durdurun; bu noktadan sonra yük lomber pasif yapılara kayar. Doğrudan klinik veri yok, mekanistik kural (düşük güven).",
+      "source_url": "https://ijspt.scholasticahq.com/article/94600-a-biomechanical-review-of-the-squat-exercise-implications-for-clinical-practice"
+    },
+    {
+      "condition": "subacromial_pain_syndrome",
+      "when": "exercise_id in (behind_neck_press, behind_neck_lat_pulldown)",
+      "decision": "block",
+      "message_tr": "Ense arkası varyantlar kapalı: omuzu eş zamanlı uç abduksiyon + uç eksternal rotasyona sokar ve ense arkası pulldown aynı grupta %15 daha düşük yükle çalışılır (59,3 kg vs 70,0 kg) — kaybedilen bir kazanç yok.",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11057623/"
+    },
+    {
+      "condition": "subacromial_pain_syndrome",
+      "when": "joint_angle_window == shoulder_elevation_over_90 && (repetitive == true || axial_loading == high)",
+      "decision": "warn",
+      "message_tr": "Omuz hizası üstü tekrarlı/ağır yükleme varsayılan olarak modifiye edilir; bu öneri çok düşük kanıt kalitesindedir (uzman görüşü), bu yüzden PT tarafından geçilebilir.",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12908218/"
+    },
+    {
+      "condition": "subacromial_pain_syndrome",
+      "when": "load_vector != diagonal_scapular_plane && joint_angle_window == shoulder_elevation_60_90",
+      "decision": "allow_with_cue",
+      "message_tr": "Elevasyonu skapular planda (frontal düzlemden 30-45° anteriorda) yapın: akromiohumeral mesafe 90° fleksiyon + nötr rotasyonda 8,08 mm ile en dardır, skapsiyonda 9,72 mm'ye çıkar.",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3927051/"
+    },
+    {
+      "condition": "subacromial_pain_syndrome",
+      "when": "grip_or_rotation == internal_rotation (empty can) && joint_angle_window in (shoulder_elevation_60_90, shoulder_elevation_over_90)",
+      "decision": "allow_with_cue",
+      "message_tr": "Empty can yerine full can (başparmak yukarı) kullanın; empty can daha fazla ağrı provoke eder ve istenmeyen skapular kinematik üretir. Not: ultrason verisiyle çelişki var, kural ağrı yanıtına bağlı uygulanır.",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3945046/"
+    },
+    {
+      "condition": "subacromial_pain_syndrome",
+      "when": "exercise_id == narrow_grip_upright_row || elbow_height > shoulder_height",
+      "decision": "block",
+      "message_tr": "Dar tutuş upright row kapalı: geniş tutuşa kıyasla lateral deltoid ve üst trapezde daha AZ aktivasyon üretir, yük biceps'e kayar ve dirsek omuz üstüne çıktığında internal rotasyonlu elevasyon riski doğar.",
+      "source_url": "https://highfit.com.br/wp-content/uploads/2017/02/MCALLISTER-2013.pdf"
+    },
+    {
+      "condition": "rotator_cuff_tendinopathy",
+      "when": "program_progression == none || external_resistance_profile == bodyweight_only",
+      "decision": "warn",
+      "message_tr": "Progresif ve dirençli program kurun: progresif dirençli egzersiz ağrıyı anlamlı azaltır (MD -1,07/10) iken progresif olmayan/dirençsiz egzersiz azaltmaz (MD -0,33/10). Yüksek yük düşük yüke üstün değildir; önce pozisyon/ROM ayarlayın.",
+      "source_url": "https://www.jospt.org/doi/10.2519/jospt.2025.13182"
+    },
+    {
+      "condition": "rotator_cuff_tendinopathy",
+      "when": "reported_pain_nprs_in_session > 3",
+      "decision": "allow_with_cue",
+      "message_tr": "Yükü veya ROM'u NPRS 0-2 (en fazla 3) olacak şekilde ayarlayın; ağrıya girerek çalışmak (NPRS 4-7) 6 ay sonunda ağrısız programdan üstün bulunmamıştır.",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11616428/"
+    },
+    {
+      "condition": "anterior_shoulder_instability",
+      "when": "joint_angle_window == shoulder_abduction_90_with_end_range_er",
+      "decision": "block",
+      "message_tr": "90-90 pozisyonu kapalı: erken fazda 90° abduksiyonda ER hiç yapılmaz, ara fazda 45-50° ile sınırlanır ve 90° abduksiyonda uç ER kalıcı olarak kaçınılan pozisyondur.",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5685970/"
+    },
+    {
+      "condition": "anterior_shoulder_instability",
+      "when": "joint_angle_window == glenohumeral_extension_beyond_neutral && axial_loading in (moderate, high)",
+      "decision": "block",
+      "message_tr": "Tam ROM dip, derin bench ve derin fly kapalı: humerusun gövde düzleminin arkasına geçtiği yüklü pozisyonlar anterior yapıları gerer. Floor press / board press ile ROM'u mekanik olarak sınırlayın.",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5685970/"
+    },
+    {
+      "condition": "multidirectional_shoulder_instability",
+      "when": "joint_angle_window == spine_end_range || stretch_type == passive_capsular_end_range",
+      "decision": "block",
+      "message_tr": "Uç ROM pasif kapsül germe kapalı; hedef orta ROM'da nöromusküler kontrol ve skapular stabilizasyondur (skapular planda <30° elevasyonda ritmik stabilizasyon, 0° abduksiyonda ER/IR).",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5685970/"
+    },
+    {
+      "condition": "ac_joint_injury",
+      "when": "load_vector == horizontal_adduction && axial_loading in (moderate, high)",
+      "decision": "block",
+      "message_tr": "Yüklü horizontal adduksiyon (cross body fly, pec deck) ve tam ROM dip akut fazda kapalı; mekanizma tekrarlayan AC eklem yüklenmesidir ve konservatif yönetim belirgin yük kısıtlaması içerir.",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12183470/"
+    },
+    {
+      "condition": "ac_joint_injury",
+      "when": "exercise_family == bench_press && (grip_width > 1.5_biacromial || scapula != retracted)",
+      "decision": "allow_with_cue",
+      "message_tr": "Tutuşu 1,5 biakromiyal genişliğin altına indirin ve skapulayı hareket boyunca retrakte tutun: geniş tutuş AC kompresyonunu artırır, retraksiyon glenohumeral reaksiyon kuvvetlerini ve manşet yükünü düşürür.",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11224528/"
+    },
+    {
+      "condition": "scapular_dyskinesis",
+      "when": "symptom_status == asymptomatic && proposed_decision == block_overhead",
+      "decision": "allow_with_cue",
+      "message_tr": "Diskinezi tek başına kısıt gerekçesi değildir: asemptomatiklerin %48'inde bulunur ve 7 prospektif çalışmalık meta-analizde omuz yaralanma riskini anlamlı artırmamıştır (RR 1,07). Bulguyu teknik ipucu olarak kullanın.",
+      "source_url": "https://ijspt.scholasticahq.com/article/74388-is-it-time-to-normalize-scapular-dyskinesis-the-incidence-of-scapular-dyskinesis-in-those-with-and-without-symptoms-a-systematic-review-of-the-liter"
+    },
+    {
+      "condition": "movement_screen_pain_flag",
+      "when": "fms_final_score == 0 || clearing_test == positive",
+      "decision": "block",
+      "message_tr": "Ağrılı paterne egzersiz atanmaz ve kullanıcı 'medical_referral_required' bayrağıyla işaretlenir. FMS kuralı: 'disfonksiyona fitness eklenmez'.",
+      "source_url": "https://fmscontent.blob.core.windows.net/content/2021%20Manual%20Updates/FMS%20Level%202%20Online%20Manual_V2_Feb%202021.pdf"
+    },
+    {
+      "condition": "any_movement_compensation_flag",
+      "when": "fms_pattern_final_score <= 1 || fms_pattern_asymmetry == true",
+      "decision": "block",
+      "message_tr": "İlgili paternin kırmızı liste egzersizleri çıkarıldı; birden fazla zayıf paternde kısıtlar kesişim değil BİRLEŞİM olarak uygulanır. Kısıt kalıcı değildir: patern 2/2 veya 3/3 olunca kalkar.",
+      "source_url": "https://fmscontent.blob.core.windows.net/content/2021%20Manual%20Updates/FMS%20Level%202%20Online%20Manual_V2_Feb%202021.pdf"
+    },
+    {
+      "condition": "any_movement_compensation_flag",
+      "when": "fms_total_score <= 14 && weekly_load_increase_percent > 10",
+      "decision": "warn",
+      "message_tr": "Toplam skor ≤14 tek başına egzersiz yasaklamaz (RR 1,47; AUC 0,53-0,56) ve yalnızca son 12 ayda sakatlık öyküsü olanlarda anlamlıdır; burada sadece yük artış hızını sınırlayan bilgilendirici bayrak olarak kullanılır. 18 yaş altında bu bayrak üretilmez.",
+      "source_url": "https://europepmc.org/article/MED/36966351"
+    },
+    {
+      "condition": "any_movement_compensation_flag",
+      "when": "intensity_percent_1rm >= 85 || phase in (max_strength, power)",
+      "decision": "warn",
+      "message_tr": "Kompansasyon sürerken OPT Faz 4-5'e geçmeyin; 12-20 tekrar ve yavaşlatılmış tempo ile Faz 1'de kalın, ilerlemeyi yeniden değerlendirmede kompansasyonun kaybolmasına bağlayın.",
+      "source_url": "https://www.nasm.org/certified-personal-trainer/opt-model"
+    },
+    {
+      "condition": "any_movement_compensation_flag",
+      "when": "static_stretch_seconds_per_muscle_group > 60 && followed_by == strength_block",
+      "decision": "allow_with_cue",
+      "message_tr": "Kas grubu başına statik germeyi 60 sn altında tutun (≥60 sn kuvvet/gücü %4,6-7,5 düşürür) ve germeden sonra dinamik ısınma bloğu ekleyin.",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6895680/"
+    },
+    {
+      "condition": "any_movement_compensation_flag",
+      "when": "corrective_block == smr_only",
+      "decision": "warn",
+      "message_tr": "Foam rolling tek başına düzeltici müdahale değildir: esnekliği %4,0 artırır ama kuvvet (g=0,12) ve sıçramaya (g=0,09) etkisizdir. Sırayı tamamlayın: inhibit → lengthen → activate → integrate.",
+      "source_url": "https://www.frontiersin.org/journals/physiology/articles/10.3389/fphys.2019.00376/full"
+    },
+    {
+      "condition": "upper_crossed_pattern",
+      "when": "exercise_id in (behind_the_neck_press, behind_the_neck_pulldown) || (movement_pattern == push_vertical && scapular_control_established == false)",
+      "decision": "warn",
+      "message_tr": "Ense arkası varyantları çıkarın ve serratus anterior / alt trapez odaklı bloğu ısınmaya yerleştirin (8-12 dk; SMR hassas noktada 30-45 sn). Bu model uzman görüşüne dayanır, mutlak yasak değildir.",
+      "source_url": "https://www.nasm.org/resource-center/blog/recovery/correcting-upper-crossed-syndrome-a-trainers-assessment-to-program-guide"
+    },
+    {
+      "condition": "lower_crossed_pattern",
+      "when": "diagnosis_source == single_posture_photo || confirmed_findings_count < 3",
+      "decision": "warn",
+      "message_tr": "Alt çapraz paterni tek başına postür fotoğrafından tanımlamayın: en az üç ölçülebilir bulgu gerekir (Thomas testi ile iliopsoas kısalığı + gluteus maximus/abdominal zayıflığı + artmış lordoz ölçümü). Tanı kriterleri standardize değildir.",
+      "source_url": "https://www.ijisrt.com/assets/upload/files/IJISRT25FEB1611.pdf"
+    },
+    {
+      "condition": "any",
+      "when": "weakness_label_source == manual_muscle_test_single_group",
+      "decision": "warn",
+      "message_tr": "'Az aktif kas' etiketini MMT notuna dayandırmayın: grade 5 tek başına 85-650 N aralığını kapsar, tavan etkisi %22-82'dir ve değerlendiriciler arası kappa 0,08-0,58'e düşer. Mümkünse el dinamometresi kullanın (ICC 0,75-0,97).",
+      "source_url": "https://journals.plos.org/plosone/article?id=10.1371%2Fjournal.pone.0194531"
+    },
+    {
+      "condition": "any",
+      "when": "ohsa_finding == medial_knee_displacement && confirmatory_tests_count < 2",
+      "decision": "warn",
+      "message_tr": "Gözlemsel OHSA bulgusunu 'olası' olarak işaretleyin ve en az 2 ek hareket testiyle (tek bacak çömelme, iniş testi) teyit edin: duyarlılık 0,58-0,83, özgüllük 0,70-0,88.",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/27834577/"
+    }
+  ],
+  "assessment_protocol": [
+    {
+      "field": "pain_nprs_24h_avg",
+      "label_tr": "Son 24 saat ortalama ağrı",
+      "unit": "0-10 NPRS",
+      "tier": "core",
+      "method": "Danışan bildirimi, seans başında",
+      "frequency": "her seans",
+      "normal_range": "0-3 hedef; >5 yüksek irritabilite"
+    },
+    {
+      "field": "pain_nprs_peak_in_session",
+      "label_tr": "Seans içi en yüksek ağrı",
+      "unit": "0-10 NPRS",
+      "tier": "core",
+      "method": "Egzersiz sırasında sorulur",
+      "frequency": "her seans",
+      "normal_range": "≤3 (tendinopati ve omuz protokolü eşiği)"
+    },
+    {
+      "field": "pain_returns_to_baseline_24h",
+      "label_tr": "Ağrı 24 saatte bazale döndü mü",
+      "unit": "evet/hayır",
+      "tier": "core",
+      "method": "Bir sonraki seansta retrospektif soru veya uygulama bildirimi",
+      "frequency": "her seans",
+      "normal_range": "evet; hayır ise yük aşılmıştır, bir kademe geri alınır"
+    },
+    {
+      "field": "symptom_direction",
+      "label_tr": "Semptom yönü",
+      "unit": "enum: centralizing | stable | peripheralizing",
+      "tier": "core",
+      "method": "Egzersiz öncesi/sonrası semptom haritası",
+      "frequency": "her seans (radikülopati profilinde zorunlu)",
+      "normal_range": "centralizing veya stable; peripheralizing o egzersizi seanstan kaldırır"
+    },
+    {
+      "field": "irritability_level",
+      "label_tr": "İrritabilite düzeyi",
+      "unit": "enum: high | moderate | low",
+      "tier": "core",
+      "method": "JOSPT ölçütü: sürekli >5/10 = yüksek; kolay provoke olmayan aralıklı <3/10 = düşük",
+      "frequency": "her seans",
+      "normal_range": "low hedef; high ise stres azaltıcı müdahale önceliklidir"
+    },
+    {
+      "field": "session_rpe",
+      "label_tr": "Seans algılanan zorluk",
+      "unit": "0-10 RPE",
+      "tier": "core",
+      "method": "Seans bitiminde tek soru",
+      "frequency": "her seans",
+      "normal_range": "rehabilitasyon fazında 4-7"
+    },
+    {
+      "field": "top_set_load_x_reps",
+      "label_tr": "Tolere edilen en yüksek set (yük x tekrar)",
+      "unit": "kg x tekrar (veya tutuş sn)",
+      "tier": "core",
+      "method": "Seans kaydı",
+      "frequency": "her seans",
+      "normal_range": "haftalık artış ≤%10 (FMS ≤14 bayrağı varken)"
+    },
+    {
+      "field": "adherence_percent",
+      "label_tr": "Uyum (planlanan / yapılan seans)",
+      "unit": "%",
+      "tier": "core",
+      "method": "Otomatik hesap",
+      "frequency": "her seans + haftalık özet",
+      "normal_range": "≥75 (nöromusküler programda faydanın eşiği)"
+    },
+    {
+      "field": "pain_free_walking_minutes",
+      "label_tr": "Ağrısız yürüme süresi",
+      "unit": "dakika (veya metre)",
+      "tier": "core",
+      "method": "Danışan bildirimi / adım sayar",
+      "frequency": "her seans",
+      "normal_range": "artış trendi hedef; <20 m kapasitede günde 3 kısa seans dozlaması"
+    },
+    {
+      "field": "new_red_flag_check",
+      "label_tr": "Yeni kırmızı bayrak kontrolü",
+      "unit": "enum: none | new_neuro_deficit | bladder_bowel_change | night_pain | new_trauma",
+      "tier": "core",
+      "method": "Tek dokunuşluk kontrol listesi",
+      "frequency": "her seans",
+      "normal_range": "none; diğer her değer programı durdurur ve yönlendirme ekranı açar"
+    },
+    {
+      "field": "fms_pattern_final_scores",
+      "label_tr": "FMS 7 patern final skoru",
+      "unit": "her biri 0-3 (toplam 0-21)",
+      "tier": "recommended",
+      "method": "FMS Level 1 protokolü; çift taraflı testlerde final = min(sağ, sol), clearing pozitifse 0",
+      "frequency": "başlangıç + 4 haftada bir",
+      "normal_range": "her patern ≥2; toplam yalnızca görüntüleme amaçlı"
+    },
+    {
+      "field": "fms_asymmetry_count",
+      "label_tr": "FMS asimetri sayısı",
+      "unit": "0-5",
+      "tier": "recommended",
+      "method": "raw_right != raw_left olan çift taraflı test sayısı",
+      "frequency": "başlangıç + 4 haftada bir",
+      "normal_range": "0 hedef; düzeltici öncelik için kullanılır, risk skoru üretmez"
+    },
+    {
+      "field": "fms_clearing_tests",
+      "label_tr": "FMS clearing testleri (omuz, ekstansiyon, fleksiyon, ayak bileği)",
+      "unit": "her biri +/- (ağrı)",
+      "tier": "recommended",
+      "method": "FMS Level 1 protokolü",
+      "frequency": "FMS ile birlikte",
+      "normal_range": "hepsi negatif"
+    },
+    {
+      "field": "ankle_clearing_mobility",
+      "label_tr": "Ayak bileği clearing mobilite sonucu",
+      "unit": "enum: G | Y | R (sağ/sol)",
+      "tier": "recommended",
+      "method": "Heel-to-toe pozisyonunda arka dizin medial malleole göre konumu",
+      "frequency": "FMS ile birlikte",
+      "normal_range": "Green; Yellow/Red düzeltici öncelik listesine eklenir"
+    },
+    {
+      "field": "anthropometrics",
+      "label_tr": "Tibia yüksekliği ve el boyu",
+      "unit": "cm (1 ondalık)",
+      "tier": "recommended",
+      "method": "Yerden tibial tuberositas üst-merkezine; distal bilek kıvrımından en uzun parmak ucuna",
+      "frequency": "bir kez (yetişkinde)",
+      "normal_range": "—(FMS kesim noktalarını ölçekler)"
+    },
+    {
+      "field": "recent_injury_12m",
+      "label_tr": "Son 12 ayda sakatlık öyküsü",
+      "unit": "evet/hayır + bölge",
+      "tier": "recommended",
+      "method": "Anamnez",
+      "frequency": "kayıt + 6 ayda bir güncelleme",
+      "normal_range": "—(FMS ≤14 bayrağının anlamlı olduğu tek alt grup)"
+    },
+    {
+      "field": "rater_certification_level",
+      "label_tr": "Değerlendirici eğitim düzeyi",
+      "unit": "enum: certified | trained | untrained",
+      "tier": "recommended",
+      "method": "Profil alanı",
+      "frequency": "bir kez",
+      "normal_range": "certified/trained; untrained girişler düşük güvenilirlik etiketiyle saklanır"
+    },
+    {
+      "field": "odi_percent",
+      "label_tr": "Oswestry Dizabilite İndeksi",
+      "unit": "%",
+      "tier": "recommended",
+      "method": "Danışan anketi",
+      "frequency": "başlangıç + 4 haftada bir (bel profilleri)",
+      "normal_range": "faz geçiş eşikleri: %41-60 → Faz 2, %21-40 → Faz 3, %0-20 → Faz 4"
+    },
+    {
+      "field": "weight_bearing_lunge_cm",
+      "label_tr": "Ağırlık taşıyan lunge testi (dorsifleksiyon)",
+      "unit": "cm (duvara baş parmak mesafesi)",
+      "tier": "recommended",
+      "method": "Topuk yerde, diz duvara; sağ/sol ayrı",
+      "frequency": "4 haftada bir",
+      "normal_range": "sağ-sol farkı <2 cm; valgus bayrağında zorunlu"
+    },
+    {
+      "field": "hhd_strength",
+      "label_tr": "El dinamometresi ile kuvvet (kalça abduksiyon, diz ekstansiyon, omuz ER)",
+      "unit": "N veya N·m, sağ/sol",
+      "tier": "recommended",
+      "method": "Standardize pozisyon, 3 tekrar en iyi",
+      "frequency": "4-6 haftada bir",
+      "normal_range": "LSI ≥%90 (pivot/kontakt sporunda %100)"
+    },
+    {
+      "field": "visa_p",
+      "label_tr": "VISA-P (patellar tendinopati)",
+      "unit": "0-100",
+      "tier": "recommended",
+      "method": "Danışan anketi",
+      "frequency": "4 haftada bir",
+      "normal_range": "artış trendi; PTLE ile 24 haftada ~28 puan beklenir"
+    },
+    {
+      "field": "spadi_percent",
+      "label_tr": "SPADI (omuz ağrı ve dizabilite)",
+      "unit": "%",
+      "tier": "recommended",
+      "method": "Danışan anketi",
+      "frequency": "4 haftada bir (omuz profilleri)",
+      "normal_range": "azalış trendi"
+    },
+    {
+      "field": "load_test_pain",
+      "label_tr": "Standart yükleme testi ağrısı (ör. tek bacak decline squat)",
+      "unit": "0-10 NRS",
+      "tier": "recommended",
+      "method": "Protokol standardize; her hafta aynı saatte",
+      "frequency": "haftada bir",
+      "normal_range": "≤3 ve 24 saatte bazale dönüş"
+    },
+    {
+      "field": "postural_compression_test",
+      "label_tr": "Postür-modüle kompresyon provokasyon testi",
+      "unit": "enum: flexion_provokes | extension_provokes | negative",
+      "tier": "recommended",
+      "method": "Oturur pozisyonda koltuk kenarlarından çekerek aksiyel kompresyon; dik ve slouched tekrar",
+      "frequency": "başlangıç + semptom değişiminde",
+      "normal_range": "negative; flexion_provokes → flexion_intolerant_back sınıfı"
+    },
+    {
+      "field": "sfma_top_tier",
+      "label_tr": "SFMA üst düzey patern sınıflaması",
+      "unit": "enum: FN | FP | DN | DP (7 patern)",
+      "tier": "optional",
+      "method": "Yetkili klinisyen",
+      "frequency": "ağrı varlığında, yönlendirme sonrası",
+      "normal_range": "FN; sayısal skora çevrilmez"
+    },
+    {
+      "field": "msi_classification",
+      "label_tr": "Sahrmann MSI sınıfı",
+      "unit": "enum: lumbar_flexion | lumbar_extension | lumbar_rotation | rotation_with_flexion | rotation_with_extension",
+      "tier": "optional",
+      "method": "Eğitimli değerlendirici (kappa 0,81)",
+      "frequency": "başlangıç",
+      "normal_range": "—(egzersiz havuzunu daraltır, üstün sonuç vaadi vermez)"
+    },
+    {
+      "field": "video_capture",
+      "label_tr": "Hareket videosu",
+      "unit": "dosya + açı etiketi",
+      "tier": "optional",
+      "method": "Sabit mesafe, ön ve yan görünüm",
+      "frequency": "değerlendirme seanslarında",
+      "normal_range": "—(güvenilirlik düşük değerlendiricide şart)"
+    },
+    {
+      "field": "posture_binary",
+      "label_tr": "Postür değerlendirmesi (ikili)",
+      "unit": "enum: ideal | ideal_degil",
+      "tier": "optional",
+      "method": "Görsel; 4'lü Kendall alt tipine BÖLÜNMEZ",
+      "frequency": "başlangıç",
+      "normal_range": "—(alt tipe göre egzersiz filtrelenmez)"
+    },
+    {
+      "field": "y_balance_composite",
+      "label_tr": "Y-Balance bileşik skoru",
+      "unit": "% bacak boyu",
+      "tier": "optional",
+      "method": "Standart protokol",
+      "frequency": "6-8 haftada bir",
+      "normal_range": "sağ-sol farkı <%4; çok değişkenli risk modelinde kullanılır"
+    }
+  ],
+  "mcp_sources": [
+    {
+      "title": "NCBI E-utilities (PubMed esearch/efetch)",
+      "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=11114441&rettype=abstract&retmode=text",
+      "access": "Anahtarsız REST; API key ile hız limiti 10 req/sn. PubMed HTML sayfaları çerez duvarı nedeniyle scrape edilemiyor, API sorunsuz.",
+      "priority": "high",
+      "license": "PubMed kayıt metadatası serbest kullanılabilir; ABSTRACT METİNLERİ yayıncı telifindedir — toplu indirme ve yeniden yayınlama yapılmamalı, uygulamada yalnızca alıntı + link gösterilmeli.",
+      "value": "Bu tasarımdaki omurga, diz ve tarama kurallarının büyük kısmının birincil kaynak doğrulaması; PMID ile deterministik referans."
+    },
+    {
+      "title": "Europe PMC REST API",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=TITLE%3A%22overhead%20squat%22&resultType=core&format=json",
+      "access": "Anahtarsız, JSON; tam metin yalnızca OA alt kümesinde.",
+      "priority": "high",
+      "license": "Metadata CC0/serbest; tam metinler kayıt bazında farklı CC lisansları taşır — her kayıtta lisans alanı kontrol edilmeli, karışık depolamadan kaçınılmalı.",
+      "value": "FMS öngörü literatürü ve meta-analizlerin (Moran, Moore, Bonazza, Cuchna) tek kanaldan çekilmesi; PubMed'e göre daha fazla tam metin."
+    },
+    {
+      "title": "PubMed Central Open Access Subset (OA-FTP / OAI)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/tools/openftlist/",
+      "access": "Toplu indirme ve OAI-PMH destekli; bu tasarımdaki PMC makalelerinin çoğu (PMC4096432, PMC5685970, PMC3927051, PMC11224528, PMC12581765) burada.",
+      "priority": "high",
+      "license": "Yalnızca OA alt kümesi yeniden dağıtılabilir; büyük bölümü CC BY / CC BY-NC — NC kayıtlar ticari üründe gömülü metin olarak tutulamaz, atıf ve link ile kullanılmalı.",
+      "value": "Omuz ve diz kurallarının sayısal dayanaklarının (akromiohumeral mesafe, ACL gerinimi, shear limitleri) makine okunabilir hali."
+    },
+    {
+      "title": "JOSPT Clinical Practice Guidelines (Rotator Cuff Tendinopathy 2025, Patellofemoral Pain 2019, FITT derlemesi 2024)",
+      "url": "https://www.jospt.org/doi/10.2519/jospt.2025.13182",
+      "access": "Ödeme duvarı; bazı kılavuzların açık ayna PDF'leri var (ör. ifspt.org PFP PDF).",
+      "priority": "high",
+      "license": "Telifli, yeniden dağıtım yasak. MCP yalnızca öneri numarası + grade + link döndürmeli, kılavuz metni gömülmemeli.",
+      "value": "Omuz ve patellofemoral kurallarının en yüksek kanıt düzeyli çapası (Grade A önerileri, doz şemaları)."
+    },
+    {
+      "title": "North American Spine Society — Lumbar Disc Herniation with Radiculopathy Guideline (PDF)",
+      "url": "https://www.spine.org/portals/0/assets/downloads/researchclinicalcare/guidelines/lumbardischerniation.pdf",
+      "access": "Açık erişim PDF, pdftotext ile ayrıştırılabilir.",
+      "priority": "high",
+      "license": "NASS telifi; serbest okunur, yeniden yayınlanamaz. Ürün içi 'iddia sınırı' uyarısı için Grade I ifadesi alıntılanabilir (kısa alıntı + atıf).",
+      "value": "Radikülopatili profilde 'egzersiz tek başına tedavi değildir' uyarısının resmi dayanağı; ürünün medikal iddia sınırını belirler."
+    },
+    {
+      "title": "Gallagher & Marras — Lumbar shear tolerance (OSU açık PDF)",
+      "url": "https://spine.osu.edu/sites/default/files/uploads/Publications/2012/ClinicalBiomechanics_2012_27_973-978.pdf",
+      "access": "Doğrudan PDF; sayısal eşikler tablo halinde.",
+      "priority": "medium",
+      "license": "Elsevier telifli makalenin kurumsal kopyası; sayısal eşikler (700/1000/2065/1537 N) olgu olarak kullanılabilir, metin kopyalanmamalı.",
+      "value": "shear_force_level ekseninin sayısal kalibrasyonu; spondilolistezis filtresi."
+    },
+    {
+      "title": "backfitpro — McGill uygulama dokümanları (Designing Back Exercise, Enhancing Low Back Health)",
+      "url": "https://www.backfitpro.com/pdf/selecting_back_exercises.pdf",
+      "access": "Açık PDF, statik URL.",
+      "priority": "medium",
+      "license": "Stuart McGill telifi. Doz parametreleri (7-8 sn tutuş, azalan piramit) olgu olarak kodlanabilir; metin ve görseller uygulamaya kopyalanamaz — ticari kullanım için yazardan izin gerekir.",
+      "value": "Big 3 doz varsayılanları, flexion-intolerant sınıflandırma ve provokasyon testi protokolü."
+    },
+    {
+      "title": "Functional Movement Systems — FMS Level 1 & Level 2 manuelleri",
+      "url": "https://fmscontent.blob.core.windows.net/content/2022%20Manuals/FMS%20Level%201%20Manual%20V2.9%20-%20nov%202021.pdf",
+      "access": "Açık blob URL, pdftotext ile okunabilir.",
+      "priority": "medium",
+      "license": "TESCİLLİ VE TELİFLİ. 'FMS' marka adı, puanlama kriter metinleri ve red/yellow/green egzersiz listeleri lisans olmadan uygulamaya gömülemez. Ürün ya FMS'ten lisans almalı ya da kendi patern-tabanlı tarama şemasını (jenerik adlandırmayla) kurmalıdır. MCP bu kaynağı yalnızca dahili referans olarak kullanmalı.",
+      "value": "Patern bazlı filtreleme mimarisinin ve düzeltici hiyerarşinin kaynağı; ürünleştirmeden önce hukuki değerlendirme şart."
+    },
+    {
+      "title": "NASM — OPT modeli ve Overhead Squat Solutions Table",
+      "url": "https://www.physio-pedia.com/images/d/d9/Nasm_overhead_squat_solutions_table_cptpes(pdf-32k).pdf",
+      "access": "Physio-pedia üzerinden açık PDF kopyası.",
+      "priority": "low",
+      "license": "NASM telifi; üçüncü taraf kopyası üzerinden erişiliyor. Kompansasyon-kas eşlemesi uzman görüşüdür ve EMG ile ancak kısmen doğrulanmıştır — ürün içinde 'NASM' markasıyla sunulmamalı, jenerik hipotez tablosu olarak kodlanmalı.",
+      "value": "Kompansasyon → olası aşırı/az aktif kas hipotezleri ve OPT faz doz aralıkları."
+    },
+    {
+      "title": "Cochrane Library (egzersiz tedavisi derlemeleri, ör. CD009790)",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34580864/",
+      "access": "Özetler PubMed üzerinden açık; tam metin abonelik.",
+      "priority": "medium",
+      "license": "Wiley/Cochrane telifi; 'plain language summary' bile yeniden yayınlanamaz. Etki büyüklükleri olgu olarak kullanılabilir.",
+      "value": "Beklenti kalibrasyonu: egzersizin gerçek etki büyüklüğünü PT'ye ve danışana dürüstçe göstermek."
+    },
+    {
+      "title": "Açık erişim dergiler (Frontiers, BMC, IJSPT/Scholastica, PLOS)",
+      "url": "https://ijspt.scholasticahq.com/article/94600-a-biomechanical-review-of-the-squat-exercise-implications-for-clinical-practice",
+      "access": "Tam metin HTML/JSON, çoğunlukla engelsiz.",
+      "priority": "medium",
+      "license": "Çoğu CC BY 4.0 — atıfla yeniden kullanılabilir; ürün içi metin gömme için en güvenli kaynak grubu. Yine de makale bazında lisans doğrulanmalı.",
+      "value": "Squat teknik değişkenleri, foam rolling/germe doz sınırları, skapular diskinezi prevalansı gibi 'yumuşak' kuralların kaynağı."
+    },
+    {
+      "title": "Dutch Orthopedic Association — SAPS kılavuz güncellemesi (PMC)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12908218/",
+      "access": "PMC üzerinden açık.",
+      "priority": "low",
+      "license": "PMC OA kaydı; lisans alanına göre kullanılmalı.",
+      "value": "Omuz hizası üstü yükleme kısıtının kaynağı ve aynı zamanda bu kısıtın 'çok düşük kanıt' etiketiyle yumuşatılması gerekçesi."
+    },
+    {
+      "title": "Egzersiz kütüphanesi / biyomekanik etiket veri seti (mevcut değil)",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=%22exercise%20taxonomy%22&format=json",
+      "access": "Aday kaynak bulunamadı; literatür taraması yalnızca dağınık makale içi tablolar veriyor.",
+      "priority": "low",
+      "license": "—",
+      "value": "BOŞLUK: kinetic_chain/axial_loading/shear_force_level etiketleri hazır bir veri setinden gelmiyor; PT ile birlikte manuel kurulması ve sürümlenmesi gereken tek katman burası."
+    }
+  ],
+  "gaps": [
+    "Egzersiz adı → biyomekanik etiket eşlemesi için açık, makine okunabilir hiçbir veri seti yok. Kompresyon/shear değerleri yalnızca birkaç düzine egzersiz için (Axler & McGill, Powers, Escamilla) ölçülmüş; kalan yüzlerce egzersizin axial_loading ve shear_force_level etiketi uzman atamasıyla doldurulacak. Bu katman ürünün en kırılgan yeri — versiyonlanmalı ve 'ölçülmüş / tahmin edilmiş' ayrımı alan düzeyinde tutulmalı.",
+    "Fleksiyon kısıtlamasının genel geçerliliği çelişkili: McGill grubunun in vitro kanıtı güçlü ama Saraceni 2020 sistematik derlemesi kaldırma sırasındaki lomber fleksiyonun bel ağrısı riski olduğuna dair yalnızca düşük kaliteli kanıt buluyor (11 çalışmanın 9'unda fark yok). Bu yüzden fleksiyon filtresi global değil, provokasyon testine koşullu kodlandı; test yapılmadan uygulanırsa kural kanıtsız kalır.",
+    "FMS toplam skoru ile sakatlık ilişkisi çelişkili ve zayıf (Moran RR 1,47 / Bonazza OR 2,74 / Dorrel AUC 0,53-0,56 / Shao 2026 AUC 0,83). Asimetrinin bağımsız öngörücülüğü 277 kişilik doğrudan replikasyonda tekrarlanamadı. Ürün bu skorlardan risk yüzdesi üretmemeli.",
+    "Kompansasyon → 'aşırı aktif / az aktif kas' eşlemesi büyük ölçüde uzman görüşü. EMG meta-analizi adduktor ve kuadriseps artışını doğrularken gluteus medius/maximus'ta anlamlı fark bulamadı; yani en çok kullanılan 'zayıf glute medius' etiketi doğrudan kanıtlanmamış durumda.",
+    "Kalça zayıflığının patellofemoral ağrıda neden mi sonuç mu olduğu belirsiz: kesitsel çalışmalarda zayıflık var, prospektif çalışmalarda kuvvet ağrı gelişimini öngörmüyor. Bu yüzden 'zayıf kalça' risk skoru girdisi değil yalnızca tedavi hedefi olarak kodlandı.",
+    "Landmine press, box press gibi popüler 'omuz dostu' alternatiflerin doğrudan RKÇ veya karşılaştırmalı EMG kanıtı yok; öneri tamamen mekanistik (skapsiyon düzlemi + akromiohumeral mesafe) ve düşük güvenle işaretlenmeli.",
+    "İnternal rotasyon ve sıkışma ilişkisi çelişkili: ultrason ölçümünde internal rotasyon akromiohumeral mesafeyi ARTIRIYOR, klinik literatür ise empty can'i provokatif sayıyor. Kural bu yüzden yasak değil, ağrı yanıtına bağlı ipucu olarak yazıldı.",
+    "Leg press ve squat derinliğinin lomber diske etkisi için doğrudan klinik sakatlık verisi bulunamadı; 'pelvis pedden kalkmadan dur' kuralı tamamen mekanistik (posterior pelvik tilt + tekrarlı fleksiyon modeli) ve düşük güvenli.",
+    "Squat derinliği tartışması çözülmedi: Hartmann 90° sonrası wrapping effect ile stresin düştüğünü savunurken biyomekanik ölçümler 70-100° arasında plato gösteriyor. Ortak nokta yalnızca 'dış yük derinlikten daha belirleyicidir' (12RM barbell 4500-4700 N vs vücut ağırlığı ~1700 N).",
+    "Diz osteoartriti, dejeneratif menisküs yırtığı ve menisküs onarımı sonrası protokol için elimdeki araştırma çıktısında doğrulanabilir kaynak URL'si yoktu (metin kesilmiş). Bu üç kimlik taksonomiye alındı ama sourced filter_rule yazılmadı; uygulamaya geçmeden önce OARSI 2019, START RCT ve menisküs onarımı protokolü için birincil kaynaklar ayrıca çekilmelidir.",
+    "Multidireksiyonel instabilite kuralları anterior instabilite protokollerinden türetildi; MDI'ya özgü kanıt kalitesi çok düşük ve doğrudan RKÇ yok.",
+    "Alt çapraz sendromun tanı kriterleri standardize değil ve 'gergin kalça fleksörü gluteusu resiprokal inhibe eder' mekanizması doğrulanmamış; bu yüzden ayrı bir patoloji değil, üç ölçülebilir bulgunun birlikteliği olarak kodlandı.",
+    "MSI/Sahrmann sınıflaması güvenilir (kappa 0,81) ama 148 kişilik RKÇ'de genel egzersize hiçbir üstünlük sağlamadı; sınıflama egzersiz seçimini daraltabilir, 'daha iyi sonuç' vaadi üretemez.",
+    "Türkçe klinik terminoloji için standart bir sözlük kullanılmadı; label_tr alanları PT ile birlikte tek geçişte gözden geçirilmeli (ör. 'shear' karşılığı, 'clearing testi' gibi ödünç terimlerin kalıp kalmayacağı)."
+  ]
+}

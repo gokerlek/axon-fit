@@ -2,17 +2,31 @@
   {
     "id": "assisted_chair_squat",
     "name": "Destekli Sandalye Squat",
-    "target_muscles": ["quadriceps", "glutes"],
+    "target_muscles": [
+      "quadriceps",
+      "glutes"
+    ],
     "kinetic_chain": "closed",
     "joint_action": "compound",
     "movement_pattern": "squat",
     "axial_loading": false,
     "shear_force_level": "low",
     "spinal_alignment": "neutral",
-    "contraindications": ["acute_knee_effusion"],
-    "safe_for": ["lumbar_disc_herniation", "patellofemoral_pain", "knee_osteoarthritis", "hypertension_uncontrolled"],
-    "regressions": ["sit_to_stand_high_box"],
-    "progressions": ["goblet_box_squat"],
+    "contraindications": [
+      "acute_knee_effusion"
+    ],
+    "safe_for": [
+      "lumbar_disc_herniation",
+      "patellofemoral_pain",
+      "knee_osteoarthritis",
+      "hypertension:uncontrolled"
+    ],
+    "regressions": [
+      "sit_to_stand_high_box"
+    ],
+    "progressions": [
+      "goblet_box_squat"
+    ],
     "biomechanical_reasoning": "El desteği gövde ağırlığının bir kısmını üst ekstremiteye aktarır; diz ve kalça momenti düşer. Sandalye derinliği sabitlendiği için diz fleksiyon açısı kontrollüdür, patellofemoral temas basıncı düşük açı aralığında kalır. Omurgaya dış yük binmediğinden disk kompresyonu vücut ağırlığı düzeyindedir.",
     "cues": [
       "Kalçanı geriye götürerek in, dizini öne itme.",
@@ -23,17 +37,32 @@
   {
     "id": "goblet_box_squat",
     "name": "Goblet Box Squat",
-    "target_muscles": ["quadriceps", "glutes"],
+    "target_muscles": [
+      "quadriceps",
+      "glutes"
+    ],
     "kinetic_chain": "closed",
     "joint_action": "compound",
     "movement_pattern": "squat",
     "axial_loading": false,
     "shear_force_level": "low",
     "spinal_alignment": "neutral",
-    "contraindications": ["acute_meniscus_tear", "acute_knee_effusion"],
-    "safe_for": ["lumbar_disc_herniation", "patellofemoral_pain", "shoulder_impingement"],
-    "regressions": ["assisted_chair_squat"],
-    "progressions": ["goblet_squat_full_depth", "front_squat"],
+    "contraindications": [
+      "acute_meniscus_tear",
+      "acute_knee_effusion"
+    ],
+    "safe_for": [
+      "lumbar_disc_herniation",
+      "patellofemoral_pain",
+      "subacromial_pain_syndrome"
+    ],
+    "regressions": [
+      "assisted_chair_squat"
+    ],
+    "progressions": [
+      "goblet_squat_full_depth",
+      "front_squat"
+    ],
     "biomechanical_reasoning": "Kutu diz fleksiyon açısını sınırlar ve tibianın aşırı öne kaymasını engelleyerek patellofemoral stresi düşürür. Ağırlığın önde (anterior yük vektörü) olması gövdeyi dik tutar, lomber ekstansörlerin yükünü azaltır ve omurgayı doğal lordozda tutar. Yük omurga üstünde taşınmadığı için eksenel kompresyon barbell varyantına göre belirgin düşüktür.",
     "cues": [
       "Kutuya sertçe oturma, sadece kalçanla hafifçe dokunup kalk.",
@@ -44,17 +73,33 @@
   {
     "id": "goblet_squat_full_depth",
     "name": "Goblet Squat (Tam Derinlik)",
-    "target_muscles": ["quadriceps", "glutes", "adductors"],
+    "target_muscles": [
+      "quadriceps",
+      "glutes",
+      "adductors"
+    ],
     "kinetic_chain": "closed",
     "joint_action": "compound",
     "movement_pattern": "squat",
     "axial_loading": false,
     "shear_force_level": "medium",
     "spinal_alignment": "neutral",
-    "contraindications": ["acute_meniscus_tear", "knee_osteoarthritis_severe", "hip_impingement_fai"],
-    "safe_for": ["lumbar_disc_herniation_stable", "shoulder_impingement"],
-    "regressions": ["goblet_box_squat"],
-    "progressions": ["front_squat", "back_squat_high_bar"],
+    "contraindications": [
+      "acute_meniscus_tear",
+      "knee_osteoarthritis:severe",
+      "hip_impingement_fai"
+    ],
+    "safe_for": [
+      "lumbar_disc_herniation:stable",
+      "subacromial_pain_syndrome"
+    ],
+    "regressions": [
+      "goblet_box_squat"
+    ],
+    "progressions": [
+      "front_squat",
+      "back_squat_high_bar"
+    ],
     "biomechanical_reasoning": "Derinlik arttıkça patellofemoral temas basıncı ve kalça ekstansör momenti artar; buna karşılık temas alanı da büyüdüğü için birim basınç artışı doğrusal değildir. Asıl risk, kalça ve ayak bileği mobilitesi yetmediğinde dipte ortaya çıkan posterior pelvik tilt (butt wink) ve buna eşlik eden lomber fleksiyondur; yüklü fleksiyon disk için en riskli kombinasyondur.",
     "cues": [
       "İnebildiğin en derin noktayı belin düzken bitir, oradan aşağı gitme.",
@@ -65,17 +110,31 @@
   {
     "id": "spanish_squat_band",
     "name": "Spanish Squat (Bantlı)",
-    "target_muscles": ["quadriceps"],
+    "target_muscles": [
+      "quadriceps"
+    ],
     "kinetic_chain": "closed",
     "joint_action": "compound",
     "movement_pattern": "squat",
     "axial_loading": false,
     "shear_force_level": "low",
     "spinal_alignment": "neutral",
-    "contraindications": ["acute_knee_effusion"],
-    "safe_for": ["patellar_tendinopathy", "patellofemoral_pain", "lumbar_disc_herniation", "knee_osteoarthritis"],
-    "regressions": ["wall_sit_isometric"],
-    "progressions": ["goblet_box_squat", "leg_press_45"],
+    "contraindications": [
+      "acute_knee_effusion"
+    ],
+    "safe_for": [
+      "patellar_tendinopathy",
+      "patellofemoral_pain",
+      "lumbar_disc_herniation",
+      "knee_osteoarthritis"
+    ],
+    "regressions": [
+      "wall_sit_isometric"
+    ],
+    "progressions": [
+      "goblet_box_squat",
+      "leg_press_45"
+    ],
     "biomechanical_reasoning": "Proksimal tibianın arkasından geçen bant, kuadriseps kasılmasının oluşturduğu anterior tibial kaymayı dengeler; böylece ACL ve patellar tendon üzerindeki gerilim azalırken kuadriseps yüksek şiddette kasılabilir. Gövde dik kaldığı için lomber ekstansör talebi minimumdur; tendinopatide ağrıyı azaltan izometrik protokoller (45 sn x 5) için uygun zemindir.",
     "cues": [
       "Bant diz altından geçsin, kalçanı geriye bırakıp bandı ger.",
@@ -86,17 +145,32 @@
   {
     "id": "leg_press_45",
     "name": "Leg Press (45°)",
-    "target_muscles": ["quadriceps", "glutes"],
+    "target_muscles": [
+      "quadriceps",
+      "glutes"
+    ],
     "kinetic_chain": "closed",
     "joint_action": "compound",
     "movement_pattern": "squat",
     "axial_loading": false,
     "shear_force_level": "medium",
     "spinal_alignment": "neutral",
-    "contraindications": ["lumbar_disc_herniation_acute"],
-    "safe_for": ["patellofemoral_pain", "knee_osteoarthritis", "hypertension_controlled", "shoulder_impingement"],
-    "regressions": ["spanish_squat_band"],
-    "progressions": ["goblet_squat_full_depth", "back_squat_high_bar"],
+    "contraindications": [
+      "lumbar_disc_herniation:acute"
+    ],
+    "safe_for": [
+      "patellofemoral_pain",
+      "knee_osteoarthritis",
+      "hypertension:controlled",
+      "subacromial_pain_syndrome"
+    ],
+    "regressions": [
+      "spanish_squat_band"
+    ],
+    "progressions": [
+      "goblet_squat_full_depth",
+      "back_squat_high_bar"
+    ],
     "biomechanical_reasoning": "Sırt desteklendiği için omurgaya eksenel yük binmez ve denge talebi ortadan kalkar; bu yüzden diz-kalça kuvveti yüksek yüklerde izole çalıştırılabilir. Kritik risk derinliktedir: kızak aşağı indikçe pelvis minderden kalkar, lomber fleksiyona zorlanır ve diskte yüklü fleksiyon oluşur. Kapalı zincir olduğu için patellofemoral basınç diz fleksiyonu arttıkça artar, terminal ekstansiyona yakın aralıkta düşüktür.",
     "cues": [
       "Kalçan minderden kalkmaya başladığı noktadan aşağı inme.",
@@ -107,17 +181,32 @@
   {
     "id": "leg_extension_machine",
     "name": "Leg Extension Makinesi",
-    "target_muscles": ["quadriceps"],
+    "target_muscles": [
+      "quadriceps"
+    ],
     "kinetic_chain": "open",
     "joint_action": "isolation",
     "movement_pattern": "knee_extension",
     "axial_loading": false,
     "shear_force_level": "high",
     "spinal_alignment": "neutral",
-    "contraindications": ["acl_rehab_early", "patellofemoral_pain_severe", "patellar_tendinopathy_acute", "acute_meniscus_tear"],
-    "safe_for": ["lumbar_disc_herniation", "shoulder_impingement"],
-    "regressions": ["spanish_squat_band", "leg_press_45"],
-    "progressions": ["leg_extension_partial_90_45"],
+    "contraindications": [
+      "acl_reconstruction_early",
+      "patellofemoral_pain:severe",
+      "patellar_tendinopathy:reactive",
+      "acute_meniscus_tear"
+    ],
+    "safe_for": [
+      "lumbar_disc_herniation",
+      "subacromial_pain_syndrome"
+    ],
+    "regressions": [
+      "spanish_squat_band",
+      "leg_press_45"
+    ],
+    "progressions": [
+      "leg_extension_partial_90_45"
+    ],
     "biomechanical_reasoning": "Açık kinetik zincirde direnç distal tibiadan uygulanır; kuadriseps kasılması tibiayı öne çeker ve 0–45° aralığında anterior tibial kayma (dolayısıyla ACL gerilimi) tepe yapar. Patellofemoral stres ise aynı aralıkta temas alanının küçük olması nedeniyle yüksektir. Bu yüzden erken ACL rehabilitasyonunda ve şiddetli patellofemoral ağrıda terminal ekstansiyon aralığı sakıncalıdır; 90–45° arasına sınırlanmış ROM genelde tolere edilir.",
     "cues": [
       "Hareketi 90–45 derece arasında tut, dizi tam kilitleme.",
@@ -128,17 +217,33 @@
   {
     "id": "back_squat_high_bar",
     "name": "Back Squat (Yüksek Bar)",
-    "target_muscles": ["quadriceps", "glutes", "erectors", "adductors"],
+    "target_muscles": [
+      "quadriceps",
+      "glutes",
+      "erectors",
+      "adductors"
+    ],
     "kinetic_chain": "closed",
     "joint_action": "compound",
     "movement_pattern": "squat",
     "axial_loading": true,
     "shear_force_level": "medium",
     "spinal_alignment": "neutral",
-    "contraindications": ["lumbar_disc_herniation", "lumbar_spondylolisthesis", "hypertension_uncontrolled", "shoulder_impingement_severe"],
+    "contraindications": [
+      "lumbar_disc_herniation",
+      "lumbar_spondylolisthesis",
+      "hypertension:uncontrolled",
+      "subacromial_pain_syndrome:severe"
+    ],
     "safe_for": [],
-    "regressions": ["goblet_squat_full_depth", "leg_press_45"],
-    "progressions": ["front_squat", "pause_back_squat"],
+    "regressions": [
+      "goblet_squat_full_depth",
+      "leg_press_45"
+    ],
+    "progressions": [
+      "front_squat",
+      "pause_back_squat"
+    ],
     "biomechanical_reasoning": "Bar omurga üstünde taşındığı için lomber diskte doğrudan eksenel kompresyon oluşur; ağır setlerde Valsalva manevrası intratorasik basıncı ve kan basıncını ani yükseltir. Derinlikte pelvisin posterior tilt'e kaçması yüklü lomber fleksiyon yaratır ki disk için en zararlı kombinasyondur. Barı omuz üstünde tutabilmek yeterli omuz dış rotasyonu ve torasik ekstansiyon gerektirir; kısıtlılıkta omuz ön yapıları zorlanır.",
     "cues": [
       "Gövdeyi kemerle değil, nefesle sıkıştır: kaburgalar aşağı.",
@@ -149,7 +254,10 @@
   {
     "id": "glute_bridge",
     "name": "Glute Bridge",
-    "target_muscles": ["glutes", "hamstrings_medial"],
+    "target_muscles": [
+      "glutes",
+      "hamstrings_medial"
+    ],
     "kinetic_chain": "closed",
     "joint_action": "compound",
     "movement_pattern": "hip_hinge",
@@ -157,9 +265,20 @@
     "shear_force_level": "low",
     "spinal_alignment": "neutral",
     "contraindications": [],
-    "safe_for": ["lumbar_disc_herniation", "patellofemoral_pain", "knee_osteoarthritis", "shoulder_impingement", "hypertension_controlled"],
-    "regressions": ["supine_hip_abduction_isometric"],
-    "progressions": ["hip_thrust_barbell", "single_leg_glute_bridge"],
+    "safe_for": [
+      "lumbar_disc_herniation",
+      "patellofemoral_pain",
+      "knee_osteoarthritis",
+      "subacromial_pain_syndrome",
+      "hypertension:controlled"
+    ],
+    "regressions": [
+      "supine_hip_abduction_isometric"
+    ],
+    "progressions": [
+      "hip_thrust_barbell",
+      "single_leg_glute_bridge"
+    ],
     "biomechanical_reasoning": "Sırtüstü pozisyon omurgayı destekler; kalça ekstansiyonu diz ve bel yükü olmadan çalışılır. Gluteus maximus'un hamstring'e göre baskın çalışması için hareketin kalça ekstansiyonuyla bitmesi, lomber ekstansiyonla değil, önemlidir. Alt çapraz sendromunda zayıf kalan gluteal aktivasyon için NASM düzeltici zincirinin 'activate' basamağına uygundur.",
     "cues": [
       "Kaburgaları aşağı çek, beli değil kalçayı kaldır.",
@@ -170,17 +289,31 @@
   {
     "id": "hip_thrust_barbell",
     "name": "Barbell Hip Thrust",
-    "target_muscles": ["glutes", "hamstrings_lateral"],
+    "target_muscles": [
+      "glutes",
+      "hamstrings_lateral"
+    ],
     "kinetic_chain": "closed",
     "joint_action": "compound",
     "movement_pattern": "hip_hinge",
     "axial_loading": false,
     "shear_force_level": "low",
     "spinal_alignment": "neutral",
-    "contraindications": ["lumbar_spondylolisthesis"],
-    "safe_for": ["lumbar_disc_herniation_stable", "patellofemoral_pain", "knee_osteoarthritis"],
-    "regressions": ["glute_bridge"],
-    "progressions": ["single_leg_hip_thrust", "pause_hip_thrust"],
+    "contraindications": [
+      "lumbar_spondylolisthesis"
+    ],
+    "safe_for": [
+      "lumbar_disc_herniation:stable",
+      "patellofemoral_pain",
+      "knee_osteoarthritis"
+    ],
+    "regressions": [
+      "glute_bridge"
+    ],
+    "progressions": [
+      "single_leg_hip_thrust",
+      "pause_hip_thrust"
+    ],
     "biomechanical_reasoning": "Yük vektörü yataydır: direnç kalça ekstansiyonuna dik biner, omurgaya eksenel kompresyon binmez. Bu yüzden disk kaynaklı bel sorunlarında ağır kalça ekstansiyon çalışmasına izin veren ender hareketlerden biridir. Asıl risk tepede lomber hiperekstansiyonla bitirmektir; bu, yükü fasetlere ve pars bölgesine aktarır ve spondilolistezis gibi ekstansiyon intoleransı olan tablolarda semptom üretir.",
     "cues": [
       "Tepede kaburgaları aşağıda tut, beli değil kalçayı kilitle.",
@@ -191,17 +324,35 @@
   {
     "id": "romanian_deadlift",
     "name": "Romanian Deadlift",
-    "target_muscles": ["hamstrings_medial", "hamstrings_lateral", "glutes", "erectors"],
+    "target_muscles": [
+      "hamstrings_medial",
+      "hamstrings_lateral",
+      "glutes",
+      "erectors"
+    ],
     "kinetic_chain": "semi_closed",
     "joint_action": "compound",
     "movement_pattern": "hip_hinge",
     "axial_loading": true,
     "shear_force_level": "medium",
     "spinal_alignment": "neutral",
-    "contraindications": ["lumbar_disc_herniation_acute", "lumbar_spondylolisthesis", "hypertension_uncontrolled"],
-    "safe_for": ["patellofemoral_pain", "knee_osteoarthritis"],
-    "regressions": ["hip_hinge_dowel_drill", "kettlebell_deadlift_high_handle"],
-    "progressions": ["conventional_deadlift", "single_leg_rdl"],
+    "contraindications": [
+      "lumbar_disc_herniation:acute",
+      "lumbar_spondylolisthesis",
+      "hypertension:uncontrolled"
+    ],
+    "safe_for": [
+      "patellofemoral_pain",
+      "knee_osteoarthritis"
+    ],
+    "regressions": [
+      "hip_hinge_dowel_drill",
+      "kettlebell_deadlift_high_handle"
+    ],
+    "progressions": [
+      "conventional_deadlift",
+      "single_leg_rdl"
+    ],
     "biomechanical_reasoning": "Gövde yere yaklaştıkça bara olan moment kolu uzar, lomber ekstansörlerin ve diskteki anterior kesme kuvvetinin talebi artar. Nötr omurga korunduğu sürece yük büyük ölçüde kas-fasya sistemi tarafından karşılanır; fleksiyona kaçıldığında aynı yük diskin posterior anulusuna aktarılır. Hamstring uzunluğu yetersizse pelvis erken posterior tilt yapar ve fleksiyon kaçınılmaz hale gelir.",
     "cues": [
       "Bar bacağa sürtünerek insin, öne uzaklaşmasın.",
@@ -212,17 +363,35 @@
   {
     "id": "conventional_deadlift",
     "name": "Conventional Deadlift",
-    "target_muscles": ["erectors", "glutes", "hamstrings_medial", "traps_mid", "quadriceps"],
+    "target_muscles": [
+      "erectors",
+      "glutes",
+      "hamstrings_medial",
+      "traps_mid",
+      "quadriceps"
+    ],
     "kinetic_chain": "semi_closed",
     "joint_action": "compound",
     "movement_pattern": "hip_hinge",
     "axial_loading": true,
     "shear_force_level": "high",
     "spinal_alignment": "neutral",
-    "contraindications": ["lumbar_disc_herniation", "lumbar_spondylolisthesis", "lumbar_stenosis", "hypertension_uncontrolled", "pregnancy_second_third_trimester"],
+    "contraindications": [
+      "lumbar_disc_herniation",
+      "lumbar_spondylolisthesis",
+      "lumbar_stenosis",
+      "hypertension:uncontrolled",
+      "pregnancy_second_third_trimester"
+    ],
     "safe_for": [],
-    "regressions": ["romanian_deadlift", "trap_bar_deadlift", "kettlebell_deadlift_high_handle"],
-    "progressions": ["deficit_deadlift"],
+    "regressions": [
+      "romanian_deadlift",
+      "trap_bar_deadlift",
+      "kettlebell_deadlift_high_handle"
+    ],
+    "progressions": [
+      "deficit_deadlift"
+    ],
     "biomechanical_reasoning": "Yerden kalkışta gövde en yatay konumdadır; L4-L5 seviyesinde hem yüksek kompresyon hem de belirgin anterior kesme kuvveti oluşur. Nötr omurga ve yüksek intraabdominal basınçla bu kuvvetler tolere edilebilir, fakat fleksiyona kaçan tek tekrar bile hassas diskte semptom üretebilir. Sabah saatlerinde disk hidrasyonu yüksek olduğundan fleksiyon toleransı daha düşüktür; ağır çekişleri güne yayılmış şekilde planlamak gerekir.",
     "cues": [
       "Bar orta ayak üstünde; kalkıştan önce barın boşluğunu al.",
@@ -233,17 +402,35 @@
   {
     "id": "kettlebell_swing",
     "name": "Kettlebell Swing",
-    "target_muscles": ["glutes", "hamstrings_lateral", "erectors"],
+    "target_muscles": [
+      "glutes",
+      "hamstrings_lateral",
+      "erectors"
+    ],
     "kinetic_chain": "semi_closed",
     "joint_action": "compound",
     "movement_pattern": "hip_hinge",
     "axial_loading": false,
     "shear_force_level": "high",
     "spinal_alignment": "neutral",
-    "contraindications": ["lumbar_disc_herniation", "lumbar_spondylolisthesis", "shoulder_impingement_severe", "hypertension_uncontrolled"],
-    "safe_for": ["knee_osteoarthritis", "patellofemoral_pain"],
-    "regressions": ["romanian_deadlift", "hip_hinge_dowel_drill"],
-    "progressions": ["single_arm_swing", "kettlebell_snatch"],
+    "contraindications": [
+      "lumbar_disc_herniation",
+      "lumbar_spondylolisthesis",
+      "subacromial_pain_syndrome:severe",
+      "hypertension:uncontrolled"
+    ],
+    "safe_for": [
+      "knee_osteoarthritis",
+      "patellofemoral_pain"
+    ],
+    "regressions": [
+      "romanian_deadlift",
+      "hip_hinge_dowel_drill"
+    ],
+    "progressions": [
+      "single_arm_swing",
+      "kettlebell_snatch"
+    ],
     "biomechanical_reasoning": "Balistik kalça ekstansiyonu kısa sürede yüksek kuvvet üretir; swing'in alt noktasında lomber bölgede kesme kuvveti tepe yapar ve hız nedeniyle hata payı küçülür. Teknik bozulduğunda hareket squat'a dönüşür, kol çekişiyle omuz öne yüklenir. Nötr omurgayı yüksek hızda koruyabilen, hinge paterni oturmuş kişiler için uygundur.",
     "cues": [
       "Kolu değil kalçayı patlat; kettlebell savrulsun.",
@@ -254,7 +441,11 @@
   {
     "id": "neutral_grip_dumbbell_floor_press",
     "name": "Nötr Tutuş Dumbbell Floor Press",
-    "target_muscles": ["chest_lower", "triceps_lateral", "delt_front"],
+    "target_muscles": [
+      "chest_lower",
+      "triceps_lateral",
+      "delt_front"
+    ],
     "kinetic_chain": "open",
     "joint_action": "compound",
     "movement_pattern": "horizontal_push",
@@ -262,9 +453,20 @@
     "shear_force_level": "low",
     "spinal_alignment": "neutral",
     "contraindications": [],
-    "safe_for": ["shoulder_impingement", "shoulder_instability", "ac_joint_pathology", "lumbar_disc_herniation", "cervical_pain"],
-    "regressions": ["band_chest_press"],
-    "progressions": ["dumbbell_bench_press_neutral", "barbell_bench_press"],
+    "safe_for": [
+      "subacromial_pain_syndrome",
+      "anterior_shoulder_instability",
+      "ac_joint_injury",
+      "lumbar_disc_herniation",
+      "cervical_pain"
+    ],
+    "regressions": [
+      "band_chest_press"
+    ],
+    "progressions": [
+      "dumbbell_bench_press_neutral",
+      "barbell_bench_press"
+    ],
     "biomechanical_reasoning": "Yer, dirseğin gövde hizasının altına inmesini engelleyerek omuz ekstansiyonunu sınırlar; anterior kapsül ve biseps uzun başı üzerindeki gerilim düşer. Nötr tutuş humerusu dış rotasyona yakın tutar ve subakromiyal aralığı korur. Sırt yerle tam temasta olduğu için lomber ekstansiyon kompansasyonu oluşmaz.",
     "cues": [
       "Dirsekler gövdeyle 45 derece, yere değince 1 saniye dur.",
@@ -275,7 +477,12 @@
   {
     "id": "landmine_press",
     "name": "Landmine Press",
-    "target_muscles": ["delt_front", "serratus", "triceps_lateral", "chest_upper"],
+    "target_muscles": [
+      "delt_front",
+      "serratus",
+      "triceps_lateral",
+      "chest_upper"
+    ],
     "kinetic_chain": "open",
     "joint_action": "compound",
     "movement_pattern": "vertical_push",
@@ -283,9 +490,20 @@
     "shear_force_level": "low",
     "spinal_alignment": "neutral",
     "contraindications": [],
-    "safe_for": ["shoulder_impingement", "rotator_cuff_tendinopathy", "lumbar_spondylolisthesis", "cervical_pain", "thoracic_extension_deficit"],
-    "regressions": ["half_kneeling_landmine_press"],
-    "progressions": ["overhead_dumbbell_press_neutral", "overhead_barbell_press"],
+    "safe_for": [
+      "subacromial_pain_syndrome",
+      "rotator_cuff_tendinopathy",
+      "lumbar_spondylolisthesis",
+      "cervical_pain",
+      "thoracic_extension_deficit"
+    ],
+    "regressions": [
+      "half_kneeling_landmine_press"
+    ],
+    "progressions": [
+      "overhead_dumbbell_press_neutral",
+      "overhead_barbell_press"
+    ],
     "biomechanical_reasoning": "İtiş, skapular düzlemde (frontal düzlemden ~30–45° önde) ve tam baş üstü olmadan tamamlanır; humerus başı ile akromiyon arasındaki aralık korunur, sıkışma provokasyonu azalır. Yükün öne yerleşmesi lomber hiperekstansiyon kompansasyonunu engeller. Serratus anterior'un skapular yukarı rotasyonu için elverişli bir açı sağlar, üst çapraz sendromunda tercih edilir.",
     "cues": [
       "Bar diagonal gitsin: omuz hizasından yukarı-öne.",
@@ -296,17 +514,35 @@
   {
     "id": "barbell_bench_press",
     "name": "Barbell Bench Press",
-    "target_muscles": ["chest_lower", "chest_upper", "triceps_lateral", "delt_front"],
+    "target_muscles": [
+      "chest_lower",
+      "chest_upper",
+      "triceps_lateral",
+      "delt_front"
+    ],
     "kinetic_chain": "open",
     "joint_action": "compound",
     "movement_pattern": "horizontal_push",
     "axial_loading": false,
     "shear_force_level": "medium",
     "spinal_alignment": "extension",
-    "contraindications": ["shoulder_instability_anterior", "ac_joint_pathology_severe", "shoulder_impingement_severe"],
-    "safe_for": ["knee_osteoarthritis", "patellofemoral_pain"],
-    "regressions": ["neutral_grip_dumbbell_floor_press", "dumbbell_bench_press_neutral"],
-    "progressions": ["pause_bench_press", "close_grip_bench_press"],
+    "contraindications": [
+      "anterior_shoulder_instability",
+      "ac_joint_injury:severe",
+      "subacromial_pain_syndrome:severe"
+    ],
+    "safe_for": [
+      "knee_osteoarthritis",
+      "patellofemoral_pain"
+    ],
+    "regressions": [
+      "neutral_grip_dumbbell_floor_press",
+      "dumbbell_bench_press_neutral"
+    ],
+    "progressions": [
+      "pause_bench_press",
+      "close_grip_bench_press"
+    ],
     "biomechanical_reasoning": "Bar sabit olduğu için humerus yolu serbest değildir; geniş tutuş ve 90° abduksiyonda dirseklerin gövdeden uzaklaşması, alt noktada anterior kapsül gerilimini ve subakromiyal sıkışmayı artırır. Kürek sıkıştırılmış ve hafif torasik ekstansiyonlu kurulum omuz için koruyucudur, fakat bunun lomber hiperekstansiyona dönüşmesi bel yüklenmesine yol açar. AC eklem patolojisinde ağrı üreten asıl faktör alt noktada horizontal adduksiyon yüküdür.",
     "cues": [
       "Dirsekler 45 derece, bar meme hizasına insin.",
@@ -317,17 +553,37 @@
   {
     "id": "overhead_barbell_press",
     "name": "Overhead Barbell Press",
-    "target_muscles": ["delt_front", "delt_side", "triceps_long", "traps_upper"],
+    "target_muscles": [
+      "delt_front",
+      "delt_side",
+      "triceps_long",
+      "traps_upper"
+    ],
     "kinetic_chain": "open",
     "joint_action": "compound",
     "movement_pattern": "vertical_push",
     "axial_loading": true,
     "shear_force_level": "medium",
     "spinal_alignment": "extension",
-    "contraindications": ["shoulder_impingement", "rotator_cuff_tendinopathy_acute", "lumbar_spondylolisthesis", "cervical_radiculopathy", "hypertension_uncontrolled"],
-    "safe_for": ["knee_osteoarthritis", "patellofemoral_pain"],
-    "regressions": ["landmine_press", "overhead_dumbbell_press_neutral"],
-    "progressions": ["push_press", "strict_press_heavy"],
+    "contraindications": [
+      "subacromial_pain_syndrome",
+      "rotator_cuff_tendinopathy:reactive",
+      "lumbar_spondylolisthesis",
+      "cervical_radiculopathy",
+      "hypertension:uncontrolled"
+    ],
+    "safe_for": [
+      "knee_osteoarthritis",
+      "patellofemoral_pain"
+    ],
+    "regressions": [
+      "landmine_press",
+      "overhead_dumbbell_press_neutral"
+    ],
+    "progressions": [
+      "push_press",
+      "strict_press_heavy"
+    ],
     "biomechanical_reasoning": "Ayakta baş üstü itiş, yükü omurga boyunca eksenel olarak aktarır. Tam baş üstü ROM için yeterli torasik ekstansiyon ve skapular yukarı rotasyon gerekir; bunlar kısıtlıysa vücut açığı lomber hiperekstansiyonla kapatır ve faset/pars bölgesi yüklenir. Omuzda 120° üzerinde subakromiyal aralık daralır, mevcut tendinopatide semptom provokasyonu olasıdır.",
     "cues": [
       "Bar çeneyi geçince başı hafif öne al, bar kulak hizasında bitsin.",
@@ -338,17 +594,34 @@
   {
     "id": "upright_row_narrow_grip",
     "name": "Upright Row (Dar Tutuş)",
-    "target_muscles": ["delt_side", "traps_upper"],
+    "target_muscles": [
+      "delt_side",
+      "traps_upper"
+    ],
     "kinetic_chain": "open",
     "joint_action": "compound",
     "movement_pattern": "vertical_pull",
     "axial_loading": false,
     "shear_force_level": "high",
     "spinal_alignment": "neutral",
-    "contraindications": ["shoulder_impingement", "rotator_cuff_tendinopathy", "ac_joint_pathology", "shoulder_instability", "lateral_epicondylitis"],
-    "safe_for": ["lumbar_disc_herniation", "knee_osteoarthritis"],
-    "regressions": ["lateral_raise_scaption_thumb_up", "face_pull_cable"],
-    "progressions": ["wide_grip_high_pull_below_shoulder"],
+    "contraindications": [
+      "subacromial_pain_syndrome",
+      "rotator_cuff_tendinopathy",
+      "ac_joint_injury",
+      "anterior_shoulder_instability",
+      "lateral_epicondylitis"
+    ],
+    "safe_for": [
+      "lumbar_disc_herniation",
+      "knee_osteoarthritis"
+    ],
+    "regressions": [
+      "lateral_raise_scaption_thumb_up",
+      "face_pull_cable"
+    ],
+    "progressions": [
+      "wide_grip_high_pull_below_shoulder"
+    ],
     "biomechanical_reasoning": "Hareket, humerusu iç rotasyonda tutarken abduksiyona zorlar: supraspinatus tendonu ve subakromiyal bursa, akromiyon ile tuberkulum majus arasında sıkışır. Dar tutuş iç rotasyonu artırır ve bilek/dirsek ulnar deviasyonunu zorlayarak lateral epikondil yükünü de yükseltir. Aynı kası çalıştırmanın çok daha güvenli yolları varken klinik popülasyonda gerekçesi zayıftır.",
     "cues": [
       "Bu hareket yerine skapular düzlemde (öne 30 derece) başparmak yukarı lateral raise yap.",
@@ -359,7 +632,13 @@
   {
     "id": "chest_supported_row",
     "name": "Göğüs Destekli Row",
-    "target_muscles": ["lats_mid", "traps_mid", "traps_lower", "delt_rear", "biceps"],
+    "target_muscles": [
+      "lats_mid",
+      "traps_mid",
+      "traps_lower",
+      "delt_rear",
+      "biceps"
+    ],
     "kinetic_chain": "open",
     "joint_action": "compound",
     "movement_pattern": "horizontal_pull",
@@ -367,9 +646,19 @@
     "shear_force_level": "low",
     "spinal_alignment": "neutral",
     "contraindications": [],
-    "safe_for": ["lumbar_disc_herniation", "lumbar_spondylolisthesis", "cervical_pain", "patellofemoral_pain", "hypertension_controlled"],
-    "regressions": ["seated_cable_row_neutral"],
-    "progressions": ["barbell_bent_over_row"],
+    "safe_for": [
+      "lumbar_disc_herniation",
+      "lumbar_spondylolisthesis",
+      "cervical_pain",
+      "patellofemoral_pain",
+      "hypertension:controlled"
+    ],
+    "regressions": [
+      "seated_cable_row_neutral"
+    ],
+    "progressions": [
+      "barbell_bent_over_row"
+    ],
     "biomechanical_reasoning": "Gövde mindere yaslandığı için lomber ekstansörler statik yük taşımaz ve diskteki kompresyon minimuma iner; çekiş kuvveti doğrudan sırt kaslarına gider. Skapular retraksiyon ve depresyon serbestçe yapılabildiğinden alt trapez/orta trapez aktivasyonu için üst çapraz sendromunda birincil seçimdir.",
     "cues": [
       "Önce kürekleri geri-aşağı kaydır, sonra dirseği çek.",
@@ -380,17 +669,34 @@
   {
     "id": "lat_pulldown_front_wide",
     "name": "Lat Pulldown (Öne, Geniş Tutuş)",
-    "target_muscles": ["lats_upper", "lats_mid", "biceps", "traps_lower"],
+    "target_muscles": [
+      "lats_upper",
+      "lats_mid",
+      "biceps",
+      "traps_lower"
+    ],
     "kinetic_chain": "open",
     "joint_action": "compound",
     "movement_pattern": "vertical_pull",
     "axial_loading": false,
     "shear_force_level": "low",
     "spinal_alignment": "neutral",
-    "contraindications": ["shoulder_instability_severe"],
-    "safe_for": ["lumbar_disc_herniation", "patellofemoral_pain", "knee_osteoarthritis"],
-    "regressions": ["band_lat_pulldown", "seated_cable_row_neutral"],
-    "progressions": ["assisted_pull_up", "pull_up"],
+    "contraindications": [
+      "anterior_shoulder_instability:severe"
+    ],
+    "safe_for": [
+      "lumbar_disc_herniation",
+      "patellofemoral_pain",
+      "knee_osteoarthritis"
+    ],
+    "regressions": [
+      "band_lat_pulldown",
+      "seated_cable_row_neutral"
+    ],
+    "progressions": [
+      "assisted_pull_up",
+      "pull_up"
+    ],
     "biomechanical_reasoning": "Bar gövdenin önünde indiği için humerus skapular düzleme yakın kalır ve omuz eklemi aşırı dış rotasyon + horizontal abduksiyon pozisyonuna zorlanmaz. Aşırı geriye yaslanma hareketi row'a dönüştürür ve lomber ekstansiyon talebi doğurur; 10–20 derecelik gövde eğimi yeterlidir.",
     "cues": [
       "Barı köprücük kemiğine doğru çek, çeneye dayama.",
@@ -401,17 +707,33 @@
   {
     "id": "behind_neck_lat_pulldown",
     "name": "Ense Arkası Lat Pulldown",
-    "target_muscles": ["lats_upper", "traps_mid", "delt_rear"],
+    "target_muscles": [
+      "lats_upper",
+      "traps_mid",
+      "delt_rear"
+    ],
     "kinetic_chain": "open",
     "joint_action": "compound",
     "movement_pattern": "vertical_pull",
     "axial_loading": false,
     "shear_force_level": "high",
     "spinal_alignment": "flexion",
-    "contraindications": ["shoulder_impingement", "shoulder_instability", "rotator_cuff_tendinopathy", "cervical_pain", "cervical_radiculopathy", "thoracic_extension_deficit"],
+    "contraindications": [
+      "subacromial_pain_syndrome",
+      "anterior_shoulder_instability",
+      "rotator_cuff_tendinopathy",
+      "cervical_pain",
+      "cervical_radiculopathy",
+      "thoracic_extension_deficit"
+    ],
     "safe_for": [],
-    "regressions": ["lat_pulldown_front_wide", "chest_supported_row"],
-    "progressions": ["pull_up"],
+    "regressions": [
+      "lat_pulldown_front_wide",
+      "chest_supported_row"
+    ],
+    "progressions": [
+      "pull_up"
+    ],
     "biomechanical_reasoning": "Bar enseye inerken omuz 90° abduksiyon + maksimum dış rotasyona (apprehension pozisyonu) zorlanır; anterior kapsül gerilir ve subakromiyal sıkışma artar. Barın başın arkasından geçebilmesi için servikal bölge fleksiyona itilir, torasik ekstansiyon kısıtlıysa bu yük boyuna aktarılır. Öne çekişe kıyasla ek bir kas aktivasyonu avantajı gösterilmemiştir; risk/fayda dengesi olumsuzdur.",
     "cues": [
       "Bu varyantı kullanma; barı öne, köprücük kemiğine çek.",
@@ -422,17 +744,35 @@
   {
     "id": "barbell_bent_over_row",
     "name": "Barbell Bent-Over Row",
-    "target_muscles": ["lats_mid", "traps_mid", "erectors", "delt_rear", "biceps"],
+    "target_muscles": [
+      "lats_mid",
+      "traps_mid",
+      "erectors",
+      "delt_rear",
+      "biceps"
+    ],
     "kinetic_chain": "open",
     "joint_action": "compound",
     "movement_pattern": "horizontal_pull",
     "axial_loading": true,
     "shear_force_level": "medium",
     "spinal_alignment": "neutral",
-    "contraindications": ["lumbar_disc_herniation", "lumbar_spondylolisthesis", "hypertension_uncontrolled"],
-    "safe_for": ["patellofemoral_pain", "knee_osteoarthritis"],
-    "regressions": ["chest_supported_row", "single_arm_dumbbell_row_supported"],
-    "progressions": ["pendlay_row"],
+    "contraindications": [
+      "lumbar_disc_herniation",
+      "lumbar_spondylolisthesis",
+      "hypertension:uncontrolled"
+    ],
+    "safe_for": [
+      "patellofemoral_pain",
+      "knee_osteoarthritis"
+    ],
+    "regressions": [
+      "chest_supported_row",
+      "single_arm_dumbbell_row_supported"
+    ],
+    "progressions": [
+      "pendlay_row"
+    ],
     "biomechanical_reasoning": "Gövde yere yakın sabit tutulurken lomber ekstansörler uzun süre yüksek izometrik yük taşır; yorulma arttıkça fleksiyona kayma ve diskte posterior yüklenme olasılığı yükselir. Bara binen her kilo, uzun moment kolu nedeniyle bel için katlanarak artan tork demektir. Sırt kaslarını hedefleyen desteklenmiş varyantlar aynı kazancı bel riski olmadan verir.",
     "cues": [
       "Gövde açısını set boyunca sabit tut; yorulunca yükselme.",
@@ -443,7 +783,11 @@
   {
     "id": "face_pull_cable",
     "name": "Kablo Face Pull",
-    "target_muscles": ["delt_rear", "traps_mid", "traps_lower"],
+    "target_muscles": [
+      "delt_rear",
+      "traps_mid",
+      "traps_lower"
+    ],
     "kinetic_chain": "open",
     "joint_action": "isolation",
     "movement_pattern": "horizontal_pull",
@@ -451,9 +795,19 @@
     "shear_force_level": "low",
     "spinal_alignment": "neutral",
     "contraindications": [],
-    "safe_for": ["shoulder_impingement", "rotator_cuff_tendinopathy", "cervical_pain", "lumbar_disc_herniation", "ac_joint_pathology"],
-    "regressions": ["band_pull_apart"],
-    "progressions": ["face_pull_with_external_rotation"],
+    "safe_for": [
+      "subacromial_pain_syndrome",
+      "rotator_cuff_tendinopathy",
+      "cervical_pain",
+      "lumbar_disc_herniation",
+      "ac_joint_injury"
+    ],
+    "regressions": [
+      "band_pull_apart"
+    ],
+    "progressions": [
+      "face_pull_with_external_rotation"
+    ],
     "biomechanical_reasoning": "Hareket humerusu dış rotasyona götürürken skapulayı retraksiyon ve aşağı rotasyona çalıştırır; bu kombinasyon subakromiyal aralığı korur ve Janda'nın üst çapraz sendromunda zayıf kalan alt/orta trapez ile infraspinatusu hedefler. Düşük yük ve yüksek tekrar toleransı nedeniyle düzeltici blokta ısınma parçası olarak kullanılabilir.",
     "cues": [
       "Halatı alnın hizasına çek, eller kulak seviyesinde ayrılsın.",
@@ -464,17 +818,31 @@
   {
     "id": "mcgill_curl_up",
     "name": "McGill Curl-Up",
-    "target_muscles": ["abs_upper", "obliques"],
+    "target_muscles": [
+      "abs_upper",
+      "obliques"
+    ],
     "kinetic_chain": "closed",
     "joint_action": "isolation",
     "movement_pattern": "anti_extension",
     "axial_loading": false,
     "shear_force_level": "low",
     "spinal_alignment": "neutral",
-    "contraindications": ["cervical_radiculopathy_acute"],
-    "safe_for": ["lumbar_disc_herniation", "lumbar_stenosis", "patellofemoral_pain", "knee_osteoarthritis"],
-    "regressions": ["abdominal_bracing_supine"],
-    "progressions": ["mcgill_curl_up_isometric_pyramid"],
+    "contraindications": [
+      "cervical_radiculopathy:acute"
+    ],
+    "safe_for": [
+      "lumbar_disc_herniation",
+      "lumbar_stenosis",
+      "patellofemoral_pain",
+      "knee_osteoarthritis"
+    ],
+    "regressions": [
+      "abdominal_bracing_supine"
+    ],
+    "progressions": [
+      "mcgill_curl_up_isometric_pyramid"
+    ],
     "biomechanical_reasoning": "Eller lomber lordozun altına yerleştirilerek omurganın düzleşmesi engellenir; rektus abdominis ve oblikler omurga nötrken izometrik çalışır. Klasik sit-up'taki tekrarlı lomber fleksiyon ve yüksek disk kompresyonu ortadan kalkar. Bir bacağın bükülü kalması pelvisi stabilize eder ve psoas kaynaklı lomber yüklenmeyi azaltır.",
     "cues": [
       "Elleri belinin altına koy, beli yere yapıştırma.",
@@ -485,17 +853,33 @@
   {
     "id": "side_plank",
     "name": "Side Plank (Yan Köprü)",
-    "target_muscles": ["obliques", "quadratus", "glute_medius"],
+    "target_muscles": [
+      "obliques",
+      "quadratus",
+      "glute_medius"
+    ],
     "kinetic_chain": "closed",
     "joint_action": "isolation",
     "movement_pattern": "anti_lateral_flexion",
     "axial_loading": false,
     "shear_force_level": "low",
     "spinal_alignment": "neutral",
-    "contraindications": ["shoulder_impingement_acute", "ac_joint_pathology_severe"],
-    "safe_for": ["lumbar_disc_herniation", "lumbar_stenosis", "patellofemoral_pain"],
-    "regressions": ["side_plank_knees_bent"],
-    "progressions": ["side_plank_leg_lift", "side_plank_with_row"],
+    "contraindications": [
+      "subacromial_pain_syndrome:acute",
+      "ac_joint_injury:severe"
+    ],
+    "safe_for": [
+      "lumbar_disc_herniation",
+      "lumbar_stenosis",
+      "patellofemoral_pain"
+    ],
+    "regressions": [
+      "side_plank_knees_bent"
+    ],
+    "progressions": [
+      "side_plank_leg_lift",
+      "side_plank_with_row"
+    ],
     "biomechanical_reasoning": "Lateral zincir (oblikler, quadratus lumborum, gluteus medius) omurgayı nötrde tutarak izometrik çalışır; McGill'in ölçümlerinde yüksek kas aktivasyonuna karşılık görece düşük disk kompresyonu üretir. Dirsek üstü destek omuzda yük taşıdığından akut omuz tablolarında modifikasyon gerekir; diz bükülü varyant moment kolunu kısaltarak yükü yarıya indirir.",
     "cues": [
       "Kalçayı yukarı it, vücut baştan topuğa tek çizgi.",
@@ -506,17 +890,37 @@
   {
     "id": "bird_dog",
     "name": "Bird Dog",
-    "target_muscles": ["erectors", "glutes", "abs_lower", "obliques"],
+    "target_muscles": [
+      "erectors",
+      "glutes",
+      "abs_lower",
+      "obliques"
+    ],
     "kinetic_chain": "closed",
     "joint_action": "compound",
     "movement_pattern": "anti_rotation",
     "axial_loading": false,
     "shear_force_level": "low",
     "spinal_alignment": "neutral",
-    "contraindications": ["wrist_pain_severe", "knee_osteoarthritis_severe"],
-    "safe_for": ["lumbar_disc_herniation", "lumbar_stenosis", "lumbar_spondylolisthesis", "shoulder_impingement", "hypertension_controlled"],
-    "regressions": ["quadruped_arm_lift", "quadruped_leg_slide"],
-    "progressions": ["bird_dog_with_row", "bird_dog_isometric_hold"],
+    "contraindications": [
+      "wrist_pain:severe",
+      "knee_osteoarthritis:severe"
+    ],
+    "safe_for": [
+      "lumbar_disc_herniation",
+      "lumbar_stenosis",
+      "lumbar_spondylolisthesis",
+      "subacromial_pain_syndrome",
+      "hypertension:controlled"
+    ],
+    "regressions": [
+      "quadruped_arm_lift",
+      "quadruped_leg_slide"
+    ],
+    "progressions": [
+      "bird_dog_with_row",
+      "bird_dog_isometric_hold"
+    ],
     "biomechanical_reasoning": "Karşılıklı kol-bacak kaldırma, gövdeye rotasyonel bir bozucu kuvvet uygular; omurgayı hareketsiz tutmak için oblik ve ekstansör zincir birlikte çalışır. Dörtayak pozisyonunda disk kompresyonu düşüktür, bu yüzden akut sonrası dönemde erken başlatılabilen ender ekstansör egzersizlerdendir. Bel hareket ettiği anda egzersizin amacı kaybolur.",
     "cues": [
       "Belin üstünde bir bardak su varmış gibi düşün, dökülmesin.",
@@ -527,7 +931,11 @@
   {
     "id": "pallof_press",
     "name": "Pallof Press",
-    "target_muscles": ["obliques", "abs_upper", "serratus"],
+    "target_muscles": [
+      "obliques",
+      "abs_upper",
+      "serratus"
+    ],
     "kinetic_chain": "open",
     "joint_action": "isolation",
     "movement_pattern": "anti_rotation",
@@ -535,9 +943,20 @@
     "shear_force_level": "low",
     "spinal_alignment": "neutral",
     "contraindications": [],
-    "safe_for": ["lumbar_disc_herniation", "lumbar_spondylolisthesis", "shoulder_impingement", "cervical_pain", "knee_osteoarthritis"],
-    "regressions": ["half_kneeling_pallof_hold"],
-    "progressions": ["pallof_press_split_stance", "standing_cable_anti_rotation_walkout"],
+    "safe_for": [
+      "lumbar_disc_herniation",
+      "lumbar_spondylolisthesis",
+      "subacromial_pain_syndrome",
+      "cervical_pain",
+      "knee_osteoarthritis"
+    ],
+    "regressions": [
+      "half_kneeling_pallof_hold"
+    ],
+    "progressions": [
+      "pallof_press_split_stance",
+      "standing_cable_anti_rotation_walkout"
+    ],
     "biomechanical_reasoning": "Kablonun yarattığı rotasyon momentine karşı omurga nötr tutulur: yük rotasyonu yaptırmak için değil, engellemek için kullanılır. Rusya twist gibi yüklü tekrarlı rotasyonun aksine anulus fibrosus lifleri makaslanmaz. Kolların uzaması moment kolunu artırdığından yük, mesafeyle kademelendirilebilir.",
     "cues": [
       "Kolları uzatırken gövde hiç dönmesin.",
@@ -548,17 +967,36 @@
   {
     "id": "suitcase_carry",
     "name": "Suitcase Carry (Tek El Taşıma)",
-    "target_muscles": ["obliques", "quadratus", "traps_upper", "forearm_flexors", "glute_medius"],
+    "target_muscles": [
+      "obliques",
+      "quadratus",
+      "traps_upper",
+      "forearm_flexors",
+      "glute_medius"
+    ],
     "kinetic_chain": "closed",
     "joint_action": "compound",
     "movement_pattern": "carry",
     "axial_loading": true,
     "shear_force_level": "low",
     "spinal_alignment": "neutral",
-    "contraindications": ["lumbar_disc_herniation_acute", "lateral_epicondylitis_acute"],
-    "safe_for": ["shoulder_impingement", "patellofemoral_pain", "knee_osteoarthritis", "lumbar_stenosis"],
-    "regressions": ["farmer_carry_two_hands"],
-    "progressions": ["heavy_suitcase_carry", "single_arm_overhead_carry"],
+    "contraindications": [
+      "lumbar_disc_herniation:acute",
+      "lateral_epicondylitis:acute"
+    ],
+    "safe_for": [
+      "subacromial_pain_syndrome",
+      "patellofemoral_pain",
+      "knee_osteoarthritis",
+      "lumbar_stenosis"
+    ],
+    "regressions": [
+      "farmer_carry_two_hands"
+    ],
+    "progressions": [
+      "heavy_suitcase_carry",
+      "single_arm_overhead_carry"
+    ],
     "biomechanical_reasoning": "Tek taraflı yük, gövdeyi yüklü tarafa lateral fleksiyona zorlar; karşı taraf oblik ve quadratus lumborum bunu engellemek için izometrik çalışır. Yürüyüş bileşeni kalça abduktörlerini pelvis stabilizasyonu için devreye sokar. Yük omurgaya eksenel binse de süre kısa ve nötr pozisyonda olduğundan tolere edilebilir; akut disk tablosunda yine de ertelenmelidir.",
     "cues": [
       "Omuzları eşit seviyede tut, yüke doğru eğilme.",
@@ -569,17 +1007,32 @@
   {
     "id": "russian_twist_weighted",
     "name": "Russian Twist (Ağırlıklı)",
-    "target_muscles": ["obliques", "abs_upper", "hip_flexors"],
+    "target_muscles": [
+      "obliques",
+      "abs_upper",
+      "hip_flexors"
+    ],
     "kinetic_chain": "open",
     "joint_action": "isolation",
     "movement_pattern": "anti_rotation",
     "axial_loading": false,
     "shear_force_level": "high",
     "spinal_alignment": "rotation",
-    "contraindications": ["lumbar_disc_herniation", "lumbar_stenosis", "lumbar_spondylolisthesis", "si_joint_pain", "pregnancy_second_third_trimester"],
+    "contraindications": [
+      "lumbar_disc_herniation",
+      "lumbar_stenosis",
+      "lumbar_spondylolisthesis",
+      "si_joint_pain",
+      "pregnancy_second_third_trimester"
+    ],
     "safe_for": [],
-    "regressions": ["pallof_press", "bird_dog"],
-    "progressions": ["landmine_rotation_controlled"],
+    "regressions": [
+      "pallof_press",
+      "bird_dog"
+    ],
+    "progressions": [
+      "landmine_rotation_controlled"
+    ],
     "biomechanical_reasoning": "Lomber omurga rotasyona yapısal olarak kısıtlıdır (segment başına birkaç derece); hareketin çoğu kalça ve torakstan gelmezse yük anulus fibrosus liflerini makaslar. Yüklü fleksiyon pozisyonunda tekrarlı rotasyon, McGill'in disk hasarı modelinde en riskli kombinasyondur. Aynı kaslar anti-rotasyon egzersizleriyle disk riski olmadan çalıştırılabilir.",
     "cues": [
       "Bu hareketi programdan çıkar; yerine Pallof press kullan.",
