@@ -103,7 +103,7 @@ export function SwipeGroup({ children }: { children: React.ReactNode }) {
 /**
  * Kart yüzündeki dokunuşun hakemi (yalnız `pointerType === 'touch'`): |dx| > 10 ve
  * |dx| > 1,5·|dy| olursa kaydırma başlar (`onSwipe`, basılan anın olayıyla: yüz parmağı
- * baştan izler); |dy| > 8 olursa sayfa kayar (`touch-action: pan-y`, tarayıcının işi);
+ * baştan izler); |dy| > 8 olursa sayfa kayar (`touch-action: pan-y pinch-zoom`, tarayıcının işi);
  * 8 px'ten az hareket dokunmadır (yüzün kendi click'i). Kaydırmadan sonra gelen click
  * `consumeClick` ile yutulur. Sürükleme yalnız tutamak çizgisinden başladığı için süre
  * yarışı yok.
@@ -446,7 +446,7 @@ export function SwipeRow({
             if (open) settle(null);
           }
         }}
-        style={{ x, touchAction: 'pan-y' }}
+        style={{ x, touchAction: 'pan-y pinch-zoom' }}
         // Kayarken yüz opak: arkadaki panel yalnız açılan yerde görünür.
         className={cn('relative', active && 'bg-(--face-bg)')}>
         {children}

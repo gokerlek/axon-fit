@@ -71,7 +71,9 @@ export function useEditorBar(registration: EditorBarRegistration): void {
   useLayoutEffect(() => {
     control?.register(registration);
   });
-  useEffect(() => () => control?.register(null), [control]);
+  // Kayıt silme de yerleşim evresinde: gün değişince eski düzenleyicinin temizliği (mutasyon
+  // evresi) yenisinin kaydından önce koşar; pasif temizlik yeni kaydı sonradan silerdi.
+  useLayoutEffect(() => () => control?.register(null), [control]);
 }
 
 const NO_BUTTON = () => null;

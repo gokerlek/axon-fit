@@ -354,8 +354,10 @@ export function ProgramForm({
     },
   });
 
-  // Kaydedilmemiş değişiklik varken sekme kapanmasın.
-  const guarded = form.isDirty && !save.isPending && !save.isSuccess;
+  // Kaydedilmemiş değişiklik varken sekme kapanmasın; cihazı silinmiş satırların düzeltmesi de
+  // kaydedilmemiş iştir (çubuk "Kaydedildi" demesin).
+  const dirty = form.isDirty || start.dropped > 0;
+  const guarded = dirty && !save.isPending && !save.isSuccess;
   useEffect(() => {
     if (!guarded) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
@@ -577,7 +579,7 @@ export function ProgramForm({
           cancelHref={mode === 'edit' ? programHref : detailHref}
           creating={mode === 'create'}
           submitLabel={mode === 'create' ? 'Programı oluştur' : 'Kaydet'}
-          dirty={form.isDirty}
+          dirty={dirty}
           pending={save.isPending || save.isSuccess}
         />
       </Form>

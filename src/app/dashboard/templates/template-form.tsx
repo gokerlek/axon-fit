@@ -82,8 +82,9 @@ export function TemplateForm({
     },
   });
 
-  // Kaydedilmemiş değişiklik varken sekme kapanmasın.
-  const dirty = form.isDirty;
+  // Kaydedilmemiş değişiklik varken sekme kapanmasın; cihazı silinmiş satırların düzeltmesi de
+  // kaydedilmemiş iştir (çubuk "Kaydedildi" demesin).
+  const dirty = form.isDirty || start.dropped > 0;
   const guarded = dirty && !save.isPending && !save.isSuccess;
   useEffect(() => {
     if (!guarded) return;
