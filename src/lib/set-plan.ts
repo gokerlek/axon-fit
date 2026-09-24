@@ -40,6 +40,11 @@ function amrapState(sets: readonly SetSpec[]): SetShape['amrap'] {
   return count === sets.length ? 'all' : 'some';
 }
 
+/** Bozuk giriş (NaN) kendine eşit sayılır: yazarken düz satır düz kalır. */
+function sameValue(a: number, b: number): boolean {
+  return a === b || (Number.isNaN(a) && Number.isNaN(b));
+}
+
 /**
  * Setlerin düzeni. Düz: bütün setlerde aynı aralık, yüzde yok. Piramit: yük yüzdesi artarak
  * tam yüke çıkar, tekrar üst sınırı azalır. Back-off: ilk set tam yük, gerisi aynı yüzdede.
@@ -50,7 +55,7 @@ export function setShape(sets: readonly SetSpec[]): SetShape {
   const first = sets[0];
   const n = sets.length;
   const pcts = sets.map(pctOf);
-  if (!first || sets.every((set) => set.min === first.min && set.max === first.max && isFullLoad(set))) {
+  if (!first || sets.every((set) => sameValue(set.min, first.min) && sameValue(set.max, first.max) && isFullLoad(set))) {
     return { kind: 'straight', amrap };
   }
   if (n >= 2) {
@@ -254,7 +259,7 @@ export function formatSets(sets: readonly SetSpec[], trackingType: TrackingType,
 
 /**
  * Program geçmişi için kısa biçim: "3×8–12", "3×30–60 sn, son set AMRAP",
- * "12/10/8 (piramit)", "5/8/8 (back-off %85)", "8–12/8–12 (yük %70/%100)".
+ * "12/10/8 (piramit %80/%90/%100)", "5/8/8 (back-off %85)", "8–12/8–12 (yük %70/%100)".
  */
 export function setsText(sets: readonly SetSpec[], trackingType: TrackingType): string {
   const list = effective(sets, trackingType);
@@ -279,7 +284,7 @@ export function setsText(sets: readonly SetSpec[], trackingType: TrackingType): 
 
   const steps = `${list.map((set) => `${range(set)}${set.amrap ? '+' : ''}`).join('/')}${seconds}`;
   const pcts = list.map(pctOf);
-  if (shape.kind === 'pyramid') return `${steps} (piramit)`;
+  if (shape.kind === 'pyramid') return `${steps} (piramit ${pcts.map((pct) => `%${count(pct)}`).join('/')})`;
   if (shape.kind === 'backoff') return `${steps} (back-off %${count(pcts[1] as number)})`;
   return pcts.some((pct) => pct < 100) ? `${steps} (yük ${pcts.map((pct) => `%${count(pct)}`).join('/')})` : steps;
 }

@@ -373,6 +373,13 @@ describe('set başına plan', () => {
     assert.deepEqual({ reason: plan.reason, top: plan.topWeightKg }, { reason: 'increase', top: 102.5 });
   });
 
+  test('back-off setlerindeki yorgunluk üst setin tekrar hedefini düşürmez', () => {
+    const backoff: SetTarget[] = [{ min: 6, max: 10 }, { min: 6, max: 10, loadPct: 85 }, { min: 6, max: 10, loadPct: 85 }];
+    const plan = planSession({ spec: barbell, rule, sets: backoff, history: [[one(100, 9), one(85, 6, 'hard'), one(85, 6, 'hard')]] });
+    assert.equal(plan.reason, 'add_rep');
+    assert.deepEqual(targets(plan), [10, 7, 7]);
+  });
+
   test('üst set tıkanınca ağırlık korunur', () => {
     const backoff: SetTarget[] = [{ min: 5, max: 5 }, { min: 8, max: 8, loadPct: 85 }, { min: 8, max: 8, loadPct: 85 }];
     const plan = planSession({ spec: barbell, rule, sets: backoff, history: [[one(100, 4), one(85, 8), one(85, 8)]] });

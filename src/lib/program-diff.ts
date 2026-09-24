@@ -26,7 +26,7 @@ import {
 
 /**
  * Program geçmişi (SPEC §7.4): PT'nin her kaydında eski ve yeni program karşılaştırılır,
- * okunur Türkçe cümleler çıkar ("Gün A: Goblet Squat 3×8–12 → 12/10/8 (piramit) · Leg
+ * okunur Türkçe cümleler çıkar ("Gün A: Goblet Squat 3×8–12 → 12/10/8 (piramit %80/%90/%100) · Leg
  * Press: son set AMRAP · Haftada 2 → 3 gün"). Gerekçe alanı yok. Cümleler
  * `program.json`'daki geçmişe (kırpılmış) ve commit mesajına (tamamı) girer.
  *

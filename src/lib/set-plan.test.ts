@@ -42,6 +42,12 @@ describe('setlerin düzeni', () => {
     assert.equal(isStraight(pyramid), false);
   });
 
+  test('yazarken bozuk giriş (NaN) düz satırı bozmaz', () => {
+    assert.equal(isStraight([{ min: NaN, max: 12 }, { min: NaN, max: 12 }, { min: NaN, max: 12 }]), true);
+    assert.equal(isStraight([{ min: NaN, max: 12 }]), true);
+    assert.equal(isStraight([{ min: NaN, max: 12 }, { min: 8, max: 12 }]), false);
+  });
+
   test('referans set: ilk tam yük seti', () => {
     assert.deepEqual(referenceSet(pyramid), { min: 8, max: 8 });
     assert.deepEqual(referenceSet(backoff), { min: 5, max: 5 });
@@ -170,7 +176,7 @@ describe('anlatım', () => {
     assert.equal(setsText([{ min: 5, max: 5, amrap: true }], 'weight_reps'), '1×5, AMRAP');
     assert.equal(setsText(three.map((set) => ({ ...set, amrap: true })), 'weight_reps'), '3×8–12, hepsi AMRAP');
     assert.equal(setsText([{ min: 8, max: 12, amrap: true }, { min: 8, max: 12 }], 'weight_reps'), '2×8–12, AMRAP: 1. set');
-    assert.equal(setsText(pyramid, 'weight_reps'), '12/10/8 (piramit)');
+    assert.equal(setsText(pyramid, 'weight_reps'), '12/10/8 (piramit %80/%90/%100)');
     assert.equal(setsText(backoff, 'weight_reps'), '5/8/8 (back-off %85)');
     assert.equal(setsText([{ min: 8, max: 12, loadPct: 70 }, { min: 8, max: 12 }], 'weight_reps'), '8–12/8–12 (yük %70/%100)');
     assert.equal(setsText([{ min: 10, max: 10 }, { min: 8, max: 8 }], 'weight_reps'), '10/8');

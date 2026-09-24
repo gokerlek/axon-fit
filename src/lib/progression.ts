@@ -498,9 +498,9 @@ function referenceWeight(pairs: readonly Pair[], spec: LoadSpec): number {
   return grid.floor(clean(implied));
 }
 
-/** Aynı aralıktaki setler birlikte ilerler: grubun geçen seferki en düşük değeri + adım (aralıkta). */
+/** Aynı aralık ve aynı yükteki setler birlikte ilerler: grubun geçen seferki en düşük değeri + adım (aralıkta). */
 function groupTargets(sets: readonly SetTarget[], pairs: readonly Pair[], unit: number): number[] {
-  const key = (set: SetTarget) => `${set.min}-${set.max}`;
+  const key = (set: SetTarget) => `${set.min}-${set.max}@${isFullLoad(set) ? 100 : set.loadPct}`;
   const lowest = new Map<string, number>();
   for (const { set, result } of pairs) {
     const previous = lowest.get(key(set));

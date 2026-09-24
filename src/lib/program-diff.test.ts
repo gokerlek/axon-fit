@@ -424,7 +424,39 @@ describe('set başına hedef', () => {
 
   test('piramit', () => {
     const after = day(applySetPreset(before.blocks, goblet.id, 'pyramid'));
-    assert.deepEqual(diffDay(before, after, ctx), ['Goblet Squat 3×8–12 → 12/10/8 (piramit)']);
+    assert.deepEqual(diffDay(before, after, ctx), ['Goblet Squat 3×8–12 → 12/10/8 (piramit %80/%90/%100)']);
+  });
+
+  test('piramitte yalnız yüzdeler değişince kayıt düşmez', () => {
+    const pyramid = (low: number, mid: number) =>
+      day([
+        single('b_goblet', {
+          ...goblet,
+          sets: [
+            { min: 12, max: 12, loadPct: low },
+            { min: 10, max: 10, loadPct: mid },
+            { min: 8, max: 8 },
+          ],
+        }),
+        single('b_press1', press),
+      ]);
+    const old = pyramid(80, 90);
+    const next = pyramid(70, 85);
+    assert.deepEqual(diffDay(old, next, ctx), ['Goblet Squat 12/10/8 (piramit %80/%90/%100) → 12/10/8 (piramit %70/%85/%100)']);
+
+    const at = '2026-09-01T00:00:00.000Z';
+    const stored: ProgramState = {
+      version: 2,
+      phased: false,
+      revision: 1,
+      createdAt: at,
+      updatedAt: at,
+      phases: [evre1([old])],
+      current: { phaseId: 'p_evre01', startedAt: at },
+      rotation: {},
+      log: [],
+    };
+    assert.notEqual(applyProgramEdit(stored, body([evre1([next])]), ctx, new Date('2026-09-24T09:00:00.000Z')), null);
   });
 
   test('son set AMRAP açılır ve kapanır', () => {
