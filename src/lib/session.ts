@@ -80,17 +80,29 @@ function cookieOf(role: Session['role']): string {
   return role === 'pt' ? PT_COOKIE : CLIENT_COOKIE;
 }
 
+const cookieOptions = (seconds: number) => ({
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  secure: process.env.NODE_ENV === 'production',
+  path: '/',
+  maxAge: seconds,
+});
+
 /** Oturumu kendi rolünün çerezine yazar; diğer rolün oturumuna dokunmaz. */
 export async function createSession(session: Session): Promise<void> {
+  const store = await cookies();
   const seconds = SESSION_DAYS * 24 * 60 * 60;
-  const token = await sign({ ...session }, seconds);
-  (await cookies()).set(cookieOf(session.role), token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: seconds,
-  });
+  if (session.role === 'pt' && !store.get(CLIENT_COOKIE)) {
+    // Ayırmadan önce danışan oturumu PT çerezinde tutuluyordu. PT girerken o eski danışan
+    // oturumu kendi çerezine taşınır; yoksa aynı tarayıcıdaki danışan sekmesi bir kez düşerdi.
+    const legacy = store.get(PT_COOKIE)?.value;
+    const payload = legacy ? await verify<{ role?: unknown; exp?: number }>(legacy) : null;
+    if (legacy && payload?.role === 'client') {
+      const remaining = Math.max(1, (payload.exp ?? 0) - Math.floor(Date.now() / 1000));
+      store.set(CLIENT_COOKIE, legacy, cookieOptions(remaining));
+    }
+  }
+  store.set(cookieOf(session.role), await sign({ ...session }, seconds), cookieOptions(seconds));
 }
 
 async function payloadOf(name: string): Promise<(Record<string, unknown> & { role?: unknown }) | null> {
