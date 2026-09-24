@@ -35,8 +35,6 @@ import {
   combineInto,
   combineOutcome,
   dissolveGroup,
-  duplicateBlock,
-  duplicateRow,
   groupBlocks,
   groupCheck,
   moveItem,
@@ -126,14 +124,6 @@ export function useBlocks(form: BlocksFormStore, path: BlocksPath): TemplateBloc
   return (field.input ?? []) as unknown as TemplateBlock[];
 }
 
-/** İşlemden sonra yeni çıkan kimlik (kopya): önce satırlar, yoksa blok. */
-function addedId(before: readonly TemplateBlock[], after: readonly TemplateBlock[], wholeBlock: boolean): string | undefined {
-  const blockIds = new Set(before.map((block) => block.id));
-  if (wholeBlock) return after.find((block) => !blockIds.has(block.id))?.id;
-  const rowIds = new Set(before.flatMap((block) => block.rows.map((row) => row.id)));
-  return after.flatMap((block) => block.rows).find((row) => !rowIds.has(row.id))?.id;
-}
-
 /** Silinen öğeden sonra odak: sonraki kart, yoksa önceki; grupta sonraki üye, önceki üye ya da grubun yüzü. */
 function neighbourOf(blocks: readonly TemplateBlock[], itemId: string): string | null {
   const index = blocks.findIndex((block) => blockItemId(block) === itemId);
@@ -168,7 +158,7 @@ function neighbourAfterRemoval(blocks: readonly TemplateBlock[], removed: Readon
  * gününün blokları) düzenler. Tek kart tasarımı: kapalı kartlar; dokununca açılır (lg
  * altında aynı anda tek kart). Kartın üstündeki çizgiden sürükleyerek sıralanır, bir
  * kartın ortasına bırakıp gruplanır; klavyede yüz odaktayken Alt + ok, Delete. Yüz sola
- * kaydırılınca silinir (parmak, kalem, fare); kopyalama kartın ⧉ düğmesinde. "Seç" ile seçim
+ * kaydırılınca silinir (parmak, kalem, fare); kopyalama yok. "Seç" ile seçim
  * moduna geçilir: seçili kartlar toplu gruplanır ya da silinir (seçim çubuğu `EditorBar`'da;
  * düzenleyici oraya kaydolur). "+ Hareket ekle" listenin altındadır.
  *
@@ -394,14 +384,6 @@ export function BlockEditor({
     };
 
     return {
-      duplicate: (itemId) => {
-        const before = current();
-        const whole = isGroup(before, itemId);
-        const next = whole ? duplicateBlock(before, itemId, newIds(before)) : duplicateRow(before, itemId, newIds(before), exerciseById);
-        if (next === before) return announce(FULL_MESSAGE);
-        const copy = addedId(before, next, whole);
-        updateWithUndo(() => next, `${titleFor(before, itemId)} kopyalandı`, copy ? { highlight: copy } : undefined);
-      },
       remove: (itemId) => {
         const before = current();
         const whole = before.some((block) => block.id === itemId);

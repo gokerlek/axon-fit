@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { getDeepError, setInput, useField, useFieldArray } from '@formisch/react';
-import { ArrowsSplit, Barbell, CaretDown, Copy, LinkBreak, NoteBlank, Plus, TrendUp, Trash, WarningCircle } from '@phosphor-icons/react';
+import { ArrowsSplit, Barbell, CaretDown, LinkBreak, NoteBlank, Plus, TrendUp, Trash, WarningCircle } from '@phosphor-icons/react';
 import { ARMED, CardBadge, CardFace, CardGrabber, ExerciseCard, ExerciseCardSection, PLACEHOLDER } from '@/components/exercise-card';
 import { GroupedSelect, LabeledSelect } from '@/components/labeled-select';
 import { SwipeRow, type SwipeAction } from '@/components/swipe/swipe-row';
@@ -15,7 +15,7 @@ import { familyOf } from '@/lib/muscles';
 import { describeRule, describeSetRules, PROGRESSION_LABELS, RIR_LABELS, type ProgressionScheme } from '@/lib/progression';
 import type { ReorderTarget } from '@/lib/reorder';
 import { isStraight, setsText } from '@/lib/set-plan';
-import { canDuplicate, changeKind, deviceChoices, setRow, swapDevice, type PickerExercise } from '@/lib/template-edit';
+import { changeKind, deviceChoices, setRow, swapDevice, type PickerExercise } from '@/lib/template-edit';
 import {
   BLOCK_KIND_HINTS,
   BLOCK_KIND_LABELS,
@@ -126,26 +126,7 @@ function MoveStrip({ itemId, kind, title }: { itemId: string; kind: 'single' | '
   );
 }
 
-/** Yüzdeki ⧉ (hep görünür, 44×44). Şablon doluysa pasif; nedeni adında ve duyuruda. */
-function CopyButton({ itemId, title }: { itemId: string; title: string }) {
-  const editor = useEditor();
-  const can = canDuplicate(editor.blocks, itemId);
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      aria-label={can ? `Kopyala: ${title}` : `Kopyala: ${title} (${FULL_MESSAGE})`}
-      aria-disabled={!can || undefined}
-      title={can ? 'Kopyala' : FULL_MESSAGE}
-      className="size-11 rounded-lg text-muted-foreground hover:text-foreground aria-disabled:opacity-40 [&_svg]:size-5"
-      onClick={() => (can ? editor.actions.duplicate(itemId) : editor.announce(FULL_MESSAGE))}>
-      <Copy aria-hidden />
-    </Button>
-  );
-}
-
-/** Kütüphanede olmayan harekette ⧉'nin yerinde 🗑 "Sil". */
+/** Kütüphanede olmayan harekette yüzün sağında 🗑 "Sil". */
 function FaceRemoveButton({ itemId }: { itemId: string }) {
   const editor = useEditor();
   return (
@@ -163,7 +144,7 @@ function FaceRemoveButton({ itemId }: { itemId: string }) {
 }
 
 // Kaydırma panelleri (tasarım §3): sağda olumlu işlemler, solda sil ve dağıt. Hepsi kartın
-// görünür düğmelerinin kopyası (⧉, açık gövdedeki Sil / Gruptan çıkar / Grubu dağıt).
+// görünür düğmelerinin kopyası (açık gövdedeki Sil / Gruptan çıkar / Grubu dağıt).
 
 function removeAction(editor: Editor, itemId: string): SwipeAction {
   return { key: 'remove', label: 'Sil', icon: <Trash />, tone: 'destructive', removes: true, onPress: () => editor.actions.remove(itemId) };
@@ -443,8 +424,8 @@ function RowBody({
 }
 
 /**
- * Tek hareketin ya da grup üyesinin kartı: çizgi, yüz, açıkken gövde. Dokunmatikte yüz
- * kayar (tek: → Kopyala, ← Sil; üye: → [Kopyala][Çıkar], ← Sil). Seçim modunda tek hareketin
+ * Tek hareketin ya da grup üyesinin kartı: çizgi, yüz, açıkken gövde. Yüz kayar (tek: ← Sil;
+ * üye: → [Çıkar], ← Sil). Kopyalama yok (PT kararı 14). Seçim modunda tek hareketin
  * kabına dokunmak seçer; üye tek başına seçilmez (grubu seçilir).
  */
 function RowCard({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; blockIndex: number; row: TemplateRow; rowIndex: number }) {
@@ -464,7 +445,7 @@ function RowCard({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; b
     (single && Boolean(getDeepError(form, { path: blockField(path, blockIndex, 'restSeconds') })));
   const onKeyDown = useFaceKeys(row.id, isOpen);
 
-  // Sağa kaydırma yalnız üyede: "Çıkar" (kopyalama kartın ⧉ düğmesinde; PT kararı 13).
+  // Sağa kaydırma yalnız üyede: "Çıkar" (kopyalama yok; PT kararı 13, 14).
   const start: SwipeAction[] = single
     ? []
     : [
@@ -492,7 +473,7 @@ function RowCard({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; b
         onToggle={() => editor.toggleOpen(row.id)}
         onKeyDown={selecting ? undefined : onKeyDown}
         keyShortcuts={KEY_SHORTCUTS}
-        action={selecting ? undefined : exercise ? <CopyButton itemId={row.id} title={title} /> : <FaceRemoveButton itemId={row.id} />}
+        action={selecting || exercise ? undefined : <FaceRemoveButton itemId={row.id} />}
         status={<DropPill itemId={row.id} />}
         after={<MoveStrip itemId={row.id} kind={single ? 'single' : 'member'} title={title} />}
         invalid={invalid}
@@ -639,7 +620,7 @@ function GroupSettings({ block, blockIndex }: { block: TemplateBlock; blockIndex
 /**
  * Grup: tek kap (vurgu tonlu kenar, %4 zemin). Kabın çizgisi bütün grubu, üyenin çizgisi
  * yalnız o üyeyi taşır. Üyeler ince çizgiyle ayrılan bölümlerdir (kart içinde kart yok);
- * en altta "+ Gruba hareket ekle". Grup yüzü kayar (→ Kopyala, ← [Dağıt][Sil]). Seçim
+ * en altta "+ Gruba hareket ekle". Grup yüzü kayar (← [Dağıt][Sil]). Seçim
  * modunda grubun her yeri grubu seçer; üyeler soluk ve etkileşimsizdir.
  */
 function GroupCard({ block, blockIndex }: { block: TemplateBlock; blockIndex: number }) {
@@ -700,7 +681,6 @@ function GroupCard({ block, blockIndex }: { block: TemplateBlock; blockIndex: nu
         onToggle={() => editor.toggleOpen(block.id)}
         onKeyDown={selecting ? undefined : onKeyDown}
         keyShortcuts={KEY_SHORTCUTS}
-        action={<CopyButton itemId={block.id} title={title} />}
         status={<DropPill itemId={block.id} />}
         after={<MoveStrip itemId={block.id} kind="group" title={title} />}
         invalid={invalid}

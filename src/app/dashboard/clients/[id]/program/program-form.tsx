@@ -420,6 +420,66 @@ export function ProgramForm({
     ...Object.fromEntries(templateList.map((template) => [template.id, template.name])),
   };
 
+  // Form sonu (uyarılar, [Vazgeç] [Kaydet]): günün hareket listesinin hemen altında, Kas yükü'nden önce.
+  const formEnd = (
+    <>
+      {stale ? (
+        <Alert variant="destructive">
+          <WarningCircle />
+          <AlertTitle>Bu program başka bir yerde değişti</AlertTitle>
+          <AlertDescription>
+            Sen düzenlerken program başka bir sekmede ya da cihazda kaydedildi. Değişikliklerin burada duruyor; yeni sürümü
+            ayrı sekmede açıp karşılaştırabilir ya da sayfayı yenileyip (değişikliklerin gider) baştan düzenleyebilirsin.
+          </AlertDescription>
+          <div className="col-start-2 mt-2 flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" nativeButton={false} render={<Link href={programHref} target="_blank" rel="noopener" />}>
+              <ArrowSquareOut data-icon="inline-start" />
+              Yeni sekmede aç
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                router.refresh();
+                window.location.reload();
+              }}>
+              <ArrowClockwise data-icon="inline-start" />
+              Sayfayı yenile
+            </Button>
+          </div>
+        </Alert>
+      ) : null}
+
+      {hidden ? (
+        <Alert variant="destructive" data-form-error>
+          <WarningCircle />
+          <AlertTitle>Kaydedilemedi</AlertTitle>
+          <AlertDescription>
+            {hiddenPhase && hiddenDay
+              ? `${dayLabel(hiddenPhase.name, hiddenDay.name)} gününde düzeltilecek alan var: ${hidden.errors[0] ?? ''}`
+              : hidden.errors[0]}
+          </AlertDescription>
+          {hiddenDay && hiddenDay.id !== selectedDay?.id ? (
+            <div className="col-start-2 mt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setSelectedDayId(hiddenDay.id)}>
+                O güne git
+              </Button>
+            </div>
+          ) : null}
+        </Alert>
+      ) : null}
+
+      <EditorBar
+        cancelHref={mode === 'edit' ? programHref : detailHref}
+        creating={mode === 'create'}
+        submitLabel={mode === 'create' ? 'Programı oluştur' : 'Kaydet'}
+        dirty={dirty}
+        pending={save.isPending || save.isSuccess}
+      />
+    </>
+  );
+
   return (
     <EditorBarProvider>
       <Form of={form} className="flex flex-col gap-6" onSubmit={submit}>
@@ -504,55 +564,11 @@ export function ProgramForm({
             devices={devices}
             timeZone={timeZone}
             actions={actions}
+            footer={formEnd}
           />
-        ) : null}
-
-        {stale ? (
-          <Alert variant="destructive">
-            <WarningCircle />
-            <AlertTitle>Bu program başka bir yerde değişti</AlertTitle>
-            <AlertDescription>
-              Sen düzenlerken program başka bir sekmede ya da cihazda kaydedildi. Değişikliklerin burada duruyor; yeni sürümü
-              ayrı sekmede açıp karşılaştırabilir ya da sayfayı yenileyip (değişikliklerin gider) baştan düzenleyebilirsin.
-            </AlertDescription>
-            <div className="col-start-2 mt-2 flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" nativeButton={false} render={<Link href={programHref} target="_blank" rel="noopener" />}>
-                <ArrowSquareOut data-icon="inline-start" />
-                Yeni sekmede aç
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  router.refresh();
-                  window.location.reload();
-                }}>
-                <ArrowClockwise data-icon="inline-start" />
-                Sayfayı yenile
-              </Button>
-            </div>
-          </Alert>
-        ) : null}
-
-        {hidden ? (
-          <Alert variant="destructive" data-form-error>
-            <WarningCircle />
-            <AlertTitle>Kaydedilemedi</AlertTitle>
-            <AlertDescription>
-              {hiddenPhase && hiddenDay
-                ? `${dayLabel(hiddenPhase.name, hiddenDay.name)} gününde düzeltilecek alan var: ${hidden.errors[0] ?? ''}`
-                : hidden.errors[0]}
-            </AlertDescription>
-            {hiddenDay && hiddenDay.id !== selectedDay?.id ? (
-              <div className="col-start-2 mt-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => setSelectedDayId(hiddenDay.id)}>
-                  O güne git
-                </Button>
-              </div>
-            ) : null}
-          </Alert>
-        ) : null}
+        ) : (
+          formEnd
+        )}
 
         <AddDayDialog
           key={`add-${dialogKey}`}
@@ -575,13 +591,6 @@ export function ProgramForm({
           onCreated={(template) => setTemplateList((list) => [...list, template])}
         />
 
-        <EditorBar
-          cancelHref={mode === 'edit' ? programHref : detailHref}
-          creating={mode === 'create'}
-          submitLabel={mode === 'create' ? 'Programı oluştur' : 'Kaydet'}
-          dirty={dirty}
-          pending={save.isPending || save.isSuccess}
-        />
       </Form>
     </EditorBarProvider>
   );

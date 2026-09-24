@@ -4,7 +4,7 @@
 >
 > *2026-09-24, birinci tur*
 > 1. Görünür "Sıra ▾" seçici **yok**. Sıralama sürükle-bırakla; klavyede Alt+ok, ekran okuyucuda sr-only şerit.
-> 2. ⧉ Kopyala kart yüzünde **hep görünür**.
+> 2. ~~⧉ Kopyala kart yüzünde **hep görünür**.~~ (karar 14 geçer)
 > 3. Sola tam kaydırma **onaysız siler**, 8 sn "Geri al".
 > 4. 2'li süpersetin üstüne 3. hareket bırakılınca **devreye döner** ("Ekle · devre olur").
 > 5. "Değiştir" editörden kalkar. ⋮ menüleri ve "Son set AMRAP" menü öğesi yok (AMRAP set başına bir düğme).
@@ -24,6 +24,7 @@
 > *2026-09-25, beşinci tur (öncekilerle çatışırsa bunlar geçer)*
 > 12. **Yapışkan alt çubuk yok.** Form sonu diğer formlardaki gibi düz bir satır: [Vazgeç] [Kaydet] / "Kaydedildi". "+ Hareket ekle" listenin altında, kesik çizgili tam genişlik düğme. Dock telefonda da hep görünür. Yüzen çubuk yalnız seçim modunda, dock'un üstünde (karar 8'in yerine geçer; §6).
 > 13. **Kopyalama yalnız ⧉'de.** Sağa kaydırınca "Kopyala" yok, seçim çubuğunda "Kopyala" yok. Sola kaydırma iOS gibi yalnız siler: panel düğmesine dokunmak ya da tam kaydırmak kırmızıyı satıra yayar, yüz dışarı kayar (240 ms), satır kapanır (300 ms), 8 sn "Geri al". Tam kaydırma eşiği satırın %45'i, en çok 220 px (masaüstünde yarım ekran çekilmez). Grup üyesinde sağa kaydırma yalnız [Çıkar] (dokunarak). Grup yüzünde sağa kaydırma yok (§3, §5).
+> 14. **Kartta kopyalama hiç yok.** ⧉ düğmesi de kalkar (karar 2'nin yerine geçer); yüzün sağı boş kalır (kütüphanede olmayan harekette yalnız 🗑 Sil). Form sonu [Vazgeç] [Kaydet] sayfanın dibinde değil, hareket listesinin hemen altında, Kas yükü'nden önce (§6).
 
 Temel C. Üstüne A'nın jestleri ve set düzenlemesi, B'nin kısayolları, v1'in seçim modu ve alt çubuğu eklendi.
 

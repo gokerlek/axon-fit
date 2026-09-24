@@ -176,20 +176,6 @@ export function TemplateForm({
           }
         />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Kas yükü</CardTitle>
-            <CardDescription>{LOAD_DESCRIPTION}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {blocks.length > 0 ? (
-              <TemplateMuscleMap variant="full" bodyClassName="h-56 lg:h-64" load={load} />
-            ) : (
-              <p className="text-sm text-muted-foreground">Hareket ekleyince kas yükü burada görünür.</p>
-            )}
-          </CardContent>
-        </Card>
-
         {stale ? (
           <Alert variant="destructive">
             <WarningCircle />
@@ -233,6 +219,20 @@ export function TemplateForm({
           dirty={dirty}
           pending={save.isPending || save.isSuccess}
         />
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Kas yükü</CardTitle>
+            <CardDescription>{LOAD_DESCRIPTION}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {blocks.length > 0 ? (
+              <TemplateMuscleMap variant="full" bodyClassName="h-56 lg:h-64" load={load} />
+            ) : (
+              <p className="text-sm text-muted-foreground">Hareket ekleyince kas yükü burada görünür.</p>
+            )}
+          </CardContent>
+        </Card>
       </Form>
     </EditorBarProvider>
   );

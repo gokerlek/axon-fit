@@ -11,8 +11,8 @@ import { cn } from '@/lib/utils';
  * Düzenleyicinin form sonu (tasarım §6): şablon ve program günü düzenleyicisinde aynı.
  * Sayfanın formuna aittir (`<Form>`'un son çocuğu); Kaydet formun submit düğmesidir.
  *
- * - Normalde diğer formlardaki gibi düz bir satır: [Vazgeç] [Kaydet]. Yapışkan değil (PT kararı
- *   12); "+ Hareket ekle" listenin altındadır.
+ * - Normalde düz bir satır: [Vazgeç] [Kaydet]; hareket listesinin hemen altında (Kas yükü'nden
+ *   önce) durur, sayfa sonunda değil. Yapışkan değil (PT kararı 12, 14).
  * - Seçim modunda (`BlockEditor` bu bağlam üzerinden verir) yüzen seçim çubuğu: dock'un üstünde
  *   (`--dock-clearance`), sürüklerken ve dokunmatikte klavye açıkken çekilir.
  */
@@ -194,7 +194,7 @@ export function EditorBar({
   }
 
   return (
-    <div data-slot="editor-footer" className="flex justify-end gap-2 border-t pt-4">
+    <div data-slot="editor-footer" className="flex justify-end gap-2">
       <Button variant="outline" nativeButton={false} render={<Link href={cancelHref} />}>
         Vazgeç
       </Button>

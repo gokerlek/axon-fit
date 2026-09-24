@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 
 /**
  * Hareket kartı kabuğu (SPEC §6): şablon ve program günü düzenleyicisi, danışanın antrenman
- * ekranı. Yukarıdan aşağı: yüz (gerilmiş düğme: [rozet][başlık + meta][⧉]; üst ortasında
+ * ekranı. Yukarıdan aşağı: yüz (gerilmiş düğme: [rozet][başlık + meta]; üst ortasında
  * `absolute` tutamak çizgisi, yer kaplamaz), açıkken gövde bölümleri.
  *
  * `overflow-hidden` yoktur: tutamağın dokunma alanı kartın 12 px üstüne taşar, halkalar
@@ -183,9 +183,9 @@ type FaceProps = {
   onKeyDown?: React.KeyboardEventHandler<HTMLButtonElement>;
   /** Yüzdeki klavye kısayolları (`aria-keyshortcuts`). */
   keyShortcuts?: string;
-  /** Yüzün üstündeki kardeş düğme (⧉ Kopyala ya da 🗑 Sil), 44×44. */
+  /** Yüzün sağındaki kardeş düğme (kütüphanede olmayan harekette 🗑 Sil), 44×44. */
   action?: React.ReactNode;
-  /** ⧉'nin yerine geçen durum (sürüklerken sonuç hapı). */
+  /** Yüzün sağındaki durum (sürüklerken sonuç hapı). */
   status?: React.ReactNode;
   /** Yüzün hemen arkasında (klavyeyle odaklanınca görünen sr-only şerit). */
   after?: React.ReactNode;
@@ -194,12 +194,12 @@ type FaceProps = {
   invalid?: boolean;
   /**
    * Seçim modu: yüz `role="checkbox"` olur (açılıp kapanmaz), rozetin yerinde 28 px onay
-   * kutusu durur; ⧉ ve sr-only şerit gizlenir. Seçimi kartın kabı değiştirir (click yukarı çıkar).
+   * kutusu durur; sağdaki düğme ve sr-only şerit gizlenir. Seçimi kartın kabı değiştirir (click yukarı çıkar).
    */
   selection?: { checked: boolean };
   /** Üst ortadaki tutamak çizgisi (`CardGrabber`): yüzün içinde `absolute`, yüzle birlikte kayar. */
   grabber?: React.ReactNode;
-  /** Yüzü (düğme, çizgi, ⧉, hap) saran katman: kaydırma (`SwipeRow`). Gövde kaymaz. */
+  /** Yüzü (düğme, çizgi, hap) saran katman: kaydırma (`SwipeRow`). Gövde kaymaz. */
   slide?: (face: React.ReactNode) => React.ReactNode;
   className?: string;
 };
@@ -207,8 +207,8 @@ type FaceProps = {
 /**
  * Kartın yüzü: tamamı gerilmiş bir `<button aria-expanded aria-controls>` (dokununca
  * açılır/kapanır). Açma oku yok (PT kararı 9): açık kartın yüzü koyulaşır, rozeti ana renge
- * döner ve altında gövde durur. ⧉ en sağda, bu düğmenin üstünde duran kardeş bir düğmedir
- * (düğme düğme içinde olmaz); yerini yüz düğmesinde boş bir sütun tutar. Rozet yalnız etiket.
+ * döner ve altında gövde durur. Sağdaki düğme (`action`) bu düğmenin üstünde duran kardeş bir
+ * düğmedir (düğme düğme içinde olmaz); yerini yüz düğmesinde boş bir sütun tutar. Rozet yalnız etiket.
  */
 export function CardFace({
   id,
@@ -248,7 +248,7 @@ export function CardFace({
           </span>
         ) : null}
       </span>
-      {/* ⧉'nin yeri (kardeş düğme üstünde durur). */}
+      {/* Sağdaki düğmenin yeri (kardeş düğme üstünde durur). */}
       {action && !selecting ? <span className="-mr-2 w-11 shrink-0" aria-hidden /> : null}
     </>
   );
@@ -258,7 +258,7 @@ export function CardFace({
   );
 
   const face = (
-    // ⧉, hap ve onay kutusu yüz düğmesine göre ortalanır (sr-only şerit açılınca kaymasın).
+    // Sağdaki düğme, hap ve onay kutusu yüz düğmesine göre ortalanır (sr-only şerit açılınca kaymasın).
     <div className="relative">
       {isStatic ? (
         <div className={shared}>{content}</div>

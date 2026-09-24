@@ -47,10 +47,8 @@ export type UndoOptions = {
   focus?: string;
 };
 
-/** Kartın işlemleri (yüzdeki ⧉, açık gövdedeki düğmeler, yüzdeki klavye kısayolları). */
+/** Kartın işlemleri (kaydırma panelleri, açık gövdedeki düğmeler, yüzdeki klavye kısayolları). */
 export type ItemActions = {
-  /** ⧉: tek hareket arkasına, grup bütünüyle arkasına, üye grupta ya da grubun arkasına. */
-  duplicate: (itemId: string) => void;
   /** 🗑: tek hareket, üye ya da grubun tamamı (8 sn "Geri al"). */
   remove: (itemId: string) => void;
   /** Üyeyi gruptan çıkarır. */
@@ -108,7 +106,7 @@ export type Editor = {
   actions: ItemActions;
   /**
    * Seçim modu (tasarım §5): kartlarda onay kutusu; sürükleme, kaydırma, Alt kısayolları,
-   * akordeon, ⧉ ve "+ Gruba hareket ekle" kapalı.
+   * akordeon ve "+ Gruba hareket ekle" kapalı.
    */
   selecting: boolean;
   /** Seçili bloklar (blok kimliği; silinenler ayıklanmış). */
