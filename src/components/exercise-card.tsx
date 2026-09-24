@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef } from 'react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 
 /**
@@ -10,23 +11,31 @@ import { cn } from '@/lib/utils';
  *
  * `overflow-hidden` yoktur: tutamağın dokunma alanı kartın 16 px üstüne taşar, halkalar
  * kesilmez. Sürüklenen kartın yerinde kesik çizgili bir yer tutucu kalır (`data-dragging`:
- * içerik gizlenir, yükseklik aynı kalır; liste zıplamaz).
+ * içerik gizlenir, yükseklik aynı kalır; liste zıplamaz). Kaydırırken yalnız yüz kayar;
+ * kayan yüzün zemini `--face-bg`'dir (kartın zemini; grubun üyeleri grubunkini miras alır).
+ * Seçim modunda seçili kartta halka ve hafif zemin (`selected`).
  */
 export function ExerciseCard({
   tone = 'default',
   highlighted = false,
+  selected,
   className,
   ...props
-}: React.ComponentProps<'div'> & { tone?: 'default' | 'group'; highlighted?: boolean }) {
+}: React.ComponentProps<'div'> & { tone?: 'default' | 'group'; highlighted?: boolean; selected?: boolean }) {
   return (
     <div
       data-slot={tone === 'group' ? 'exercise-group' : 'exercise-card'}
       data-highlighted={highlighted || undefined}
+      data-selected={selected || undefined}
       className={cn(
-        'relative flex min-w-0 scroll-mt-24 scroll-mb-32 flex-col rounded-lg border bg-card text-sm motion-safe:transition-[box-shadow,background-color] motion-safe:duration-300',
-        // Grubun zemini opak kalır (sürüklenen overlay'in altında kart görünmesin).
-        tone === 'group' && 'rounded-xl border-primary/40 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))]',
+        // Vurgulanan ya da odaklanan kart alt çubuğun altında kalmaz (`--editor-bar-clearance`).
+        'relative flex min-w-0 scroll-mt-24 scroll-mb-(--editor-bar-clearance) flex-col rounded-lg border bg-card [--face-bg:var(--card)] text-sm motion-safe:transition-[box-shadow,background-color] motion-safe:duration-300',
+        // Grubun zemini opak kalır (sürüklenen overlay'in altında kart görünmesin). Karışım oklab: kartın
+        // renksiz tonuyla oklch ton açısı karışıp pembeye kaymasın.
+        tone === 'group' &&
+          'rounded-xl border-primary/40 bg-[color-mix(in_oklab,var(--primary)_4%,var(--card))] [--face-bg:color-mix(in_oklab,var(--primary)_4%,var(--card))]',
         'data-highlighted:ring-2 data-highlighted:ring-primary/60',
+        SELECTED,
         PLACEHOLDER,
         ARMED,
         className,
@@ -35,6 +44,9 @@ export function ExerciseCard({
     />
   );
 }
+
+/** Seçim modunda seçili kart: halka ve hafif ana renk zemini. */
+export const SELECTED = 'data-selected:ring-2 data-selected:ring-primary data-selected:bg-[color-mix(in_oklab,var(--primary)_6%,var(--card))]';
 
 /** Sürüklenen öğenin yerinde kalan yer tutucu: kesik çizgi, içerik görünmez (yükseklik aynı). */
 export const PLACEHOLDER =
@@ -165,6 +177,13 @@ type FaceProps = {
   /** Etkileşimsiz kopya (sürüklenen overlay). */
   static?: boolean;
   invalid?: boolean;
+  /**
+   * Seçim modu: yüz `role="checkbox"` olur (açılıp kapanmaz), rozetin yerinde 28 px onay
+   * kutusu durur; ⧉ ve sr-only şerit gizlenir. Seçimi kartın kabı değiştirir (click yukarı çıkar).
+   */
+  selection?: { checked: boolean };
+  /** Yüzü (düğme, ⧉, hap) saran katman: kaydırma (`SwipeRow`). Şerit ve gövde kaymaz. */
+  slide?: (face: React.ReactNode) => React.ReactNode;
   className?: string;
 };
 
@@ -191,12 +210,16 @@ export function CardFace({
   after,
   static: isStatic = false,
   invalid = false,
+  selection,
+  slide,
   className,
 }: FaceProps) {
   const metaId = useId();
+  const selecting = selection !== undefined;
   const content = (
     <>
-      {badge}
+      {/* Seçim modunda rozetin yeri boş kalır; onay kutusu üstünde durur (başlık kaymaz). */}
+      {selecting ? <span className="size-7 shrink-0" aria-hidden /> : badge}
       <span className="flex min-h-9 min-w-0 flex-1 flex-col justify-center">
         <span data-slot="card-title" className={cn('line-clamp-2 text-sm leading-5 font-medium break-words', titleClassName)}>
           {title}
@@ -208,7 +231,7 @@ export function CardFace({
         ) : null}
       </span>
       {/* ⧉'nin yeri (kardeş düğme üstünde durur). */}
-      {action ? <span className="-mr-2 w-11 shrink-0" aria-hidden /> : null}
+      {action && !selecting ? <span className="-mr-2 w-11 shrink-0" aria-hidden /> : null}
     </>
   );
   const shared = cn(
@@ -216,38 +239,51 @@ export function CardFace({
     invalid && '[&_[data-slot=card-title]]:text-destructive',
   );
 
+  const face = (
+    // ⧉, hap ve onay kutusu yüz düğmesine göre ortalanır (sr-only şerit açılınca kaymasın).
+    <div className="relative">
+      {isStatic ? (
+        <div className={shared}>{content}</div>
+      ) : (
+        <button
+          type="button"
+          id={id}
+          role={selecting ? 'checkbox' : undefined}
+          aria-checked={selecting ? selection.checked : undefined}
+          aria-expanded={selecting ? undefined : expanded}
+          aria-controls={selecting ? undefined : controls}
+          aria-label={label}
+          aria-describedby={label && meta ? metaId : undefined}
+          data-invalid={invalid || undefined}
+          onClick={selecting ? undefined : onToggle}
+          onKeyDown={onKeyDown}
+          aria-keyshortcuts={selecting ? undefined : keyShortcuts}
+          className={cn(
+            shared,
+            'outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset hover:bg-muted/40 aria-expanded:bg-muted/50 motion-safe:transition-colors motion-safe:duration-100',
+            // Açık kart: rozet ana renge döner (ok yok, durum buradan okunur).
+            'aria-expanded:[&_[data-slot=card-badge]]:bg-primary aria-expanded:[&_[data-slot=card-badge]]:text-primary-foreground',
+          )}>
+          {content}
+        </button>
+      )}
+      {selecting ? (
+        // Görsel onay kutusu: durum yüz düğmesinde (`aria-checked`); bu kopya odak ve dokunma almaz.
+        <span inert className="pointer-events-none absolute inset-y-0 left-3 flex items-center pt-2 pb-3">
+          <Checkbox checked={selection.checked} className="size-7 rounded-md bg-background [&_svg]:size-4.5!" />
+        </span>
+      ) : null}
+      {action && !selecting ? (
+        <div className="absolute top-1/2 right-1 z-10 -translate-y-1/2 group-has-[[data-slot=drop-pill]]/card:invisible">{action}</div>
+      ) : null}
+      {status}
+    </div>
+  );
+
   return (
     <div data-slot="card-face" className={cn('group/card', className)}>
-      {/* ⧉ ve hap yüz düğmesine göre ortalanır (sr-only şerit açılınca kaymasın). */}
-      <div className="relative">
-        {isStatic ? (
-          <div className={shared}>{content}</div>
-        ) : (
-          <button
-            type="button"
-            id={id}
-            aria-expanded={expanded}
-            aria-controls={controls}
-            aria-label={label}
-            aria-describedby={label && meta ? metaId : undefined}
-            onClick={onToggle}
-            onKeyDown={onKeyDown}
-            aria-keyshortcuts={keyShortcuts}
-            className={cn(
-              shared,
-              'outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset hover:bg-muted/40 aria-expanded:bg-muted/50 motion-safe:transition-colors motion-safe:duration-100',
-              // Açık kart: rozet ana renge döner (ok yok, durum buradan okunur).
-              'aria-expanded:[&_[data-slot=card-badge]]:bg-primary aria-expanded:[&_[data-slot=card-badge]]:text-primary-foreground',
-            )}>
-            {content}
-          </button>
-        )}
-        {action ? (
-          <div className="absolute top-1/2 right-1 z-10 -translate-y-1/2 group-has-[[data-slot=drop-pill]]/card:invisible">{action}</div>
-        ) : null}
-        {status}
-      </div>
-      {after}
+      {slide ? slide(face) : face}
+      {selecting ? null : after}
     </div>
   );
 }

@@ -1,6 +1,19 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { combineMessage, edgeMessage, moveMessage, titleOfItem } from './edit-messages.ts';
+import {
+  addToGroupHint,
+  addToGroupTitle,
+  addedToGroupMessage,
+  bulkMessage,
+  combineMessage,
+  dativeOf,
+  edgeMessage,
+  groupedMessage,
+  moveMessage,
+  selectedRowCount,
+  selectionStatus,
+  titleOfItem,
+} from './edit-messages.ts';
 import { uniformSets } from './set-plan.ts';
 import { combineInto, moveItem, type IdSource } from './template-edit.ts';
 import type { BlockKind, TemplateBlock, TemplateRow } from './template-plan.ts';
@@ -55,5 +68,42 @@ describe('düzenleyici cümleleri', () => {
   test('klavyede uç', () => {
     assert.equal(edgeMessage(blocks, 'r_1', true, titleOf), 'Squat zaten ilk sırada');
     assert.equal(edgeMessage(blocks, 'r_3', false, titleOf), 'Cable Row grupta zaten son sırada');
+  });
+
+  test('seçim çubuğunun durum satırı', () => {
+    assert.equal(selectionStatus(0, 'too_few', true), 'Seçmek için kartlara dokun');
+    assert.equal(selectionStatus(0, 'too_few', true, 'mouse'), 'Seçmek için kartlara tıkla');
+    assert.equal(selectionStatus(1, 'too_few', true), '1 seçili · gruplamak için en az 2 hareket');
+    assert.equal(selectionStatus(2, 'superset', true), '2 seçili · süperset olur');
+    assert.equal(selectionStatus(3, 'circuit', true), '3 seçili · devre olur');
+    assert.equal(selectionStatus(2, 'not_singles', true), 'Grup seçili: yalnız tek hareketler gruplanır');
+    assert.equal(selectionStatus(9, 'too_many', true), '9 seçili · grup en çok 8 hareket');
+    assert.equal(selectionStatus(2, 'superset', false), '2 seçili · süperset olur · Şablon dolu: kopya sığmaz');
+  });
+
+  test('toplu işlemler: gruplama, kopya, silme (sayı gruptaki üyeler dahil)', () => {
+    assert.equal(groupedMessage(blocks, new Set(['b_4', 'b_1']), 'superset', titleOf), 'Süperset yapıldı: Squat + Curl');
+    assert.equal(groupedMessage(blocks, new Set(['b_1', 'b_4', 'b_x']), 'circuit', titleOf), 'Devre yapıldı (2 hareket)');
+    assert.equal(selectedRowCount(blocks, new Set(['b_1', 'b_2'])), 3);
+    assert.equal(bulkMessage(3, 'copied'), '3 hareket kopyalandı');
+    assert.equal(bulkMessage(1, 'removed'), '1 hareket silindi');
+  });
+
+  test('yönelme eki ve "Gruba hareket ekle" başlığı', () => {
+    assert.deepEqual(
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 16, 20, 26, 30, 40, 50, 60, 70, 80, 90, 100].map(dativeOf),
+      ["1'e", "2'ye", "3'e", "4'e", "5'e", "6'ya", "7'ye", "8'e", "9'a", "10'a", "12'ye", "16'ya", "20'ye", "26'ya", "30'a", "40'a", "50'ye", "60'a", "70'e", "80'e", "90'a", "100'e"],
+    );
+    assert.equal(addToGroupTitle('superset', 1), "Süperset 2'ye ekle");
+    assert.equal(addToGroupTitle('circuit', 5), "Devre 6'ya ekle");
+  });
+
+  test('gruba ekleme: önce ve sonra', () => {
+    assert.deepEqual(addToGroupHint('becomes_circuit'), { blocked: null, hint: 'Eklenirse devre olur' });
+    assert.deepEqual(addToGroupHint('join'), { blocked: null, hint: '' });
+    assert.equal(addToGroupHint('full').blocked, 'Grup dolu (8)');
+    assert.equal(addToGroupHint('limit').blocked, 'Şablon dolu: en fazla 40 hareket, 30 blok');
+    assert.equal(addedToGroupMessage('Cable Row', 'superset', 'circuit'), 'Cable Row eklendi · grup devre oldu');
+    assert.equal(addedToGroupMessage('Cable Row', 'circuit', 'circuit'), 'Cable Row eklendi');
   });
 });

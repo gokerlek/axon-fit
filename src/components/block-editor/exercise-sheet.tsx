@@ -8,8 +8,11 @@ import { DRAG } from '@/lib/motion';
 import type { EditorDevice, PickerExercise } from '@/lib/template-edit';
 import { ExercisePicker } from './exercise-picker';
 
-/** Sheet'in kipi: sona ekleme (grubun sonuna ekleme 2. adımda gelir). */
-export type PickerState = { kind: 'add' };
+/**
+ * Sheet'in kipi: sona ekleme ya da bir grubun sonuna ekleme ("+ Gruba hareket ekle";
+ * başlık açılıştaki adıyla: "Süperset 2'ye ekle").
+ */
+export type PickerState = { kind: 'add' } | { kind: 'addToGroup'; blockId: string; title: string };
 
 type SheetProps = {
   /** Açık kip; `null` kapalı. */
@@ -18,23 +21,25 @@ type SheetProps = {
   exercises: readonly PickerExercise[];
   devices: ReadonlyMap<string, EditorDevice>;
   usage: ReadonlyMap<string, number>;
-  canAdd: boolean;
-  addDescription: string;
-  /** Egzersizi sona ekler: eklenen satırın sırası; eklenemezse `null`. */
-  onAdd: (exercise: PickerExercise) => number | null;
+  title: string;
+  description: string;
+  /** Eklenemiyorsa nedeni ("Grup dolu (8)", "Şablon dolu…"): liste pasif, durum satırında yazar. */
+  blocked: string | null;
+  /** Eklemeden önceki durum satırı ("Eklenirse devre olur"). */
+  hint: string;
+  /** Dokunulan egzersizi ekler; durum satırının yeni cümlesi, eklenemezse `null`. */
+  onPick: (exercise: PickerExercise) => string | null;
   /** Kapanınca odaklanılacak öğe (açan düğme). */
   finalFocus: () => HTMLElement | null;
   /** Kapanış animasyonu bitince. */
   onClosed: () => void;
 };
 
-const FULL_MESSAGE = 'Şablon dolu: en fazla 40 hareket ve 30 blok olur.';
-
 /**
  * Hareket kütüphanesi sheet'i (SPEC §6): ≥sm sağdan, telefonda tam ekran. Dokunulan hareket
- * sona eklenir ve sheet açık kalır (kısa onayla). Esc, dışarıya dokunma, Kapat ve "Bitti"
- * kapatır; odak açan düğmeye döner. Editörde "Değiştir" yok (sil + ekle); ExercisePicker'ın
- * değiştirme kipi antrenmandaki "Muadil" için kalır.
+ * sona (ya da grubun sonuna) eklenir ve sheet açık kalır (durum satırında kısa onay). Esc,
+ * dışarıya dokunma, Kapat ve "Bitti" kapatır; odak açan düğmeye döner. Editörde "Değiştir"
+ * yok (sil + ekle); ExercisePicker'ın değiştirme kipi antrenmandaki "Muadil" için kalır.
  */
 export function ExerciseSheet(props: SheetProps) {
   const { state, onClose, onClosed, finalFocus } = props;
@@ -57,7 +62,7 @@ export function ExerciseSheet(props: SheetProps) {
         initialFocus={(type) => (coarse || type === 'touch' ? popupRef.current : searchRef.current)}
         finalFocus={() => finalFocus() ?? true}
         className="gap-0 p-0 data-[side=bottom]:top-0 data-[side=bottom]:h-dvh data-[side=bottom]:border-t-0 data-[side=right]:w-full data-[side=right]:sm:max-w-md">
-        {shownState ? <SheetBody {...props} searchRef={searchRef} /> : null}
+        {shownState ? <SheetBody key={shownState.kind === 'add' ? 'add' : shownState.blockId} {...props} searchRef={searchRef} /> : null}
       </SheetContent>
     </Sheet>
   );
@@ -69,9 +74,11 @@ function SheetBody({
   exercises,
   devices,
   usage,
-  canAdd,
-  addDescription,
-  onAdd,
+  title,
+  description,
+  blocked,
+  hint,
+  onPick,
 }: SheetProps & { searchRef: React.RefObject<HTMLInputElement | null> }) {
   const [status, setStatus] = useState('');
   const [justAdded, setJustAdded] = useState<string | null>(null);
@@ -83,20 +90,17 @@ function SheetBody({
   }, [justAdded]);
 
   const pick = (exercise: PickerExercise) => {
-    const position = onAdd(exercise);
-    if (position === null) {
-      setStatus(FULL_MESSAGE);
-      return;
-    }
-    setStatus(`${exercise.title} eklendi (${position}. sıra)`);
+    const message = onPick(exercise);
+    if (message === null) return;
+    setStatus(message);
     setJustAdded(exercise.id);
   };
 
   return (
     <>
       <SheetHeader className="border-b pr-14">
-        <SheetTitle>Hareket ekle</SheetTitle>
-        <SheetDescription>{addDescription}</SheetDescription>
+        <SheetTitle>{title}</SheetTitle>
+        <SheetDescription>{description}</SheetDescription>
       </SheetHeader>
       <ExercisePicker
         className="min-h-0 flex-1"
@@ -105,14 +109,14 @@ function SheetBody({
         usage={usage}
         mode="add"
         suggestFor={null}
-        disabled={!canAdd}
+        disabled={blocked !== null}
         justAdded={justAdded}
         searchRef={searchRef}
         onPick={pick}
       />
       <SheetFooter className="flex-row items-center gap-3 border-t pb-[max(1rem,env(safe-area-inset-bottom))]">
-        <p role="status" aria-live="polite" className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-          {canAdd ? status : FULL_MESSAGE}
+        <p role="status" aria-live="polite" className="min-w-0 flex-1 text-sm text-muted-foreground">
+          {blocked ? (status ? `${status} · ${blocked}` : blocked) : status || hint}
         </p>
         <SheetClose render={<Button type="button" className="touch:h-11" />}>Bitti</SheetClose>
       </SheetFooter>

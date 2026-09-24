@@ -1,9 +1,11 @@
 import type { JoiningOutcome } from './drop-target.ts';
+import type { AddToGroupOutcome, GroupCheck } from './template-edit.ts';
 import { BLOCK_KIND_LABELS, type TemplateBlock } from './template-plan.ts';
 
 /**
  * Düzenleyicinin duyuru ve toast cümleleri (canlı bölge, "Geri al" bildirimleri): taşıma,
- * üstüne bırakıp gruplama, klavyeyle taşımada uç. Saf; yol takma adıyla çalışma zamanı içe
+ * üstüne bırakıp gruplama, klavyeyle taşımada uç, seçim modunun durum satırı ve toplu
+ * işlemleri, "Gruba hareket ekle" sheet'i. Saf; yol takma adıyla çalışma zamanı içe
  * aktarması yapmaz (testler Node'un kendi test aracıyla çalışır).
  */
 
@@ -92,4 +94,76 @@ export function edgeMessage(blocks: readonly TemplateBlock[], itemId: string, to
   const title = titleOfItem(blocks, itemId, titleOf);
   const where = placeOf(blocks, itemId)?.level === 'group' ? 'grupta zaten' : 'zaten';
   return `${title} ${where} ${towardsStart ? 'ilk' : 'son'} sırada`;
+}
+
+/** Seçili blokların hareket sayısı (gruplardaki üyeler dahil; toast'lardaki sayı). */
+export function selectedRowCount(blocks: readonly TemplateBlock[], blockIds: ReadonlySet<string>): number {
+  return blocks.reduce((sum, block) => sum + (blockIds.has(block.id) ? block.rows.length : 0), 0);
+}
+
+/**
+ * Seçim çubuğunun durum satırı: kaç kart seçili ve "Grupla" ne yapar ya da neden pasif;
+ * kopya sığmıyorsa sonuna eklenir ("Kopyala" pasif). Pasif düğmenin nedeni burada yazar.
+ */
+export function selectionStatus(count: number, check: GroupCheck, copyFits: boolean, pointer: 'touch' | 'mouse' = 'touch'): string {
+  if (count === 0) return `Seçmek için kartlara ${pointer === 'touch' ? 'dokun' : 'tıkla'}`;
+  const group =
+    check === 'superset'
+      ? `${count} seçili · süperset olur`
+      : check === 'circuit'
+        ? `${count} seçili · devre olur`
+        : check === 'not_singles'
+          ? 'Grup seçili: yalnız tek hareketler gruplanır'
+          : check === 'too_many'
+            ? `${count} seçili · grup en çok 8 hareket`
+            : `${count} seçili · gruplamak için en az 2 hareket`;
+  return copyFits ? group : `${group} · Şablon dolu: kopya sığmaz`;
+}
+
+/** "Grupla" sonrası (toast ve duyuru): "Süperset yapıldı: Squat + Bench Press", "Devre yapıldı (4 hareket)". */
+export function groupedMessage(
+  blocks: readonly TemplateBlock[],
+  blockIds: ReadonlySet<string>,
+  kind: 'superset' | 'circuit',
+  titleOf: TitleOf,
+): string {
+  const titles = blocks.filter((block) => blockIds.has(block.id)).flatMap((block) => block.rows.map((row) => titleOf(row.exerciseId)));
+  return kind === 'superset' ? `Süperset yapıldı: ${titles.join(' + ')}` : `Devre yapıldı (${titles.length} hareket)`;
+}
+
+/** Toplu kopya ve silmenin cümlesi: "3 hareket kopyalandı", "1 hareket silindi". */
+export function bulkMessage(rows: number, action: 'copied' | 'removed'): string {
+  return `${rows} hareket ${action === 'copied' ? 'kopyalandı' : 'silindi'}`;
+}
+
+/** Sayıya gelen yönelme eki ("2'ye", "6'ya", "3'e", "10'a"): son okunan sözcüğün ünlüsüne göre. */
+export function dativeOf(value: number): string {
+  const n = Math.abs(Math.trunc(value));
+  const units = ["'a", "'e", "'ye", "'e", "'e", "'e", "'ya", "'ye", "'e", "'a"];
+  const tens = ["'a", "'a", "'ye", "'a", "'a", "'ye", "'a", "'e", "'e", "'a"];
+  if (n === 0) return `${n}'a`;
+  if (n % 100 === 0) return `${n}'e`;
+  const unit = n % 10;
+  return `${n}${unit === 0 ? tens[Math.floor(n / 10) % 10] : units[unit]}`;
+}
+
+/** "Gruba hareket ekle" sheet'inin başlığı: "Süperset 2'ye ekle". */
+export function addToGroupTitle(kind: TemplateBlock['kind'], blockIndex: number): string {
+  return `${BLOCK_KIND_LABELS[kind]} ${dativeOf(blockIndex + 1)} ekle`;
+}
+
+/**
+ * "Gruba hareket ekle" sheet'inin durum satırı, eklemeden önce: dolu grupta ve dolu
+ * şablonda liste pasif, süpersette ya da 6'lı komplekste "Eklenirse devre olur".
+ */
+export function addToGroupHint(outcome: AddToGroupOutcome): { blocked: string | null; hint: string } {
+  if (outcome === 'full') return { blocked: 'Grup dolu (8)', hint: '' };
+  if (outcome === 'limit') return { blocked: 'Şablon dolu: en fazla 40 hareket, 30 blok', hint: '' };
+  if (outcome === 'not_allowed') return { blocked: 'Bu grup artık yok', hint: '' };
+  return { blocked: null, hint: outcome === 'becomes_circuit' ? 'Eklenirse devre olur' : '' };
+}
+
+/** Gruba eklendikten sonra: "Cable Row eklendi", tür değiştiyse "Cable Row eklendi · grup devre oldu". */
+export function addedToGroupMessage(title: string, before: TemplateBlock['kind'], after: TemplateBlock['kind']): string {
+  return before === after ? `${title} eklendi` : `${title} eklendi · grup ${BLOCK_KIND_LABELS[after].toLocaleLowerCase('tr-TR')} oldu`;
 }

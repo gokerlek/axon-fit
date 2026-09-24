@@ -24,6 +24,18 @@ export const DRAG = {
   settle: { bounceStiffness: 600, bounceDamping: 45 }, // bırakınca ~180 ms'de yerine oturma
 } as const;
 
+/** Kaydırma (kart yüzünde sağa kopyala, sola sil; yalnız dokunmatik). */
+export const SWIPE = {
+  actionWidth: 72, // px: panelin bir işlem düğmesi
+  fullRatio: 0.45, // tek işlemli tarafta tam kaydırma eşiği: satır genişliğinin bu oranı
+  flingVelocity: 400, // px/sn: hızlı fırlatma paneli açar, işlemi tetiklemez
+  spring: { type: 'spring', stiffness: 500, damping: 40 }, // panelin açılıp kapanması
+  startDistance: 10, // px: |dx| bunu ve 1,5·|dy|'yi aşınca kaydırma başlar
+  directionRatio: 1.5,
+  scrollSlop: 8, // px: |dy| bunu aşınca sayfa kayar; daha azı dokunmadır
+  nudge: 40, // px: ilk kullanımda ilk kartın bir kez sola "göz kırpması"
+} as const;
+
 /** motion/react geçişi: süre ms verilir. */
 export function tween(ms: number, ease: readonly [number, number, number, number] = EASE.enter) {
   return { type: 'tween' as const, duration: ms / 1000, ease };

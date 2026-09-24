@@ -1,29 +1,49 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { getInput, setInput, useField, useFieldArray } from '@formisch/react';
-import { Plus } from '@phosphor-icons/react';
+import { CheckSquare, Plus } from '@phosphor-icons/react';
 import { toast } from 'sonner';
+import { SwipeGroup } from '@/components/swipe/swipe-row';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { FieldError } from '@/components/ui/field';
+import { showUndoToast } from '@/components/undo-toast';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { isJoining } from '@/lib/drop-target';
-import { combineMessage, edgeMessage, moveMessage } from '@/lib/edit-messages';
+import {
+  addToGroupHint,
+  addToGroupTitle,
+  addedToGroupMessage,
+  bulkMessage,
+  combineMessage,
+  edgeMessage,
+  groupedMessage,
+  moveMessage,
+  selectedRowCount,
+  selectionStatus,
+} from '@/lib/edit-messages';
 import { formatNumber } from '@/lib/format';
 import { DRAG } from '@/lib/motion';
 import type { TemplateInput } from '@/lib/schemas/template';
 import {
+  addToGroup,
+  addToGroupOutcome,
   appendExercise,
   canAdd,
+  canDuplicateBlocks,
   combineInto,
   combineOutcome,
   dissolveGroup,
   duplicateBlock,
+  duplicateBlocks,
   duplicateRow,
+  groupBlocks,
+  groupCheck,
   moveItem,
   removeBlock,
+  removeBlocks,
   removeRow,
   stepDestination,
   ungroupRow,
@@ -46,17 +66,54 @@ import {
   type Editor,
   type ItemActions,
 } from './editor-context';
+import { useEditorBar, useEditorBarAddButton } from './editor-bar';
 import { ExerciseSheet, type PickerState } from './exercise-sheet';
 
 /** Açıklama (SPEC §6, tasarım §2): dokunmatikte ve masaüstünde ayrı. */
 const DEFAULT_DESCRIPTION = (
   <>
-    <span className="hidden touch:inline">Karta dokun: düzenle. Üstteki çizgiden sürükle: sırala; bir kartın ortasına bırak: grupla.</span>
+    <span className="hidden touch:inline">
+      Karta dokun: düzenle. Üstteki çizgiden sürükle: sırala; bir kartın ortasına bırak: grupla. Sola kaydır: sil, sağa kaydır:
+      kopyala.
+    </span>
     <span className="touch:hidden">
       Karta tıkla: düzenle. Üstteki çizgiden sürükle: sırala; bir kartın ortasına bırak: grupla. Alt + ok tuşları taşır.
     </span>
   </>
 );
+
+const SELECTING_DESCRIPTION = 'Gruplamak, kopyalamak ya da silmek istediklerini seç.';
+const SHEET_FULL_MESSAGE = 'Şablon dolu: en fazla 40 hareket ve 30 blok olur.';
+
+/**
+ * Kaydırma ipucu (ilk kullanımda bir kez, dokunmatikte): ilk kart 40 px sola "göz kırpar";
+ * reduced-motion'da bunun yerine ipucu satırı çıkar. Sayfa açıkken sabit kalır (modül
+ * düzeyinde); görüldüğü localStorage'a yazılır (erişilemezse ipucu hiç çıkmaz).
+ */
+const SWIPE_HINT_KEY = 'pulsecoach.editor.swipe-hint';
+let swipeHintCache: 'nudge' | 'text' | null | undefined;
+
+function readSwipeHint(): 'nudge' | 'text' | null {
+  if (swipeHintCache !== undefined) return swipeHintCache;
+  swipeHintCache = null;
+  // Kaydırma yalnız dokunmatikte: fareyle gelen cihazda ipucu harcanmaz.
+  if (!window.matchMedia('(pointer: coarse)').matches) return swipeHintCache;
+  try {
+    if (window.localStorage.getItem(SWIPE_HINT_KEY) === '1') return swipeHintCache;
+    window.localStorage.setItem(SWIPE_HINT_KEY, '1');
+  } catch {
+    return swipeHintCache;
+  }
+  swipeHintCache = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'text' : 'nudge';
+  return swipeHintCache;
+}
+
+/** Göz kırpma oynadı: bu sayfa açıkken başka düzenleyicide tekrarlanmaz. */
+function spendSwipeHint() {
+  if (swipeHintCache === 'nudge') swipeHintCache = null;
+}
+
+const noSubscription = () => () => {};
 
 function toggled(open: ReadonlySet<string>, id: string): ReadonlySet<string> {
   const next = new Set(open);
@@ -95,11 +152,27 @@ function neighbourOf(blocks: readonly TemplateBlock[], itemId: string): string |
   return other?.id ?? group.id;
 }
 
+/** Toplu silmeden sonra odak: silinenlerden sonraki kart, yoksa önceki; liste boşaldıysa `null`. */
+function neighbourAfterRemoval(blocks: readonly TemplateBlock[], removed: ReadonlySet<string>): string | null {
+  const indexes = blocks.flatMap((block, index) => (removed.has(block.id) ? [index] : []));
+  const last = indexes.at(-1) ?? -1;
+  const next = blocks.slice(last + 1).find((block) => !removed.has(block.id));
+  const previous = blocks
+    .slice(0, last)
+    .filter((block) => !removed.has(block.id))
+    .at(-1);
+  const target = next ?? previous;
+  return target ? blockItemId(target) : null;
+}
+
 /**
  * Hareket düzenleyici: formdaki bir blok dizisini (şablonun blokları ya da program
  * gününün blokları) düzenler. Tek kart tasarımı: kapalı kartlar; dokununca açılır (lg
  * altında aynı anda tek kart). Kartın üstündeki çizgiden sürükleyerek sıralanır, bir
- * kartın ortasına bırakıp gruplanır; klavyede yüz odaktayken Alt + ok, Delete.
+ * kartın ortasına bırakıp gruplanır; klavyede yüz odaktayken Alt + ok, Delete. Dokunmatikte
+ * yüz sola kayınca silinir, sağa kayınca kopyalanır. "Seç" ile seçim moduna geçilir: seçili
+ * kartlar toplu gruplanır, kopyalanır ya da silinir. "+ Hareket ekle" ve Kaydet sayfanın alt
+ * çubuğundadır (`EditorBar`; düzenleyici oraya kaydolur).
  *
  * Yaprak alanlar (dinlenme, setlerin hedefi, yüzdesi ve AMRAP'ı, kural, cihaz, not) alan
  * olarak bağlanır; yapısal işlemler (ekleme, taşıma, gruplama, set sayısı, tur, hazır
@@ -121,6 +194,7 @@ export function BlockEditor({
   description = DEFAULT_DESCRIPTION,
   notice,
   listLabel = 'Şablondaki hareketler',
+  addLabel = 'Hareket ekle',
 }: {
   form: BlocksFormStore;
   path: BlocksPath;
@@ -136,6 +210,8 @@ export function BlockEditor({
   notice?: React.ReactNode;
   /** Ekran okuyucu için listenin adı. */
   listLabel?: string;
+  /** Alt çubuktaki "+ Hareket ekle"nin erişilebilir adı (programda "Hareket ekle: Gün A"). */
+  addLabel?: string;
 }) {
   const exerciseById = useMemo(() => new Map(exercises.map((exercise) => [exercise.id, exercise])), [exercises]);
   const deviceById = useMemo(() => new Map(devices.map((device) => [device.id, device])), [devices]);
@@ -150,11 +226,16 @@ export function BlockEditor({
   const [detailsOpen, setDetailsOpen] = useState<ReadonlySet<string>>(() => new Set());
   const [highlight, setHighlight] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
+  const [selecting, setSelecting] = useState(false);
+  const [selection, setSelection] = useState<ReadonlySet<string>>(() => new Set());
+  const [nudged, setNudged] = useState(false);
 
   const listRef = useRef<HTMLOListElement>(null);
-  /** Sheet'i açan düğme (kapanınca odak döner) ve listenin sonundaki "Hareket ekle". */
+  /** Sheet'i açan düğme (kapanınca odak döner). */
   const returnFocus = useRef<HTMLElement | null>(null);
-  const endAddRef = useRef<HTMLButtonElement>(null);
+  /** Seçim modunda Shift+tık aralığının başı (son dokunulan kart). */
+  const anchor = useRef<string | null>(null);
+  const selectButtonRef = useRef<HTMLButtonElement>(null);
   /** Sheet açıkken eklenen son satır ve bekleyen duyuru: sheet kapanınca vurgulanır/duyurulur. */
   const lastAdded = useRef<string | null>(null);
   const pendingAnnouncement = useRef<string | null>(null);
@@ -195,18 +276,21 @@ export function BlockEditor({
     [form, path],
   );
 
+  /** Alt çubuktaki "+ Hareket ekle" (liste boşalınca ve sheet kapanınca odak dönüşü). */
+  const barAdd = useEditorBarAddButton();
+
   /** Çizimden sonra öğenin yüzüne odaklanır (taşınan kart yeniden kurulmuş olabilir). */
   const focusFace = useCallback((itemId: string | null) => {
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         const face = itemId ? document.getElementById(faceId(itemId)) : null;
-        // Liste boşaldıysa boş durumdaki "Hareket ekle".
-        const target = face ?? endAddRef.current ?? emptyAddRef.current;
+        // Liste boşaldıysa çubuktaki (ya da boş durumdaki) "Hareket ekle".
+        const target = face ?? barAdd() ?? emptyAddRef.current;
         target?.focus({ preventScroll: true });
         target?.scrollIntoView({ block: 'nearest' });
       }),
     );
-  }, []);
+  }, [barAdd]);
 
   const update = useCallback<Editor['update']>(
     (change, options) => {
@@ -220,8 +304,7 @@ export function BlockEditor({
     [current, write, announce],
   );
 
-  const undoToast = useRef<string | number | null>(null);
-
+  /** Geri alınabilir güncelleme: aynı anda tek "Geri al" bildirimi (8 sn), yenisi öncekini kapatır. */
   const updateWithUndo = useCallback<Editor['updateWithUndo']>(
     (change, message, options) => {
       const before = current();
@@ -233,20 +316,13 @@ export function BlockEditor({
       announce(message);
       if (options?.highlight) setHighlight(options.highlight);
       if (options?.focus !== undefined) focusFace(options.focus);
-      if (undoToast.current !== null) toast.dismiss(undoToast.current);
-      undoToast.current = toast(message, {
-        action: {
-          label: 'Geri al',
-          onClick: () => {
-            if (JSON.stringify(current()) !== after) {
-              toast.error('Sonrasında başka değişiklik yapıldı; geri alınamadı.');
-              return;
-            }
-            write(before);
-            announce('Geri alındı');
-          },
-        },
-        duration: 8000,
+      showUndoToast(message, () => {
+        if (JSON.stringify(current()) !== after) {
+          toast.error('Sonrasında başka değişiklik yapıldı; geri alınamadı.');
+          return;
+        }
+        write(before);
+        announce('Geri alındı');
       });
     },
     [current, write, announce, focusFace],
@@ -383,19 +459,177 @@ export function BlockEditor({
     return counts;
   }, [blocks]);
 
-  const add = (exercise: PickerExercise): number | null => {
+  // ─── Seçim modu (tasarım §5) ─────────────────────────────────────────────────────────
+
+  /** Liste boşalınca (ör. başka yerden geri alma) seçim modu kendiliğinden biter. */
+  const selectingNow = selecting && blocks.length > 0;
+  /** Seçili bloklar: silinenler ayıklanır (bloklar her değiştiğinde). */
+  const selected = useMemo<ReadonlySet<string>>(
+    () => new Set(blocks.filter((block) => selection.has(block.id)).map((block) => block.id)),
+    [blocks, selection],
+  );
+  const coarse = useMediaQuery('(pointer: coarse)');
+  const check = groupCheck(blocks, selected);
+  const copyFits = selected.size === 0 || canDuplicateBlocks(blocks, selected);
+  const allSelected = selected.size === blocks.length;
+
+  const enterSelection = () => {
+    setOpen(new Set());
+    setSelection(new Set());
+    anchor.current = null;
+    setSelecting(true);
+    announce('Seçim modu: gruplamak, kopyalamak ya da silmek istediklerini seç');
+    const first = blocks[0];
+    if (first) focusFace(blockItemId(first));
+  };
+
+  /** Seçim modundan çıkar. `returnFocus`: Vazgeç ve Esc'te odak [Seç]'e döner (işlem sonrası odak işlemin). */
+  const leaveSelection = useCallback(
+    (options?: { announce?: boolean; returnFocus?: boolean }) => {
+      setSelecting(false);
+      setSelection(new Set());
+      anchor.current = null;
+      if (options?.announce) announce('Seçim modundan çıkıldı');
+      if (options?.returnFocus) requestAnimationFrame(() => requestAnimationFrame(() => selectButtonRef.current?.focus()));
+    },
+    [announce],
+  );
+
+  const toggleSelect = useCallback<Editor['toggleSelect']>(
+    (blockId, range) => {
+      const ids = current().map((block) => block.id);
+      const from = range && anchor.current ? ids.indexOf(anchor.current) : -1;
+      const to = ids.indexOf(blockId);
+      if (to === -1) return;
+      anchor.current = blockId;
+      // Güncel seçimden (art arda iki dokunuş bir çizimde birleşmesin).
+      setSelection((now) => {
+        const next = new Set(now);
+        if (from !== -1 && from !== to) {
+          for (const id of ids.slice(Math.min(from, to), Math.max(from, to) + 1)) next.add(id);
+        } else if (next.has(blockId)) {
+          next.delete(blockId);
+        } else {
+          next.add(blockId);
+        }
+        return next;
+      });
+    },
+    [current],
+  );
+
+  const selectAll = () => setSelection(new Set(current().map((block) => block.id)));
+
+  /** Seçimin olay anındaki hâli (liste sırasıyla, silinenler yok). */
+  const pickedNow = () => {
     const before = current();
+    return { before, ids: new Set(before.filter((block) => selection.has(block.id)).map((block) => block.id)) };
+  };
+
+  const groupSelected = () => {
+    const { before, ids } = pickedNow();
+    const kind = groupCheck(before, ids);
+    const first = before.find((block) => ids.has(block.id));
+    if ((kind !== 'superset' && kind !== 'circuit') || !first) return;
+    leaveSelection();
+    // Grup ilk seçilen kartın yerinde ve kimliğiyle kurulur: vurgu ve odak onda.
+    updateWithUndo((now) => groupBlocks(now, ids), groupedMessage(before, ids, kind, titleOf), { highlight: first.id, focus: first.id });
+  };
+
+  const copySelected = () => {
+    const { before, ids } = pickedNow();
+    const next = duplicateBlocks(before, ids, newIds(before));
+    if (next === before) return announce(FULL_MESSAGE);
+    const known = new Set(before.map((block) => block.id));
+    const firstCopy = next.find((block) => !known.has(block.id));
+    const target = firstCopy ? blockItemId(firstCopy) : undefined;
+    leaveSelection();
+    updateWithUndo(() => next, bulkMessage(selectedRowCount(before, ids), 'copied'), target ? { highlight: target, focus: target } : undefined);
+  };
+
+  const removeSelected = () => {
+    const { before, ids } = pickedNow();
+    if (ids.size === 0) return;
+    leaveSelection();
+    updateWithUndo((now) => removeBlocks(now, ids), bulkMessage(selectedRowCount(before, ids), 'removed'), {
+      focus: neighbourAfterRemoval(before, ids) ?? '',
+    });
+  };
+
+  // Esc seçim modundan çıkar (odak çubukta da olabilir).
+  useEffect(() => {
+    if (!selectingNow) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || sheetOpen.current) return;
+      event.preventDefault();
+      leaveSelection({ announce: true, returnFocus: true });
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [selectingNow, leaveSelection]);
+
+  /** Liste odaktayken: Ctrl/⌘+A tümünü seçer, Delete "Sil" gibi çalışır (Space/Enter yüzün kendisi). */
+  const onListKeyDown = (event: React.KeyboardEvent<HTMLOListElement>) => {
+    if (!selectingNow) return;
+    if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase('en') === 'a') {
+      event.preventDefault();
+      selectAll();
+    } else if ((event.key === 'Delete' || event.key === 'Backspace') && selected.size > 0) {
+      event.preventDefault();
+      removeSelected();
+    }
+  };
+
+  const status = selectionStatus(selected.size, check, copyFits, coarse ? 'touch' : 'mouse');
+
+  // ─── Ekleme sheet'i: sona ya da grubun sonuna ────────────────────────────────────────
+
+  const openAddToGroup = useCallback<Editor['openAddToGroup']>(
+    (blockId, event) => {
+      const now = current();
+      const blockIndex = now.findIndex((block) => block.id === blockId);
+      const block = now[blockIndex];
+      if (!block || block.kind === 'single') return;
+      returnFocus.current = event.currentTarget;
+      lastAdded.current = null;
+      setPicker({ kind: 'addToGroup', blockId, title: addToGroupTitle(block.kind, blockIndex) });
+    },
+    [current],
+  );
+
+  /** Dokunulan egzersizi ekler (vurgu ve duyuru sheet kapanınca); durum satırının cümlesi, eklenemezse `null`. */
+  const pick = (exercise: PickerExercise): string | null => {
+    const before = current();
+    if (picker?.kind === 'addToGroup') {
+      const group = before.find((block) => block.id === picker.blockId);
+      const next = addToGroup(before, picker.blockId, exercise, newIds(before));
+      const joined = next.find((block) => block.id === picker.blockId);
+      const rowId = joined?.rows.at(-1)?.id;
+      if (next === before || !group || !joined || !rowId) return null;
+      update(() => next);
+      lastAdded.current = rowId;
+      const message = addedToGroupMessage(exercise.title, group.kind, joined.kind);
+      announce(message);
+      return message;
+    }
     const next = appendExercise(before, exercise, newIds(before));
     const rowId = next.at(-1)?.rows[0]?.id;
     if (next.length === before.length || !rowId) return null;
-    // Vurgu ve duyuru sheet kapanınca (sheet açıkken sayfa görünmez ve ekran okuyucuya kapalı).
     update(() => next);
     lastAdded.current = rowId;
-    return next.length;
+    return `${exercise.title} eklendi (${next.length}. sıra)`;
   };
 
-  // Boş durumdaki düğme ilk eklemeden sonra kalkar: odak listenin sonundakine döner.
-  const sheetFinalFocus = () => (returnFocus.current?.isConnected ? returnFocus.current : endAddRef.current);
+  const sheet = (() => {
+    if (picker?.kind === 'addToGroup') {
+      const { blocked, hint } = addToGroupHint(addToGroupOutcome(blocks, picker.blockId));
+      return { title: picker.title, description: 'Ada ya da kasa göre ara; dokununca grubun sonuna eklenir.', blocked, hint };
+    }
+    return { title: 'Hareket ekle', description: libraryDescription, blocked: canAdd(blocks) ? null : SHEET_FULL_MESSAGE, hint: '' };
+  })();
+
+  // Açan düğme gitmişse (boş durumdaki düğme ilk eklemeden sonra kalkar) çubuktaki "+ Hareket ekle".
+  const sheetFinalFocus = () => (returnFocus.current?.isConnected ? returnFocus.current : barAdd());
 
   const sheetClosed = () => {
     if (lastAdded.current) setHighlight(lastAdded.current);
@@ -404,6 +638,34 @@ export function BlockEditor({
     pendingAnnouncement.current = null;
     if (pending) announce(pending);
   };
+
+  // ─── Alt çubuk ve kaydırma ipucu ─────────────────────────────────────────────────────
+
+  useEditorBar({
+    addLabel,
+    onAdd: openAdd,
+    selection: selectingNow
+      ? {
+          count: selected.size,
+          status,
+          canGroup: check === 'superset' || check === 'circuit',
+          canCopy: selected.size > 0 && copyFits,
+          canRemove: selected.size > 0,
+          onGroup: groupSelected,
+          onCopy: copySelected,
+          onRemove: removeSelected,
+          onCancel: () => leaveSelection({ announce: true, returnFocus: true }),
+        }
+      : null,
+  });
+
+  const hint = useSyncExternalStore(noSubscription, () => (blocks.length > 0 && picker === null ? readSwipeHint() : null), () => null);
+  const firstBlock = blocks[0];
+  const nudgeId = hint === 'nudge' && !nudged && firstBlock ? blockItemId(firstBlock) : null;
+  const onNudged = useCallback(() => {
+    spendSwipeHint();
+    setNudged(true);
+  }, []);
 
   const editor: Editor = {
     form,
@@ -431,6 +693,12 @@ export function BlockEditor({
     focusSet,
     highlight,
     actions,
+    selecting: selectingNow,
+    selected,
+    toggleSelect,
+    openAddToGroup,
+    nudgeId,
+    onNudged,
   };
 
   return (
@@ -443,15 +711,29 @@ export function BlockEditor({
       <Card className="overflow-visible max-sm:rounded-none max-sm:bg-transparent max-sm:py-0 max-sm:ring-0">
         <CardHeader className="max-sm:px-0">
           <CardTitle>{title}</CardTitle>
-          {blocks.length > 0 ? (
+          {blocks.length >= 2 ? (
             <CardAction className="row-span-1 self-center">
-              <Button type="button" variant="outline" size="sm" className="touch:h-11" aria-haspopup="dialog" onClick={openAdd}>
-                <Plus data-icon="inline-start" />
-                Hareket ekle
-              </Button>
+              {selectingNow ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="touch:h-11"
+                  onClick={() => (allSelected ? setSelection(new Set()) : selectAll())}>
+                  {allSelected ? 'Seçimi kaldır' : 'Tümünü seç'}
+                </Button>
+              ) : (
+                <Button ref={selectButtonRef} type="button" variant="outline" size="sm" className="touch:h-11" onClick={enterSelection}>
+                  <CheckSquare data-icon="inline-start" />
+                  Seç
+                </Button>
+              )}
             </CardAction>
           ) : null}
-          <CardDescription className="col-span-2">{description}</CardDescription>
+          <CardDescription className="col-span-2">{selectingNow ? SELECTING_DESCRIPTION : description}</CardDescription>
+          {hint === 'text' && !selectingNow ? (
+            <p className="col-span-2 text-sm text-muted-foreground">İpucu: kartı sola kaydır → sil, sağa kaydır → kopyala</p>
+          ) : null}
           {blocks.length > 0 ? (
             <p className="col-span-2 text-sm tabular-nums text-muted-foreground">
               {formatNumber(summary.rows)} hareket · {formatNumber(summary.workingSets)} set · ≈ {formatNumber(summary.minutes)} dk
@@ -462,26 +744,20 @@ export function BlockEditor({
           {notice}
 
           {blocks.length > 0 ? (
-            <>
+            <SwipeGroup>
               <EditorDnd listRef={listRef} preview={(itemId) => <ItemPreview itemId={itemId} />}>
                 {/* İlk kartın üstünde 20 px (12 + 8): tutamağın 16 px taşan dokunma alanı üstteki içeriğe binmez. */}
-                <ol ref={listRef} aria-label={listLabel} className="flex flex-col gap-3 pt-2">
+                <ol
+                  ref={listRef}
+                  aria-label={listLabel}
+                  className="flex flex-col gap-3 pt-2"
+                  onKeyDown={onListKeyDown}>
                   {blocks.map((block, blockIndex) => (
                     <BlockItem key={block.id} block={block} blockIndex={blockIndex} count={blocks.length} />
                   ))}
                 </ol>
               </EditorDnd>
-              <Button
-                ref={endAddRef}
-                type="button"
-                variant="outline"
-                aria-haspopup="dialog"
-                className="h-10 w-full border-dashed touch:h-11"
-                onClick={openAdd}>
-                <Plus data-icon="inline-start" />
-                Hareket ekle
-              </Button>
-            </>
+            </SwipeGroup>
           ) : (
             <Empty className="border border-dashed">
               <EmptyHeader>
@@ -506,9 +782,11 @@ export function BlockEditor({
         exercises={exercises}
         devices={deviceById}
         usage={usage}
-        canAdd={canAdd(blocks)}
-        addDescription={libraryDescription}
-        onAdd={add}
+        title={sheet.title}
+        description={sheet.description}
+        blocked={sheet.blocked}
+        hint={sheet.hint}
+        onPick={pick}
         finalFocus={sheetFinalFocus}
         onClosed={sheetClosed}
       />

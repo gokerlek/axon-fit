@@ -62,3 +62,10 @@ export function useDragView<T>(select: (view: DragView) => T): T {
   const getServerSnapshot = useCallback(() => select(SERVER()), [select]);
   return useSyncExternalStore(store.subscribe, getSnapshot, getServerSnapshot);
 }
+
+const selectDragging = (view: DragView) => view.activeId !== null;
+
+/** Sürükleme sürüyor mu (kaydırma o sırada kapalı). Yalnız başlangıçta ve bitişte değişir. */
+export function useDragging(): boolean {
+  return useDragView(selectDragging);
+}

@@ -7,13 +7,13 @@ import { Field as FormField, Form, getDeepError, setErrors, useForm } from '@for
 import { ArrowClockwise, ArrowSquareOut, WarningCircle } from '@phosphor-icons/react';
 import { BlockEditor, useBlocks } from '@/components/block-editor/block-editor';
 import type { BlocksFormStore } from '@/components/block-editor/block-items';
+import { EditorBar, EditorBarProvider } from '@/components/block-editor/editor-bar';
 import { TemplateMuscleMap } from '@/components/muscle-map/template-muscle-map';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { exerciseSetWeights } from '@/lib/muscles';
 import { fetchJson } from '@/lib/query/errors';
@@ -34,7 +34,7 @@ const LOAD_DESCRIPTION =
  * Tek Formisch formu: şablonun adı ve açıklaması burada, hareketler ortak hareket
  * düzenleyicide (`BlockEditor`, program günleriyle aynı). Listelerin anahtarları blok ve
  * satır kimlikleridir; sürükle-bırak sıralar ve gruplar, ekleme kütüphaneden dokunarak
- * yapılır.
+ * yapılır. "+ Hareket ekle" ve Kaydet formun sonundaki yapışkan alt çubukta (`EditorBar`).
  */
 export function TemplateForm({
   editing,
@@ -116,123 +116,123 @@ export function TemplateForm({
   const detailHref = editing ? `/dashboard/templates/${editing.template.id}` : '/dashboard/templates';
 
   return (
-    <Form of={form} className="flex flex-col gap-6" onSubmit={submit}>
-      <Card>
-        <CardHeader>
-          <CardTitle>Şablon</CardTitle>
-          <CardDescription>Adı ve kısa amacı; danışan antrenman ekranında görür.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-5 lg:grid-cols-2">
-          <FormField of={form} path={['name']}>
-            {(field) => (
-              <Field data-invalid={Boolean(field.errors) || undefined}>
-                <FieldLabel htmlFor="name">Şablon adı</FieldLabel>
-                <Input
-                  {...field.props}
-                  id="name"
-                  className="max-w-sm"
-                  value={field.input ?? ''}
-                  placeholder="Ör. Alt vücut A"
-                  aria-invalid={Boolean(field.errors) || undefined}
-                />
-                <FieldError>{field.errors?.[0]}</FieldError>
-              </Field>
+    <EditorBarProvider>
+      <Form of={form} className="flex flex-col gap-6" onSubmit={submit}>
+        <Card>
+          <CardHeader>
+            <CardTitle>Şablon</CardTitle>
+            <CardDescription>Adı ve kısa amacı; danışan antrenman ekranında görür.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-5 lg:grid-cols-2">
+            <FormField of={form} path={['name']}>
+              {(field) => (
+                <Field data-invalid={Boolean(field.errors) || undefined}>
+                  <FieldLabel htmlFor="name">Şablon adı</FieldLabel>
+                  <Input
+                    {...field.props}
+                    id="name"
+                    className="max-w-sm"
+                    value={field.input ?? ''}
+                    placeholder="Ör. Alt vücut A"
+                    aria-invalid={Boolean(field.errors) || undefined}
+                  />
+                  <FieldError>{field.errors?.[0]}</FieldError>
+                </Field>
+              )}
+            </FormField>
+            <FormField of={form} path={['description']}>
+              {(field) => (
+                <Field data-invalid={Boolean(field.errors) || undefined}>
+                  <FieldLabel htmlFor="description">Açıklama</FieldLabel>
+                  <Textarea {...field.props} id="description" rows={2} value={field.input ?? ''} placeholder="Ör. Güç odaklı, haftada iki kez" />
+                  <FieldDescription>
+                    Danışana özel bilgi yazma: şablonlar uygulama repo&apos;sunda durur ve birden çok danışana atanır.
+                  </FieldDescription>
+                  <FieldError>{field.errors?.[0]}</FieldError>
+                </Field>
+              )}
+            </FormField>
+          </CardContent>
+        </Card>
+
+        <BlockEditor
+          form={form as unknown as BlocksFormStore}
+          path={['blocks']}
+          exercises={exercises}
+          devices={devices}
+          newIds={idSource}
+          noteHint="Danışan antrenmanda görür. Kişisel bilgi yazma."
+          libraryDescription="Ada ya da kasa göre ara; dokununca şablonun sonuna eklenir."
+          notice={
+            start.dropped > 0 ? (
+              <Alert>
+                <WarningCircle />
+                <AlertDescription>
+                  {start.dropped} satırın cihazı silinmiş; egzersizin kendi cihazına döndü. Kaydedince kalıcı olur.
+                </AlertDescription>
+              </Alert>
+            ) : null
+          }
+        />
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Kas yükü</CardTitle>
+            <CardDescription>{LOAD_DESCRIPTION}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {blocks.length > 0 ? (
+              <TemplateMuscleMap variant="full" bodyClassName="h-56 lg:h-64" load={load} />
+            ) : (
+              <p className="text-sm text-muted-foreground">Hareket ekleyince kas yükü burada görünür.</p>
             )}
-          </FormField>
-          <FormField of={form} path={['description']}>
-            {(field) => (
-              <Field data-invalid={Boolean(field.errors) || undefined}>
-                <FieldLabel htmlFor="description">Açıklama</FieldLabel>
-                <Textarea {...field.props} id="description" rows={2} value={field.input ?? ''} placeholder="Ör. Güç odaklı, haftada iki kez" />
-                <FieldDescription>
-                  Danışana özel bilgi yazma: şablonlar uygulama repo&apos;sunda durur ve birden çok danışana atanır.
-                </FieldDescription>
-                <FieldError>{field.errors?.[0]}</FieldError>
-              </Field>
-            )}
-          </FormField>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      <BlockEditor
-        form={form as unknown as BlocksFormStore}
-        path={['blocks']}
-        exercises={exercises}
-        devices={devices}
-        newIds={idSource}
-        noteHint="Danışan antrenmanda görür. Kişisel bilgi yazma."
-        libraryDescription="Ada ya da kasa göre ara; dokununca şablonun sonuna eklenir."
-        notice={
-          start.dropped > 0 ? (
-            <Alert>
-              <WarningCircle />
-              <AlertDescription>
-                {start.dropped} satırın cihazı silinmiş; egzersizin kendi cihazına döndü. Kaydedince kalıcı olur.
-              </AlertDescription>
-            </Alert>
-          ) : null
-        }
-      />
+        {stale ? (
+          <Alert variant="destructive">
+            <WarningCircle />
+            <AlertTitle>Bu şablon başka bir yerde değişti</AlertTitle>
+            <AlertDescription>
+              Sen düzenlerken şablon başka bir sekmede ya da cihazda kaydedildi. Değişikliklerin burada duruyor; yeni sürümü
+              ayrı sekmede açıp karşılaştırabilir ya da sayfayı yenileyip (değişikliklerin gider) baştan düzenleyebilirsin.
+            </AlertDescription>
+            <div className="col-start-2 mt-2 flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" nativeButton={false} render={<Link href={detailHref} target="_blank" rel="noopener" />}>
+                <ArrowSquareOut data-icon="inline-start" />
+                Yeni sekmede aç
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  router.refresh();
+                  window.location.reload();
+                }}>
+                <ArrowClockwise data-icon="inline-start" />
+                Sayfayı yenile
+              </Button>
+            </div>
+          </Alert>
+        ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Kas yükü</CardTitle>
-          <CardDescription>{LOAD_DESCRIPTION}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {blocks.length > 0 ? (
-            <TemplateMuscleMap variant="full" bodyClassName="h-56 lg:h-64" load={load} />
-          ) : (
-            <p className="text-sm text-muted-foreground">Hareket ekleyince kas yükü burada görünür.</p>
-          )}
-        </CardContent>
-      </Card>
+        {hiddenError ? (
+          <Alert variant="destructive" data-form-error>
+            <WarningCircle />
+            <AlertTitle>Form gönderilemedi</AlertTitle>
+            <AlertDescription>{hiddenError}</AlertDescription>
+          </Alert>
+        ) : null}
 
-      {stale ? (
-        <Alert variant="destructive">
-          <WarningCircle />
-          <AlertTitle>Bu şablon başka bir yerde değişti</AlertTitle>
-          <AlertDescription>
-            Sen düzenlerken şablon başka bir sekmede ya da cihazda kaydedildi. Değişikliklerin burada duruyor; yeni sürümü
-            ayrı sekmede açıp karşılaştırabilir ya da sayfayı yenileyip (değişikliklerin gider) baştan düzenleyebilirsin.
-          </AlertDescription>
-          <div className="col-start-2 mt-2 flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" nativeButton={false} render={<Link href={detailHref} target="_blank" rel="noopener" />}>
-              <ArrowSquareOut data-icon="inline-start" />
-              Yeni sekmede aç
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                router.refresh();
-                window.location.reload();
-              }}>
-              <ArrowClockwise data-icon="inline-start" />
-              Sayfayı yenile
-            </Button>
-          </div>
-        </Alert>
-      ) : null}
-
-      {hiddenError ? (
-        <Alert variant="destructive">
-          <WarningCircle />
-          <AlertTitle>Form gönderilemedi</AlertTitle>
-          <AlertDescription>{hiddenError}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      <div className="flex justify-end gap-2 border-t pt-4">
-        <Button variant="outline" nativeButton={false} render={<Link href={detailHref} />}>
-          Vazgeç
-        </Button>
-        <Button type="submit" disabled={save.isPending}>
-          {save.isPending ? <Spinner data-icon="inline-start" /> : null}
-          {save.isPending ? 'Kaydediliyor…' : 'Kaydet'}
-        </Button>
-      </div>
-    </Form>
+        <EditorBar
+          cancelHref={detailHref}
+          creating={!editing}
+          submitLabel={editing ? 'Kaydet' : 'Şablonu oluştur'}
+          dirty={dirty}
+          pending={save.isPending || save.isSuccess}
+        />
+      </Form>
+    </EditorBarProvider>
   );
 }

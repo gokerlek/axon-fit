@@ -7,23 +7,26 @@ import {
   addToGroup,
   addToGroupOutcome,
   appendExercise,
-  appendGroup,
   applySetPreset,
   canDuplicate,
+  canDuplicateBlocks,
   changeKind,
   combineInto,
   combineOutcome,
   deviceChoices,
   dissolveGroup,
   duplicateBlock,
+  duplicateBlocks,
   duplicateRow,
+  groupBlocks,
+  groupCheck,
   idSource,
   moveCheck,
   moveItem,
-  newGroupCapacity,
   newGroupKind,
   prepareForEditing,
   removeBlock,
+  removeBlocks,
   removeRow,
   replaceExercise,
   setRounds,
@@ -744,58 +747,142 @@ describe('üstüne bırakıp gruplama', () => {
   });
 });
 
-describe('grup kurma ve gruba ekleme', () => {
+describe('seçim modu: gruplama, kopyalama, silme', () => {
   test('seçilen sayıya göre tür: 2 süperset, 3–8 devre', () => {
     assert.deepEqual([0, 1, 2, 3, 8, 9].map(newGroupKind), [null, null, 'superset', 'circuit', 'circuit', null]);
   });
 
-  test('2 hareket: sona süperset, seçim sırasıyla; setler türüne göre, dinlenme 90', () => {
-    const blocks = [block('b_1', 'single', [row('r_1', 'squat')])];
-    const result = appendGroup(blocks, [curl, squat], sequentialIds());
-    assert.equal(result[0], blocks[0]);
-    assert.deepEqual(result[1], {
-      id: 'b_new001',
-      kind: 'superset',
-      restSeconds: 90,
-      rows: [
-        { id: 'r_new002', exerciseId: 'curl', sets: uniformSets({ min: 10, max: 15 }, 3) },
-        { id: 'r_new003', exerciseId: 'squat', sets: uniformSets({ min: 6, max: 10 }, 3) },
-      ],
-    });
+  test('gruplanır mı: 2 süperset, 3–8 devre; az, çok, grup var', () => {
+    const blocks = [...singles(9), block('b_g', 'superset', [row('r_g1', 'squat'), row('r_g2', 'curl')])];
+    assert.equal(groupCheck(blocks, []), 'too_few');
+    assert.equal(groupCheck(blocks, ['b_0']), 'too_few');
+    assert.equal(groupCheck(blocks, ['b_0', 'b_1']), 'superset');
+    assert.equal(groupCheck(blocks, ['b_0', 'b_1', 'b_2']), 'circuit');
+    assert.equal(groupCheck(blocks, ['b_0', 'b_1', 'b_2', 'b_3', 'b_4', 'b_5', 'b_6', 'b_7']), 'circuit');
+    assert.equal(groupCheck(blocks, ['b_0', 'b_1', 'b_2', 'b_3', 'b_4', 'b_5', 'b_6', 'b_7', 'b_8']), 'too_many');
+    assert.equal(groupCheck(blocks, ['b_0', 'b_g']), 'not_singles');
   });
 
-  test('3–8 hareket: devre (120 sn, geçiş 15); kimlikler geçerli ve benzersiz', () => {
-    const blocks = [block('b_aaaaaa', 'single', [row('r_aaaaaa', 'squat')])];
-    const result = appendGroup(blocks, [plank, squat, curl], idSource(blocks));
+  test('bilinmeyen kimlik yok sayılır, aynı kimlik bir kez sayılır', () => {
+    const blocks = singles(3);
+    assert.equal(groupCheck(blocks, ['b_0', 'b_0', 'b_x']), 'too_few');
+    assert.equal(groupCheck(blocks, ['b_0', 'b_x', 'b_2', 'b_2']), 'superset');
+  });
+
+  test('2 tek → süperset: ilk seçilenin yerinde ve kimliğiyle, liste sırasıyla, dinlenme 90', () => {
+    const blocks = [
+      block('b_0', 'single', [row('r_0', 'squat', { note: 'Diz dışa', rule: { scheme: 'linear', targetRir: 2 } })], { restSeconds: 180 }),
+      block('b_1', 'single', [row('r_1', 'curl', { count: 4 })]),
+      block('b_2', 'single', [row('r_2', 'plank')]),
+    ];
+    // Dokunma sırası tersine: liste sırası geçer.
+    const result = groupBlocks(blocks, ['b_2', 'b_0']);
+    assert.deepEqual(shape(result), ['superset:r_0,r_2', 'single:r_1']);
+    const group = result[0] as TemplateBlock;
+    assert.deepEqual(
+      { id: group.id, rest: group.restSeconds, transition: group.transitionSeconds, rounds: roundsOf(group) },
+      { id: 'b_0', rest: 90, transition: undefined, rounds: 3 },
+    );
+    // Satırlar olduğu gibi: kimlik, setler, kural, not.
+    assert.equal(group.rows[0], blocks[0]?.rows[0]);
+    assert.equal(group.rows[1], blocks[2]?.rows[0]);
+    assert.equal(result[1], blocks[1]);
+  });
+
+  test('bitişik olmayan 3 tek → devre (120 sn, geçiş 15); tur en çok set', () => {
+    const blocks = [
+      block('b_0', 'single', [row('r_0', 'squat')]),
+      block('b_1', 'single', [row('r_1', 'curl', { count: 5 })]),
+      block('b_g', 'superset', [row('r_g1', 'squat'), row('r_g2', 'curl')]),
+      block('b_3', 'single', [row('r_3', 'plank')]),
+      block('b_4', 'single', [row('r_4', 'squat')]),
+    ];
+    const result = groupBlocks(blocks, ['b_4', 'b_1', 'b_3']);
+    assert.deepEqual(shape(result), ['single:r_0', 'circuit:r_1,r_3,r_4', 'superset:r_g1,r_g2']);
     const group = result[1] as TemplateBlock;
     assert.deepEqual(
-      { kind: group.kind, rest: group.restSeconds, transition: group.transitionSeconds, rows: group.rows.map((r) => r.exerciseId) },
-      { kind: 'circuit', rest: 120, transition: 15, rows: ['plank', 'squat', 'curl'] },
+      { id: group.id, rest: group.restSeconds, transition: group.transitionSeconds, rounds: roundsOf(group) },
+      { id: 'b_1', rest: 120, transition: 15, rounds: 5 },
     );
-    assert.match(group.id, BLOCK_ID_PATTERN);
-    for (const item of group.rows) assert.match(item.id, ROW_ID_PATTERN);
     assert.deepEqual(duplicateIds(result), []);
-    assert.equal(appendGroup(blocks, Array.from({ length: 8 }, () => squat), sequentialIds())[1]?.rows.length, 8);
   });
 
-  test('1 ya da 9 hareket, 30 blok ya da 40 hareketi aşan grup kurulmaz (aynı dizi)', () => {
-    const blocks = [block('b_1', 'single', [row('r_1', 'squat')])];
-    assert.equal(appendGroup(blocks, [squat], sequentialIds()), blocks);
-    assert.equal(appendGroup(blocks, Array.from({ length: 9 }, () => squat), sequentialIds()), blocks);
-    assert.equal(newGroupCapacity(blocks), 8);
-
-    const thirty = singles(30);
-    assert.equal(newGroupCapacity(thirty), 0);
-    assert.equal(appendGroup(thirty, [squat, curl], sequentialIds()), thirty);
-
-    const rows39 = [...circuits(4, 8), block('b_7', 'circuit', Array.from({ length: 7 }, (_, i) => row(`r_7${i}`, 'squat')))];
-    assert.equal(newGroupCapacity(rows39), 1);
-    assert.equal(appendGroup(rows39, [squat, curl], sequentialIds()), rows39);
-    const rows37 = rows39.slice(0, -1).concat(block('b_5', 'circuit', Array.from({ length: 5 }, (_, i) => row(`r_5${i}`, 'squat'))));
-    assert.equal(newGroupCapacity(rows37), 3);
-    assert.equal(countRows(appendGroup(rows37, [squat, curl, plank], sequentialIds())), 40);
+  test('8 tek devre olur; 9 tek, 1 tek ya da seçimde grup: aynı dizi', () => {
+    const blocks = [...singles(9), block('b_g', 'superset', [row('r_g1', 'squat'), row('r_g2', 'curl')])];
+    const eight = groupBlocks(blocks, blocks.slice(0, 8).map((item) => item.id));
+    assert.deepEqual(shape(eight).slice(0, 2), ['circuit:r_0,r_1,r_2,r_3,r_4,r_5,r_6,r_7', 'single:r_8']);
+    assert.equal(groupBlocks(blocks, blocks.slice(0, 9).map((item) => item.id)), blocks);
+    assert.equal(groupBlocks(blocks, ['b_0']), blocks);
+    assert.equal(groupBlocks(blocks, ['b_0', 'b_g']), blocks);
+    assert.equal(groupBlocks(blocks, []), blocks);
   });
 
+  test('kopyalama: liste sırasıyla son seçilenin arkasına, yeni kimliklerle, aynı ayarlarla', () => {
+    const blocks = [
+      block('b_0', 'single', [row('r_0', 'squat')], { restSeconds: 150 }),
+      block('b_g', 'circuit', [row('r_g1', 'squat'), row('r_g2', 'curl'), row('r_g3', 'plank')], { transitionSeconds: 20 }),
+      block('b_2', 'single', [row('r_2', 'curl')]),
+      block('b_3', 'single', [row('r_3', 'plank')]),
+    ];
+    const result = duplicateBlocks(blocks, ['b_2', 'b_0', 'b_g', 'b_x'], sequentialIds());
+    assert.deepEqual(shape(result), [
+      'single:r_0',
+      'circuit:r_g1,r_g2,r_g3',
+      'single:r_2',
+      'single:r_new002',
+      'circuit:r_new004,r_new005,r_new006',
+      'single:r_new008',
+      'single:r_3',
+    ]);
+    assert.deepEqual(
+      result.slice(3, 6).map((item) => ({ id: item.id, rest: item.restSeconds, transition: item.transitionSeconds })),
+      [
+        { id: 'b_new001', rest: 150, transition: undefined },
+        { id: 'b_new003', rest: 90, transition: 20 },
+        { id: 'b_new007', rest: 90, transition: undefined },
+      ],
+    );
+    assert.deepEqual(result[4]?.rows.map((item) => item.exerciseId), ['squat', 'curl', 'plank']);
+    // Kopya bağımsız: setler ayrı nesne.
+    assert.notEqual(result[3]?.rows[0]?.sets, blocks[0]?.rows[0]?.sets);
+    assert.deepEqual(result[3]?.rows[0]?.sets, blocks[0]?.rows[0]?.sets);
+    assert.deepEqual(duplicateIds(duplicateBlocks(blocks, ['b_0', 'b_g'], idSource(blocks))), []);
+  });
+
+  test('kopya sığmazsa (30 blok, 40 hareket) ya da seçim boşsa aynı dizi', () => {
+    const blocks = singles(3);
+    assert.equal(canDuplicateBlocks(blocks, []), false);
+    assert.equal(duplicateBlocks(blocks, ['b_x'], sequentialIds()), blocks);
+
+    const twentyNine = singles(29);
+    assert.equal(canDuplicateBlocks(twentyNine, ['b_0']), true);
+    assert.equal(duplicateBlocks(twentyNine, ['b_0'], sequentialIds()).length, 30);
+    assert.equal(canDuplicateBlocks(twentyNine, ['b_0', 'b_1']), false);
+    assert.equal(duplicateBlocks(twentyNine, ['b_0', 'b_1'], sequentialIds()), twentyNine);
+
+    const rows37 = [...circuits(4, 8), block('b_5', 'circuit', Array.from({ length: 5 }, (_, i) => row(`r_5${i}`, 'squat')))];
+    assert.equal(countRows(rows37), 37);
+    assert.equal(canDuplicateBlocks(rows37, ['b_c0']), false);
+    assert.equal(canDuplicateBlocks(rows37, ['b_5']), false);
+    const rows35 = [...circuits(4, 8), block('b_3', 'circuit', Array.from({ length: 3 }, (_, i) => row(`r_3${i}`, 'squat')))];
+    assert.equal(canDuplicateBlocks(rows35, ['b_3']), true);
+    assert.equal(countRows(duplicateBlocks(rows35, ['b_3'], sequentialIds())), 38);
+  });
+
+  test('silme: seçili bloklar bütün satırlarıyla gider; hiçbiri yoksa aynı dizi', () => {
+    const blocks = [
+      block('b_0', 'single', [row('r_0', 'squat')]),
+      block('b_g', 'superset', [row('r_g1', 'squat'), row('r_g2', 'curl')]),
+      block('b_2', 'single', [row('r_2', 'curl')]),
+    ];
+    assert.deepEqual(shape(removeBlocks(blocks, ['b_g', 'b_0'])), ['single:r_2']);
+    assert.deepEqual(removeBlocks(blocks, ['b_0', 'b_g', 'b_2']), []);
+    assert.equal(removeBlocks(blocks, ['b_x']), blocks);
+    assert.equal(removeBlocks(blocks, []), blocks);
+  });
+});
+
+describe('gruba ekleme', () => {
   test('gruba ekleme: sona, setleri türüne göre; süperset devre olur', () => {
     const blocks = [block('b_1', 'superset', [row('r_1', 'squat'), row('r_2', 'curl')], { restSeconds: 75 })];
     assert.equal(addToGroupOutcome(blocks, 'b_1'), 'becomes_circuit');

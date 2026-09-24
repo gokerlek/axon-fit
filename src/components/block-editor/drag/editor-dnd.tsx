@@ -36,8 +36,8 @@ import { DragStoreContext, IDLE, createDragStore } from './drag-store';
  * - Bırakınca forma tek yazım: `moveItem` (geri al yok; geri sürüklemek yeter) ya da
  *   `combineInto` ("Geri al"). Kart kapalı oturur ve 1,2 sn vurgulanır. Esc, pointercancel
  *   ya da listenin dışına bırakmak iptal eder.
- * - Ekranın üst ve alt 80 px'i otomatik kaydırır. Sürerken `html[data-reordering]` dock'u ve
- *   kullanıcı menüsünü çeker.
+ * - Ekranın üst ve alt 80 px'i otomatik kaydırır. Sürerken `html[data-reordering]` dock'u,
+ *   kullanıcı menüsünü ve düzenleyicinin alt çubuğunu çeker; kaydırma panelleri kapanır.
  */
 
 type Session = {

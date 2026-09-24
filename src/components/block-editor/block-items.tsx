@@ -2,9 +2,10 @@
 
 import { useMemo } from 'react';
 import { getDeepError, setInput, useField, useFieldArray } from '@formisch/react';
-import { Barbell, CaretDown, Copy, LinkBreak, NoteBlank, TrendUp, Trash, WarningCircle } from '@phosphor-icons/react';
+import { ArrowsSplit, Barbell, CaretDown, Copy, LinkBreak, NoteBlank, Plus, TrendUp, Trash, WarningCircle } from '@phosphor-icons/react';
 import { ARMED, CardBadge, CardFace, CardGrabber, ExerciseCard, ExerciseCardSection, PLACEHOLDER } from '@/components/exercise-card';
 import { GroupedSelect, LabeledSelect } from '@/components/labeled-select';
+import { SwipeRow, type SwipeAction } from '@/components/swipe/swipe-row';
 import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -29,10 +30,12 @@ import {
 } from '@/lib/template-plan';
 import { cn } from '@/lib/utils';
 import { DragGroup, DragItem, DropFace, DropLine, DropPill, Grabber } from './drag/drag-node';
-import { blockField, bodyId, faceId, groupTitle, rowTitle, useEditor } from './editor-context';
+import { useDragging } from './drag/drag-store';
+import { blockField, bodyId, faceId, groupTitle, rowTitle, useEditor, type Editor } from './editor-context';
 import { BlockSecondsField, RoundsField, SetCountField, SetsSection, SetsSummary, TargetField } from './set-table';
 
-export { EditorContext, blockField, rowTitle, useEditor, type BlocksFormStore, type BlocksPath, type Editor } from './editor-context';
+export { EditorContext, blockField, rowTitle, useEditor, type BlocksFormStore, type BlocksPath } from './editor-context';
+export type { Editor };
 
 /** Dokunmatikte ya da dar ekranda seçim kutusu ve öğeleri 44 px. */
 const SELECT_TOUCH = {
@@ -157,6 +160,25 @@ function FaceRemoveButton({ itemId }: { itemId: string }) {
       <Trash aria-hidden />
     </Button>
   );
+}
+
+// Kaydırma panelleri (tasarım §3): sağda olumlu işlemler, solda sil ve dağıt. Hepsi kartın
+// görünür düğmelerinin kopyası (⧉, açık gövdedeki Sil / Gruptan çıkar / Grubu dağıt).
+
+function copyAction(editor: Editor, itemId: string): SwipeAction {
+  const can = canDuplicate(editor.blocks, itemId);
+  return {
+    key: 'copy',
+    label: 'Kopyala',
+    icon: <Copy />,
+    tone: 'primary',
+    disabled: !can,
+    onPress: () => (can ? editor.actions.duplicate(itemId) : editor.announce(FULL_MESSAGE)),
+  };
+}
+
+function removeAction(editor: Editor, itemId: string): SwipeAction {
+  return { key: 'remove', label: 'Sil', icon: <Trash />, tone: 'destructive', removes: true, onPress: () => editor.actions.remove(itemId) };
 }
 
 function Mark({ label, children }: { label: string; children: React.ReactNode }) {
@@ -432,10 +454,15 @@ function RowBody({
   );
 }
 
-/** Tek hareketin ya da grup üyesinin kartı: çizgi, yüz, açıkken gövde. */
+/**
+ * Tek hareketin ya da grup üyesinin kartı: çizgi, yüz, açıkken gövde. Dokunmatikte yüz
+ * kayar (tek: → Kopyala, ← Sil; üye: → [Kopyala][Çıkar], ← Sil). Seçim modunda tek hareketin
+ * kabına dokunmak seçer; üye tek başına seçilmez (grubu seçilir).
+ */
 function RowCard({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; blockIndex: number; row: TemplateRow; rowIndex: number }) {
   const editor = useEditor();
-  const { form, path, exercises, labels, open, highlight } = editor;
+  const { form, path, exercises, labels, open, highlight, selecting, selected } = editor;
+  const dragging = useDragging();
   // Formisch kancası: satırın hata okuması bu kartın çizimine bağlansın.
   useField(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'exerciseId') });
   const exercise = exercises.get(row.exerciseId);
@@ -443,10 +470,27 @@ function RowCard({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; b
   const single = block.kind === 'single';
   const last = rowIndex === block.rows.length - 1;
   const isOpen = open.has(row.id);
+  const checked = single && selected.has(block.id);
   const invalid =
     Boolean(getDeepError(form, { path: blockField(path, blockIndex, 'rows', rowIndex) })) ||
     (single && Boolean(getDeepError(form, { path: blockField(path, blockIndex, 'restSeconds') })));
   const onKeyDown = useFaceKeys(row.id, isOpen);
+
+  const start: SwipeAction[] = [
+    ...(exercise ? [copyAction(editor, row.id)] : []),
+    ...(single
+      ? []
+      : [
+          {
+            key: 'ungroup',
+            label: 'Çıkar',
+            icon: <LinkBreak />,
+            tone: 'neutral' as const,
+            disabled: editor.blocks.length >= TEMPLATE_LIMITS.blocks,
+            onPress: () => editor.actions.ungroup(row.id),
+          },
+        ]),
+  ];
 
   const content = (
     <>
@@ -457,16 +501,36 @@ function RowCard({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; b
         title={title}
         titleClassName={exercise ? undefined : 'text-destructive'}
         meta={<RowMeta block={block} row={row} exercise={exercise} invalid={invalid} />}
-        label={`${title}, ayrıntıları aç/kapat`}
+        label={selecting ? title : `${title}, ayrıntıları aç/kapat`}
         expanded={isOpen}
         controls={bodyId(row.id)}
         onToggle={() => editor.toggleOpen(row.id)}
-        onKeyDown={onKeyDown}
+        onKeyDown={selecting ? undefined : onKeyDown}
         keyShortcuts={KEY_SHORTCUTS}
-        action={exercise ? <CopyButton itemId={row.id} title={title} /> : <FaceRemoveButton itemId={row.id} />}
+        action={selecting ? undefined : exercise ? <CopyButton itemId={row.id} title={title} /> : <FaceRemoveButton itemId={row.id} />}
         status={<DropPill itemId={row.id} />}
         after={<MoveStrip itemId={row.id} kind={single ? 'single' : 'member'} title={title} />}
         invalid={invalid}
+        selection={selecting && single ? { checked } : undefined}
+        slide={
+          selecting
+            ? undefined
+            : (face) => (
+                <SwipeRow
+                  id={row.id}
+                  start={start}
+                  end={[removeAction(editor, row.id)]}
+                  // Üyede sağa tam kaydırma yok (iki işlem: Kopyala, Çıkar).
+                  fullStart={single ? undefined : false}
+                  disabled={dragging}
+                  nudge={editor.nudgeId === row.id}
+                  onNudged={editor.onNudged}
+                  // Kapalı tek kartta yüz kartın altına kadar iner: panel köşeleri kartın yuvarlaklığında.
+                  className={single && !isOpen ? 'rounded-b-[calc(var(--radius)-1px)]' : undefined}>
+                  {face}
+                </SwipeRow>
+              )
+        }
       />
       {isOpen ? <RowBody block={block} blockIndex={blockIndex} row={row} rowIndex={rowIndex} exercise={exercise} title={title} /> : null}
       {single ? null : <DropLine destination={{ at: 'group', blockId: block.id, index: rowIndex }} edge="before" />}
@@ -479,16 +543,26 @@ function RowCard({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; b
       itemId={row.id}
       domId={`row-${row.id}`}
       drop={{ kind: single ? 'single' : 'member', blockId: block.id }}
+      disabled={selecting}
       render={(props) =>
         single ? (
-          <ExerciseCard {...props} highlighted={highlight === row.id} />
+          <ExerciseCard
+            {...props}
+            highlighted={highlight === row.id}
+            selected={checked}
+            // Seçim modunda kabın her yeri seçer (yüzün click'i de buraya çıkar); Shift+tık aralık.
+            onClick={selecting ? (event) => editor.toggleSelect(block.id, event.shiftKey) : undefined}
+            className={selecting ? 'cursor-pointer' : undefined}
+          />
         ) : (
           <section
             {...props}
             aria-label={title}
             data-highlighted={highlight === row.id || undefined}
+            // Kaydırarak silinince üye 220 ms'de kapanır.
+            data-swipe-collapse
             className={cn(
-              'relative flex min-w-0 scroll-mt-24 scroll-mb-32 flex-col border-t border-primary/25 text-sm motion-safe:transition-[box-shadow,background-color] motion-safe:duration-300',
+              'relative flex min-w-0 scroll-mt-24 scroll-mb-(--editor-bar-clearance) flex-col border-t border-primary/25 text-sm motion-safe:transition-[box-shadow,background-color] motion-safe:duration-300',
               'data-armed:rounded-lg data-dragging:rounded-lg data-dragging:border data-highlighted:rounded-lg data-highlighted:ring-2 data-highlighted:ring-primary/60',
               PLACEHOLDER,
               ARMED,
@@ -577,20 +651,25 @@ function GroupSettings({ block, blockIndex }: { block: TemplateBlock; blockIndex
 
 /**
  * Grup: tek kap (vurgu tonlu kenar, %4 zemin). Kabın çizgisi bütün grubu, üyenin çizgisi
- * yalnız o üyeyi taşır. Üyeler ince çizgiyle ayrılan bölümlerdir (kart içinde kart yok).
+ * yalnız o üyeyi taşır. Üyeler ince çizgiyle ayrılan bölümlerdir (kart içinde kart yok);
+ * en altta "+ Gruba hareket ekle". Grup yüzü kayar (→ Kopyala, ← [Dağıt][Sil]). Seçim
+ * modunda grubun her yeri grubu seçer; üyeler soluk ve etkileşimsizdir.
  */
 function GroupCard({ block, blockIndex }: { block: TemplateBlock; blockIndex: number }) {
   const editor = useEditor();
-  const { form, path, open, highlight } = editor;
+  const { form, path, open, highlight, selecting, selected } = editor;
+  const dragging = useDragging();
   const rowsArray = useFieldArray(form, { path: blockField(path, blockIndex, 'rows') });
   const kind = block.kind === 'single' ? 'superset' : block.kind;
   const title = groupTitle(block, blockIndex);
   const rounds = roundsOf(block);
   const isOpen = open.has(block.id);
+  const checked = selected.has(block.id);
   const invalid =
     Boolean(getDeepError(form, { path: blockField(path, blockIndex, 'restSeconds') })) ||
     Boolean(getDeepError(form, { path: blockField(path, blockIndex, 'transitionSeconds') }));
   const onKeyDown = useFaceKeys(block.id, isOpen);
+  const tooMany = editor.blocks.length - 1 + block.rows.length > TEMPLATE_LIMITS.blocks;
   const meta = [
     `${block.rows.length} hareket`,
     `${rounds} tur`,
@@ -599,6 +678,18 @@ function GroupCard({ block, blockIndex }: { block: TemplateBlock; blockIndex: nu
   ]
     .filter(Boolean)
     .join(' · ');
+
+  const end: SwipeAction[] = [
+    {
+      key: 'dissolve',
+      label: 'Dağıt',
+      icon: <ArrowsSplit />,
+      tone: 'neutral',
+      disabled: tooMany,
+      onPress: () => (tooMany ? editor.announce(FULL_MESSAGE) : editor.actions.dissolve(block.id)),
+    },
+    removeAction(editor, block.id),
+  ];
 
   const head = (
     <>
@@ -617,16 +708,32 @@ function GroupCard({ block, blockIndex }: { block: TemplateBlock; blockIndex: nu
             ) : null}
           </>
         }
-        label={`${title}, ayarları aç/kapat`}
+        label={selecting ? title : `${title}, ayarları aç/kapat`}
         expanded={isOpen}
         controls={bodyId(block.id)}
         onToggle={() => editor.toggleOpen(block.id)}
-        onKeyDown={onKeyDown}
+        onKeyDown={selecting ? undefined : onKeyDown}
         keyShortcuts={KEY_SHORTCUTS}
         action={<CopyButton itemId={block.id} title={title} />}
         status={<DropPill itemId={block.id} />}
         after={<MoveStrip itemId={block.id} kind="group" title={title} />}
         invalid={invalid}
+        selection={selecting ? { checked } : undefined}
+        slide={
+          selecting
+            ? undefined
+            : (face) => (
+                <SwipeRow
+                  id={block.id}
+                  start={[copyAction(editor, block.id)]}
+                  end={end}
+                  disabled={dragging}
+                  nudge={editor.nudgeId === block.id}
+                  onNudged={editor.onNudged}>
+                  {face}
+                </SwipeRow>
+              )
+        }
       />
       {isOpen ? <GroupSettings block={block} blockIndex={blockIndex} /> : null}
     </>
@@ -636,16 +743,44 @@ function GroupCard({ block, blockIndex }: { block: TemplateBlock; blockIndex: nu
     <DragGroup
       itemId={block.id}
       domId={`group-${block.id}`}
-      render={(props) => <ExerciseCard {...props} tone="group" highlighted={highlight === block.id} aria-label={title} role="group" />}>
-      <DropFace itemId={block.id} render={(props) => <div {...props} className={cn('relative rounded-t-[inherit] data-armed:rounded-xl', ARMED)} />}>
+      disabled={selecting}
+      render={(props) => (
+        <ExerciseCard
+          {...props}
+          tone="group"
+          highlighted={highlight === block.id}
+          selected={checked}
+          aria-label={title}
+          role="group"
+          // Seçim modunda grubun her yeri grubu seçer (üyeler etkileşimsiz; dokunuş kaba düşer).
+          onClick={selecting ? (event) => editor.toggleSelect(block.id, event.shiftKey) : undefined}
+          className={selecting ? 'cursor-pointer' : undefined}
+        />
+      )}>
+      <DropFace
+        itemId={block.id}
+        disabled={selecting}
+        render={(props) => <div {...props} className={cn('relative rounded-t-[inherit] data-armed:rounded-xl', ARMED)} />}>
         {head}
       </DropFace>
-      <div className="flex flex-col">
+      <div inert={selecting} className={cn('flex flex-col', selecting && 'opacity-60')}>
         {block.rows.map((row, rowIndex) => (
           <RowCard key={row.id} block={block} blockIndex={blockIndex} row={row} rowIndex={rowIndex} />
         ))}
       </div>
       {rowsArray.errors ? <FieldError className="px-3 pb-3">{rowsArray.errors[0]}</FieldError> : null}
+      {selecting ? null : (
+        <Button
+          type="button"
+          variant="ghost"
+          aria-haspopup="dialog"
+          aria-label={`Gruba hareket ekle: ${title}`}
+          className="h-11 w-full rounded-none rounded-b-[inherit] border-t border-primary/25 text-primary hover:bg-primary/8 hover:text-primary"
+          onClick={(event) => editor.openAddToGroup(block.id, event)}>
+          <Plus data-icon="inline-start" />
+          Gruba hareket ekle
+        </Button>
+      )}
     </DragGroup>
   );
 }
@@ -654,7 +789,8 @@ function GroupCard({ block, blockIndex }: { block: TemplateBlock; blockIndex: nu
 export function BlockItem({ block, blockIndex, count }: { block: TemplateBlock; blockIndex: number; count: number }) {
   const first = block.rows[0];
   return (
-    <li className="relative">
+    // Kaydırarak silinince satır (ve liste aralığı) 220 ms'de kapanır.
+    <li className="relative" data-swipe-collapse>
       <DropLine destination={{ at: 'top', index: blockIndex }} edge="before" />
       {block.kind === 'single' && first ? (
         <RowCard block={block} blockIndex={blockIndex} row={first} rowIndex={0} />
@@ -679,7 +815,7 @@ export function ItemPreview({ itemId }: { itemId: string }) {
     <div
       className={cn(
         'origin-top rounded-lg border bg-card text-sm shadow-lg ring-2 ring-primary/40 motion-safe:scale-[1.02]',
-        group && 'rounded-xl border-primary/40 bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))]',
+        group && 'rounded-xl border-primary/40 bg-[color-mix(in_oklab,var(--primary)_4%,var(--card))]',
       )}>
       <CardGrabber tone={group ? 'group' : 'default'} dragging />
       {group || !row ? (

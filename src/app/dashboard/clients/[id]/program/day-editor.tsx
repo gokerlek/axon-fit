@@ -207,6 +207,7 @@ export function DayEditor({
         noteHint="Danışan antrenmanda görür; yalnız bu programda durur."
         libraryDescription="Ada ya da kasa göre ara; dokununca günün sonuna eklenir."
         listLabel={`${day.name} hareketleri`}
+        addLabel={`Hareket ekle: ${day.name}`}
       />
 
       <Card>

@@ -106,6 +106,20 @@ export type Editor = {
   focusSet: (rowId: string, index: number, column: SetColumn) => void;
   highlight: string | null;
   actions: ItemActions;
+  /**
+   * Seçim modu (tasarım §5): kartlarda onay kutusu; sürükleme, kaydırma, Alt kısayolları,
+   * akordeon, ⧉ ve "+ Gruba hareket ekle" kapalı.
+   */
+  selecting: boolean;
+  /** Seçili bloklar (blok kimliği; silinenler ayıklanmış). */
+  selected: ReadonlySet<string>;
+  /** Kartın kabına dokunma: seçer ya da bırakır; `range` (Shift) ise son dokunulandan buraya kadar seçer. */
+  toggleSelect: (blockId: string, range: boolean) => void;
+  /** Grubun sonundaki "+ Gruba hareket ekle": kütüphane sheet'ini grubun kipinde açar. */
+  openAddToGroup: (blockId: string, event: React.MouseEvent<HTMLElement>) => void;
+  /** İlk kullanımda bir kez sola "göz kırpacak" kart (öğe kimliği; dokunmatikte). */
+  nudgeId: string | null;
+  onNudged: () => void;
 };
 
 export const EditorContext = createContext<Editor | null>(null);

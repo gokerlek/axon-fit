@@ -1,17 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Form, getDeepErrorEntry, getInput, setErrors, setInput, useField, useForm, type FormStore } from '@formisch/react';
 import { ArrowClockwise, ArrowSquareOut, WarningCircle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
+import { EditorBar, EditorBarProvider } from '@/components/block-editor/editor-bar';
 import { LabeledSelect } from '@/components/labeled-select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
-import { Spinner } from '@/components/ui/spinner';
+import { showUndoToast } from '@/components/undo-toast';
 import {
   addDay,
   dayFromTemplate,
@@ -90,7 +91,8 @@ function toInput(phases: readonly ProgramPhase[]): ProgramFormInput['phases'] {
  * günler tek listededir ("Günler" kartı); "Evrelere böl" evreleri açar. Evre ve gün işlemleri
  * (`program-plan.ts`) evre dizisine tek seferde yazılır; seçili günün hareketleri
  * şablonlarla ortak hareket düzenleyicide (`BlockEditor`). Kimlikler bütün programda
- * benzersiz üretilir. Kayıtta sunucu farkı çıkarır, program geçmişine yazar.
+ * benzersiz üretilir. Kayıtta sunucu farkı çıkarır, program geçmişine yazar. "+ Hareket ekle"
+ * (seçili güne) ve Kaydet formun sonundaki yapışkan alt çubukta (`EditorBar`).
  */
 export function ProgramForm({
   clientId,
@@ -201,25 +203,20 @@ export function ProgramForm({
     [form, write],
   );
 
-  const undoToast = useRef<string | number | null>(null);
-  /** "Geri al" bildirimi: yalnız bu işlemden sonra başka değişiklik yoksa geçerli; yoksa sonraki düzenlemeler silinirdi. */
+  /**
+   * "Geri al" bildirimi (hareket düzenleyicisiyle ortak, aynı anda tek): yalnız bu işlemden
+   * sonra başka değişiklik yoksa geçerli; yoksa sonraki düzenlemeler silinirdi.
+   */
   const offerUndo = useCallback(
     (before: Snapshot, message: string) => {
       const after = JSON.stringify(snapshot());
       setAnnouncement(message);
-      if (undoToast.current !== null) toast.dismiss(undoToast.current);
-      undoToast.current = toast(message, {
-        action: {
-          label: 'Geri al',
-          onClick: () => {
-            if (JSON.stringify(snapshot()) !== after) {
-              toast.error('Sonrasında başka değişiklik yapıldı; geri alınamadı.');
-              return;
-            }
-            restore(before);
-          },
-        },
-        duration: 8000,
+      showUndoToast(message, () => {
+        if (JSON.stringify(snapshot()) !== after) {
+          toast.error('Sonrasında başka değişiklik yapıldı; geri alınamadı.');
+          return;
+        }
+        restore(before);
       });
     },
     [snapshot, restore],
@@ -422,168 +419,168 @@ export function ProgramForm({
   };
 
   return (
-    <Form of={form} className="flex flex-col gap-6" onSubmit={submit}>
-      <p className="sr-only" aria-live="polite">
-        {announcement}
-      </p>
+    <EditorBarProvider>
+      <Form of={form} className="flex flex-col gap-6" onSubmit={submit}>
+        <p className="sr-only" aria-live="polite">
+          {announcement}
+        </p>
 
-      {start.dropped > 0 ? (
-        <Alert>
-          <WarningCircle />
-          <AlertDescription>
-            {start.dropped} satırın cihazı silinmiş; egzersizin kendi cihazına döndü. Kaydedince kalıcı olur.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {missingRows > 0 ? (
-        <Alert variant="destructive">
-          <WarningCircle />
-          <AlertDescription>
-            {missingRows} hareket kütüphanede yok ({missingLabels}); kaydetmeden önce kartlarını sil, yerine yenisini ekle.
-          </AlertDescription>
-        </Alert>
-      ) : null}
+        {start.dropped > 0 ? (
+          <Alert>
+            <WarningCircle />
+            <AlertDescription>
+              {start.dropped} satırın cihazı silinmiş; egzersizin kendi cihazına döndü. Kaydedince kalıcı olur.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {missingRows > 0 ? (
+          <Alert variant="destructive">
+            <WarningCircle />
+            <AlertDescription>
+              {missingRows} hareket kütüphanede yok ({missingLabels}); kaydetmeden önce kartlarını sil, yerine yenisini ekle.
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
-      {mode === 'create' ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Başlangıç</CardTitle>
-            <CardDescription>Bir şablonla başlayıp bu danışana göre değiştirebilirsin.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Field className="max-w-sm">
-              <FieldLabel htmlFor="startTemplate">Başlangıç şablonu</FieldLabel>
-              <LabeledSelect id="startTemplate" value={startChoice} labels={startLabels} onChange={chooseStart} />
-              <FieldDescription>
-                {startTarget} bu şablonla dolar. Başka günleri &quot;Gün ekle → Şablondan&quot; ile eklersin.
-              </FieldDescription>
-            </Field>
-          </CardContent>
-        </Card>
-      ) : null}
+        {mode === 'create' ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Başlangıç</CardTitle>
+              <CardDescription>Bir şablonla başlayıp bu danışana göre değiştirebilirsin.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Field className="max-w-sm">
+                <FieldLabel htmlFor="startTemplate">Başlangıç şablonu</FieldLabel>
+                <LabeledSelect id="startTemplate" value={startChoice} labels={startLabels} onChange={chooseStart} />
+                <FieldDescription>
+                  {startTarget} bu şablonla dolar. Başka günleri &quot;Gün ekle → Şablondan&quot; ile eklersin.
+                </FieldDescription>
+              </Field>
+            </CardContent>
+          </Card>
+        ) : null}
 
-      {phased ? (
-        <PhasesCard
-          form={form}
-          phases={phases}
-          currentPhaseId={currentPhaseId}
-          stored={stored}
-          selectedDayId={selectedDay?.id ?? null}
-          nextDayId={next}
-          missingDayIds={missingDayIds}
-          hasTemplates={templateList.length > 0}
-          now={now}
-          timeZone={timeZone}
-          actions={actions}
-        />
-      ) : (
-        <DaysCard
-          form={form}
-          phases={phases}
-          selectedDayId={selectedDay?.id ?? null}
-          nextDayId={next}
-          missingDayIds={missingDayIds}
-          hasTemplates={templateList.length > 0}
-          actions={actions}
-        />
-      )}
+        {phased ? (
+          <PhasesCard
+            form={form}
+            phases={phases}
+            currentPhaseId={currentPhaseId}
+            stored={stored}
+            selectedDayId={selectedDay?.id ?? null}
+            nextDayId={next}
+            missingDayIds={missingDayIds}
+            hasTemplates={templateList.length > 0}
+            now={now}
+            timeZone={timeZone}
+            actions={actions}
+          />
+        ) : (
+          <DaysCard
+            form={form}
+            phases={phases}
+            selectedDayId={selectedDay?.id ?? null}
+            nextDayId={next}
+            missingDayIds={missingDayIds}
+            hasTemplates={templateList.length > 0}
+            actions={actions}
+          />
+        )}
 
-      {located && selectedPhase && selectedDay ? (
-        <DayEditor
-          key={selectedDay.id}
-          form={form}
-          phases={phases}
-          phased={phased}
-          phase={selectedPhase}
-          phaseIndex={located.phaseIndex}
-          day={selectedDay}
-          dayIndex={located.dayIndex}
-          isNext={selectedPhase.id === currentPhaseId && selectedDay.id === next}
-          templateIds={templateIds}
-          exercises={exercises}
-          devices={devices}
-          timeZone={timeZone}
-          actions={actions}
-        />
-      ) : null}
+        {located && selectedPhase && selectedDay ? (
+          <DayEditor
+            key={selectedDay.id}
+            form={form}
+            phases={phases}
+            phased={phased}
+            phase={selectedPhase}
+            phaseIndex={located.phaseIndex}
+            day={selectedDay}
+            dayIndex={located.dayIndex}
+            isNext={selectedPhase.id === currentPhaseId && selectedDay.id === next}
+            templateIds={templateIds}
+            exercises={exercises}
+            devices={devices}
+            timeZone={timeZone}
+            actions={actions}
+          />
+        ) : null}
 
-      {stale ? (
-        <Alert variant="destructive">
-          <WarningCircle />
-          <AlertTitle>Bu program başka bir yerde değişti</AlertTitle>
-          <AlertDescription>
-            Sen düzenlerken program başka bir sekmede ya da cihazda kaydedildi. Değişikliklerin burada duruyor; yeni sürümü
-            ayrı sekmede açıp karşılaştırabilir ya da sayfayı yenileyip (değişikliklerin gider) baştan düzenleyebilirsin.
-          </AlertDescription>
-          <div className="col-start-2 mt-2 flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" nativeButton={false} render={<Link href={programHref} target="_blank" rel="noopener" />}>
-              <ArrowSquareOut data-icon="inline-start" />
-              Yeni sekmede aç
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                router.refresh();
-                window.location.reload();
-              }}>
-              <ArrowClockwise data-icon="inline-start" />
-              Sayfayı yenile
-            </Button>
-          </div>
-        </Alert>
-      ) : null}
-
-      {hidden ? (
-        <Alert variant="destructive">
-          <WarningCircle />
-          <AlertTitle>Kaydedilemedi</AlertTitle>
-          <AlertDescription>
-            {hiddenPhase && hiddenDay
-              ? `${dayLabel(hiddenPhase.name, hiddenDay.name)} gününde düzeltilecek alan var: ${hidden.errors[0] ?? ''}`
-              : hidden.errors[0]}
-          </AlertDescription>
-          {hiddenDay && hiddenDay.id !== selectedDay?.id ? (
-            <div className="col-start-2 mt-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setSelectedDayId(hiddenDay.id)}>
-                O güne git
+        {stale ? (
+          <Alert variant="destructive">
+            <WarningCircle />
+            <AlertTitle>Bu program başka bir yerde değişti</AlertTitle>
+            <AlertDescription>
+              Sen düzenlerken program başka bir sekmede ya da cihazda kaydedildi. Değişikliklerin burada duruyor; yeni sürümü
+              ayrı sekmede açıp karşılaştırabilir ya da sayfayı yenileyip (değişikliklerin gider) baştan düzenleyebilirsin.
+            </AlertDescription>
+            <div className="col-start-2 mt-2 flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" nativeButton={false} render={<Link href={programHref} target="_blank" rel="noopener" />}>
+                <ArrowSquareOut data-icon="inline-start" />
+                Yeni sekmede aç
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  router.refresh();
+                  window.location.reload();
+                }}>
+                <ArrowClockwise data-icon="inline-start" />
+                Sayfayı yenile
               </Button>
             </div>
-          ) : null}
-        </Alert>
-      ) : null}
+          </Alert>
+        ) : null}
 
-      <div className="flex justify-end gap-2 border-t pt-4">
-        <Button variant="outline" nativeButton={false} render={<Link href={mode === 'edit' ? programHref : detailHref} />}>
-          Vazgeç
-        </Button>
-        <Button type="submit" disabled={save.isPending}>
-          {save.isPending ? <Spinner data-icon="inline-start" /> : null}
-          {save.isPending ? (mode === 'create' ? 'Oluşturuluyor…' : 'Kaydediliyor…') : mode === 'create' ? 'Programı oluştur' : 'Kaydet'}
-        </Button>
-      </div>
+        {hidden ? (
+          <Alert variant="destructive" data-form-error>
+            <WarningCircle />
+            <AlertTitle>Kaydedilemedi</AlertTitle>
+            <AlertDescription>
+              {hiddenPhase && hiddenDay
+                ? `${dayLabel(hiddenPhase.name, hiddenDay.name)} gününde düzeltilecek alan var: ${hidden.errors[0] ?? ''}`
+                : hidden.errors[0]}
+            </AlertDescription>
+            {hiddenDay && hiddenDay.id !== selectedDay?.id ? (
+              <div className="col-start-2 mt-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setSelectedDayId(hiddenDay.id)}>
+                  O güne git
+                </Button>
+              </div>
+            ) : null}
+          </Alert>
+        ) : null}
 
-      <AddDayDialog
-        key={`add-${dialogKey}`}
-        open={addDayPhase !== undefined}
-        onOpenChange={(open) => {
-          if (!open) setAddDayPhaseId(null);
-        }}
-        phaseName={phased ? (addDayPhase?.name ?? '') : null}
-        templates={templateList}
-        exercises={exerciseById}
-        onAdd={addFromTemplate}
-      />
-      <SaveTemplateDialog
-        key={`save-${dialogKey}`}
-        open={saveBlocks !== null}
-        onOpenChange={(open) => {
-          if (!open) setSaveBlocks(null);
-        }}
-        blocks={saveBlocks ?? []}
-        onCreated={(template) => setTemplateList((list) => [...list, template])}
-      />
-    </Form>
+        <AddDayDialog
+          key={`add-${dialogKey}`}
+          open={addDayPhase !== undefined}
+          onOpenChange={(open) => {
+            if (!open) setAddDayPhaseId(null);
+          }}
+          phaseName={phased ? (addDayPhase?.name ?? '') : null}
+          templates={templateList}
+          exercises={exerciseById}
+          onAdd={addFromTemplate}
+        />
+        <SaveTemplateDialog
+          key={`save-${dialogKey}`}
+          open={saveBlocks !== null}
+          onOpenChange={(open) => {
+            if (!open) setSaveBlocks(null);
+          }}
+          blocks={saveBlocks ?? []}
+          onCreated={(template) => setTemplateList((list) => [...list, template])}
+        />
+
+        <EditorBar
+          cancelHref={mode === 'edit' ? programHref : detailHref}
+          creating={mode === 'create'}
+          submitLabel={mode === 'create' ? 'Programı oluştur' : 'Kaydet'}
+          dirty={form.isDirty}
+          pending={save.isPending || save.isSuccess}
+        />
+      </Form>
+    </EditorBarProvider>
   );
 }

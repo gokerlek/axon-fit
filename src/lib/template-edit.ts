@@ -33,13 +33,14 @@ import {
 /**
  * Şablon düzenleyicinin işlemleri: ekleme, değiştirme, kaldırma, kopyalama, taşıma
  * (`moveItem`), üstüne bırakıp gruplama (`combineInto`), grubu dağıtma, tür değiştirme,
+ * seçim modunun toplu işlemleri (`groupBlocks`, `duplicateBlocks`, `removeBlocks`),
  * satırın cihazını ve setlerini (sayı, tur, hazır düzenler) değiştirme. Setler satırla
  * birlikte taşınır: gruplama ve gruptan çıkarma hareketin setlerini değiştirmez.
  *
  * Hepsi saf ve değiştirmez (yeni dizi döner); düzenleyici sonucu forma tek seferde
  * yazar. Reddedilen ya da etkisiz işlem aynı diziyi döner (çağıran `===` ile anlar);
- * nedenini bırakmadan önce `moveCheck`, `combineOutcome`, `addToGroupOutcome` ve
- * `canDuplicate` söyler. Satır kimliği yalnız satır oluşurken üretilir: sıralama,
+ * nedenini önceden `moveCheck`, `combineOutcome`, `addToGroupOutcome`, `groupCheck`,
+ * `canDuplicate` ve `canDuplicateBlocks` söyler. Satır kimliği yalnız satır oluşurken üretilir: sıralama,
  * gruplama, hareket ya da cihaz değişimi kimliği korur ("Kopyala" yeni kimlik alır).
  * Antrenman kayıtları satıra bu kimlikle bağlanır.
  *
@@ -542,36 +543,88 @@ export function combineInto(
   });
 }
 
-// "Grup kur" ve "Gruba hareket ekle": boş grup hiç oluşmaz.
+// Seçim modu (toplu işlemler) ve "Gruba hareket ekle": boş grup hiç oluşmaz.
 
-/** Sırayla seçilen hareketlerden kurulacak grubun türü: 2 → süperset, 3–8 → devre; olmuyorsa `null`. */
+/** Seçilen hareketlerden kurulacak grubun türü: 2 → süperset, 3–8 → devre; olmuyorsa `null`. */
 export function newGroupKind(count: number): 'superset' | 'circuit' | null {
   if (count === BLOCK_ROWS.superset.min) return 'superset';
   if (count >= BLOCK_ROWS.circuit.min && count <= BLOCK_ROWS.circuit.max) return 'circuit';
   return null;
 }
 
-/** Yeni grubun en çok kaç hareket alabileceği (seçim bunda kilitlenir): 8, şablonun kalan yeri ya da 30 blokta 0. */
-export function newGroupCapacity(blocks: readonly TemplateBlock[]): number {
-  if (blocks.length >= TEMPLATE_LIMITS.blocks) return 0;
-  return Math.max(0, Math.min(BLOCK_ROWS.circuit.max, TEMPLATE_LIMITS.rows - countRows(blocks)));
-}
-
 /**
- * Sırayla seçilen hareketlerden grup kurar ve sona ekler ("Grup kur"): 2 hareket süperset
- * (90 sn), 3–8 devre (120 sn, geçiş 15 sn). Setler her hareketin türüne göre. Hareket
- * sayısı uymuyorsa ya da şablona sığmıyorsa aynı dizi.
+ * Seçili bloklar liste sırasıyla (dokunma sırası önemsiz): bilinmeyen kimlik yok sayılır,
+ * aynı kimlik bir kez sayılır.
  */
-export function appendGroup(blocks: readonly TemplateBlock[], exercises: readonly PlanExercise[], ids: IdSource): TemplateBlock[] {
-  const kind = newGroupKind(exercises.length);
-  if (!kind || exercises.length > newGroupCapacity(blocks)) return blocks as TemplateBlock[];
-  const id = ids('b');
-  const rows = exercises.map((exercise) => newRow(exercise, ids('r')));
-  return [...blocks, withKind({ id, kind, restSeconds: DEFAULT_GROUP_REST_SECONDS[kind], rows }, kind)];
+function pickBlocks(blocks: readonly TemplateBlock[], blockIds: Iterable<string>): { index: number; block: TemplateBlock }[] {
+  const wanted = new Set(blockIds);
+  return blocks.flatMap((block, index) => (wanted.has(block.id) ? [{ index, block }] : []));
 }
 
 /**
- * Gruba bir hareket eklenirse ("+ Gruba hareket ekle" sayfası):
+ * Seçimden grup kurulur mu ("Grupla"):
+ * - `superset` / `circuit`: 2 → süperset, 3–8 → devre.
+ * - `not_singles`: seçimde grup var (grup gruba girmez).
+ * - `too_few`: 2'den az; `too_many`: 8'den çok.
+ */
+export type GroupCheck = 'superset' | 'circuit' | 'too_few' | 'too_many' | 'not_singles';
+
+export function groupCheck(blocks: readonly TemplateBlock[], blockIds: Iterable<string>): GroupCheck {
+  const picked = pickBlocks(blocks, blockIds);
+  if (picked.some(({ block }) => block.kind !== 'single')) return 'not_singles';
+  return newGroupKind(picked.length) ?? (picked.length < BLOCK_ROWS.superset.min ? 'too_few' : 'too_many');
+}
+
+/**
+ * Seçili tek hareketleri gruplar: 2 hareket süperset (90 sn), 3–8 devre (120 sn, geçiş
+ * 15 sn). Satırlar liste sırasıyla girer (dokunma sırası değil); grup ilk seçilen bloğun
+ * yerinde ve kimliğiyle kurulur. Satırlar kimliklerini, setlerini, kuralını ve notunu
+ * korur. Olmuyorsa (`groupCheck`) aynı dizi.
+ */
+export function groupBlocks(blocks: readonly TemplateBlock[], blockIds: Iterable<string>): TemplateBlock[] {
+  const ids = [...blockIds];
+  const kind = groupCheck(blocks, ids);
+  const picked = pickBlocks(blocks, ids);
+  const [first] = picked;
+  if ((kind !== 'superset' && kind !== 'circuit') || !first) return blocks as TemplateBlock[];
+  const rows = picked.flatMap(({ block }) => block.rows);
+  const group = withKind({ id: first.block.id, kind, restSeconds: DEFAULT_GROUP_REST_SECONDS[kind], rows }, kind);
+  const leaving = new Set(picked.map(({ block }) => block.id));
+  return blocks.flatMap((block) => (block.id === first.block.id ? [group] : leaving.has(block.id) ? [] : [block]));
+}
+
+/** Seçimin kopyası sığar mı ("Kopyala"; 30 blok, 40 hareket). Boş seçimde hayır. */
+export function canDuplicateBlocks(blocks: readonly TemplateBlock[], blockIds: Iterable<string>): boolean {
+  const picked = pickBlocks(blocks, blockIds);
+  const rows = picked.reduce((sum, { block }) => sum + block.rows.length, 0);
+  return (
+    picked.length > 0 && blocks.length + picked.length <= TEMPLATE_LIMITS.blocks && countRows(blocks) + rows <= TEMPLATE_LIMITS.rows
+  );
+}
+
+/**
+ * Seçili blokları kopyalar: kopyalar liste sırasıyla son seçilen bloğun arkasına girer,
+ * aynı ayarlarla; blok ve satırlar yeni kimlikle. Sığmıyorsa aynı dizi.
+ */
+export function duplicateBlocks(blocks: readonly TemplateBlock[], blockIds: Iterable<string>, ids: IdSource): TemplateBlock[] {
+  const picked = pickBlocks(blocks, blockIds);
+  const last = picked.at(-1);
+  if (!last || !canDuplicateBlocks(blocks, picked.map(({ block }) => block.id))) return blocks as TemplateBlock[];
+  const copies = picked.map(({ block }): TemplateBlock => ({ ...block, id: ids('b'), rows: block.rows.map((row) => cloneRow(row, ids('r'))) }));
+  const next = [...blocks];
+  next.splice(last.index + 1, 0, ...copies);
+  return next;
+}
+
+/** Seçili blokları bütün satırlarıyla kaldırır ("Sil"). Hiçbiri yoksa aynı dizi. */
+export function removeBlocks(blocks: readonly TemplateBlock[], blockIds: Iterable<string>): TemplateBlock[] {
+  const leaving = new Set(blockIds);
+  const next = blocks.filter((block) => !leaving.has(block.id));
+  return next.length === blocks.length ? (blocks as TemplateBlock[]) : next;
+}
+
+/**
+ * Gruba bir hareket eklenirse ("+ Gruba hareket ekle" sheet'i):
  * - `join` / `becomes_circuit`: `combineOutcome` gibi (süperset ve 6'lı kompleks devre olur).
  * - `full`: grupta 8 hareket var → "Grup dolu (8)".
  * - `limit`: şablonda 40 hareket var.

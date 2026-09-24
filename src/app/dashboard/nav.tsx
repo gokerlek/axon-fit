@@ -32,13 +32,23 @@ function isActive(pathname: string, item: NavItem): boolean {
   return (item.sections ?? [item.href]).some((href) => matches(pathname, href));
 }
 
-/** PT gezinmesi: masaüstünde büyüyen dock, telefonda aynı dock alt çubuk görevi görür. */
+/** Hareket düzenleyicili sayfalar: şablon ekleme/düzenleme, program oluşturma/düzenleme. */
+const EDITOR_PATHS = [/^\/dashboard\/templates\/(new|[^/]+\/edit)\/?$/, /^\/dashboard\/clients\/[^/]+\/program\/(new|edit)\/?$/];
+
+/**
+ * PT gezinmesi: masaüstünde büyüyen dock, telefonda aynı dock alt çubuk görevi görür.
+ * Düzenleyici sayfalarında telefonda gizlenir: ekranın altında düzenleyicinin kendi çubuğu
+ * (Hareket ekle, Kaydet) durur; geri dönüş sayfa yolundan.
+ */
 export function DashboardDock() {
   const pathname = usePathname();
+  const editor = EDITOR_PATHS.some((pattern) => pattern.test(pathname));
   return (
-    <Dock
-      ariaLabel="Ana menü"
-      items={ITEMS.map(({ sections, ...item }) => ({ ...item, active: isActive(pathname, { ...item, sections }) }))}
-    />
+    <div className={editor ? 'max-md:hidden' : undefined}>
+      <Dock
+        ariaLabel="Ana menü"
+        items={ITEMS.map(({ sections, ...item }) => ({ ...item, active: isActive(pathname, { ...item, sections }) }))}
+      />
+    </div>
   );
 }
