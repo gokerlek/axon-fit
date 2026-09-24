@@ -39,6 +39,7 @@ type Arm = { id: number; x: number; y: number; event: PointerEvent; timer: numbe
  * yerleşimde 36 px). Ayrı kolon, şerit ya da tutma ikonu yoktur.
  *
  * - Fare ve kalem: basınca sürükleme hazırlanır, 3 px kayınca başlar (tıklama sürüklemez).
+ *   Kalem basılı kaldıkça `touchmove` engellenir; kalemle sürüklerken sayfa kaymaz.
  * - Dokunma: ~200 ms basılı tutunca başlar. Süre dolmadan kayan parmak sayfayı kaydırır
  *   (`touch-action: pan-y`); başladıktan sonra `touchmove` engellenir, sayfa kaymaz.
  * - Klavye: Alt+↑/↓ bir sıra, Alt+Home/End uçlara.
@@ -128,6 +129,17 @@ export function ReorderHandle({ tone = 'neutral', className, children }: { tone?
       onPointerDown={(event) => {
         if (event.button !== 0 || !event.isPrimary) return;
         if (event.pointerType !== 'touch') {
+          if (event.pointerType === 'pen') {
+            // Kalem de sayfayı kaydırabilir (pan-y): basılıyken touchmove engellensin, sürükleme iptal olmasın.
+            touchActiveRef.current = true;
+            const end = () => {
+              window.removeEventListener('pointerup', end, true);
+              window.removeEventListener('pointercancel', end, true);
+              touchActiveRef.current = false;
+            };
+            window.addEventListener('pointerup', end, true);
+            window.addEventListener('pointercancel', end, true);
+          }
           item.start(event.nativeEvent);
           return;
         }
