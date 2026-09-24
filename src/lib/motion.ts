@@ -24,10 +24,14 @@ export const DRAG = {
   settle: { bounceStiffness: 600, bounceDamping: 45 }, // bırakınca ~180 ms'de yerine oturma
 } as const;
 
-/** Kaydırma (kart yüzünde sağa kopyala, sola sil; yalnız dokunmatik). */
+/** Kaydırma (kart yüzünde sola sil; grup üyesinde sağa "Çıkar"). Parmak, kalem ve fare. */
 export const SWIPE = {
   actionWidth: 72, // px: panelin bir işlem düğmesi
-  fullRatio: 0.45, // tek işlemli tarafta tam kaydırma eşiği: satır genişliğinin bu oranı
+  fullRatio: 0.45, // tek işlemli tarafta tam kaydırma eşiği: satır genişliğinin bu oranı…
+  fullMax: 220, // px: …ama en çok bu kadar (masaüstündeki geniş satırda yarım ekran çekilmez)
+  exitMs: 240, // ms: silmede yüzün dışarı kayması (kırmızı satırı doldurur)
+  collapseMs: 300, // ms: ardından satırın kapanması; alttaki kartlar yukarı kayar
+  exitEase: [0.32, 0.72, 0, 1], // iOS tarzı: hızlı başlar, yumuşak durur
   flingVelocity: 400, // px/sn: hızlı fırlatma paneli açar, işlemi tetiklemez
   spring: { type: 'spring', stiffness: 500, damping: 40 }, // panelin açılıp kapanması
   startDistance: 10, // px: |dx| bunu ve 1,5·|dy|'yi aşınca kaydırma başlar

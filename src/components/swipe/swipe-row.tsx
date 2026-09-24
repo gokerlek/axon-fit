@@ -20,7 +20,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { animate, motion, useDragControls, useMotionValue, useReducedMotion, useTransform, type MotionValue, type PanInfo } from 'motion/react';
-import { DURATION, EASE, INSTANT, SWIPE, tween } from '@/lib/motion';
+import { INSTANT, SWIPE, tween } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 
 /** İşlemin rengi: olumlu (kopyala), nötr (çıkar, dağıt), yıkıcı (sil). */
@@ -155,7 +155,10 @@ export function useCardGesture({ enabled, onSwipe }: { enabled: boolean; onSwipe
 
 // ─── Silmede satırın kapanması ─────────────────────────────────────────────────────────
 
-/** Satırın yüksekliği 220 ms'de kapanır (liste aralığı da); iptal edilirse eski hâline döner. */
+/**
+ * Satırın yüksekliği kapanır (liste aralığı da), alttaki kartlar yukarı kayar; kırmızı satır
+ * sonuna kadar görünür, yalnız son anda solar (iOS'taki gibi). İptal edilirse eski hâline döner.
+ */
 function collapse(element: HTMLElement): { finished: Promise<unknown>; cancel: () => void } {
   const height = element.offsetHeight;
   const parent = element.parentElement;
@@ -166,10 +169,11 @@ function collapse(element: HTMLElement): { finished: Promise<unknown>; cancel: (
   element.style.overflow = 'hidden';
   const animation = element.animate(
     [
-      { height: `${height}px`, opacity: 1, [margin]: '0px' },
-      { height: '0px', opacity: 0, [margin]: `${-gap}px` },
+      { height: `${height}px`, opacity: 1, [margin]: '0px', offset: 0 },
+      { opacity: 1, offset: 0.7 },
+      { height: '0px', opacity: 0, [margin]: `${-gap}px`, offset: 1 },
     ],
-    { duration: DURATION.base, easing: `cubic-bezier(${EASE.exit.join(',')})`, fill: 'forwards' },
+    { duration: SWIPE.collapseMs, easing: `cubic-bezier(${SWIPE.exitEase.join(',')})`, fill: 'forwards' },
   );
   return {
     finished: animation.finished,
@@ -247,7 +251,8 @@ function Panel({
 /**
  * iOS tarzı iki yönlü kaydırma: sağa kaydırınca soldan `start` işlemleri (olumlu), sola
  * kaydırınca sağdan `end` işlemleri (sil, dağıt) açılır. Bir tarafta tek işlem varsa tam
- * kaydırma (satırın %45'i) onu tetikler; fırlatma (400 px/sn) paneli açar ama tetiklemez.
+ * kaydırma (satırın %45'i, en çok 220 px) onu tetikler; fırlatma (400 px/sn) paneli açar ama
+ * tetiklemez. Panel düğmesine dokunmak da tam kaydırma gibi biter (silmede satırı doldurur).
  * Panel açıkken yüze dokunmak kapatır (click yutulur).
  */
 export function SwipeRow({
@@ -324,10 +329,10 @@ export function SwipeRow({
     latestSettle.current = settle;
   });
 
-  // Başka satırın paneli açılınca, dışarı dokununca ya da Esc'te kapanır.
+  // Başka satırın paneli açılınca, dışarı dokununca ya da Esc'te kapanır (silme sürerken değil).
   const groupOpenId = group?.openId ?? null;
   useEffect(() => {
-    if (open && groupOpenId !== id) latestSettle.current(null);
+    if (open && groupOpenId !== id && !busy.current) latestSettle.current(null);
   }, [groupOpenId, id, open]);
 
   // Kapatılınca (sürükleme başladı, seçim modu) açık panel ve süren kaydırma kapanır.
@@ -363,12 +368,16 @@ export function SwipeRow({
       settle(null);
       return;
     }
-    // Sil: yüz çıkar, satır kapanır, sonra silinir (toast'ta "Geri al").
+    // Sil (iOS gibi): kırmızı satırı doldurur, yüz dışarı kayar, satır kapanır, sonra silinir
+    // (toast'ta "Geri al"). Açık durum önce bırakılır: yoksa grubun kapatması yüzü geri çekerdi.
     busy.current = true;
     setActive(true);
+    setOpen(null);
+    armedRef.current = side;
+    setArmed(side);
     group?.close(id);
     const out = side === 'end' ? -width() : width();
-    void animate(x, out, tween(DURATION.fast, EASE.exit)).then(() => {
+    void animate(x, out, tween(SWIPE.exitMs, SWIPE.exitEase)).then(() => {
       const closing = collapse(row);
       void closing.finished.then(() => {
         action.onPress();
@@ -380,6 +389,7 @@ export function SwipeRow({
             closing.cancel();
             x.set(0);
             setOpen(null);
+            arm(null);
             setActive(false);
           }),
         );
@@ -397,7 +407,7 @@ export function SwipeRow({
 
   const onDrag = () => {
     const value = x.get();
-    const threshold = width() * SWIPE.fullRatio;
+    const threshold = Math.min(width() * SWIPE.fullRatio, SWIPE.fullMax);
     arm(value <= -threshold && fullEnd ? 'end' : value >= threshold && fullStart ? 'start' : null);
   };
 

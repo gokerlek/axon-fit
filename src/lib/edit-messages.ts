@@ -105,19 +105,17 @@ export function selectedRowCount(blocks: readonly TemplateBlock[], blockIds: Rea
  * Seçim çubuğunun durum satırı: kaç kart seçili ve "Grupla" ne yapar ya da neden pasif;
  * kopya sığmıyorsa sonuna eklenir ("Kopyala" pasif). Pasif düğmenin nedeni burada yazar.
  */
-export function selectionStatus(count: number, check: GroupCheck, copyFits: boolean, pointer: 'touch' | 'mouse' = 'touch'): string {
+export function selectionStatus(count: number, check: GroupCheck, pointer: 'touch' | 'mouse' = 'touch'): string {
   if (count === 0) return `Seçmek için kartlara ${pointer === 'touch' ? 'dokun' : 'tıkla'}`;
-  const group =
-    check === 'superset'
-      ? `${count} seçili · süperset olur`
-      : check === 'circuit'
-        ? `${count} seçili · devre olur`
-        : check === 'not_singles'
-          ? 'Grup seçili: yalnız tek hareketler gruplanır'
-          : check === 'too_many'
-            ? `${count} seçili · grup en çok 8 hareket`
-            : `${count} seçili · gruplamak için en az 2 hareket`;
-  return copyFits ? group : `${group} · Şablon dolu: kopya sığmaz`;
+  return check === 'superset'
+    ? `${count} seçili · süperset olur`
+    : check === 'circuit'
+      ? `${count} seçili · devre olur`
+      : check === 'not_singles'
+        ? 'Grup seçili: yalnız tek hareketler gruplanır'
+        : check === 'too_many'
+          ? `${count} seçili · grup en çok 8 hareket`
+          : `${count} seçili · gruplamak için en az 2 hareket`;
 }
 
 /** "Grupla" sonrası (toast ve duyuru): "Süperset yapıldı: Squat + Bench Press", "Devre yapıldı (4 hareket)". */

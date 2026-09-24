@@ -29,9 +29,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
       </div>
 
-      {/* Menüye pay `PageHeader`'ın en üst satırında; altta dock'a yer. Düzenleyici sayfalarında
-          telefonda dock yok, altta düzenleyicinin kendi çubuğu durur: pay yalnız ona. */}
-      <main className={`${PAGE_WIDTH} pt-6 pb-32 max-md:has-data-[slot=editor-bar]:pb-0`}>{children}</main>
+      {/* Menüye pay `PageHeader`'ın en üst satırında; altta dock'a yer. */}
+      <main className={`${PAGE_WIDTH} pt-6 pb-32`}>{children}</main>
 
       <DashboardDock />
     </>

@@ -135,11 +135,11 @@
 }
 
 /* Dock'un kapladığı alt pay (dock.tsx): büyümüş öğe 64 + iç boşluk 2×8 + kenar 2 = 82 px,
-   altındaki 0.75rem ve güvenli alan; üstüne 8 px. Masaüstünde düzenleyicinin alt çubuğu bunun
-   üstünde durur. Kartlar ve sayfa, alt çubuğun altında kalmasın diye aynı payı bırakır. */
+   altındaki 0.75rem ve güvenli alan; üstüne 8 px. Düzenleyicinin seçim çubuğu bunun üstünde
+   durur. Kartlar ve sayfa, seçim çubuğunun altında kalmasın diye aynı payı bırakır. */
 :root {
   --dock-clearance: calc(0.75rem + 82px + 8px + env(safe-area-inset-bottom));
-  --editor-bar-clearance: calc(4.75rem + env(safe-area-inset-bottom));
+  --editor-bar-clearance: calc(var(--dock-clearance) + 7.5rem);
 }
 @media (width >= 48rem) {
   :root {

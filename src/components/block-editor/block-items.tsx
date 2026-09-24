@@ -165,18 +165,6 @@ function FaceRemoveButton({ itemId }: { itemId: string }) {
 // Kaydırma panelleri (tasarım §3): sağda olumlu işlemler, solda sil ve dağıt. Hepsi kartın
 // görünür düğmelerinin kopyası (⧉, açık gövdedeki Sil / Gruptan çıkar / Grubu dağıt).
 
-function copyAction(editor: Editor, itemId: string): SwipeAction {
-  const can = canDuplicate(editor.blocks, itemId);
-  return {
-    key: 'copy',
-    label: 'Kopyala',
-    icon: <Copy />,
-    tone: 'primary',
-    disabled: !can,
-    onPress: () => (can ? editor.actions.duplicate(itemId) : editor.announce(FULL_MESSAGE)),
-  };
-}
-
 function removeAction(editor: Editor, itemId: string): SwipeAction {
   return { key: 'remove', label: 'Sil', icon: <Trash />, tone: 'destructive', removes: true, onPress: () => editor.actions.remove(itemId) };
 }
@@ -476,21 +464,19 @@ function RowCard({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; b
     (single && Boolean(getDeepError(form, { path: blockField(path, blockIndex, 'restSeconds') })));
   const onKeyDown = useFaceKeys(row.id, isOpen);
 
-  const start: SwipeAction[] = [
-    ...(exercise ? [copyAction(editor, row.id)] : []),
-    ...(single
-      ? []
-      : [
-          {
-            key: 'ungroup',
-            label: 'Çıkar',
-            icon: <LinkBreak />,
-            tone: 'neutral' as const,
-            disabled: editor.blocks.length >= TEMPLATE_LIMITS.blocks,
-            onPress: () => editor.actions.ungroup(row.id),
-          },
-        ]),
-  ];
+  // Sağa kaydırma yalnız üyede: "Çıkar" (kopyalama kartın ⧉ düğmesinde; PT kararı 13).
+  const start: SwipeAction[] = single
+    ? []
+    : [
+        {
+          key: 'ungroup',
+          label: 'Çıkar',
+          icon: <LinkBreak />,
+          tone: 'neutral' as const,
+          disabled: editor.blocks.length >= TEMPLATE_LIMITS.blocks,
+          onPress: () => editor.actions.ungroup(row.id),
+        },
+      ];
 
   const content = (
     <>
@@ -520,8 +506,8 @@ function RowCard({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; b
                   id={row.id}
                   start={start}
                   end={[removeAction(editor, row.id)]}
-                  // Üyede sağa tam kaydırma yok (iki işlem: Kopyala, Çıkar).
-                  fullStart={single ? undefined : false}
+                  // "Çıkar" tam kaydırmayla tetiklenmez: dokunarak seçilir.
+                  fullStart={false}
                   disabled={dragging}
                   nudge={editor.nudgeId === row.id}
                   onNudged={editor.onNudged}
@@ -726,7 +712,6 @@ function GroupCard({ block, blockIndex }: { block: TemplateBlock; blockIndex: nu
             : (face) => (
                 <SwipeRow
                   id={block.id}
-                  start={[copyAction(editor, block.id)]}
                   end={end}
                   disabled={dragging}
                   nudge={editor.nudgeId === block.id}

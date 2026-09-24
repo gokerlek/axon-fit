@@ -71,14 +71,13 @@ describe('düzenleyici cümleleri', () => {
   });
 
   test('seçim çubuğunun durum satırı', () => {
-    assert.equal(selectionStatus(0, 'too_few', true), 'Seçmek için kartlara dokun');
-    assert.equal(selectionStatus(0, 'too_few', true, 'mouse'), 'Seçmek için kartlara tıkla');
-    assert.equal(selectionStatus(1, 'too_few', true), '1 seçili · gruplamak için en az 2 hareket');
-    assert.equal(selectionStatus(2, 'superset', true), '2 seçili · süperset olur');
-    assert.equal(selectionStatus(3, 'circuit', true), '3 seçili · devre olur');
-    assert.equal(selectionStatus(2, 'not_singles', true), 'Grup seçili: yalnız tek hareketler gruplanır');
-    assert.equal(selectionStatus(9, 'too_many', true), '9 seçili · grup en çok 8 hareket');
-    assert.equal(selectionStatus(2, 'superset', false), '2 seçili · süperset olur · Şablon dolu: kopya sığmaz');
+    assert.equal(selectionStatus(0, 'too_few'), 'Seçmek için kartlara dokun');
+    assert.equal(selectionStatus(0, 'too_few', 'mouse'), 'Seçmek için kartlara tıkla');
+    assert.equal(selectionStatus(1, 'too_few'), '1 seçili · gruplamak için en az 2 hareket');
+    assert.equal(selectionStatus(2, 'superset'), '2 seçili · süperset olur');
+    assert.equal(selectionStatus(3, 'circuit'), '3 seçili · devre olur');
+    assert.equal(selectionStatus(2, 'not_singles'), 'Grup seçili: yalnız tek hareketler gruplanır');
+    assert.equal(selectionStatus(9, 'too_many'), '9 seçili · grup en çok 8 hareket');
   });
 
   test('toplu işlemler: gruplama, kopya, silme (sayı gruptaki üyeler dahil)', () => {

@@ -32,12 +32,10 @@ import {
   addToGroupOutcome,
   appendExercise,
   canAdd,
-  canDuplicateBlocks,
   combineInto,
   combineOutcome,
   dissolveGroup,
   duplicateBlock,
-  duplicateBlocks,
   duplicateRow,
   groupBlocks,
   groupCheck,
@@ -66,24 +64,23 @@ import {
   type Editor,
   type ItemActions,
 } from './editor-context';
-import { useEditorBar, useEditorBarAddButton } from './editor-bar';
+import { useEditorBar } from './editor-bar';
 import { ExerciseSheet, type PickerState } from './exercise-sheet';
 
 /** Açıklama (SPEC §6, tasarım §2): dokunmatikte ve masaüstünde ayrı. */
 const DEFAULT_DESCRIPTION = (
   <>
     <span className="hidden touch:inline">
-      Karta dokun: düzenle. Üstteki çizgiden sürükle: sırala; bir kartın ortasına bırak: grupla. Sola kaydır: sil, sağa kaydır:
-      kopyala.
+      Karta dokun: düzenle. Üstteki çizgiden sürükle: sırala; bir kartın ortasına bırak: grupla. Sola kaydır: sil.
     </span>
     <span className="touch:hidden">
-      Karta tıkla: düzenle. Üstteki çizgiden sürükle: sırala; bir kartın ortasına bırak: grupla. Kartı sola çek: sil, sağa
-      çek: kopyala. Alt + ok tuşları taşır.
+      Karta tıkla: düzenle. Üstteki çizgiden sürükle: sırala; bir kartın ortasına bırak: grupla. Kartı sola çek: sil. Alt + ok
+      tuşları taşır.
     </span>
   </>
 );
 
-const SELECTING_DESCRIPTION = 'Gruplamak, kopyalamak ya da silmek istediklerini seç.';
+const SELECTING_DESCRIPTION = 'Gruplamak ya da silmek istediklerini seç.';
 const SHEET_FULL_MESSAGE = 'Şablon dolu: en fazla 40 hareket ve 30 blok olur.';
 
 /**
@@ -170,10 +167,10 @@ function neighbourAfterRemoval(blocks: readonly TemplateBlock[], removed: Readon
  * Hareket düzenleyici: formdaki bir blok dizisini (şablonun blokları ya da program
  * gününün blokları) düzenler. Tek kart tasarımı: kapalı kartlar; dokununca açılır (lg
  * altında aynı anda tek kart). Kartın üstündeki çizgiden sürükleyerek sıralanır, bir
- * kartın ortasına bırakıp gruplanır; klavyede yüz odaktayken Alt + ok, Delete. Dokunmatikte
- * yüz sola kayınca silinir, sağa kayınca kopyalanır. "Seç" ile seçim moduna geçilir: seçili
- * kartlar toplu gruplanır, kopyalanır ya da silinir. "+ Hareket ekle" ve Kaydet sayfanın alt
- * çubuğundadır (`EditorBar`; düzenleyici oraya kaydolur).
+ * kartın ortasına bırakıp gruplanır; klavyede yüz odaktayken Alt + ok, Delete. Yüz sola
+ * kaydırılınca silinir (parmak, kalem, fare); kopyalama kartın ⧉ düğmesinde. "Seç" ile seçim
+ * moduna geçilir: seçili kartlar toplu gruplanır ya da silinir (seçim çubuğu `EditorBar`'da;
+ * düzenleyici oraya kaydolur). "+ Hareket ekle" listenin altındadır.
  *
  * Yaprak alanlar (dinlenme, setlerin hedefi, yüzdesi ve AMRAP'ı, kural, cihaz, not) alan
  * olarak bağlanır; yapısal işlemler (ekleme, taşıma, gruplama, set sayısı, tur, hazır
@@ -241,6 +238,8 @@ export function BlockEditor({
   const lastAdded = useRef<string | null>(null);
   const pendingAnnouncement = useRef<string | null>(null);
   const emptyAddRef = useRef<HTMLButtonElement>(null);
+  /** Listenin altındaki "+ Hareket ekle" (odak dönüşleri: sheet kapanınca, öğe silinince). */
+  const listAddRef = useRef<HTMLButtonElement>(null);
   const sheetOpen = useRef(false);
   const lastSaid = useRef('');
 
@@ -277,21 +276,18 @@ export function BlockEditor({
     [form, path],
   );
 
-  /** Alt çubuktaki "+ Hareket ekle" (liste boşalınca ve sheet kapanınca odak dönüşü). */
-  const barAdd = useEditorBarAddButton();
-
   /** Çizimden sonra öğenin yüzüne odaklanır (taşınan kart yeniden kurulmuş olabilir). */
   const focusFace = useCallback((itemId: string | null) => {
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         const face = itemId ? document.getElementById(faceId(itemId)) : null;
-        // Liste boşaldıysa çubuktaki (ya da boş durumdaki) "Hareket ekle".
-        const target = face ?? barAdd() ?? emptyAddRef.current;
+        // Öğe gittiyse listenin altındaki (liste boşaldıysa boş durumdaki) "Hareket ekle".
+        const target = face ?? listAddRef.current ?? emptyAddRef.current;
         target?.focus({ preventScroll: true });
         target?.scrollIntoView({ block: 'nearest' });
       }),
     );
-  }, [barAdd]);
+  }, []);
 
   const update = useCallback<Editor['update']>(
     (change, options) => {
@@ -471,7 +467,6 @@ export function BlockEditor({
   );
   const coarse = useMediaQuery('(pointer: coarse)');
   const check = groupCheck(blocks, selected);
-  const copyFits = selected.size === 0 || canDuplicateBlocks(blocks, selected);
   const allSelected = selected.size === blocks.length;
 
   const enterSelection = () => {
@@ -479,7 +474,7 @@ export function BlockEditor({
     setSelection(new Set());
     anchor.current = null;
     setSelecting(true);
-    announce('Seçim modu: gruplamak, kopyalamak ya da silmek istediklerini seç');
+    announce('Seçim modu: gruplamak ya da silmek istediklerini seç');
     const first = blocks[0];
     if (first) focusFace(blockItemId(first));
   };
@@ -537,17 +532,6 @@ export function BlockEditor({
     updateWithUndo((now) => groupBlocks(now, ids), groupedMessage(before, ids, kind, titleOf), { highlight: first.id, focus: first.id });
   };
 
-  const copySelected = () => {
-    const { before, ids } = pickedNow();
-    const next = duplicateBlocks(before, ids, newIds(before));
-    if (next === before) return announce(FULL_MESSAGE);
-    const known = new Set(before.map((block) => block.id));
-    const firstCopy = next.find((block) => !known.has(block.id));
-    const target = firstCopy ? blockItemId(firstCopy) : undefined;
-    leaveSelection();
-    updateWithUndo(() => next, bulkMessage(selectedRowCount(before, ids), 'copied'), target ? { highlight: target, focus: target } : undefined);
-  };
-
   const removeSelected = () => {
     const { before, ids } = pickedNow();
     if (ids.size === 0) return;
@@ -581,7 +565,7 @@ export function BlockEditor({
     }
   };
 
-  const status = selectionStatus(selected.size, check, copyFits, coarse ? 'touch' : 'mouse');
+  const status = selectionStatus(selected.size, check, coarse ? 'touch' : 'mouse');
 
   // ─── Ekleme sheet'i: sona ya da grubun sonuna ────────────────────────────────────────
 
@@ -629,8 +613,8 @@ export function BlockEditor({
     return { title: 'Hareket ekle', description: libraryDescription, blocked: canAdd(blocks) ? null : SHEET_FULL_MESSAGE, hint: '' };
   })();
 
-  // Açan düğme gitmişse (boş durumdaki düğme ilk eklemeden sonra kalkar) çubuktaki "+ Hareket ekle".
-  const sheetFinalFocus = () => (returnFocus.current?.isConnected ? returnFocus.current : barAdd());
+  // Açan düğme gitmişse (boş durumdaki düğme ilk eklemeden sonra kalkar) listenin altındaki "+ Hareket ekle".
+  const sheetFinalFocus = () => (returnFocus.current?.isConnected ? returnFocus.current : listAddRef.current);
 
   const sheetClosed = () => {
     if (lastAdded.current) setHighlight(lastAdded.current);
@@ -643,17 +627,13 @@ export function BlockEditor({
   // ─── Alt çubuk ve kaydırma ipucu ─────────────────────────────────────────────────────
 
   useEditorBar({
-    addLabel,
-    onAdd: openAdd,
     selection: selectingNow
       ? {
           count: selected.size,
           status,
           canGroup: check === 'superset' || check === 'circuit',
-          canCopy: selected.size > 0 && copyFits,
           canRemove: selected.size > 0,
           onGroup: groupSelected,
-          onCopy: copySelected,
           onRemove: removeSelected,
           onCancel: () => leaveSelection({ announce: true, returnFocus: true }),
         }
@@ -733,7 +713,7 @@ export function BlockEditor({
           ) : null}
           <CardDescription className="col-span-2">{selectingNow ? SELECTING_DESCRIPTION : description}</CardDescription>
           {hint === 'text' && !selectingNow ? (
-            <p className="col-span-2 text-sm text-muted-foreground">İpucu: kartı sola kaydır → sil, sağa kaydır → kopyala</p>
+            <p className="col-span-2 text-sm text-muted-foreground">İpucu: kartı sola kaydır → sil</p>
           ) : null}
           {blocks.length > 0 ? (
             <p className="col-span-2 text-sm tabular-nums text-muted-foreground">
@@ -758,6 +738,20 @@ export function BlockEditor({
                   ))}
                 </ol>
               </EditorDnd>
+              {selectingNow ? null : (
+                <Button
+                  ref={listAddRef}
+                  type="button"
+                  variant="outline"
+                  aria-haspopup="dialog"
+                  aria-label={addLabel === 'Hareket ekle' ? undefined : addLabel}
+                  data-reorder-hide
+                  className="h-11 w-full border-dashed text-muted-foreground hover:text-foreground"
+                  onClick={openAdd}>
+                  <Plus data-icon="inline-start" />
+                  Hareket ekle
+                </Button>
+              )}
             </SwipeGroup>
           ) : (
             <Empty className="border border-dashed">

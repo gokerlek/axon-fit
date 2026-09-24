@@ -11,8 +11,8 @@
 >
 > *2026-09-24, ikinci tur (birinci turla çatışırsa bunlar geçer)*
 > 6. **Tutamak = kartın üst ortasında tek yatay çizgi** (bottom-sheet tutamağı gibi). Basıp kaydırınca sürükleme hemen başlar; basılı tutma yok. Grubun ve her üyenin kendi çizgisi var. Rozet yalnız etiket (§1, §2).
-> 7. **Seçim modu** (v1'deki gibi): başlıkta "Seç", kartlarda onay kutusu, altta [Vazgeç] [Grupla (n)] [Kopyala] [Sil]. "+ Grup kur" sayfasının yerine geçer. Üstüne bırakıp gruplama hızlı yol olarak kalır (§4, §5).
-> 8. **Yapışkan alt çubuk** her iki düzenleyicide: [+ Hareket ekle] ve [Kaydet] / "Kaydedildi". Telefonda bu sayfalarda dock gizlenir. Başlıktaki "Hareket ekle" kalkar (§6).
+> 7. **Seçim modu** (v1'deki gibi): başlıkta "Seç", kartlarda onay kutusu, altta [Vazgeç] [Grupla (n)] [Sil] (karar 13). "+ Grup kur" sayfasının yerine geçer. Üstüne bırakıp gruplama hızlı yol olarak kalır (§4, §5).
+> 8. ~~**Yapışkan alt çubuk**~~ (karar 12 geçer) her iki düzenleyicide: [+ Hareket ekle] ve [Kaydet] / "Kaydedildi". Telefonda bu sayfalarda dock gizlenir. Başlıktaki "Hareket ekle" kalkar (§6).
 >
 > *2026-09-24, üçüncü tur*
 > 9. **Kart yüzünde açma oku (⌄/⌃) yok.** Tek harekette, grup yüzünde ve üyede. Yüze dokunmak zaten açıp kapatıyor; ok gereksizdi. En sağdaki denetim ⧉ Kopyala. Erişilebilirlik okla gitmez: yüz gerçek bir `<button aria-expanded aria-controls>` olarak kalır, odak halkası görünür, adı "Plank, ayrıntıları aç/kapat" (grupta "Süperset 2, ayarları aç/kapat"), meta satırı açıklama olarak okunur. Açık kart görsel olarak belli: yüz koyulaşır (`bg-muted/50`), rozet ana renge döner, altında gövde durur. Açık gövdenin içindeki "Setleri ayrı düzenle" ve "Ayrıntılar · kural · not" bölüm başlıkları küçük oklarını korur (kart yüzü değiller) (§1).
@@ -20,6 +20,10 @@
 > *2026-09-24, dördüncü tur*
 > 10. **Kaydırma farede ve kalemde de çalışır** (farenin sol tuşuyla kartı sağa/sola çek). Masaüstündeki PT de aynı jestleri kullanır; ⧉ ve açık karttaki "Sil" yine durur (§3).
 > 11. **Tutamak için ayrı şerit yok.** Çizgi yüzün içinde `absolute` durur (kart `relative`), yer kaplamaz ve kaydırınca yüzle birlikte kayar. Kart ≈ 12 px kısalır. Çizgiye kıpırdamadan dokunmak yüze dokunmakla aynıdır (kartı açar/kapatır) (§1).
+>
+> *2026-09-25, beşinci tur (öncekilerle çatışırsa bunlar geçer)*
+> 12. **Yapışkan alt çubuk yok.** Form sonu diğer formlardaki gibi düz bir satır: [Vazgeç] [Kaydet] / "Kaydedildi". "+ Hareket ekle" listenin altında, kesik çizgili tam genişlik düğme. Dock telefonda da hep görünür. Yüzen çubuk yalnız seçim modunda, dock'un üstünde (karar 8'in yerine geçer; §6).
+> 13. **Kopyalama yalnız ⧉'de.** Sağa kaydırınca "Kopyala" yok, seçim çubuğunda "Kopyala" yok. Sola kaydırma iOS gibi yalnız siler: panel düğmesine dokunmak ya da tam kaydırmak kırmızıyı satıra yayar, yüz dışarı kayar (240 ms), satır kapanır (300 ms), 8 sn "Geri al". Tam kaydırma eşiği satırın %45'i, en çok 220 px (masaüstünde yarım ekran çekilmez). Grup üyesinde sağa kaydırma yalnız [Çıkar] (dokunarak). Grup yüzünde sağa kaydırma yok (§3, §5).
 
 Temel C. Üstüne A'nın jestleri ve set düzenlemesi, B'nin kısayolları, v1'in seçim modu ve alt çubuğu eklendi.
 
@@ -38,8 +42,8 @@ Temel C. Üstüne A'nın jestleri ve set düzenlemesi, B'nin kısayolları, v1'i
 | Kaydırma eşlemesi | A'nınki | Grubu tek hamlede silmek imkânsız olur. |
 | Set düzenleme | A'nınki (stepper + çip + açılır bölüm) | Vakaların %80'i düz set. v1 kartlarını PT sevmişti. |
 | Görünür taşıma yolu | **Yok** (karar 1) | Klavyede Alt+ok, ekran okuyucuda sr-only şerit. (Açık soru 1) |
-| Çoklu gruplama | **Seçim modu** (karar 7) | Var olan hareketleri gruplar; kopyala ve sil de toplu çalışır. |
-| Kaydet nerede | **Yapışkan alt çubuk** (karar 8) | 30 kartlık listede kaydetmek için sayfa sonuna inilmez. |
+| Çoklu gruplama | **Seçim modu** (karar 7) | Var olan hareketleri gruplar; sil de toplu çalışır. |
+| Kaydet nerede | **Form sonu** (karar 12) | Diğer formlarla aynı; yüzen çubuk yalnız seçim modunda. |
 | Masaüstünde hover ikonları | **Yok** | ⧉ hep görünür. Sil açık kartta ve Delete tuşunda. |
 
 ## 1. Kart anatomisi (375 px)
@@ -156,7 +160,7 @@ Açık üyede dinlenme alanı yok. Yerine şu satır çıkar: "Dinlenme grup aya
 | Grupla (hızlı) | Sürüklerken kartın ortasında 250 ms bekle, bırak | Aynı | Alt+→ = öncekiyle grupla |
 | Grupla (çoklu) | "Seç" → kartlara dokun → "Grupla" | "Seç" → tıkla (Shift+tık aralık) → "Grupla" | "Seç" → Space → "Grupla" |
 | Gruptan çıkar | Üst düzeye sürükle, ya da üyeyi sağa kaydır → "Çıkar" | Üst düzeye sürükle, ya da açık üyede "Gruptan çıkar" | Alt+← (grup yüzünde: grubu dağıt) |
-| Kopyala | ⧉, ya da sağa tam kaydır | ⧉ | ⧉'ye Tab ile gelip Enter |
+| Kopyala | ⧉ | ⧉ | ⧉'ye Tab ile gelip Enter |
 | Sil | Sola tam kaydır (8 sn "Geri al") | Açık kartta "Sil" | Delete / Backspace (+ Geri al) |
 | İptal | Liste dışına bırak, ya da pointercancel | Esc | Esc |
 
@@ -171,18 +175,18 @@ Açık üyede dinlenme alanı yok. Yerine şu satır çıkar: "Dinlenme grup aya
   - Olmayan işlemin nedeni: "Grup başka bir gruba eklenemez", "Grup dolu (8)", "Şablon dolu: en fazla 40 hareket, 30 blok".
   - Sheet açıkken duyurular sheet kapanınca yapılır.
 - **Kopya metinleri:**
-  - Telefon açıklaması: "Karta dokun: düzenle. Üstteki çizgiden sürükle: sırala; bir kartın ortasına bırak: grupla. Sola kaydır: sil, sağa kaydır: kopyala."
+  - Telefon açıklaması: "Karta dokun: düzenle. Üstteki çizgiden sürükle: sırala; bir kartın ortasına bırak: grupla. Sola kaydır: sil."
   - Masaüstü açıklaması: "Karta tıkla: düzenle. Üstteki çizgiden sürükle: sırala; bir kartın ortasına bırak: grupla. Alt + ok tuşları taşır."
-  - İlk kullanımda bir kez ilk kart 40 px sola "göz kırpar" (localStorage, try/catch içinde). Reduced-motion'da bunun yerine şu satır çıkar: "İpucu: kartı sola kaydır → sil, sağa kaydır → kopyala".
+  - İlk kullanımda bir kez ilk kart 40 px sola "göz kırpar" (localStorage, try/catch içinde). Reduced-motion'da bunun yerine şu satır çıkar: "İpucu: kartı sola kaydır → sil".
 
 ## 3. Kaydırma eşlemesi
 Kural: sağda olumlu işlemler, solda sil ve dağıt. Bir tarafta tek işlem varsa tam kaydırma onu tetikler (Easy Dude kuralı).
 
 | Öğe | Sağa → (soldan açılır) | ← Sola (sağdan açılır) |
 |---|---|---|
-| Tek hareket | [Kopyala] (tam kaydırma) | [Sil] (tam kaydırma) |
-| Grup üyesi | [Kopyala][Çıkar] (tam kaydırma yok) | [Sil] (tam kaydırma) |
-| Grup yüzü | [Kopyala] (tam kaydırma) | [Dağıt][Sil] (tam kaydırma **yok**) |
+| Tek hareket | — | [Sil] (tam kaydırma) |
+| Grup üyesi | [Çıkar] (tam kaydırma yok) | [Sil] (tam kaydırma) |
+| Grup yüzü | — | [Dağıt][Sil] (tam kaydırma **yok**) |
 
 - Değerler: işlem genişliği 72 px. Tam kaydırma eşiği satırın %45'i (343 px'te ≈154 px). Fırlatma 400 px/sn'de paneli açar ama işlemi tetiklemez. Yay: 500/40.
 - Eşik geçilince panel parmağa kadar uzar, ikon kenarı izler ve bir kez vibrate(8) olur. Parmak eşiğin altına dönerse iptal.
