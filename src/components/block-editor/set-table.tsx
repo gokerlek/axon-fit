@@ -36,7 +36,7 @@ import {
 import { applySetPreset, setRounds, setRowSetCount, updateRowSets, type PickerExercise, type SetPreset } from '@/lib/template-edit';
 import { TEMPLATE_LIMITS, type TemplateBlock, type TemplateRow } from '@/lib/template-plan';
 import { cn } from '@/lib/utils';
-import { blockField, setInputId, useEditor, type SetColumn } from './editor-context';
+import { MENU_TOUCH, blockField, setInputId, useEditor, type SetColumn } from './editor-context';
 
 /**
  * Satırın setleri (SPEC §7.4): set sayısı, grubun turu, setlerin özeti ve set tablosu
@@ -118,7 +118,7 @@ export function SetCountField({ row, exercise, className }: Pick<RowProps, 'row'
         step={1}
         disabled={!exercise}
         aria-invalid={count.invalid || undefined}
-        className="tabular-nums"
+        className="tabular-nums touch:h-11"
         value={count.draft ?? String(row.sets.length)}
         onFocus={count.onFocus}
         onChange={(event) => count.onChange(event.currentTarget.value)}
@@ -157,7 +157,7 @@ export function RoundsField({ block, rounds, className }: { block: TemplateBlock
         max={TEMPLATE_LIMITS.sets}
         step={1}
         aria-invalid={count.invalid || undefined}
-        className="tabular-nums"
+        className="tabular-nums touch:h-11"
         value={count.draft ?? String(rounds)}
         onFocus={count.onFocus}
         onChange={(event) => count.onChange(event.currentTarget.value)}
@@ -180,7 +180,7 @@ export function SetsSummary({ row, exercise, className }: Pick<RowProps, 'row' |
       <Button
         type="button"
         variant="ghost"
-        className="h-auto min-h-8 w-full min-w-0 justify-start px-2 py-1.5 text-left font-normal tabular-nums"
+        className="h-auto min-h-8 w-full min-w-0 justify-start px-2 py-1.5 text-left font-normal tabular-nums touch:min-h-11"
         disabled={!exercise}
         aria-label={`Setleri düzenle: ${text}`}
         onClick={() => {
@@ -215,11 +215,11 @@ export function SetPresetMenu({ row, exercise }: Pick<RowProps, 'row' | 'exercis
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button type="button" variant="outline" size="sm" disabled={!exercise} />}>
+      <DropdownMenuTrigger render={<Button type="button" variant="outline" size="sm" className="touch:h-11" disabled={!exercise} />}>
         Hazır düzen
         <CaretDown data-icon="inline-end" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-56">
+      <DropdownMenuContent align="end" className={cn('min-w-56', MENU_TOUCH)}>
         <DropdownMenuItem onClick={() => apply('straight', PRESET_MESSAGES.straight)}>
           Düz · {formatNumber(n)} × {rangeText(ref)}
         </DropdownMenuItem>
@@ -284,7 +284,7 @@ function SetNumberInput({
       disabled={disabled}
       aria-label={label}
       aria-invalid={Boolean(field.errors) || undefined}
-      className={cn('tabular-nums', column !== 'pct' && 'h-10 w-16')}
+      className={cn('tabular-nums', column === 'pct' ? 'touch:h-11' : 'h-10 w-16 touch:h-11')}
       value={shown(field.input)}
       onChange={(event) => onValue(numberOf(event.currentTarget))}
       onKeyDown={(event) => {
@@ -351,9 +351,9 @@ export function SetRowEditor({ blockIndex, rowIndex, row, exercise, index }: Row
           onValue={(value) => write('max', value)}
         />
         <span className="text-sm text-muted-foreground">{duration ? 'sn' : 'tekrar'}</span>
-        <div className="flex basis-full items-center gap-2 pl-9 sm:basis-auto sm:pl-0">
+        <div className="flex basis-full flex-wrap items-center gap-2 pl-9 sm:basis-auto sm:pl-0">
           {weighted ? (
-            <InputGroup className="h-10 w-24" data-disabled={disabled || undefined}>
+            <InputGroup className="h-10 w-24 touch:h-11" data-disabled={disabled || undefined}>
               <InputGroupAddon align="inline-start">%</InputGroupAddon>
               <SetNumberInput
                 rowId={row.id}
@@ -371,7 +371,7 @@ export function SetRowEditor({ blockIndex, rowIndex, row, exercise, index }: Row
           ) : null}
           <Toggle
             variant="outline"
-            className="h-10"
+            className="h-10 touch:h-11"
             disabled={disabled}
             pressed={Boolean(set?.amrap)}
             onPressedChange={(pressed) => setInput(form, { path: at('amrap'), input: pressed ? true : undefined })}
@@ -381,10 +381,10 @@ export function SetRowEditor({ blockIndex, rowIndex, row, exercise, index }: Row
           <DropdownMenu>
             <DropdownMenuTrigger
               disabled={disabled}
-              render={<Button type="button" variant="ghost" size="icon" aria-label={`Set ${n} işlemleri`} />}>
+              render={<Button type="button" variant="ghost" size="icon" className="ml-auto size-8 touch:size-11 sm:ml-0" aria-label={`Set ${n} işlemleri`} />}>
               <DotsThreeVertical weight="bold" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-56">
+            <DropdownMenuContent align="end" className={cn('min-w-56', MENU_TOUCH)}>
               <DropdownMenuItem
                 onClick={() =>
                   editor.update((before) => updateRowSets(before, row.id, (sets) => targetToAll(sets, index)), {
@@ -443,6 +443,7 @@ export function SetTable({ blockIndex, rowIndex, row, exercise, title }: RowProp
           type="button"
           variant="outline"
           size="sm"
+          className="touch:h-11"
           id={`set-add-${row.id}`}
           disabled={!exercise || count >= SET_LIMITS.perRow}
           onClick={add}>
@@ -502,7 +503,7 @@ export function StraightTargetField({ blockIndex, rowIndex, row, exercise, class
           disabled={!exercise}
           aria-label="En az"
           aria-invalid={Boolean(minField.errors) || undefined}
-          className="w-16 tabular-nums"
+          className="w-16 tabular-nums touch:h-11"
           value={shown(minField.input)}
           onChange={(event) => writeAll('min', numberOf(event.currentTarget))}
         />
@@ -520,7 +521,7 @@ export function StraightTargetField({ blockIndex, rowIndex, row, exercise, class
           disabled={!exercise}
           aria-label="En çok"
           aria-invalid={Boolean(maxField.errors) || undefined}
-          className="w-16 tabular-nums"
+          className="w-16 tabular-nums touch:h-11"
           value={shown(maxField.input)}
           onChange={(event) => writeAll('max', numberOf(event.currentTarget))}
         />

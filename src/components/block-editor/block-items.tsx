@@ -2,20 +2,11 @@
 
 import { useMemo } from 'react';
 import { getDeepError, setInput, useField, useFieldArray, type FieldElementProps } from '@formisch/react';
-import {
-  ArrowDown,
-  ArrowsClockwise,
-  ArrowUp,
-  CaretDown,
-  Copy,
-  DotsSixVertical,
-  DotsThreeVertical,
-  LinkBreak,
-  LinkSimple,
-  Trash,
-} from '@phosphor-icons/react';
-import { Reorder, useDragControls, type DragControls } from 'motion/react';
+import { ArrowsClockwise, CaretDown, Copy, DotsThreeVertical, LinkBreak, LinkSimple, Trash } from '@phosphor-icons/react';
+import { ExerciseCard, ExerciseCardHeader, ExerciseCardSection } from '@/components/exercise-card';
 import { GroupedSelect, LabeledSelect } from '@/components/labeled-select';
+import { ReorderHandle } from '@/components/sortable/reorder-handle';
+import { SortableItem, SortableList } from '@/components/sortable/sortable-list';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -41,8 +32,6 @@ import {
   dissolveGroup,
   duplicateRow,
   joinBlocks,
-  moveBlock,
-  moveRowInGroup,
   removeRow,
   reorderRows,
   setRow,
@@ -65,7 +54,7 @@ import {
   type TemplateRow,
 } from '@/lib/template-plan';
 import { cn } from '@/lib/utils';
-import { blockField, rowTitle, useEditor } from './editor-context';
+import { MENU_TOUCH, blockField, rowTitle, useEditor } from './editor-context';
 import { RoundsField, SetCountField, SetsSummary, SetTable, StraightTargetField } from './set-table';
 
 export {
@@ -78,45 +67,14 @@ export {
   type Editor,
 } from './editor-context';
 
-/** Taşıma sonrası: odak tutamağa geri döner (liste yeniden çizildikten sonra). */
-function refocus(id: string) {
-  requestAnimationFrame(() => document.getElementById(`handle-${id}`)?.focus());
-}
+/** Dokunmatikte ya da dar ekranda seçim kutusu ve öğeleri 44 px. */
+const SELECT_TOUCH = {
+  triggerClassName: 'touch:data-[size=default]:h-11',
+  contentClassName: 'touch:**:data-[slot=select-item]:min-h-11',
+} as const;
 
-/**
- * Sürükleme tutamağı: yalnız buradan sürüklenir (sayfanın geri kalanı normal kayar).
- * Klavyede yukarı/aşağı ok tuşları bir sıra taşır.
- */
-function DragHandle({
-  id,
-  title,
-  controls,
-  onMove,
-}: {
-  id: string;
-  title: string;
-  controls: DragControls;
-  onMove: (delta: -1 | 1) => void;
-}) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      id={`handle-${id}`}
-      className="shrink-0 cursor-grab touch-none select-none text-muted-foreground active:cursor-grabbing"
-      aria-label={`Sırayı değiştir: ${title}`}
-      aria-describedby="sira-ipucu"
-      onPointerDown={(event) => controls.start(event)}
-      onKeyDown={(event) => {
-        if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
-        event.preventDefault();
-        onMove(event.key === 'ArrowUp' ? -1 : 1);
-      }}>
-      <DotsSixVertical weight="bold" />
-    </Button>
-  );
-}
+/** Satır ve grup menüsünün düğmesi: 32 px yer kaplar, dokunmatikte 44 px. */
+const MENU_TRIGGER = 'size-8 touch:-mx-1.5 touch:size-11';
 
 type NumberFieldStore = { input: unknown; errors: readonly string[] | null; props: FieldElementProps };
 
@@ -164,7 +122,7 @@ function NumberInput({
 
 function SecondsInput(props: Parameters<typeof NumberInput>[0]) {
   return (
-    <InputGroup>
+    <InputGroup className={props.className}>
       <InputGroupInput
         {...props.field.props}
         id={props.id}
@@ -175,7 +133,7 @@ function SecondsInput(props: Parameters<typeof NumberInput>[0]) {
         step={props.step}
         disabled={props.disabled}
         aria-invalid={Boolean(props.field.errors) || undefined}
-        className="tabular-nums"
+        className="tabular-nums touch:h-11"
         value={typeof props.field.input === 'number' && !Number.isNaN(props.field.input) ? props.field.input : ''}
         onChange={(event) => props.onValue(event.currentTarget.value === '' ? undefined : event.currentTarget.valueAsNumber)}
       />
@@ -218,7 +176,7 @@ function BlockNumberField({
       <FieldLabel htmlFor={id} className="text-xs text-muted-foreground">
         {label}
       </FieldLabel>
-      <Control id={id} field={field} onValue={onValue} min={min} max={max} step={step} disabled={disabled} />
+      <Control id={id} field={field} onValue={onValue} min={min} max={max} step={step} disabled={disabled} className="touch:h-11" />
       <FieldError>{field.errors?.[0]}</FieldError>
     </Field>
   );
@@ -267,17 +225,19 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
   };
 
   return (
-    <div className="grid gap-4 border-t p-3 sm:grid-cols-2">
+    <ExerciseCardSection className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <Field className="gap-1.5">
         <FieldLabel htmlFor={`scheme-${row.id}`}>İlerleme</FieldLabel>
         <div className="grid grid-cols-2 gap-2">
           <LabeledSelect
+            {...SELECT_TOUCH}
             id={`scheme-${row.id}`}
             value={rule.scheme}
             labels={PROGRESSION_LABELS}
             onChange={(scheme) => writeRule({ scheme, targetRir: rule.targetRir })}
           />
           <LabeledSelect
+            {...SELECT_TOUCH}
             id={`rir-${row.id}`}
             value={String(rule.targetRir)}
             labels={RIR_ITEMS}
@@ -291,7 +251,7 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
             type="button"
             variant="ghost"
             size="sm"
-            className="self-start"
+            className="self-start touch:h-11"
             onClick={() => setInput(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'rule'), input: undefined })}>
             Egzersizin kuralına dön
           </Button>
@@ -301,6 +261,7 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
       <Field className="gap-1.5">
         <FieldLabel htmlFor={`device-${row.id}`}>Cihaz</FieldLabel>
         <GroupedSelect
+          {...SELECT_TOUCH}
           id={`device-${row.id}`}
           value={row.deviceId ?? ''}
           groups={groups}
@@ -317,6 +278,7 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
         <Input
           {...noteField.props}
           id={`note-${row.id}`}
+          className="touch:h-11"
           maxLength={TEMPLATE_LIMITS.note}
           placeholder="Dizleri içe kaçırma"
           value={typeof noteField.input === 'string' ? noteField.input : ''}
@@ -324,12 +286,12 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
         <FieldDescription>{editor.noteHint}</FieldDescription>
         <FieldError>{noteField.errors?.[0]}</FieldError>
       </Field>
-    </div>
+    </ExerciseCardSection>
   );
 }
 
-/** Satırın menüsü: değiştir, kopyala, taşı, grupla/gruptan çıkar, kaldır. */
-function RowMenu({ block, blockIndex, row, rowIndex, title }: { block: TemplateBlock; blockIndex: number; row: TemplateRow; rowIndex: number; title: string }) {
+/** Satırın menüsü: değiştir, kopyala, AMRAP, grupla/gruptan çıkar, kaldır (sıralama sürükle-bırakla). */
+function RowMenu({ block, row, title }: { block: TemplateBlock; row: TemplateRow; title: string }) {
   const editor = useEditor();
   const { blocks, exercises } = editor;
   // Kütüphanede olmayan egzersizde yalnız "Değiştir" ve "Kaldır" işler.
@@ -339,20 +301,24 @@ function RowMenu({ block, blockIndex, row, rowIndex, title }: { block: TemplateB
   // Kopya gruba sığmazsa (tek hareket ya da 8'lik grup) yeni blok olur.
   const copyNeedsBlock = !inGroup || block.rows.length >= 8;
   const full = countRows(blocks) >= TEMPLATE_LIMITS.rows || (copyNeedsBlock && blocksFull);
-  const canUp = !missing && (inGroup ? rowIndex > 0 : blockIndex > 0);
-  const canDown = !missing && (inGroup ? rowIndex < block.rows.length - 1 : blockIndex < blocks.length - 1);
   const lastAmrap = ['last', 'all'].includes(setShape(row.sets).amrap);
-  const move = (delta: -1 | 1) =>
-    editor.update((before) => (inGroup ? moveRowInGroup(before, row.id, delta) : moveBlock(before, block.id, delta)), {
-      highlight: row.id,
-    });
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon" aria-label={`Satır işlemleri: ${title}`} />}>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            id={`row-menu-${row.id}`}
+            className={MENU_TRIGGER}
+            aria-label={`Satır işlemleri: ${title}`}
+          />
+        }>
         <DotsThreeVertical weight="bold" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-48">
+      <DropdownMenuContent align="end" className={cn('min-w-48', MENU_TOUCH)}>
         <DropdownMenuItem onClick={() => editor.startReplace(row.id)}>
           <ArrowsClockwise />
           Değiştir…
@@ -372,14 +338,6 @@ function RowMenu({ block, blockIndex, row, rowIndex, title }: { block: TemplateB
           Son set AMRAP
         </DropdownMenuCheckboxItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled={!canUp} onClick={() => move(-1)}>
-          <ArrowUp />
-          Yukarı taşı
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={!canDown} onClick={() => move(1)}>
-          <ArrowDown />
-          Aşağı taşı
-        </DropdownMenuItem>
         {inGroup ? (
           <DropdownMenuItem
             disabled={missing || blocksFull}
@@ -425,23 +383,13 @@ function RowMenu({ block, blockIndex, row, rowIndex, title }: { block: TemplateB
 }
 
 /**
- * Bir hareket satırı: başlık, alanlar (set sayısı, tek harekette dinlenme, düz setlerde
- * hedef, değilse setlerin özeti), set tablosu, ayrıntılar ve menü. Kütüphanede olmayan
+ * Bir hareket kartı: 1. satır [numara-tutamak][ad + kaslar · cihaz][menü]; altında tam
+ * genişlikte alanlar (set sayısı, tek harekette dinlenme, düz setlerde hedef, değilse setlerin
+ * özeti), set tablosu, ayrıntılar ve "Setler / Ayrıntılar" düğmeleri. Tutamak en yakın
+ * sıralanan öğeyi taşır: tek harekette bloğu, grupta satırı (2a, 2b). Kütüphanede olmayan
  * egzersizde alanlar kapalı; yalnız "Değiştir" ve "Kaldır" işler.
  */
-function RowEditor({
-  block,
-  blockIndex,
-  row,
-  rowIndex,
-  handle,
-}: {
-  block: TemplateBlock;
-  blockIndex: number;
-  row: TemplateRow;
-  rowIndex: number;
-  handle: React.ReactNode;
-}) {
+function RowEditor({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; blockIndex: number; row: TemplateRow; rowIndex: number }) {
   const editor = useEditor();
   const { form, path, exercises, devices, labels, expanded, expandedSets, highlight } = editor;
   const exerciseField = useField(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'exerciseId') });
@@ -459,50 +407,35 @@ function RowEditor({
   const deviceId = row.deviceId ?? exercise?.deviceId;
   const deviceName = deviceId ? devices.get(deviceId)?.name : undefined;
   const subtitle = exercise
-    ? [summarizeMuscles(exercise.primaryMuscles).join(', '), deviceName ?? EQUIPMENT_LABELS[exercise.equipment]]
-        .filter(Boolean)
-        .join(' · ')
+    ? [summarizeMuscles(exercise.primaryMuscles).join(', '), deviceName ?? EQUIPMENT_LABELS[exercise.equipment]].filter(Boolean).join(' · ')
     : null;
   const badges = [row.rule ? 'kural' : null, row.deviceId ? 'cihaz' : null, row.note?.trim() ? 'not' : null].filter(
     (badge): badge is string => badge !== null,
   );
+  const exerciseError = exerciseField.errors?.[0];
 
   return (
-    <div
-      id={`row-${row.id}`}
-      className={cn(
-        'flex scroll-mt-24 flex-col rounded-[inherit] motion-safe:transition-shadow motion-safe:duration-500',
-        highlight === row.id && 'ring-2 ring-primary/60',
-      )}>
-      <div className="flex items-start gap-2 p-3">
-        {handle}
-        <span className="w-6 shrink-0 pt-1.5 text-center text-sm tabular-nums text-muted-foreground">{labels.get(row.id)}</span>
-        <div className="min-w-0 flex-1 pt-0.5">
-          <p className={cn('truncate font-medium', !exercise && 'text-destructive')}>{title}</p>
-          {exercise ? (
-            <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
-          ) : (
-            <p className="truncate font-mono text-xs text-muted-foreground">{row.exerciseId}</p>
-          )}
-          {badges.length > 0 ? (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {badges.map((badge) => (
-                <Badge key={badge} variant="secondary">
-                  {badge}
-                </Badge>
-              ))}
-            </div>
-          ) : null}
-          <FieldError className="mt-1 text-xs">{exerciseField.errors?.[0]}</FieldError>
+    <ExerciseCard id={`row-${row.id}`} highlighted={highlight === row.id}>
+      <ExerciseCardHeader
+        handle={<ReorderHandle>{labels.get(row.id)}</ReorderHandle>}
+        title={title}
+        titleClassName={exercise ? undefined : 'text-destructive'}
+        meta={exercise ? subtitle : <span className="font-mono">{row.exerciseId}</span>}
+        action={<RowMenu block={block} row={row} title={title} />}
+      />
+      {badges.length > 0 || exerciseError ? (
+        <div className="-mt-1 flex flex-wrap items-center gap-1 px-3 pb-3">
+          {badges.map((badge) => (
+            <Badge key={badge} variant="secondary">
+              {badge}
+            </Badge>
+          ))}
+          <FieldError className="basis-full text-xs">{exerciseError}</FieldError>
         </div>
-        <RowMenu block={block} blockIndex={blockIndex} row={row} rowIndex={rowIndex} title={title} />
-      </div>
+      ) : null}
 
-      <div
-        className={cn(
-          'grid gap-3 border-t p-3',
-          single ? 'grid-cols-2 sm:grid-cols-[5.5rem_7.5rem_minmax(0,1fr)]' : 'grid-cols-[5.5rem_minmax(0,1fr)]',
-        )}>
+      <ExerciseCardSection
+        className={cn('grid gap-3', single ? 'grid-cols-2 sm:grid-cols-[5.5rem_7.5rem_minmax(0,1fr)]' : 'grid-cols-2 sm:grid-cols-[5.5rem_minmax(0,1fr)]')}>
         <SetCountField row={row} exercise={exercise} />
         {single ? (
           <BlockNumberField
@@ -518,17 +451,11 @@ function RowEditor({
           />
         ) : null}
         {straight && !setsOpen ? (
-          <StraightTargetField
-            blockIndex={blockIndex}
-            rowIndex={rowIndex}
-            row={row}
-            exercise={exercise}
-            className={single ? 'col-span-2 sm:col-span-1' : undefined}
-          />
+          <StraightTargetField blockIndex={blockIndex} rowIndex={rowIndex} row={row} exercise={exercise} className="col-span-2 sm:col-span-1" />
         ) : (
-          <SetsSummary row={row} exercise={exercise} className={single ? 'col-span-2 sm:col-span-1' : undefined} />
+          <SetsSummary row={row} exercise={exercise} className="col-span-2 sm:col-span-1" />
         )}
-      </div>
+      </ExerciseCardSection>
 
       {exercise && setsOpen ? <SetTable blockIndex={blockIndex} rowIndex={rowIndex} row={row} exercise={exercise} title={title} /> : null}
       {exercise && isOpen ? <RowDetails blockIndex={blockIndex} rowIndex={rowIndex} row={row} exercise={exercise} /> : null}
@@ -542,76 +469,44 @@ function RowEditor({
             aria-expanded={setsOpen}
             aria-controls={`sets-${row.id}`}
             disabled={forcedOpen}
-            className="group/sets rounded-none rounded-bl-[inherit] border-r text-muted-foreground"
+            className="group/sets h-9 rounded-none rounded-bl-[inherit] border-r text-muted-foreground touch:h-11"
             onClick={() => editor.toggleSets(row.id)}>
             Setler
-            <CaretDown data-icon="inline-end" className="transition-transform group-aria-expanded/sets:rotate-180" />
+            <CaretDown
+              data-icon="inline-end"
+              className="transition-transform duration-160 group-aria-expanded/sets:rotate-180 motion-reduce:transition-none"
+            />
           </Button>
           <Button
             type="button"
             variant="ghost"
             size="sm"
             aria-expanded={isOpen}
-            className="group/details rounded-none rounded-br-[inherit] text-muted-foreground"
+            className="group/details h-9 rounded-none rounded-br-[inherit] text-muted-foreground touch:h-11"
             onClick={() => editor.toggleExpanded(row.id)}>
             Ayrıntılar
-            <CaretDown data-icon="inline-end" className="transition-transform group-aria-expanded/details:rotate-180" />
+            <CaretDown
+              data-icon="inline-end"
+              className="transition-transform duration-160 group-aria-expanded/details:rotate-180 motion-reduce:transition-none"
+            />
           </Button>
         </div>
       ) : null}
-    </div>
+    </ExerciseCard>
   );
 }
 
-/** Gruptaki bir satır: kendi tutamağıyla grubun içinde sıralanır. */
-function GroupRowItem({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; blockIndex: number; row: TemplateRow; rowIndex: number }) {
-  const editor = useEditor();
-  const controls = useDragControls();
-  const title = rowTitle(row, editor.exercises);
-  const move = (delta: -1 | 1) => {
-    editor.update((before) => moveRowInGroup(before, row.id, delta), { announce: `${title} ${rowIndex + delta + 1}. sıraya taşındı` });
-    refocus(row.id);
-  };
-  return (
-    <Reorder.Item
-      value={row.id}
-      as="li"
-      dragListener={false}
-      dragControls={controls}
-      layout="position"
-      whileDrag={{ scale: 1.01 }}
-      className="relative rounded-lg border bg-card">
-      <RowEditor
-        block={block}
-        blockIndex={blockIndex}
-        row={row}
-        rowIndex={rowIndex}
-        handle={<DragHandle id={row.id} title={title} controls={controls} onMove={move} />}
-      />
-    </Reorder.Item>
-  );
-}
-
-/** Grubun menüsü: taşı, komşuyla grupla, dağıt, kaldır. */
-function GroupMenu({ block, blockIndex, title }: { block: TemplateBlock; blockIndex: number; title: string }) {
+/** Grubun menüsü: komşuyla grupla, dağıt, kaldır (sıralama sürükle-bırakla). */
+function GroupMenu({ block, title }: { block: TemplateBlock; title: string }) {
   const editor = useEditor();
   const { blocks, exercises } = editor;
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon" aria-label={`Grup işlemleri: ${title}`} />}>
+      <DropdownMenuTrigger
+        render={<Button type="button" variant="ghost" size="icon" className={MENU_TRIGGER} aria-label={`Grup işlemleri: ${title}`} />}>
         <DotsThreeVertical weight="bold" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-48">
-        <DropdownMenuItem disabled={blockIndex === 0} onClick={() => editor.update((before) => moveBlock(before, block.id, -1))}>
-          <ArrowUp />
-          Yukarı taşı
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={blockIndex === blocks.length - 1}
-          onClick={() => editor.update((before) => moveBlock(before, block.id, 1))}>
-          <ArrowDown />
-          Aşağı taşı
-        </DropdownMenuItem>
+      <DropdownMenuContent align="end" className={cn('min-w-48', MENU_TOUCH)}>
         <DropdownMenuItem
           disabled={!canJoin(blocks, block.id, 'previous')}
           onClick={() => editor.update((before) => joinBlocks(before, block.id, 'previous'), { announce: `${title} öncekiyle gruplandı` })}>
@@ -644,37 +539,42 @@ function GroupMenu({ block, blockIndex, title }: { block: TemplateBlock; blockIn
   );
 }
 
-/** Grubun başlığı ve satırları: tür, tur, tur sonu dinlenme, (devrede) istasyon geçişi. */
-function GroupBlock({ block, blockIndex, handle, title }: { block: TemplateBlock; blockIndex: number; handle: React.ReactNode; title: string }) {
+/**
+ * Grup kartı: vurgu tonlu rozet-tutamak bütün grubu taşır; altında tür, tur, tur sonu
+ * dinlenme, (devrede) istasyon geçişi ve grubun kendi sıralanan satırları (2a, 2b). Satırlar
+ * gruptan sürüklenerek çıkmaz; "Gruptan çıkar" satırın menüsündedir.
+ */
+function GroupBlock({ block, blockIndex, title }: { block: TemplateBlock; blockIndex: number; title: string }) {
   const editor = useEditor();
   const rowsArray = useFieldArray(editor.form, { path: blockField(editor.path, blockIndex, 'rows') });
   const options = kindOptions(block.rows.length);
   const kindLabels = Object.fromEntries(options.map((kind) => [kind, BLOCK_KIND_LABELS[kind]])) as Record<BlockKind, string>;
   const kind = block.kind === 'single' ? 'superset' : block.kind;
+  const rounds = roundsOf(block);
   const skipNote = groupSkipNote(block, (row) => rowTitle(row, editor.exercises));
 
   return (
-    <div className="flex flex-col rounded-xl bg-primary/5">
-      <div className="grid grid-cols-2 items-end gap-3 p-3 sm:flex sm:flex-wrap">
-        <div className="col-span-2 flex items-center gap-2 sm:pb-0.5">
-          {handle}
-          <span className="w-6 text-center text-sm font-medium tabular-nums">{blockIndex + 1}</span>
-          <div className="ml-auto sm:hidden">
-            <GroupMenu block={block} blockIndex={blockIndex} title={title} />
-          </div>
-        </div>
-        <Field className="col-span-2 gap-1.5 sm:w-36">
+    <ExerciseCard tone="group">
+      <ExerciseCardHeader
+        handle={<ReorderHandle tone="accent">{blockIndex + 1}</ReorderHandle>}
+        title={BLOCK_KIND_LABELS[kind]}
+        meta={`${block.rows.length} hareket · ${rounds} tur`}
+        action={<GroupMenu block={block} title={title} />}
+      />
+      <div className="grid grid-cols-2 gap-3 px-3 pb-3 sm:flex sm:flex-wrap sm:items-end">
+        <Field className="col-span-2 gap-1.5 sm:w-40">
           <FieldLabel htmlFor={`kind-${block.id}`} className="text-xs text-muted-foreground">
             Grup
           </FieldLabel>
           <LabeledSelect
+            {...SELECT_TOUCH}
             id={`kind-${block.id}`}
             value={block.kind}
             labels={kindLabels}
             onChange={(next) => editor.update((before) => changeKind(before, block.id, next))}
           />
         </Field>
-        <RoundsField block={block} rounds={roundsOf(block)} className="sm:w-20" />
+        <RoundsField block={block} rounds={rounds} className="sm:w-20" />
         <BlockNumberField
           blockIndex={blockIndex}
           blockId={block.id}
@@ -684,7 +584,7 @@ function GroupBlock({ block, blockIndex, handle, title }: { block: TemplateBlock
           max={TEMPLATE_LIMITS.restSeconds}
           step={15}
           seconds
-          className="sm:w-32"
+          className="sm:w-36"
         />
         {block.kind === 'circuit' ? (
           <BlockNumberField
@@ -696,58 +596,47 @@ function GroupBlock({ block, blockIndex, handle, title }: { block: TemplateBlock
             max={TEMPLATE_LIMITS.transitionSeconds}
             step={5}
             seconds
-            className="sm:w-28"
+            className="sm:w-32"
           />
         ) : null}
-        <div className="hidden sm:ml-auto sm:block">
-          <GroupMenu block={block} blockIndex={blockIndex} title={title} />
-        </div>
       </div>
       <p className="px-3 text-xs text-muted-foreground">{BLOCK_KIND_HINTS[kind]}</p>
       {skipNote ? <p className="px-3 pt-1 text-xs text-muted-foreground">{skipNote}</p> : null}
-      <Reorder.Group
-        as="ol"
-        axis="y"
+      <SortableList
         values={block.rows.map((row) => row.id)}
-        onReorder={(ids: string[]) => editor.update((before) => reorderRows(before, block.id, ids))}
-        className="flex flex-col gap-2 p-3 pt-2"
-        aria-label={`${title} hareketleri`}>
+        onReorder={(ids) => editor.update((before) => reorderRows(before, block.id, ids))}
+        getLabel={(id) => {
+          const row = block.rows.find((item) => item.id === id);
+          return row ? rowTitle(row, editor.exercises) : '';
+        }}
+        announce={(label, position) => `${label} grupta ${position}. sıraya taşındı`}
+        aria-label={`${title} hareketleri`}
+        className="flex flex-col gap-2 p-2 pt-3 sm:p-3">
         {block.rows.map((row, rowIndex) => (
-          <GroupRowItem key={row.id} block={block} blockIndex={blockIndex} row={row} rowIndex={rowIndex} />
+          <SortableItem key={row.id} value={row.id}>
+            <RowEditor block={block} blockIndex={blockIndex} row={row} rowIndex={rowIndex} />
+          </SortableItem>
         ))}
-      </Reorder.Group>
+      </SortableList>
       {rowsArray.errors ? <FieldError className="px-3 pb-3">{rowsArray.errors[0]}</FieldError> : null}
-    </div>
+    </ExerciseCard>
   );
 }
 
-/** Şablonun bir bloğu: tek hareket ya da grup; tutamaktan sürüklenir. */
+/** Listenin bir bloğu: tek hareket ya da grup; numara rozetinden sürüklenir. */
 export function BlockItem({ block, blockIndex }: { block: TemplateBlock; blockIndex: number }) {
   const editor = useEditor();
-  const controls = useDragControls();
   const single = block.kind === 'single';
   const firstRow = block.rows[0];
   const title = single && firstRow ? rowTitle(firstRow, editor.exercises) : `${BLOCK_KIND_LABELS[block.kind]} ${blockIndex + 1}`;
-  const move = (delta: -1 | 1) => {
-    editor.update((before) => moveBlock(before, block.id, delta), { announce: `${title} ${blockIndex + delta + 1}. sıraya taşındı` });
-    refocus(block.id);
-  };
-  const handle = <DragHandle id={block.id} title={title} controls={controls} onMove={move} />;
 
   return (
-    <Reorder.Item
-      value={block.id}
-      as="li"
-      dragListener={false}
-      dragControls={controls}
-      layout="position"
-      whileDrag={{ scale: 1.01 }}
-      className={cn('relative bg-card', single ? 'rounded-lg border' : 'rounded-xl border border-primary/40')}>
+    <SortableItem value={block.id}>
       {single && firstRow ? (
-        <RowEditor block={block} blockIndex={blockIndex} row={firstRow} rowIndex={0} handle={handle} />
+        <RowEditor block={block} blockIndex={blockIndex} row={firstRow} rowIndex={0} />
       ) : (
-        <GroupBlock block={block} blockIndex={blockIndex} handle={handle} title={title} />
+        <GroupBlock block={block} blockIndex={blockIndex} title={title} />
       )}
-    </Reorder.Item>
+    </SortableItem>
   );
 }

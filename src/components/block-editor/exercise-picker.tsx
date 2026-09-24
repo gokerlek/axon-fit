@@ -1,9 +1,8 @@
 'use client';
 
 import { useDeferredValue, useMemo, useState } from 'react';
-import { MagnifyingGlass, Plus } from '@phosphor-icons/react';
+import { Check, MagnifyingGlass, Plus } from '@phosphor-icons/react';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item';
@@ -12,6 +11,7 @@ import { searchExercises } from '@/lib/exercise-search';
 import { exerciseAlternatives, familyOf, summarizeMuscles, works } from '@/lib/muscles';
 import { EQUIPMENT_LABELS, MUSCLE_GROUPS, MUSCLE_LABELS, type Muscle } from '@/lib/schemas/exercise';
 import type { EditorDevice, PickerExercise } from '@/lib/template-edit';
+import { cn } from '@/lib/utils';
 
 /** Ekranda en çok bu kadar sonuç; gerisi için arama daraltılır. */
 const RESULT_LIMIT = 50;
@@ -29,31 +29,41 @@ function muscleNames(muscle: string): string[] {
 export type ReplaceTarget = { rowId: string; label: string; title: string; exerciseId: string };
 
 /**
- * Kütüphane paneli: ada ya da kasa göre arama, bölge süzgeci; dokununca listenin sonuna
- * eklenir. Değiştirme kipinde seçilen hareket satırın yerine geçer ve önce muadiller önerilir.
+ * Kütüphane (sheet'in içinde): ada ya da kasa göre arama, bölge süzgeci ve sonuçlar.
+ * Ekleme kipinde dokununca listenin sonuna eklenir; değiştirme kipinde seçilen hareket
+ * satırın yerine geçer ve önce muadiller önerilir. Arama ve süzgeç üstte sabit, sonuçlar kayar.
  */
 export function ExercisePicker({
   exercises,
   devices,
   usage,
-  replacing,
+  mode,
+  suggestFor,
   disabled,
+  justAdded,
+  searchRef,
   onPick,
-  onCancelReplace,
+  className,
 }: {
   exercises: readonly PickerExercise[];
   devices: ReadonlyMap<string, EditorDevice>;
-  /** Egzersiz → şablonda kaç kez geçtiği. */
+  /** Egzersiz → listede kaç kez geçtiği. */
   usage: ReadonlyMap<string, number>;
-  replacing: ReplaceTarget | null;
-  /** Şablon dolu (40 hareket ya da 30 blok): ekleme kapalı, değiştirme açık. */
+  mode: 'add' | 'replace';
+  /** Değiştirme kipinde yerine seçilen egzersiz: muadilleri önce önerilir. */
+  suggestFor: string | null;
+  /** Liste dolu (40 hareket ya da 30 blok): ekleme kapalı, değiştirme açık. */
   disabled: boolean;
+  /** Az önce eklenen egzersiz: kısa süre "Eklendi" görünür. */
+  justAdded: string | null;
+  searchRef?: React.Ref<HTMLInputElement>;
   onPick: (exercise: PickerExercise) => void;
-  onCancelReplace: () => void;
+  className?: string;
 }) {
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState<string | null>(null);
   const deferredQuery = useDeferredValue(query);
+  const replacing = mode === 'replace';
 
   const results = useMemo(() => {
     const muscles = MUSCLE_GROUPS.find((item) => item.id === group)?.muscles ?? null;
@@ -62,10 +72,10 @@ export function ExercisePicker({
   }, [exercises, deferredQuery, group]);
 
   const suggestions = useMemo(() => {
-    if (!replacing) return [];
-    const source = exercises.find((exercise) => exercise.id === replacing.exerciseId);
+    if (!replacing || !suggestFor) return [];
+    const source = exercises.find((exercise) => exercise.id === suggestFor);
     return source ? exerciseAlternatives(source, exercises, 6).map((item) => item.exercise) : [];
-  }, [replacing, exercises]);
+  }, [replacing, suggestFor, exercises]);
 
   const locked = disabled && !replacing;
   const shown = results.slice(0, RESULT_LIMIT);
@@ -89,63 +99,66 @@ export function ExercisePicker({
         </ItemContent>
         <ItemActions>
           {count > 0 ? <Badge variant="secondary">şablonda ×{count}</Badge> : null}
-          {replacing ? <span className="text-xs font-medium text-primary">Seç</span> : <Plus className="text-muted-foreground" />}
+          {replacing ? (
+            <span className="text-xs font-medium text-primary">Seç</span>
+          ) : justAdded === exercise.id ? (
+            <span className="flex items-center gap-1 text-xs font-medium text-primary animate-in duration-160 fade-in-0" aria-hidden>
+              <Check className="size-3.5" />
+              Eklendi
+            </span>
+          ) : (
+            <Plus className="size-4 text-muted-foreground" />
+          )}
         </ItemActions>
       </Item>
     );
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      {replacing ? (
-        <div className="flex items-center gap-2 rounded-lg bg-muted p-2 text-sm">
-          <span className="min-w-0 flex-1">
-            <span className="tabular-nums text-muted-foreground">{replacing.label}</span> · <span className="font-medium">{replacing.title}</span>{' '}
-            yerine seçiyorsun
-          </span>
-          <Button type="button" variant="ghost" size="xs" onClick={onCancelReplace}>
-            Vazgeç
-          </Button>
+    <div className={cn('flex flex-col', className)}>
+      <div className="flex flex-col gap-3 border-b px-4 py-3">
+        <InputGroup className="touch:h-11">
+          <InputGroupAddon>
+            <MagnifyingGlass />
+          </InputGroupAddon>
+          <InputGroupInput
+            ref={searchRef}
+            type="search"
+            className="touch:h-11"
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            // Sheet formun dışında (portal) olsa da Enter hiçbir şey göndermesin.
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.nativeEvent.isComposing) event.preventDefault();
+            }}
+            placeholder="Egzersiz ya da kas ara"
+            aria-label="Egzersiz ya da kas ara"
+            autoComplete="off"
+          />
+        </InputGroup>
+
+        {/* Telefonda tek satır, yatay kayar (sayfa taşmaz); geniş sheet'te sarılır. */}
+        <div
+          className="-mx-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0"
+          role="group"
+          aria-label="Bölgeye göre süz">
+          {MUSCLE_GROUPS.map((item) => (
+            <Toggle
+              key={item.id}
+              variant="outline"
+              size="sm"
+              className="shrink-0 touch:h-11"
+              pressed={group === item.id}
+              onPressedChange={(pressed) => setGroup(pressed ? item.id : null)}>
+              {item.label}
+            </Toggle>
+          ))}
         </div>
-      ) : null}
 
-      <InputGroup>
-        <InputGroupAddon>
-          <MagnifyingGlass />
-        </InputGroupAddon>
-        <InputGroupInput
-          id="kutuphane-ara"
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.currentTarget.value)}
-          // Arama kutusu şablon formunun içinde: Enter formu göndermesin.
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.nativeEvent.isComposing) event.preventDefault();
-          }}
-          placeholder="Egzersiz ya da kas ara"
-          aria-label="Egzersiz ya da kas ara"
-          autoComplete="off"
-        />
-      </InputGroup>
-
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Bölgeye göre süz">
-        {MUSCLE_GROUPS.map((item) => (
-          <Toggle
-            key={item.id}
-            variant="outline"
-            size="sm"
-            pressed={group === item.id}
-            onPressedChange={(pressed) => setGroup(pressed ? item.id : null)}>
-            {item.label}
-          </Toggle>
-        ))}
+        {locked ? <p className="text-sm text-muted-foreground">Şablon dolu: en fazla 40 hareket ve 30 blok olur.</p> : null}
       </div>
 
-      {locked ? (
-        <p className="text-sm text-muted-foreground">Şablon dolu: en fazla 40 hareket ve 30 blok olur.</p>
-      ) : null}
-
-      <div className="flex max-h-[60svh] flex-col gap-3 overflow-y-auto lg:max-h-[calc(100svh-18rem)]">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 py-3">
         {suggestions.length > 0 ? (
           <section className="flex flex-col gap-2" aria-label="Önerilen muadiller">
             <h3 className="text-xs font-medium text-muted-foreground">Önerilen muadiller</h3>

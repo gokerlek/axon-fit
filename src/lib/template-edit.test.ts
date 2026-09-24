@@ -12,8 +12,6 @@ import {
   duplicateRow,
   idSource,
   joinBlocks,
-  moveBlock,
-  moveRowInGroup,
   prepareForEditing,
   removeRow,
   reorderBlocks,
@@ -312,16 +310,6 @@ describe('sıralama', () => {
   test('grubun içinde sıralama', () => {
     assert.deepEqual(rowIds(reorderRows(blocks, 'b_2', ['r_3', 'r_2']))[1], ['r_3', 'r_2']);
     assert.equal(reorderRows(blocks, 'b_2', ['r_2', 'r_3']), blocks);
-  });
-
-  test('yukarı/aşağı taşıma uçlarda değişmez', () => {
-    assert.deepEqual(moveBlock(blocks, 'b_2', -1).map((item) => item.id), ['b_2', 'b_1', 'b_3']);
-    assert.deepEqual(moveBlock(blocks, 'b_2', 1).map((item) => item.id), ['b_1', 'b_3', 'b_2']);
-    assert.equal(moveBlock(blocks, 'b_1', -1), blocks);
-    assert.equal(moveBlock(blocks, 'b_3', 1), blocks);
-    assert.deepEqual(rowIds(moveRowInGroup(blocks, 'r_3', -1))[1], ['r_3', 'r_2']);
-    assert.equal(moveRowInGroup(blocks, 'r_2', -1), blocks);
-    assert.equal(moveRowInGroup(blocks, 'r_3', 1), blocks);
   });
 });
 

@@ -21,7 +21,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <>
       {/* Menü sabit durur ama içerik sütununa hizalıdır; boş alan tıklamayı engellemez. */}
-      <div className="pointer-events-none fixed inset-x-0 top-0 z-30">
+      <div data-reorder-hide className="pointer-events-none fixed inset-x-0 top-0 z-30">
         <div className={`${PAGE_WIDTH} flex justify-end pt-4`}>
           <div className="pointer-events-auto">
             <UserMenu login={session.subject} appName={config.appName} />

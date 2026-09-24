@@ -257,31 +257,6 @@ function inOrder<T extends { id: string }>(items: readonly T[], orderedIds: read
   return result;
 }
 
-function shift<T>(items: readonly T[], index: number, delta: -1 | 1): T[] | null {
-  const target = index + delta;
-  if (index < 0 || target < 0 || target >= items.length) return null;
-  const next = [...items];
-  const [item] = next.splice(index, 1);
-  next.splice(target, 0, item as T);
-  return next;
-}
-
-/** Bloğu bir yukarı ya da aşağı taşır; uçlarda değişmez. */
-export function moveBlock(blocks: readonly TemplateBlock[], blockId: string, delta: -1 | 1): TemplateBlock[] {
-  return shift(blocks, blocks.findIndex((block) => block.id === blockId), delta) ?? (blocks as TemplateBlock[]);
-}
-
-/** Satırı grubunun içinde taşır; uçlarda değişmez. */
-export function moveRowInGroup(blocks: readonly TemplateBlock[], rowId: string, delta: -1 | 1): TemplateBlock[] {
-  const found = locate(blocks, rowId);
-  const block = found ? blocks[found.blockIndex] : undefined;
-  const rows = found && block ? shift(block.rows, found.rowIndex, delta) : null;
-  if (!found || !block || !rows) return blocks as TemplateBlock[];
-  const next = [...blocks];
-  next[found.blockIndex] = { ...block, rows };
-  return next;
-}
-
 /** İki komşu bloğun birleşimi (öncekinin kimliğiyle); olmuyorsa `null`. Her hareket kendi setlerini korur. */
 function merged(first: TemplateBlock, second: TemplateBlock): TemplateBlock | null {
   const rows = [...first.rows, ...second.rows];

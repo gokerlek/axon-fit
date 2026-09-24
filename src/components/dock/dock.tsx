@@ -148,7 +148,9 @@ export function Dock({
   const reduced = useReducedMotion() ?? false;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+    <div
+      data-reorder-hide
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
       <motion.nav
         className="pointer-events-auto flex items-end gap-2 rounded-2xl border bg-background/95 p-2 shadow-xl backdrop-blur-xl supports-backdrop-filter:bg-background/85"
         aria-label={ariaLabel}

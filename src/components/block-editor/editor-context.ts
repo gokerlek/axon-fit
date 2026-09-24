@@ -4,7 +4,7 @@ import { createContext, useContext } from 'react';
 import type { FormStore } from '@formisch/react';
 import type { blocksHostSchema } from '@/lib/schemas/template';
 import type { EditorDevice, IdSource, PickerExercise } from '@/lib/template-edit';
-import type { TemplateBlock, TemplateRow } from '@/lib/template-plan';
+import { BLOCK_KIND_LABELS, type TemplateBlock, type TemplateRow } from '@/lib/template-plan';
 
 /** Blokları kökte tutan form tipi. Gerçek form başka şekilde olabilir (program); yol öneki `path`'tedir. */
 export type BlocksFormStore = FormStore<typeof blocksHostSchema>;
@@ -55,6 +55,7 @@ export type Editor = {
   /** Set tablosundaki bir kutuya odaklanır (çizimden sonra). */
   focusSet: (rowId: string, index: number, column: SetColumn) => void;
   highlight: string | null;
+  /** Kütüphane sheet'ini değiştirme kipinde açar: seçilen hareket satırın yerine geçer. */
   startReplace: (rowId: string) => void;
 };
 
@@ -70,3 +71,20 @@ export function useEditor(): Editor {
 export function rowTitle(row: TemplateRow, exercises: ReadonlyMap<string, PickerExercise>): string {
   return exercises.get(row.exerciseId)?.title ?? 'Silinmiş egzersiz';
 }
+
+/**
+ * Bloğun adı (tutamak ve sıralama duyurusu): tek harekette hareketin adı, grupta türü ve
+ * ilk iki hareket ("Süperset (Bench Press, Cable Row, …)").
+ */
+export function blockTitle(block: TemplateBlock | undefined, exercises: ReadonlyMap<string, PickerExercise>): string {
+  if (!block) return '';
+  if (block.kind === 'single') {
+    const row = block.rows[0];
+    return row ? rowTitle(row, exercises) : '';
+  }
+  const titles = block.rows.map((row) => rowTitle(row, exercises));
+  return `${BLOCK_KIND_LABELS[block.kind]} (${titles.slice(0, 2).join(', ')}${titles.length > 2 ? ', …' : ''})`;
+}
+
+/** Düzenleyicinin açılır menüleri: dokunmatikte ya da dar ekranda öğeler 44 px. */
+export const MENU_TOUCH = 'touch:**:data-[slot=dropdown-menu-item]:min-h-11 touch:**:data-[slot=dropdown-menu-checkbox-item]:min-h-11';

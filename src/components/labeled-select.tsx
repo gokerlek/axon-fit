@@ -1,6 +1,7 @@
 'use client';
 
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 type Option = { value: string; label: string };
 
@@ -11,20 +12,24 @@ export function LabeledSelect<T extends string>({
   labels,
   onChange,
   placeholder,
+  triggerClassName,
+  contentClassName,
 }: {
   id: string;
   value: T | undefined;
   labels: Record<T, string>;
   onChange: (value: T) => void;
   placeholder?: string;
+  triggerClassName?: string;
+  contentClassName?: string;
 }) {
   const items: Option[] = Object.entries(labels).map(([key, label]) => ({ value: key, label: label as string }));
   return (
     <Select items={items} value={value ?? null} onValueChange={(next) => next && onChange(next as T)}>
-      <SelectTrigger id={id} className="w-full">
+      <SelectTrigger id={id} className={cn('w-full', triggerClassName)}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className={contentClassName}>
         {items.map((item) => (
           <SelectItem key={item.value} value={item.value}>
             {item.label}
@@ -42,6 +47,8 @@ export function GroupedSelect({
   groups,
   onChange,
   empty,
+  triggerClassName,
+  contentClassName,
 }: {
   id: string;
   value: string | undefined;
@@ -49,14 +56,16 @@ export function GroupedSelect({
   onChange: (value: string) => void;
   /** Boş seçeneğin etiketi (ör. "Cihazsız"); verilmezse boş seçilemez. */
   empty?: string;
+  triggerClassName?: string;
+  contentClassName?: string;
 }) {
   const items: Option[] = [...(empty ? [{ value: '', label: empty }] : []), ...groups.flatMap((group) => group.options)];
   return (
     <Select items={items} value={value ?? ''} onValueChange={(next) => onChange(next ?? '')}>
-      <SelectTrigger id={id} className="w-full">
+      <SelectTrigger id={id} className={cn('w-full', triggerClassName)}>
         <SelectValue />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className={contentClassName}>
         {empty ? <SelectItem value="">{empty}</SelectItem> : null}
         {groups.map((group) => (
           <SelectGroup key={group.label}>
