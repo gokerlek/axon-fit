@@ -25,7 +25,7 @@ function failed(error: unknown, fallback: string) {
 
 /**
  * Programı oluşturur (`baseRevision: null`) ya da kaydeder. Egzersiz ve cihaz kimlikleri
- * kütüphaneye göre denetlenir. Düzenleyici yüklediği revision'ı gönderir: program o arada
+ * kütüphaneye göre denetlenir; eski biçimle açık kalmış sekmenin gövdesi şemada çevrilir. Düzenleyici yüklediği revision'ı gönderir: program o arada
  * başka yerde kaydedildiyse 412 döner ve kayıt yapılmaz. Değişiklik yoksa hiçbir şey
  * yazılmaz; varsa geçmişe ve commit mesajına otomatik özet girer.
  */
@@ -44,12 +44,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'Bilgileri kontrol et.', fields }, { status: 400 });
   }
 
-  const { baseRevision, currentPhaseId, phases } = parsed.output;
+  const { baseRevision, phased, currentPhaseId, phases } = parsed.output;
   try {
     if (!(await readClient(id))) return clientMissing();
     const [exercises, devices] = await Promise.all([listExercises(), listDevices()]);
     const normalized = normalizeProgram(
-      { phases },
+      { phased, phases },
       { exercises: new Map(exercises.map((exercise) => [exercise.id, exercise])), deviceIds: new Set(devices.map((device) => device.id)) },
     );
     if (Object.keys(normalized.errors).length > 0) {
@@ -58,7 +58,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     const result = await saveProgram(
       id,
-      { currentPhaseId, phases: normalized.phases },
+      { phased, currentPhaseId, phases: normalized.phases },
       baseRevision,
       programDiffContext(exercises, devices),
     );

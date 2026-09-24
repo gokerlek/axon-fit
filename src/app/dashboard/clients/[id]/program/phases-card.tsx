@@ -1,20 +1,8 @@
 'use client';
 
-import { getDeepError, setInput, useField, useFieldArray } from '@formisch/react';
-import {
-  ArrowDown,
-  ArrowRight,
-  ArrowUp,
-  Copy,
-  DotsThreeVertical,
-  FileText,
-  Info,
-  Plus,
-  PushPin,
-  Square,
-  Trash,
-  WarningCircle,
-} from '@phosphor-icons/react';
+import { useState } from 'react';
+import { setInput, useField, useFieldArray } from '@formisch/react';
+import { ArrowDown, ArrowRight, ArrowUp, Copy, DotsThreeVertical, Info, Plus, PushPin, Rows, Trash } from '@phosphor-icons/react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -32,13 +20,9 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/in
 import { formatDate } from '@/lib/format';
 import {
   PROGRAM_LIMITS,
-  addDay,
   addPhase,
-  blankDay,
   blankPhase,
-  canAddDay,
   canAddPhase,
-  copyDay,
   copyPhase,
   movePhase,
   phaseStatus,
@@ -47,7 +31,10 @@ import {
   type ProgramPhase,
 } from '@/lib/program-plan';
 import { cn } from '@/lib/utils';
+import { AddDayMenu, DayChips } from './day-chips';
+import { FrequencySelect } from './frequency-select';
 import type { PhaseActions, ProgramFormStore, StoredState } from './program-form';
+import { UnphaseDialog } from './unphase-dialog';
 
 type Shared = {
   form: ProgramFormStore;
@@ -60,58 +47,6 @@ type Shared = {
   hasTemplates: boolean;
   actions: PhaseActions;
 };
-
-/** Evrenin günü eklenir: evreyi güncel hâlinden bulur, yeni günü seçer. */
-function addDayTo(actions: PhaseActions, phaseId: string, make: (phase: ProgramPhase, all: ProgramPhase[]) => ProgramPhase['days'][number], after?: string) {
-  const all = actions.current();
-  const phase = all.find((item) => item.id === phaseId);
-  if (!phase) return;
-  const day = make(phase, all);
-  actions.update((phasesNow) => addDay(phasesNow, phaseId, day, after), { select: day.id, announce: `${day.name} eklendi` });
-}
-
-/** "+ Gün": boş gün, şablondan, seçili günün kopyası. */
-function AddDayMenu({ phase, shared }: { phase: ProgramPhase; shared: Shared }) {
-  const { phases, selectedDayId, hasTemplates, actions } = shared;
-  const selectedHere = phase.days.find((day) => day.id === selectedDayId);
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        disabled={!canAddDay(phases, phase.id)}
-        render={<Button type="button" variant="outline" size="sm" aria-label={`${phase.name} evresine gün ekle`} />}>
-        <Plus data-icon="inline-start" />
-        Gün
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-52">
-        <DropdownMenuItem onClick={() => addDayTo(actions, phase.id, (target, all) => blankDay(target, programIdSource(all)))}>
-          <Square />
-          Boş gün
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={!hasTemplates} onClick={() => actions.openAddDay(phase.id)}>
-          <FileText />
-          {hasTemplates ? 'Şablondan…' : 'Şablondan… (şablon yok)'}
-        </DropdownMenuItem>
-        {selectedHere ? (
-          <DropdownMenuItem
-            onClick={() =>
-              addDayTo(
-                actions,
-                phase.id,
-                (target, all) => {
-                  const source = target.days.find((day) => day.id === selectedHere.id) ?? selectedHere;
-                  return copyDay(target, source, programIdSource(all));
-                },
-                selectedHere.id,
-              )
-            }>
-            <Copy />
-            Seçili günün kopyası
-          </DropdownMenuItem>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
 
 /** Evrenin menüsü: taşı, kopyala, şu anki evre yap, sil. */
 function PhaseMenu({ phase, index, shared }: { phase: ProgramPhase; index: number; shared: Shared }) {
@@ -166,9 +101,9 @@ function PhaseMenu({ phase, index, shared }: { phase: ProgramPhase; index: numbe
   );
 }
 
-/** Bir evre: ad, süre, durum rozeti, menü; altında günler (seçilebilir çipler) ve "+ Gün". */
+/** Bir evre: ad, süre, sıklık, durum rozeti, menü; altında günler (seçilebilir çipler) ve "+ Gün". */
 function PhaseRow({ phase, index, shared }: { phase: ProgramPhase; index: number; shared: Shared }) {
-  const { form, currentPhaseId, stored, selectedDayId, nextDayId, missingDayIds, actions } = shared;
+  const { form, phases, currentPhaseId, stored, selectedDayId, nextDayId, missingDayIds, hasTemplates, actions } = shared;
   const nameField = useField(form, { path: ['phases', index, 'name'] });
   const weeksField = useField(form, { path: ['phases', index, 'weeks'] });
   const daysArray = useFieldArray(form, { path: ['phases', index, 'days'] });
@@ -220,6 +155,7 @@ function PhaseRow({ phase, index, shared }: { phase: ProgramPhase; index: number
             <InputGroupAddon align="inline-end">hafta</InputGroupAddon>
           </InputGroup>
         </Field>
+        <FrequencySelect form={form} phaseIndex={index} id={`phase-frequency-${phase.id}`} label="Haftada" compact className="w-32" />
         <div className="flex flex-1 items-center justify-end gap-2 pb-1 sm:flex-none">
           {isCurrent ? <Badge variant="secondary">{pending ? 'Şu an (kaydedince)' : 'Şu an'}</Badge> : null}
           <PhaseMenu phase={phase} index={index} shared={shared} />
@@ -231,29 +167,25 @@ function PhaseRow({ phase, index, shared }: { phase: ProgramPhase; index: number
 
       <div className="flex flex-col gap-1.5">
         <span className="text-xs text-muted-foreground">Günler</span>
-        <div className="flex flex-wrap gap-2">
-          {phase.days.map((day, dayIndex) => {
-            const selected = day.id === selectedDayId;
-            const failing = Boolean(getDeepError(form, { path: ['phases', index, 'days', dayIndex] })) || missingDayIds.has(day.id);
-            const isNext = isCurrent && day.id === nextDayId;
-            return (
-              <Button
-                key={day.id}
-                type="button"
-                size="sm"
-                variant={selected ? 'default' : 'outline'}
-                aria-pressed={selected}
-                aria-label={`${phase.name} · ${day.name}${isNext ? ', sıradaki gün' : ''}${failing ? ', hatalı' : ''}`}
-                className={cn(failing && 'ring-2 ring-destructive')}
-                onClick={() => actions.select(day.id)}>
-                {failing ? <WarningCircle data-icon="inline-start" className="text-destructive" /> : null}
-                {day.name}
-                {isNext ? <span className="size-1.5 rounded-full bg-current" title="Sıradaki gün" aria-hidden /> : null}
-              </Button>
-            );
-          })}
-          <AddDayMenu phase={phase} shared={shared} />
-        </div>
+        <DayChips
+          form={form}
+          phase={phase}
+          phaseIndex={index}
+          phased
+          isCurrent={isCurrent}
+          selectedDayId={selectedDayId}
+          nextDayId={nextDayId}
+          missingDayIds={missingDayIds}
+          actions={actions}>
+          <AddDayMenu
+            phase={phase}
+            phases={phases}
+            phased
+            selectedDayId={selectedDayId}
+            hasTemplates={hasTemplates}
+            actions={actions}
+          />
+        </DayChips>
         <FieldError>{daysArray.errors?.[0]}</FieldError>
       </div>
     </li>
@@ -320,13 +252,16 @@ function Suggestion({ shared, now, timeZone }: { shared: Shared; now: string; ti
 }
 
 /**
- * Evreler: ad ve süre alanları, evre menüsü, günler. Günler çip olarak seçilir; seçili
- * gün aşağıdaki gün düzenleyicide açılır. Hatalı gün kırmızı çerçeveyle işaretlenir.
+ * Evreler (program evrelere bölündüyse): ad, süre ve sıklık alanları, evre menüsü, günler.
+ * Günler çip olarak seçilir; seçili gün aşağıdaki gün düzenleyicide açılır. Hatalı gün
+ * kırmızı çerçeveyle işaretlenir. "Evreleri kaldır" günleri tek listede birleştirir.
  */
 export function PhasesCard({ now, timeZone, ...shared }: Shared & { now: string; timeZone: string }) {
-  const { form, phases, actions } = shared;
-  // Formisch kancası: aşağıdaki `getDeepError` okumaları bu bileşenin çizimine bağlansın.
+  const { form, phases, currentPhaseId, actions } = shared;
+  // Formisch kancası: günlerin `getDeepError` okumaları bu bileşenin çizimine bağlansın.
   const phasesArray = useFieldArray(form, { path: ['phases'] });
+  const [unphasing, setUnphasing] = useState(false);
+  const unphase = () => (phases.length <= 1 ? actions.setPhased(false) : setUnphasing(true));
 
   const addNewPhase = () => {
     const all = actions.current();
@@ -342,14 +277,25 @@ export function PhasesCard({ now, timeZone, ...shared }: Shared & { now: string;
       <CardHeader>
         <CardTitle>Evreler</CardTitle>
         <CardDescription>
-          Program evrelerden oluşur; şu anki evrenin günleri sırayla döner (A → B → C). Süre boş kalırsa evre süresizdir; süre
-          dolunca sonraki evreye geçmeyi önerir.
+          Her evrenin günleri sırayla döner; süre dolunca sonraki evreye geçmeyi önerir. Günü başka evreye günün menüsünden
+          taşırsın.
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex items-center gap-1">
           <Button type="button" variant="outline" size="sm" disabled={!canAddPhase(phases)} onClick={addNewPhase}>
             <Plus data-icon="inline-start" />
             Evre ekle
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon" aria-label="Evre seçenekleri" />}>
+              <DotsThreeVertical weight="bold" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-48">
+              <DropdownMenuItem onClick={unphase}>
+                <Rows />
+                Evreleri kaldır…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -361,6 +307,13 @@ export function PhasesCard({ now, timeZone, ...shared }: Shared & { now: string;
         </ol>
         <FieldError>{phasesArray.errors?.[0]}</FieldError>
       </CardContent>
+      <UnphaseDialog
+        open={unphasing}
+        onOpenChange={setUnphasing}
+        phases={phases}
+        currentPhaseId={currentPhaseId}
+        onConfirm={() => actions.setPhased(false)}
+      />
     </Card>
   );
 }

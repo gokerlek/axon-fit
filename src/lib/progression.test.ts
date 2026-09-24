@@ -6,17 +6,24 @@ import {
   deloadSets,
   deloadWeight,
   describeRule,
+  describeSetRules,
   isOverload,
   nextSession,
   nextSet,
+  nextSetInPlan,
   overloadLimitKg,
+  percentOfTop,
+  planSession,
   progressionOf,
+  rescalePlan,
   roundDownToStep,
   warmupSets,
   type Effort,
   type LoadSpec,
   type ProgressionRule,
+  type SessionPlan,
   type SessionResult,
+  type SetTarget,
 } from './progression.ts';
 
 const barbell: LoadSpec = { trackingType: 'weight_reps', loadStepKg: 2.5, minLoadKg: 20 };
@@ -252,5 +259,274 @@ describe('varsayılan kural ve anlatım', () => {
     assert.match(text, /2,5 kg/);
     assert.match(text, /%15 hafifletilir/);
     assert.match(describeRule({ ...double, targetMin: 30, targetMax: 60 }, timed), /5 sn eklenir/);
+  });
+});
+
+describe('set başına plan', () => {
+  const S3: SetTarget[] = [
+    { min: 8, max: 12 },
+    { min: 8, max: 12 },
+    { min: 8, max: 12 },
+  ];
+  const rule = { scheme: 'double' as const, targetRir: 2 };
+  const uniform = (n: number, min: number, max: number): SetTarget[] => Array.from({ length: n }, () => ({ min, max }));
+  const one = (weightKg: number, value: number, effort: Effort = 'good') => ({ weightKg, value, effort });
+  const weights = (plan: SessionPlan) => plan.sets.map((set) => set.weightKg);
+  const targets = (plan: SessionPlan) => plan.sets.map((set) => set.target);
+
+  describe('düz setlerde nextSession ile aynı', () => {
+    const band: LoadSpec = { trackingType: 'weight_reps', loadStepKg: 0, minLoadKg: 0 };
+    const stuck = sets(80, [9, 8, 7]);
+    const timedRule: ProgressionRule = { scheme: 'double', targetMin: 30, targetMax: 60, targetRir: 2 };
+    const cases: { name: string; spec: LoadSpec; rule: ProgressionRule; history: SessionResult[]; n?: number; start?: number }[] = [
+      { name: 'geçmiş yok, başlangıç 41', spec: barbell, rule: double, history: [], start: 41 },
+      { name: 'geçmiş yok, taban', spec: barbell, rule: double, history: [] },
+      { name: 'hepsi tepede', spec: barbell, rule: double, history: [sets(60, [12, 12, 12])] },
+      { name: 'tepede ve kolay', spec: barbell, rule: double, history: [sets(60, [12, 12, 12], 'easy')] },
+      { name: 'aralıkta', spec: barbell, rule: double, history: [sets(60, [11, 10, 9])] },
+      { name: 'bir set altta', spec: barbell, rule: double, history: [sets(60, [9, 8, 6])] },
+      { name: 'son set başaramadım', spec: barbell, rule: double, history: [[...sets(60, [12, 12]), one(60, 12, 'fail')]] },
+      { name: 'hiçbiri ulaşmadı', spec: barbell, rule: double, history: [sets(60, [6, 5, 5], 'hard')] },
+      { name: '3 kez tıkandı', spec: barbell, rule: double, history: [sets(80, [10, 9, 8]), stuck, stuck, stuck] },
+      { name: 'tıkanma serisi sıfırlanır', spec: barbell, rule: double, history: [stuck, stuck, sets(80, [10, 9, 8]), stuck] },
+      { name: 'doğrusal 5×5', spec: barbell, rule: linear, history: [sets(100, [5, 5, 5, 5, 5])], n: 5 },
+      { name: 'boş antrenman yok sayılır', spec: barbell, rule: double, history: [[one(55, 12), one(60, 12)], []] },
+      { name: 'ilerleme yok', spec: barbell, rule: { ...double, scheme: 'none' }, history: [sets(40, [12, 12])] },
+      { name: 'dambıl +2', spec: dumbbell, rule: double, history: [sets(14, [12, 12, 12])] },
+      { name: 'vücut ağırlığı +1', spec: bodyweight, rule: double, history: [sets(0, [9, 8, 8])] },
+      { name: 'vücut ağırlığı tepede', spec: bodyweight, rule: double, history: [sets(0, [12, 12])] },
+      { name: 'süre +5 sn', spec: timed, rule: timedRule, history: [sets(0, [40, 35])] },
+      { name: 'süre üst sınırı geçmez', spec: timed, rule: timedRule, history: [sets(0, [58, 59])] },
+      { name: 'bant tekrarla', spec: band, rule: double, history: [sets(0, [10, 10])] },
+    ];
+    for (const item of cases) {
+      test(item.name, () => {
+        const n = item.n ?? 3;
+        const legacy = nextSession({ spec: item.spec, rule: item.rule, history: item.history, startWeightKg: item.start });
+        const plan = planSession({
+          spec: item.spec,
+          rule: item.rule,
+          sets: uniform(n, item.rule.targetMin, item.rule.targetMax),
+          history: item.history,
+          startWeightKg: item.start,
+        });
+        assert.equal(plan.reason, legacy.reason);
+        assert.equal(plan.topWeightKg, legacy.weightKg);
+        assert.equal(plan.sets.length, legacy.reason === 'deload' ? deloadSets(n) : n);
+        for (const set of plan.sets) {
+          assert.equal(set.weightKg, legacy.weightKg);
+          assert.equal(set.target, legacy.target);
+          assert.equal(set.amrap, false);
+        }
+      });
+    }
+
+    test('beklenen değerler', () => {
+      const plan = (history: SessionResult[], start?: number) => planSession({ spec: barbell, rule, sets: S3, history, startWeightKg: start });
+      assert.equal(plan([], 41).topWeightKg, 40);
+      assert.equal(plan([sets(60, [12, 12, 12])]).topWeightKg, 62.5);
+      assert.equal(plan([sets(60, [12, 12, 12], 'easy')]).topWeightKg, 65);
+      assert.deepEqual(targets(plan([sets(60, [11, 10, 9])])), [10, 10, 10]);
+      const deload = plan([sets(80, [10, 9, 8]), sets(80, [9, 8, 7]), sets(80, [9, 8, 7]), sets(80, [9, 8, 7])]);
+      assert.deepEqual({ reason: deload.reason, weights: weights(deload) }, { reason: 'deload', weights: [67.5, 67.5] });
+    });
+
+    const planned = (weightKg: number, target: number): SessionPlan => ({
+      sets: S3.map((_, setIndex) => ({ weightKg, target, amrap: false, setIndex })),
+      topWeightKg: weightKg,
+      reason: 'hold',
+    });
+    const setCases: { name: string; done: SessionResult }[] = [
+      { name: 'ilk set', done: [] },
+      { name: 'normal set', done: sets(60, [9]) },
+      { name: 'başarısız', done: sets(60, [6], 'fail') },
+      { name: '3+ altı', done: sets(60, [5], 'hard') },
+      { name: '1–2 altı', done: sets(60, [7], 'hard') },
+      { name: 'kolay ve tepede', done: sets(60, [12], 'easy') },
+    ];
+    for (const item of setCases) {
+      test(`aynı antrenmanda: ${item.name}`, () => {
+        const legacy = nextSet({ spec: barbell, rule: double, plan: { weightKg: 60, target: 8 }, done: item.done });
+        const next = nextSetInPlan({ spec: barbell, rule, sets: S3, plan: planned(60, 8), done: item.done });
+        assert.deepEqual({ weightKg: next.weightKg, target: next.target, reason: next.reason }, legacy);
+      });
+    }
+  });
+
+  test('back-off setleri üst setin yüzdesini izler', () => {
+    const backoff: SetTarget[] = [{ min: 5, max: 5 }, { min: 8, max: 8, loadPct: 85 }, { min: 8, max: 8, loadPct: 85 }];
+    const plan = planSession({ spec: barbell, rule, sets: backoff, history: [[one(122.5, 5), one(102.5, 8), one(102.5, 8)]] });
+    // 125 × 0,85 = 106,25 → 105.
+    assert.equal(plan.reason, 'increase');
+    assert.equal(plan.topWeightKg, 125);
+    assert.deepEqual(weights(plan), [125, 105, 105]);
+    assert.deepEqual(targets(plan), [5, 8, 8]);
+    assert.deepEqual(
+      plan.sets.map((set) => set.loadPct),
+      [undefined, 85, 85],
+    );
+  });
+
+  test('back-off setinde tıkanma artışı durdurmaz', () => {
+    const backoff: SetTarget[] = [{ min: 5, max: 5 }, { min: 8, max: 8, loadPct: 85 }, { min: 8, max: 8, loadPct: 85 }];
+    const plan = planSession({ spec: barbell, rule, sets: backoff, history: [[one(100, 5), one(85, 6, 'fail'), one(85, 5)]] });
+    assert.deepEqual({ reason: plan.reason, top: plan.topWeightKg }, { reason: 'increase', top: 102.5 });
+  });
+
+  test('üst set tıkanınca ağırlık korunur', () => {
+    const backoff: SetTarget[] = [{ min: 5, max: 5 }, { min: 8, max: 8, loadPct: 85 }, { min: 8, max: 8, loadPct: 85 }];
+    const plan = planSession({ spec: barbell, rule, sets: backoff, history: [[one(100, 4), one(85, 8), one(85, 8)]] });
+    assert.equal(plan.reason, 'hold');
+    assert.deepEqual(weights(plan), [100, 85, 85]);
+  });
+
+  const pyramid: SetTarget[] = [{ min: 12, max: 12, loadPct: 80 }, { min: 10, max: 10, loadPct: 90 }, { min: 8, max: 8 }];
+
+  test('piramit: tepe setine göre artar, basamaklar yüzdeyle', () => {
+    const plan = planSession({ spec: barbell, rule, sets: pyramid, history: [[one(87.5, 12), one(97.5, 10), one(110, 8)]] });
+    assert.equal(plan.reason, 'increase');
+    assert.deepEqual(weights(plan), [90, 100, 112.5]);
+    assert.deepEqual(targets(plan), [12, 10, 8]);
+  });
+
+  test('piramit tepeye varmadan bitti: referans yüzdelerden çıkarılır', () => {
+    const plan = planSession({ spec: barbell, rule, sets: pyramid, history: [[one(80, 12), one(90, 10)]] });
+    assert.equal(plan.reason, 'increase');
+    assert.equal(plan.topWeightKg, 102.5);
+    assert.deepEqual(weights(plan), [80, 90, 102.5]);
+  });
+
+  test('piramitte 3 kez tıkanınca hafifletme: önce tepe seti kalır, AMRAP yok', () => {
+    const stuck = [one(87.5, 12), one(97.5, 10), one(110, 6)];
+    const withAmrap = pyramid.map((set, index) => (index === 2 ? { ...set, amrap: true } : set));
+    const plan = planSession({ spec: barbell, rule, sets: withAmrap, history: [stuck, stuck, stuck] });
+    assert.equal(plan.reason, 'deload');
+    assert.equal(plan.topWeightKg, 92.5);
+    assert.deepEqual(
+      plan.sets.map((set) => set.setIndex),
+      [0, 2],
+    );
+    assert.deepEqual(weights(plan), [72.5, 92.5]);
+    assert.deepEqual(targets(plan), [12, 8]);
+    assert.ok(plan.sets.every((set) => !set.amrap));
+  });
+
+  describe('AMRAP', () => {
+    const lastAmrap: SetTarget[] = [...S3.slice(0, 2), { min: 8, max: 12, amrap: true }];
+    const plan = (amrap: number, effort: Effort = 'fail') =>
+      planSession({ spec: barbell, rule, sets: lastAmrap, history: [[one(60, 12), one(60, 12), one(60, amrap, effort)]] });
+
+    test('aralığın 3+ üstü iki adım; zorluk düğmesi tıkanma sayılmaz', () => {
+      assert.deepEqual({ reason: plan(16).reason, top: plan(16).topWeightKg }, { reason: 'increase', top: 65 });
+    });
+
+    test('tepede ama 3 tekrar üstünde değil: bir adım', () => {
+      assert.equal(plan(13).topWeightKg, 62.5);
+    });
+
+    test('alt sınırın altı tıkanmadır', () => {
+      assert.deepEqual({ reason: plan(7, 'good').reason, weights: weights(plan(7, 'good')) }, { reason: 'hold', weights: [60, 60, 60] });
+    });
+
+    test('plan AMRAP işaretini taşır, hedef alt sınır', () => {
+      assert.deepEqual(
+        plan(13).sets.map((set) => [set.amrap, set.target]),
+        [
+          [false, 8],
+          [false, 8],
+          [true, 8],
+        ],
+      );
+    });
+
+    test('vücut ağırlığında hepsi AMRAP: zorluk yok sayılır, tepede zor varyasyon', () => {
+      const all = uniform(3, 8, 12).map((set) => ({ ...set, amrap: true }));
+      const result = planSession({ spec: bodyweight, rule, sets: all, history: [sets(0, [12, 12, 12], 'fail')] });
+      assert.equal(result.reason, 'harder_variant');
+      assert.deepEqual(targets(result), [12, 12, 12]);
+    });
+  });
+
+  test('planın set sayısından fazla sonuç karara girmez (nextSession: korunur)', () => {
+    const history = [sets(60, [12, 12, 5])];
+    assert.equal(nextSession({ spec: barbell, rule: double, history }).reason, 'hold');
+    const plan = planSession({ spec: barbell, rule, sets: uniform(2, 8, 12), history });
+    assert.deepEqual({ reason: plan.reason, top: plan.topWeightKg }, { reason: 'increase', top: 62.5 });
+  });
+
+  test('setIndex yapılış sırasına üstün', () => {
+    const backoff: SetTarget[] = [{ min: 5, max: 5 }, { min: 8, max: 8, loadPct: 85 }];
+    // Back-off önce yapılmış: yine de tepe seti karar verir.
+    const history: SessionResult[] = [[{ ...one(85, 8), setIndex: 1 }, { ...one(100, 5), setIndex: 0 }]];
+    assert.equal(planSession({ spec: barbell, rule, sets: backoff, history }).topWeightKg, 102.5);
+  });
+
+  test('üst ağırlığın yüzdesi', () => {
+    assert.equal(percentOfTop(100, 85, barbell), 85);
+    assert.equal(percentOfTop(62.5, 85, barbell), 52.5);
+    assert.equal(percentOfTop(20, 50, barbell), 20); // boş barın altına inmez
+    const dumbbells: LoadSpec = { trackingType: 'weight_reps', loadStepKg: 5, minLoadKg: 0, loadsKg: [5, 10, 15, 20, 25] };
+    assert.equal(percentOfTop(20, 85, dumbbells), 15);
+    assert.equal(percentOfTop(0, 50, bodyweight), 0);
+    assert.equal(percentOfTop(70, undefined, barbell), 70);
+    assert.equal(percentOfTop(70, 100, barbell), 70);
+  });
+
+  describe('aynı antrenmanda yüzde değişimi', () => {
+    const backoff: SetTarget[] = [{ min: 5, max: 5 }, { min: 8, max: 8, loadPct: 85 }, { min: 8, max: 12, loadPct: 85, amrap: true }];
+    const plan: SessionPlan = {
+      sets: [
+        { weightKg: 100, target: 5, amrap: false, setIndex: 0 },
+        { weightKg: 85, target: 8, amrap: false, loadPct: 85, setIndex: 1 },
+        { weightKg: 85, target: 8, amrap: true, loadPct: 85, setIndex: 2 },
+      ],
+      topWeightKg: 100,
+      reason: 'increase',
+    };
+    const next = (done: SessionResult) => nextSetInPlan({ spec: barbell, rule, sets: backoff, plan, done });
+
+    test('üst set ağır yapıldıysa back-off onun yüzdesi', () => {
+      const result = next([one(110, 5)]);
+      assert.deepEqual([result.weightKg, result.reason], [92.5, 'increase']);
+    });
+
+    test('üst set tıkandıysa önce ~%5 iner', () => {
+      const result = next([one(100, 2, 'fail')]);
+      assert.deepEqual([result.weightKg, result.reason], [80, 'decrease']);
+    });
+
+    test('planlandığı gibi', () => {
+      const result = next([one(100, 5)]);
+      assert.deepEqual([result.weightKg, result.reason], [85, 'hold']);
+    });
+
+    test('sıradaki set AMRAP: işaret ve alt sınır', () => {
+      const result = next([one(100, 5), one(85, 8)]);
+      assert.deepEqual({ amrap: result.amrap, target: result.target, weightKg: result.weightKg }, { amrap: true, target: 8, weightKg: 85 });
+    });
+
+    test('plan bitince son set', () => {
+      assert.equal(next([one(100, 5), one(85, 8), one(85, 10)]).setIndex, 2);
+    });
+  });
+
+  test('üst ağırlık değişince setler yeniden hesaplanır', () => {
+    const backoff: SetTarget[] = [{ min: 5, max: 5 }, { min: 8, max: 8, loadPct: 85 }];
+    const plan = planSession({ spec: barbell, rule, sets: backoff, history: [], startWeightKg: 100 });
+    assert.deepEqual(weights(plan), [100, 85]);
+    const lowered = rescalePlan(plan, backoff, barbell, 90, 'pain_reduce');
+    assert.deepEqual(weights(lowered), [90, 75]); // 76,5 → 75
+    assert.equal(lowered.reason, 'pain_reduce');
+    assert.equal(lowered.topWeightKg, 90);
+    assert.deepEqual(targets(lowered), targets(plan));
+  });
+
+  test('set düzeninin kuralları', () => {
+    assert.equal(describeSetRules(S3, barbell), null);
+    assert.match(describeSetRules([{ min: 5, max: 5 }, { min: 8, max: 8, loadPct: 85 }], barbell) ?? '', /tam yükteki/);
+    const amrap = [{ min: 8, max: 12 }, { min: 8, max: 12, amrap: true }];
+    assert.match(describeSetRules(amrap, barbell) ?? '', /3\+ tekrar/);
+    assert.doesNotMatch(describeSetRules(amrap, bodyweight) ?? '', /3\+/);
+    assert.match(describeSetRules(amrap, bodyweight) ?? '', /AMRAP/);
   });
 });

@@ -25,7 +25,8 @@ export function AddDayDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  phaseName: string;
+  /** Evreli programda evrenin adı; evresizde `null`. */
+  phaseName: string | null;
   templates: TemplateOption[];
   exercises: ReadonlyMap<string, PickerExercise>;
   onAdd: (template: TemplateOption) => void;
@@ -42,8 +43,8 @@ export function AddDayDialog({
         <DialogHeader>
           <DialogTitle>Şablondan gün ekle</DialogTitle>
           <DialogDescription>
-            &apos;{phaseName}&apos; evresine yeni gün olarak eklenir; şablonla bağı kalmaz, burada yaptığın değişiklik şablonu
-            etkilemez.
+            {phaseName === null ? 'Programa' : `'${phaseName}' evresine`} yeni gün olarak eklenir; şablonla bağı kalmaz, burada
+            yaptığın değişiklik şablonu etkilemez.
           </DialogDescription>
         </DialogHeader>
         <Field>

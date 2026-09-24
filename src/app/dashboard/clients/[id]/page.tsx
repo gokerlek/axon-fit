@@ -16,7 +16,7 @@ import { serverEnv } from '@/lib/env';
 import { listExercises, type ExerciseWithSource } from '@/lib/exercises';
 import { formatDate, formatNumber } from '@/lib/format';
 import { clientRepoName } from '@/lib/github/client';
-import { currentPhaseOf, nextDayId, phaseStatus, phaseStatusLabel } from '@/lib/program-plan';
+import { countDays, currentPhaseOf, frequencyLabel, nextDayId, phaseStatus, phaseStatusLabel } from '@/lib/program-plan';
 import { readProgramFile, type ProgramFile } from '@/lib/programs';
 import { CLIENT_ID_PATTERN, CLIENT_STATUS_LABELS, HEALTH_FIELD_INFO } from '@/lib/schemas/client';
 import { templateSummary } from '@/lib/template-plan';
@@ -95,21 +95,24 @@ function ProgramCard({
   const current = currentPhaseOf(program);
   const status = phaseStatus(program, new Date());
   const next = nextDayId(program);
+  const perWeek = frequencyLabel(current?.phase.daysPerWeek)?.toLocaleLowerCase('tr');
+  // Evresiz programda evreden söz edilmez: gün sayısı ve sıklık.
+  const description = program.phased
+    ? [current?.phase.name, phaseStatusLabel(status)].filter(Boolean).join(' · ') + (perWeek ? ` · ${perWeek}` : '')
+    : [`${countDays(program.phases)} gün`, perWeek].filter(Boolean).join(' · ');
   return (
     <Card>
       <CardHeader>
         <CardTitle>Program</CardTitle>
-        <CardDescription>
-          {current?.phase.name} · {phaseStatusLabel(status)}
-        </CardDescription>
-        {status.kind === 'due' ? (
+        <CardDescription>{description}</CardDescription>
+        {program.phased && status.kind === 'due' ? (
           <CardAction>
             <Badge variant="outline">Evre süresi doldu</Badge>
           </CardAction>
         ) : null}
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Şu anki evrenin günleri">
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label={program.phased ? 'Şu anki evrenin günleri' : 'Programın günleri'}>
           {current?.phase.days.map((day) => {
             const summary = templateSummary({ blocks: day.blocks }, exercises);
             const isNext = day.id === next;

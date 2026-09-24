@@ -4,12 +4,13 @@ import { listDevices } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
 import { GithubError } from '@/lib/github/client';
 import { dayToTemplate } from '@/lib/program-plan';
-import { templateBlocksSchema, templateNameSchema, type Template } from '@/lib/schemas/template';
+import { storedBlocksSchema, templateNameSchema, type Template } from '@/lib/schemas/template';
 import { readPtSession } from '@/lib/session';
 import { normalizeTemplate, randomId } from '@/lib/template-plan';
 import { writeTemplate } from '@/lib/templates';
 
-const bodySchema = v.object({ name: templateNameSchema, blocks: templateBlocksSchema });
+/** Bloklar eski biçimde de gelebilir (eski sekme): yeni biçime çevrilir. */
+const bodySchema = v.object({ name: templateNameSchema, blocks: storedBlocksSchema });
 
 /**
  * Program gününü yeni şablon olarak kaydeder. Şablonda kişisel veri olmamalı: satır

@@ -19,6 +19,7 @@ import { programSchema, type Program } from './schemas/program';
  * düzenlemesi antrenman bitti diye boşa düşmez.
  *
  * Her kayıtta değişikliklerin özeti hem dosyadaki geçmişe hem commit mesajına girer.
+ * Sürüm 1 dosya okunurken sürüm 2'ye çevrilir (şema); her yazım sürüm 2'dir.
  */
 
 export const PROGRAM_PATH = 'program.json';

@@ -1,8 +1,10 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { DeviceKind } from './device-loads.ts';
+import { resizeSets, setShape, uniformSets } from './set-plan.ts';
 import {
   appendExercise,
+  applySetPreset,
   canJoin,
   changeKind,
   deviceChoices,
@@ -17,12 +19,23 @@ import {
   reorderBlocks,
   reorderRows,
   replaceExercise,
+  setRounds,
+  setRowSetCount,
   swapDevice,
   ungroupRow,
   type EditorExercise,
   type IdSource,
 } from './template-edit.ts';
-import { BLOCK_ID_PATTERN, ROW_ID_PATTERN, duplicateIds, type BlockKind, type TemplateBlock, type TemplateRow } from './template-plan.ts';
+import {
+  BLOCK_ID_PATTERN,
+  ROW_ID_PATTERN,
+  duplicateIds,
+  roundsOf,
+  type BlockKind,
+  type TemplateBlock,
+  type TemplateRow,
+  type TemplateTarget,
+} from './template-plan.ts';
 
 function exercise(id: string, fields: Partial<EditorExercise> = {}): EditorExercise {
   return {
@@ -116,14 +129,22 @@ function sequentialIds(): IdSource {
   return (prefix) => `${prefix}_new${String(++n).padStart(3, '0')}`;
 }
 
-function row(id: string, exerciseId: string, fields: Partial<TemplateRow> = {}): TemplateRow {
-  return { id, exerciseId, target: { min: 8, max: 12 }, ...fields };
+/** Satır: `target` (varsayılan 8–12) ile `count` (varsayılan 3) düz set. */
+function row(id: string, exerciseId: string, fields: Partial<TemplateRow> & { target?: TemplateTarget; count?: number } = {}): TemplateRow {
+  const { target = { min: 8, max: 12 }, count = 3, ...rest } = fields;
+  return { id, exerciseId, sets: uniformSets(target, count), ...rest };
 }
-function block(id: string, kind: BlockKind, rows: TemplateRow[], fields: Partial<TemplateBlock> = {}): TemplateBlock {
-  return { id, kind, sets: 3, restSeconds: 90, rows, ...fields };
+/** Blok: `sets` verilirse her satırın set sayısı ona çekilir. */
+function block(id: string, kind: BlockKind, rows: TemplateRow[], fields: Partial<TemplateBlock> & { sets?: number } = {}): TemplateBlock {
+  const { sets, ...rest } = fields;
+  const sized = sets === undefined ? rows : rows.map((item) => ({ ...item, sets: resizeSets(item.sets, sets) }));
+  return { id, kind, restSeconds: 90, rows: sized, ...rest };
 }
 
 const rowIds = (blocks: TemplateBlock[]) => blocks.map((item) => item.rows.map((r) => r.id));
+/** Özet: blok türü, set/tur, dinlenme, satırlar. */
+const outline = (blocks: TemplateBlock[]) =>
+  blocks.map(({ id, kind, restSeconds, rows }) => ({ id, kind, sets: roundsOf({ rows }), restSeconds, rows: rows.map((r) => r.id) }));
 
 describe('ekleme ve kimlikler', () => {
   test('bileşik: 3 set, 120 sn, 6–10; izolasyon 60 sn, 10–15; süreli saniye', () => {
@@ -133,7 +154,7 @@ describe('ekleme ve kimlikler', () => {
     blocks = appendExercise(blocks, plank, ids);
     assert.equal(blocks.length, 3);
     assert.deepEqual(
-      blocks.map(({ kind, sets, restSeconds, rows }) => ({ kind, sets, restSeconds, target: rows[0]?.target })),
+      blocks.map(({ kind, restSeconds, rows }) => ({ kind, sets: rows[0]?.sets.length, restSeconds, target: rows[0]?.sets[0] })),
       [
         { kind: 'single', sets: 3, restSeconds: 120, target: { min: 6, max: 10 } },
         { kind: 'single', sets: 3, restSeconds: 60, target: { min: 10, max: 15 } },
@@ -167,15 +188,24 @@ describe('hareket değiştirme', () => {
     assert.deepEqual(result?.rows[0], {
       id: 'r_1',
       exerciseId: 'dambil-bench',
-      target: { min: 8, max: 12 },
+      sets: uniformSets({ min: 8, max: 12 }, 3),
       rule: { scheme: 'linear', targetRir: 1 },
       note: 'Yavaş',
     });
   });
 
-  test('tekrardan süreye geçince hedef sıfırlanır, kural düşer', () => {
+  test('aynı kayıt türünde piramit ve AMRAP kalır; kopya bağımsız', () => {
+    const pyramid = applySetPreset(applySetPreset(start, 'r_1', 'pyramid'), 'r_1', 'lastAmrap');
+    const [result] = replaceExercise(pyramid, 'r_1', dumbbellBench, bench);
+    assert.deepEqual(result?.rows[0]?.sets, pyramid[0]?.rows[0]?.sets);
+    assert.notEqual(result?.rows[0]?.sets[0], pyramid[0]?.rows[0]?.sets[0]);
+  });
+
+  test('tekrardan süreye geçince hedef sıfırlanır (set sayısı kalır), kural düşer', () => {
     const [result] = replaceExercise(start, 'r_1', plank, bench);
-    assert.deepEqual(result?.rows[0], { id: 'r_1', exerciseId: 'plank', target: { min: 30, max: 60 }, note: 'Yavaş' });
+    assert.deepEqual(result?.rows[0], { id: 'r_1', exerciseId: 'plank', sets: uniformSets({ min: 30, max: 60 }, 3), note: 'Yavaş' });
+    const four = replaceExercise(applySetPreset(setRowSetCount(start, 'r_1', 4), 'r_1', 'backoff'), 'r_1', plank, bench);
+    assert.deepEqual(four[0]?.rows[0]?.sets, uniformSets({ min: 30, max: 60 }, 4));
   });
 
   test('cihaz değişikliği düşer', () => {
@@ -190,10 +220,10 @@ describe('kaldırma', () => {
     assert.deepEqual(rowIds(removeRow(blocks, 'r_1', LIBRARY)), [['r_2']]);
   });
 
-  test('süperset tekleşir: grubun kimliği ve turu, türün dinlenmesi', () => {
-    const blocks = [block('b_1', 'superset', [row('r_1', 'squat'), row('r_2', 'curl')], { sets: 4, restSeconds: 90 })];
+  test('süperset tekleşir: grubun kimliği, satırın kendi setleri, türün dinlenmesi', () => {
+    const blocks = [block('b_1', 'superset', [row('r_1', 'squat'), row('r_2', 'curl', { count: 2 })], { restSeconds: 90 })];
     assert.deepEqual(removeRow(blocks, 'r_1', LIBRARY), [
-      { id: 'b_1', kind: 'single', sets: 4, restSeconds: 60, rows: [row('r_2', 'curl')] },
+      { id: 'b_1', kind: 'single', restSeconds: 60, rows: [row('r_2', 'curl', { count: 2 })] },
     ]);
   });
 
@@ -225,15 +255,22 @@ describe('kopyalama', () => {
   test('tek hareket: hemen arkasına aynı ayarlarla yeni blok', () => {
     const blocks = [block('b_1', 'single', [row('r_1', 'squat')], { sets: 4, restSeconds: 150 }), block('b_2', 'single', [row('r_2', 'curl')])];
     const result = duplicateRow(blocks, 'r_1', sequentialIds());
-    assert.deepEqual(
-      result.map(({ id, kind, sets, restSeconds, rows }) => ({ id, kind, sets, restSeconds, rows: rows.map((r) => r.id) })),
-      [
-        { id: 'b_1', kind: 'single', sets: 4, restSeconds: 150, rows: ['r_1'] },
-        { id: 'b_new002', kind: 'single', sets: 4, restSeconds: 150, rows: ['r_new001'] },
-        { id: 'b_2', kind: 'single', sets: 3, restSeconds: 90, rows: ['r_2'] },
-      ],
-    );
+    assert.deepEqual(outline(result), [
+      { id: 'b_1', kind: 'single', sets: 4, restSeconds: 150, rows: ['r_1'] },
+      { id: 'b_new002', kind: 'single', sets: 4, restSeconds: 150, rows: ['r_new001'] },
+      { id: 'b_2', kind: 'single', sets: 3, restSeconds: 90, rows: ['r_2'] },
+    ]);
     assert.equal(result[1]?.rows[0]?.exerciseId, 'squat');
+  });
+
+  test('kopyanın setleri kaynaktan bağımsız', () => {
+    const blocks = [block('b_1', 'single', [row('r_1', 'squat')])];
+    const result = duplicateRow(blocks, 'r_1', sequentialIds());
+    const copy = result[1]?.rows[0];
+    assert.ok(copy);
+    copy.sets[0]!.min = 1;
+    copy.sets.push({ min: 2, max: 2 });
+    assert.deepEqual(blocks[0]?.rows[0]?.sets, uniformSets({ min: 8, max: 12 }, 3));
   });
 
   test('grupta kaynağın arkasına; süperset devre olur', () => {
@@ -250,7 +287,7 @@ describe('kopyalama', () => {
     const result = duplicateRow(blocks, 'r_3', sequentialIds());
     assert.equal(result.length, 2);
     assert.equal(result[0]?.rows.length, 8);
-    assert.deepEqual({ kind: result[1]?.kind, sets: result[1]?.sets, rows: result[1]?.rows.map((r) => r.id) }, {
+    assert.deepEqual({ kind: result[1]?.kind, sets: result[1]?.rows[0]?.sets.length, rows: result[1]?.rows.map((r) => r.id) }, {
       kind: 'single',
       sets: 2,
       rows: ['r_new001'],
@@ -289,14 +326,15 @@ describe('sıralama', () => {
 });
 
 describe('gruplama', () => {
-  test('iki tek hareket süperset: tur = büyük set, dinlenme 90, öncekinin kimliği', () => {
+  test('iki tek hareket süperset: her hareket kendi seti (tur = büyüğü), dinlenme 90, öncekinin kimliği', () => {
     const blocks = [
       block('b_1', 'single', [row('r_1', 'squat')], { sets: 4, restSeconds: 150 }),
       block('b_2', 'single', [row('r_2', 'curl')], { sets: 3, restSeconds: 60 }),
     ];
-    const expected = [{ id: 'b_1', kind: 'superset', sets: 4, restSeconds: 90, rows: [row('r_1', 'squat'), row('r_2', 'curl')] }];
+    const expected = [{ id: 'b_1', kind: 'superset', restSeconds: 90, rows: [row('r_1', 'squat', { count: 4 }), row('r_2', 'curl')] }];
     assert.deepEqual(joinBlocks(blocks, 'b_1', 'next'), expected);
     assert.deepEqual(joinBlocks(blocks, 'b_2', 'previous'), expected);
+    assert.equal(roundsOf(joinBlocks(blocks, 'b_1', 'next')[0] as TemplateBlock), 4);
   });
 
   test('süperset + tek = devre (3), grubun ayarları, geçiş 15', () => {
@@ -306,8 +344,12 @@ describe('gruplama', () => {
     ];
     const [result] = joinBlocks(blocks, 'b_2', 'previous');
     assert.deepEqual(
-      { id: result?.id, kind: result?.kind, sets: result?.sets, rest: result?.restSeconds, transition: result?.transitionSeconds },
+      { id: result?.id, kind: result?.kind, sets: roundsOf(result as TemplateBlock), rest: result?.restSeconds, transition: result?.transitionSeconds },
       { id: 'b_1', kind: 'circuit', sets: 4, rest: 75, transition: 15 },
+    );
+    assert.deepEqual(
+      result?.rows.map((item) => item.sets.length),
+      [4, 4, 2],
     );
     assert.deepEqual(rowIds(joinBlocks(blocks, 'b_2', 'previous')), [['r_1', 'r_2', 'r_3']]);
   });
@@ -319,20 +361,24 @@ describe('gruplama', () => {
     ];
     const [result] = joinBlocks(blocks, 'b_1', 'next');
     assert.deepEqual(
-      { id: result?.id, kind: result?.kind, sets: result?.sets, rest: result?.restSeconds, rows: result?.rows.map((r) => r.id) },
+      { id: result?.id, kind: result?.kind, sets: roundsOf(result as TemplateBlock), rest: result?.restSeconds, rows: result?.rows.map((r) => r.id) },
       { id: 'b_1', kind: 'complex', sets: 5, rest: 180, rows: ['r_1', 'r_2', 'r_3'] },
     );
   });
 
-  test('iki grup: öncekinin ayarları, tür uyar', () => {
+  test('iki grup: öncekinin ayarları, tür uyar; setler hareketlerde kalır', () => {
     const blocks = [
       block('b_1', 'superset', [row('r_1', 'squat'), row('r_2', 'curl')], { sets: 3, restSeconds: 60 }),
       block('b_2', 'superset', [row('r_3', 'plank'), row('r_4', 'halter-bench')], { sets: 5, restSeconds: 120 }),
     ];
     const [result] = joinBlocks(blocks, 'b_2', 'previous');
     assert.deepEqual(
-      { id: result?.id, kind: result?.kind, sets: result?.sets, rest: result?.restSeconds, rows: result?.rows.length },
-      { id: 'b_1', kind: 'circuit', sets: 3, rest: 60, rows: 4 },
+      { id: result?.id, kind: result?.kind, rest: result?.restSeconds, rows: result?.rows.length },
+      { id: 'b_1', kind: 'circuit', rest: 60, rows: 4 },
+    );
+    assert.deepEqual(
+      result?.rows.map((item) => item.sets.length),
+      [3, 3, 5, 5],
     );
   });
 
@@ -355,13 +401,10 @@ describe('gruptan çıkarma ve dağıtma', () => {
 
   test('ilk satır grubun önüne yeni blok; kalan tekleşir ve grubun kimliğini korur', () => {
     const result = ungroupRow(superset(), 'r_1', LIBRARY, sequentialIds());
-    assert.deepEqual(
-      result.map(({ id, kind, sets, restSeconds, rows }) => ({ id, kind, sets, restSeconds, rows: rows.map((r) => r.id) })),
-      [
-        { id: 'b_new001', kind: 'single', sets: 4, restSeconds: 120, rows: ['r_1'] },
-        { id: 'b_1', kind: 'single', sets: 4, restSeconds: 60, rows: ['r_2'] },
-      ],
-    );
+    assert.deepEqual(outline(result), [
+      { id: 'b_new001', kind: 'single', sets: 4, restSeconds: 120, rows: ['r_1'] },
+      { id: 'b_1', kind: 'single', sets: 4, restSeconds: 60, rows: ['r_2'] },
+    ]);
   });
 
   test('diğer satır grubun arkasına gider', () => {
@@ -380,6 +423,14 @@ describe('gruptan çıkarma ve dağıtma', () => {
     assert.equal('transitionSeconds' in (result[0] ?? {}), false);
   });
 
+  test('farklı set sayıları dağıtılınca her hareket kendi setiyle', () => {
+    const blocks = [block('b_1', 'superset', [row('r_1', 'squat', { count: 4 }), row('r_2', 'curl', { count: 2 })])];
+    assert.deepEqual(
+      dissolveGroup(blocks, 'b_1', LIBRARY, sequentialIds()).map((item) => item.rows[0]?.sets.length),
+      [4, 2],
+    );
+  });
+
   test('grubu dağıtma: her satır yerinde tek hareket, ilki grubun kimliğiyle', () => {
     const blocks = [
       block('b_0', 'single', [row('r_0', 'plank')]),
@@ -387,7 +438,7 @@ describe('gruptan çıkarma ve dağıtma', () => {
     ];
     const result = dissolveGroup(blocks, 'b_1', LIBRARY, sequentialIds());
     assert.deepEqual(
-      result.map(({ id, kind, sets, restSeconds }) => ({ id, kind, sets, restSeconds })),
+      result.map(({ id, kind, restSeconds, rows }) => ({ id, kind, sets: roundsOf({ rows }), restSeconds })),
       [
         { id: 'b_0', kind: 'single', sets: 3, restSeconds: 90 },
         { id: 'b_1', kind: 'single', sets: 2, restSeconds: 120 },
@@ -423,7 +474,7 @@ describe('cihaz değiştirme', () => {
       kind: 'swapped',
       from: 'halter-bench',
       to: 'dambil-bench',
-      row: { id: 'r_1', exerciseId: 'dambil-bench', target: { min: 5, max: 8 }, note: 'Yavaş' },
+      row: { id: 'r_1', exerciseId: 'dambil-bench', sets: uniformSets({ min: 5, max: 8 }, 3), note: 'Yavaş' },
     });
   });
 
@@ -454,7 +505,7 @@ describe('cihaz değiştirme', () => {
       kind: 'swapped',
       from: 'crunch-makine',
       to: 'plank',
-      row: { id: 'r_1', exerciseId: 'plank', target: { min: 30, max: 60 } },
+      row: { id: 'r_1', exerciseId: 'plank', sets: uniformSets({ min: 30, max: 60 }, 3) },
     });
   });
 
@@ -481,5 +532,35 @@ describe('cihaz değiştirme', () => {
     assert.deepEqual(droppedDeviceRowIds, ['r_2']);
     assert.equal(blocks[0]?.rows[0]?.deviceId, 'lat-b');
     assert.equal('deviceId' in (blocks[0]?.rows[1] ?? {}), false);
+  });
+});
+
+describe('setler ve turlar', () => {
+  const counts = (blocks: TemplateBlock[]) => blocks[0]?.rows.map((item) => item.sets.length);
+  const pair = (a: number, b: number) => [block('b_1', 'superset', [row('r_1', 'squat', { count: a }), row('r_2', 'curl', { count: b })])];
+
+  test('tur: turu dolduranlar yeni tura geçer, azı kendi sayısında kalır', () => {
+    assert.deepEqual(counts(setRounds(pair(3, 3), 'b_1', 4)), [4, 4]);
+    assert.deepEqual(counts(setRounds(pair(3, 2), 'b_1', 4)), [4, 2]);
+    assert.deepEqual(counts(setRounds(pair(4, 2), 'b_1', 2)), [2, 2]);
+    assert.deepEqual(counts(setRounds(pair(4, 2), 'b_1', 3)), [3, 2]);
+    const same = pair(3, 3);
+    assert.equal(setRounds(same, 'b_1', 3), same);
+    assert.deepEqual(counts(setRounds(pair(3, 3), 'b_1', 50)), [10, 10]);
+  });
+
+  test('set sayısı: son set AMRAP son sette kalır; aynıysa aynı dizi', () => {
+    const blocks = applySetPreset([block('b_1', 'single', [row('r_1', 'squat')])], 'r_1', 'lastAmrap');
+    const more = setRowSetCount(blocks, 'r_1', 5);
+    assert.equal(more[0]?.rows[0]?.sets.length, 5);
+    assert.equal(setShape(more[0]?.rows[0]?.sets ?? []).amrap, 'last');
+    assert.equal(setRowSetCount(blocks, 'r_1', 3), blocks);
+  });
+
+  test('hazır düzenler satırın setlerine uygulanır', () => {
+    const blocks = [block('b_1', 'single', [row('r_1', 'squat')])];
+    assert.equal(setShape(applySetPreset(blocks, 'r_1', 'pyramid')[0]?.rows[0]?.sets ?? []).kind, 'pyramid');
+    assert.equal(setShape(applySetPreset(blocks, 'r_1', 'backoff')[0]?.rows[0]?.sets ?? []).kind, 'backoff');
+    assert.equal(applySetPreset(blocks, 'r_1', 'straight'), blocks);
   });
 });

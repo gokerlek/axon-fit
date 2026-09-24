@@ -6,11 +6,13 @@ import type { ExerciseWithSource } from '@/lib/exercises';
 import { PROGRESSION_LABELS, RIR_LABELS } from '@/lib/progression';
 import { EQUIPMENT_LABELS } from '@/lib/schemas/exercise';
 import type { Template } from '@/lib/schemas/template';
+import { formatSets } from '@/lib/set-plan';
 import {
   BLOCK_KIND_LABELS,
   describeBlock,
   formatRest,
-  formatTarget,
+  groupSkipNote,
+  roundsOf,
   rowLabels,
   type TemplateBlock,
   type TemplateRow,
@@ -27,6 +29,7 @@ type Lookups = {
  */
 export function TemplateSequence({ template, exercises, devices }: { template: Template } & Lookups) {
   const labels = rowLabels(template);
+  const titleOf = (row: TemplateRow) => exercises.get(row.exerciseId)?.title ?? 'Silinmiş egzersiz';
   return (
     <ol className="grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {template.blocks.map((block, index) => (
@@ -41,7 +44,8 @@ export function TemplateSequence({ template, exercises, devices }: { template: T
                 <Badge variant="secondary">
                   {index + 1} · {BLOCK_KIND_LABELS[block.kind]}
                 </Badge>
-                <p className="text-xs text-muted-foreground">{describeBlock(block)}</p>
+                <p className="text-xs text-muted-foreground">{describeBlock({ ...block, sets: roundsOf(block) })}</p>
+                {groupSkipNote(block, titleOf) ? <p className="text-xs text-muted-foreground">{groupSkipNote(block, titleOf)}</p> : null}
               </div>
               {block.rows.map((row) => (
                 <RowItem key={row.id} row={row} block={block} label={labels.get(row.id) ?? ''} exercises={exercises} devices={devices} />
@@ -73,11 +77,11 @@ function RowItem({ row, block, label, exercises, devices }: { row: TemplateRow; 
     );
   }
 
-  const target = formatTarget(row.target, exercise.trackingType);
+  const sets = formatSets(row.sets, exercise.trackingType);
   const work =
     block.kind === 'single'
-      ? `${block.sets} × ${target} · ${block.restSeconds > 0 ? `${formatRest(block.restSeconds)} dinlenme` : 'setler arası dinlenme yok'}`
-      : target;
+      ? `${sets} · ${block.restSeconds > 0 ? `${formatRest(block.restSeconds)} dinlenme` : 'setler arası dinlenme yok'}`
+      : sets;
   const overridden = row.deviceId ? devices.get(row.deviceId) : undefined;
   const own = exercise.deviceId ? devices.get(exercise.deviceId) : undefined;
 

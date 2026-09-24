@@ -1,7 +1,7 @@
 'use client';
 
-import { createContext, useContext, useMemo } from 'react';
-import { setInput, useField, useFieldArray, type FieldElementProps, type FormStore } from '@formisch/react';
+import { useMemo } from 'react';
+import { getDeepError, setInput, useField, useFieldArray, type FieldElementProps } from '@formisch/react';
 import {
   ArrowDown,
   ArrowsClockwise,
@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -30,10 +31,11 @@ import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { DEVICE_KIND_LABELS, DEVICE_KINDS, loadSpecFor } from '@/lib/device-loads';
 import { familyOf, summarizeMuscles } from '@/lib/muscles';
-import { describeRule, PROGRESSION_LABELS, RIR_LABELS, type ProgressionScheme } from '@/lib/progression';
+import { describeRule, describeSetRules, PROGRESSION_LABELS, RIR_LABELS, type ProgressionScheme } from '@/lib/progression';
 import { EQUIPMENT_LABELS } from '@/lib/schemas/exercise';
-import type { blocksHostSchema } from '@/lib/schemas/template';
+import { isStraight, setShape } from '@/lib/set-plan';
 import {
+  applySetPreset,
   canJoin,
   deviceChoices,
   dissolveGroup,
@@ -47,8 +49,6 @@ import {
   swapDevice,
   ungroupRow,
   changeKind,
-  type EditorDevice,
-  type IdSource,
   type PickerExercise,
 } from '@/lib/template-edit';
 import {
@@ -56,63 +56,27 @@ import {
   BLOCK_KIND_LABELS,
   TEMPLATE_LIMITS,
   countRows,
+  groupSkipNote,
   kindOptions,
-  ruleFor,
+  roundsOf,
+  rowRule,
   type BlockKind,
   type TemplateBlock,
   type TemplateRow,
 } from '@/lib/template-plan';
 import { cn } from '@/lib/utils';
+import { blockField, rowTitle, useEditor } from './editor-context';
+import { RoundsField, SetCountField, SetsSummary, SetTable, StraightTargetField } from './set-table';
 
-/** Blokları kökte tutan form tipi. Gerçek form başka şekilde olabilir (program); yol öneki `path`'tedir. */
-export type BlocksFormStore = FormStore<typeof blocksHostSchema>;
-
-/** Blok dizisinin formdaki yolu (sonu her zaman 'blocks'). */
-export type BlocksPath = readonly ['blocks'] | readonly ['phases', number, 'days', number, 'blocks'];
-
-/** Formisch yolu: tip, blokları kökte tutan forma göre denetlenir; çalışma zamanında gerçek önek kullanılır. */
-export function blockField<const T extends readonly (string | number)[]>(path: BlocksPath, ...rest: T): ['blocks', ...T] {
-  return [...path, ...rest] as unknown as ['blocks', ...T];
-}
-
-/** Düzenleyicinin ortak durumu: form, bloklar ve yapısal işlemler (block-editor.tsx sağlar). */
-export type Editor = {
-  form: BlocksFormStore;
-  /** Blok dizisinin formdaki yolu (şablonda `['blocks']`, programda günün blokları). */
-  path: BlocksPath;
-  /** Yeni blok ve satır kimlikleri: şablonda şablonun, programda bütün programın kimliklerini bilir. */
-  newIds: (blocks: readonly TemplateBlock[]) => IdSource;
-  /** Satır notunun altındaki açıklama. */
-  noteHint: string;
-  /** Ekrandaki bloklar (çizim için). İşlemler `update` ile olay anındaki güncel bloklara uygulanır. */
-  blocks: TemplateBlock[];
-  /** Blokları günceller ve forma tek seferde yazar; satır vurgusu ve ekran okuyucu duyurusu isteğe bağlı. */
-  update: (change: (blocks: TemplateBlock[]) => TemplateBlock[], options?: { highlight?: string; announce?: string }) => void;
-  /** Geri alınabilir güncelleme: önceki hâl saklanır, bildirimde "Geri al" çıkar. */
-  updateWithUndo: (change: (blocks: TemplateBlock[]) => TemplateBlock[], message: string) => void;
-  exercises: ReadonlyMap<string, PickerExercise>;
-  exerciseList: readonly PickerExercise[];
-  devices: ReadonlyMap<string, EditorDevice>;
-  deviceList: readonly EditorDevice[];
-  labels: ReadonlyMap<string, string>;
-  expanded: ReadonlySet<string>;
-  toggleExpanded: (rowId: string) => void;
-  highlight: string | null;
-  startReplace: (rowId: string) => void;
-};
-
-export const EditorContext = createContext<Editor | null>(null);
-
-function useEditor(): Editor {
-  const editor = useContext(EditorContext);
-  if (!editor) throw new Error('Hareket düzenleyicinin içinde kullanılmalı.');
-  return editor;
-}
-
-/** Satırın başlığı: egzersizin adı; kütüphanede yoksa "Silinmiş egzersiz". */
-export function rowTitle(row: TemplateRow, exercises: ReadonlyMap<string, PickerExercise>): string {
-  return exercises.get(row.exerciseId)?.title ?? 'Silinmiş egzersiz';
-}
+export {
+  EditorContext,
+  blockField,
+  rowTitle,
+  useEditor,
+  type BlocksFormStore,
+  type BlocksPath,
+  type Editor,
+} from './editor-context';
 
 /** Taşıma sonrası: odak tutamağa geri döner (liste yeniden çizildikten sonra). */
 function refocus(id: string) {
@@ -220,7 +184,7 @@ function SecondsInput(props: Parameters<typeof NumberInput>[0]) {
   );
 }
 
-/** Blok ayarı: tek harekette set/dinlenme, grupta tur/tur sonu dinlenme/istasyon geçişi. */
+/** Blok ayarı: tek harekette dinlenme, grupta tur sonu dinlenme/istasyon geçişi (setler satırda). */
 function BlockNumberField({
   blockIndex,
   blockId,
@@ -235,7 +199,7 @@ function BlockNumberField({
 }: {
   blockIndex: number;
   blockId: string;
-  name: 'sets' | 'restSeconds' | 'transitionSeconds';
+  name: 'restSeconds' | 'transitionSeconds';
   label: string;
   min: number;
   max: number;
@@ -260,65 +224,6 @@ function BlockNumberField({
   );
 }
 
-/** Hedef: tekrar aralığı ya da (süreli harekette) saniye. */
-function TargetField({
-  blockIndex,
-  rowIndex,
-  row,
-  exercise,
-  className,
-}: {
-  blockIndex: number;
-  rowIndex: number;
-  row: TemplateRow;
-  exercise: PickerExercise | undefined;
-  className?: string;
-}) {
-  const { form, path } = useEditor();
-  const minField = useField(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'target', 'min') });
-  const maxField = useField(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'target', 'max') });
-  const isDuration = exercise?.trackingType === 'duration';
-  const max = isDuration ? TEMPLATE_LIMITS.secondsMax : TEMPLATE_LIMITS.repsMax;
-  const step = isDuration ? 5 : 1;
-  const errors = minField.errors ?? maxField.errors;
-  return (
-    <Field data-invalid={Boolean(errors) || undefined} className={cn('gap-1.5', className)}>
-      <FieldLabel htmlFor={`min-${row.id}`} className="text-xs text-muted-foreground">
-        Hedef
-      </FieldLabel>
-      <div className="flex items-center gap-2">
-        <NumberInput
-          id={`min-${row.id}`}
-          label="En az"
-          field={minField}
-          min={1}
-          max={max}
-          step={step}
-          disabled={!exercise}
-          className="w-16"
-          onValue={(value) => setInput(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'target', 'min'), input: value as number })}
-        />
-        <span className="text-muted-foreground" aria-hidden>
-          –
-        </span>
-        <NumberInput
-          id={`max-${row.id}`}
-          label="En çok"
-          field={maxField}
-          min={1}
-          max={max}
-          step={step}
-          disabled={!exercise}
-          className="w-16"
-          onValue={(value) => setInput(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'target', 'max'), input: value as number })}
-        />
-        <span className="text-sm text-muted-foreground">{isDuration ? 'sn' : 'tekrar'}</span>
-      </div>
-      <FieldError>{errors?.[0]}</FieldError>
-    </Field>
-  );
-}
-
 const RIR_ITEMS: Record<string, string> = Object.fromEntries(Object.entries(RIR_LABELS).map(([rir, label]) => [rir, label]));
 
 /** Satırın ayrıntıları: ilerleme kuralı, cihaz ve not. */
@@ -326,9 +231,11 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
   const editor = useEditor();
   const { form, path, devices, deviceList, exerciseList, exercises } = editor;
   const noteField = useField(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'note') });
-  const rule = ruleFor(row, exercise);
+  const rule = rowRule(row, exercise);
   const deviceId = row.deviceId ?? exercise.deviceId;
   const device = deviceId ? devices.get(deviceId) : undefined;
+  const spec = loadSpecFor(exercise, device);
+  const setRules = describeSetRules(row.sets, spec);
   const ownDevice = exercise.deviceId ? devices.get(exercise.deviceId) : undefined;
   const swapContext = useMemo(() => ({ exercises: exerciseList, devices, familyOf }), [exerciseList, devices]);
 
@@ -377,7 +284,8 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
             onChange={(rir) => writeRule({ scheme: rule.scheme, targetRir: Number(rir) })}
           />
         </div>
-        <FieldDescription>{describeRule(rule, loadSpecFor(exercise, device))}</FieldDescription>
+        <FieldDescription>{describeRule(rule, spec)}</FieldDescription>
+        {setRules ? <FieldDescription>{setRules}</FieldDescription> : null}
         {row.rule ? (
           <Button
             type="button"
@@ -433,6 +341,7 @@ function RowMenu({ block, blockIndex, row, rowIndex, title }: { block: TemplateB
   const full = countRows(blocks) >= TEMPLATE_LIMITS.rows || (copyNeedsBlock && blocksFull);
   const canUp = !missing && (inGroup ? rowIndex > 0 : blockIndex > 0);
   const canDown = !missing && (inGroup ? rowIndex < block.rows.length - 1 : blockIndex < blocks.length - 1);
+  const lastAmrap = ['last', 'all'].includes(setShape(row.sets).amrap);
   const move = (delta: -1 | 1) =>
     editor.update((before) => (inGroup ? moveRowInGroup(before, row.id, delta) : moveBlock(before, block.id, delta)), {
       highlight: row.id,
@@ -454,6 +363,14 @@ function RowMenu({ block, blockIndex, row, rowIndex, title }: { block: TemplateB
           <Copy />
           Kopyala
         </DropdownMenuItem>
+        <DropdownMenuCheckboxItem
+          disabled={missing}
+          checked={lastAmrap}
+          onCheckedChange={() =>
+            editor.updateWithUndo((before) => applySetPreset(before, row.id, 'lastAmrap'), lastAmrap ? `${title}: AMRAP kaldırıldı` : `${title}: son set AMRAP`)
+          }>
+          Son set AMRAP
+        </DropdownMenuCheckboxItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={!canUp} onClick={() => move(-1)}>
           <ArrowUp />
@@ -508,8 +425,9 @@ function RowMenu({ block, blockIndex, row, rowIndex, title }: { block: TemplateB
 }
 
 /**
- * Bir hareket satırı: başlık, alanlar (tek harekette set ve dinlenme da), ayrıntılar ve menü.
- * Kütüphanede olmayan egzersizde alanlar kapalı; yalnız "Değiştir" ve "Kaldır" işler.
+ * Bir hareket satırı: başlık, alanlar (set sayısı, tek harekette dinlenme, düz setlerde
+ * hedef, değilse setlerin özeti), set tablosu, ayrıntılar ve menü. Kütüphanede olmayan
+ * egzersizde alanlar kapalı; yalnız "Değiştir" ve "Kaldır" işler.
  */
 function RowEditor({
   block,
@@ -525,12 +443,19 @@ function RowEditor({
   handle: React.ReactNode;
 }) {
   const editor = useEditor();
-  const { form, path, exercises, devices, labels, expanded, highlight } = editor;
+  const { form, path, exercises, devices, labels, expanded, expandedSets, highlight } = editor;
   const exerciseField = useField(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'exerciseId') });
+  // Formisch kancası: set hatası okuması bu satırın çizimine bağlansın.
+  useFieldArray(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'sets') });
   const exercise = exercises.get(row.exerciseId);
   const title = rowTitle(row, exercises);
   const single = block.kind === 'single';
   const isOpen = expanded.has(row.id);
+  const straight = isStraight(row.sets);
+  // Düz olmayan setlerde hata varsa tablo açık kalır: hata görünür ve odaklanılır.
+  const setError = Boolean(getDeepError(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'sets') }));
+  const forcedOpen = !straight && setError;
+  const setsOpen = expandedSets.has(row.id) || forcedOpen;
   const deviceId = row.deviceId ?? exercise?.deviceId;
   const deviceName = deviceId ? devices.get(deviceId)?.name : undefined;
   const subtitle = exercise
@@ -573,45 +498,66 @@ function RowEditor({
         <RowMenu block={block} blockIndex={blockIndex} row={row} rowIndex={rowIndex} title={title} />
       </div>
 
-      <div className={cn('grid grid-cols-2 gap-3 border-t p-3', single && 'sm:grid-cols-[5.5rem_7.5rem_minmax(0,1fr)]')}>
+      <div
+        className={cn(
+          'grid gap-3 border-t p-3',
+          single ? 'grid-cols-2 sm:grid-cols-[5.5rem_7.5rem_minmax(0,1fr)]' : 'grid-cols-[5.5rem_minmax(0,1fr)]',
+        )}>
+        <SetCountField row={row} exercise={exercise} />
         {single ? (
-          <>
-            <BlockNumberField blockIndex={blockIndex} blockId={block.id} name="sets" label="Set" min={1} max={TEMPLATE_LIMITS.sets} disabled={!exercise} />
-            <BlockNumberField
-              blockIndex={blockIndex}
-              blockId={block.id}
-              name="restSeconds"
-              label="Dinlenme"
-              min={0}
-              max={TEMPLATE_LIMITS.restSeconds}
-              step={15}
-              seconds
-              disabled={!exercise}
-            />
-          </>
+          <BlockNumberField
+            blockIndex={blockIndex}
+            blockId={block.id}
+            name="restSeconds"
+            label="Dinlenme"
+            min={0}
+            max={TEMPLATE_LIMITS.restSeconds}
+            step={15}
+            seconds
+            disabled={!exercise}
+          />
         ) : null}
-        <TargetField
-          blockIndex={blockIndex}
-          rowIndex={rowIndex}
-          row={row}
-          exercise={exercise}
-          className={single ? 'col-span-2 sm:col-span-1' : 'col-span-2'}
-        />
+        {straight && !setsOpen ? (
+          <StraightTargetField
+            blockIndex={blockIndex}
+            rowIndex={rowIndex}
+            row={row}
+            exercise={exercise}
+            className={single ? 'col-span-2 sm:col-span-1' : undefined}
+          />
+        ) : (
+          <SetsSummary row={row} exercise={exercise} className={single ? 'col-span-2 sm:col-span-1' : undefined} />
+        )}
       </div>
 
+      {exercise && setsOpen ? <SetTable blockIndex={blockIndex} rowIndex={rowIndex} row={row} exercise={exercise} title={title} /> : null}
       {exercise && isOpen ? <RowDetails blockIndex={blockIndex} rowIndex={rowIndex} row={row} exercise={exercise} /> : null}
 
       {exercise ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-expanded={isOpen}
-          className="group/details w-full rounded-none rounded-b-[inherit] border-t text-muted-foreground"
-          onClick={() => editor.toggleExpanded(row.id)}>
-          {isOpen ? 'Ayrıntıları gizle' : 'Ayrıntılar'}
-          <CaretDown data-icon="inline-end" className="transition-transform group-aria-expanded/details:rotate-180" />
-        </Button>
+        <div className="grid grid-cols-2 rounded-b-[inherit] border-t">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-expanded={setsOpen}
+            aria-controls={`sets-${row.id}`}
+            disabled={forcedOpen}
+            className="group/sets rounded-none rounded-bl-[inherit] border-r text-muted-foreground"
+            onClick={() => editor.toggleSets(row.id)}>
+            Setler
+            <CaretDown data-icon="inline-end" className="transition-transform group-aria-expanded/sets:rotate-180" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-expanded={isOpen}
+            className="group/details rounded-none rounded-br-[inherit] text-muted-foreground"
+            onClick={() => editor.toggleExpanded(row.id)}>
+            Ayrıntılar
+            <CaretDown data-icon="inline-end" className="transition-transform group-aria-expanded/details:rotate-180" />
+          </Button>
+        </div>
       ) : null}
     </div>
   );
@@ -705,6 +651,7 @@ function GroupBlock({ block, blockIndex, handle, title }: { block: TemplateBlock
   const options = kindOptions(block.rows.length);
   const kindLabels = Object.fromEntries(options.map((kind) => [kind, BLOCK_KIND_LABELS[kind]])) as Record<BlockKind, string>;
   const kind = block.kind === 'single' ? 'superset' : block.kind;
+  const skipNote = groupSkipNote(block, (row) => rowTitle(row, editor.exercises));
 
   return (
     <div className="flex flex-col rounded-xl bg-primary/5">
@@ -727,7 +674,7 @@ function GroupBlock({ block, blockIndex, handle, title }: { block: TemplateBlock
             onChange={(next) => editor.update((before) => changeKind(before, block.id, next))}
           />
         </Field>
-        <BlockNumberField blockIndex={blockIndex} blockId={block.id} name="sets" label="Tur" min={1} max={TEMPLATE_LIMITS.sets} className="sm:w-20" />
+        <RoundsField block={block} rounds={roundsOf(block)} className="sm:w-20" />
         <BlockNumberField
           blockIndex={blockIndex}
           blockId={block.id}
@@ -757,6 +704,7 @@ function GroupBlock({ block, blockIndex, handle, title }: { block: TemplateBlock
         </div>
       </div>
       <p className="px-3 text-xs text-muted-foreground">{BLOCK_KIND_HINTS[kind]}</p>
+      {skipNote ? <p className="px-3 pt-1 text-xs text-muted-foreground">{skipNote}</p> : null}
       <Reorder.Group
         as="ol"
         axis="y"

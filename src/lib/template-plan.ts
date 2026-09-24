@@ -1,4 +1,5 @@
 import { progressionOf, type ProgressionRule, type ProgressionScheme, type TrackingType } from './progression.ts';
+import { SET_LIMITS, referenceSet, uniformSets, type SetSpec } from './set-plan.ts';
 import type { Category } from '@/lib/schemas/exercise';
 
 /**
@@ -6,9 +7,11 @@ import type { Category } from '@/lib/schemas/exercise';
  *
  * Şablon sıralı bloklardan oluşur; blok tek hareket ya da gruptur (süperset, devre,
  * kompleks). Her hareket bir satırdır ve kalıcı kimliği vardır: antrenman kayıtları
- * satıra `şablon kimliği + satır kimliği` ile bağlanır. Set sayısı ve dinlenme
- * bloktadır; grupta `sets` tur sayısıdır (her hareket turda bir set yapar).
- * Isınma setleri saklanmaz, antrenmanda `warmupSets` ile hesaplanır.
+ * satıra `şablon kimliği + satır kimliği` ile bağlanır. Setler satırdadır: her setin
+ * kendi hedefi, isteğe bağlı yük yüzdesi ve AMRAP'ı olur (`set-plan.ts`). Dinlenme
+ * bloktadır; grupta tur sayısı en çok seti olan hareketinkidir (`roundsOf`), seti biten
+ * hareket sonraki turlarda atlanır. Isınma setleri saklanmaz, antrenmanda `warmupSets`
+ * ile hesaplanır.
  *
  * Saf fonksiyonlar; yol takma adıyla çalışma zamanı içe aktarması yapmaz (testler
  * Node'un kendi test aracıyla çalışır). Kas payları (`exerciseSetWeights`) çağırandan gelir.
@@ -47,7 +50,8 @@ export const TEMPLATE_LIMITS = {
   description: 300,
   blocks: 30,
   rows: 40,
-  sets: 10,
+  /** Bir satırdaki en fazla set (grupta tur da en fazla bu kadar). */
+  sets: SET_LIMITS.perRow,
   restSeconds: 600,
   transitionSeconds: 120,
   note: 200,
@@ -83,13 +87,14 @@ export const SECONDS_PER_REP = 3;
 export const FALLBACK_REST_SECONDS = 90;
 
 // Yapısal tipler: Valibot şemasının çıktısı (`schemas/template.ts`) bunlarla aynı şekildedir.
+/** Tek aralık: egzersizin varsayılan hedefi, kural kaynağı, düz setlerin hedefi. */
 export type TemplateTarget = { min: number; max: number };
 export type RuleOverride = { scheme: ProgressionScheme; targetRir: number };
 export type TemplateRow = {
   id: string;
   exerciseId: string;
-  /** Tekrar aralığı; süreli harekette saniye. */
-  target: TemplateTarget;
+  /** Setler (1–10), sırasıyla: her birinin hedefi (tekrar; süreli harekette saniye), yüzdesi, AMRAP'ı. */
+  sets: SetSpec[];
   /** Egzersizin kuralının yerine: ilerleme türü ve yedekte tekrar. */
   rule?: RuleOverride;
   /** Aynı hareket başka cihazda. Yoksa egzersizin kendi cihazı. */
@@ -99,8 +104,6 @@ export type TemplateRow = {
 export type TemplateBlock = {
   id: string;
   kind: BlockKind;
-  /** Tek harekette çalışma seti; grupta tur. */
-  sets: number;
   /** Tek harekette setler arası; grupta tur sonu dinlenme. */
   restSeconds: number;
   /** Yalnız devre: istasyonlar arası geçiş. */
@@ -160,6 +163,52 @@ export function countRows(blocks: readonly TemplateBlock[]): number {
   return blocks.reduce((sum, block) => sum + block.rows.length, 0);
 }
 
+/** Bloğun tur sayısı: en çok seti olan hareketinki (tek harekette set sayısı). */
+export function roundsOf(block: Pick<TemplateBlock, 'rows'>): number {
+  return Math.max(0, ...block.rows.map((row) => row.sets.length));
+}
+
+/**
+ * Grupta seti erken biten hareketler: "Leg Curl 3 sette biter; sonraki turlarda atlanır."
+ * Bütün hareketlerin set sayısı aynıysa (ya da tek harekette) `null`.
+ */
+export function groupSkipNote(block: Pick<TemplateBlock, 'kind' | 'rows'>, titleOf: (row: TemplateRow) => string): string | null {
+  if (block.kind === 'single') return null;
+  const rounds = roundsOf(block);
+  const short = block.rows.filter((row) => row.sets.length < rounds);
+  if (short.length === 0) return null;
+  const list = short.map((row) => `${titleOf(row)} ${count(row.sets.length)}`).join(', ');
+  return `${list} sette biter; sonraki turlarda atlanır.`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Eski şablon/gün blokları (blokta `sets: n`, satırda tek `target`) → satır başına setler.
+ * Yalnız yapıyı çevirir, onarmaz: geçersiz sayı geçersiz kalır (0 → [], 25 → 11 set), dev dizi üretmez.
+ * Yeni biçime ve tanımadığı değerlere dokunmaz; iki kez uygulamak aynı sonucu verir.
+ */
+export function upgradeLegacyBlocks(blocks: unknown): unknown {
+  if (!Array.isArray(blocks)) return blocks;
+  return blocks.map((block: unknown) => {
+    if (!isRecord(block) || !Array.isArray(block.rows)) return block;
+    if (!('sets' in block)) return block;
+    const { sets: setCount, ...rest } = block;
+    const n = typeof setCount === 'number' && Number.isInteger(setCount) ? Math.min(Math.max(setCount, 0), TEMPLATE_LIMITS.sets + 1) : 0;
+    return {
+      ...rest,
+      rows: block.rows.map((row: unknown) => {
+        if (!isRecord(row) || Array.isArray(row.sets) || !isRecord(row.target)) return row;
+        const { target, ...others } = row;
+        const { min, max } = target as Record<string, unknown>;
+        return { ...others, sets: Array.from({ length: n }, () => ({ min, max })) };
+      }),
+    };
+  });
+}
+
 /** Birden çok kez geçen blok ve satır kimlikleri (temiz şablonda boş). */
 export function duplicateIds(blocks: readonly TemplateBlock[]): string[] {
   const seen = new Set<string>();
@@ -179,11 +228,16 @@ export function defaultTarget(exercise: RuleSource): TemplateTarget {
   return { min: rule.targetMin, max: rule.targetMax };
 }
 
+/** Yeni satırın setleri: egzersizin aralığıyla düz setler (sayı türüne göre ya da verilen). */
+export function defaultSets(exercise: RuleSource, setCount: number = DEFAULT_SETS[exercise.category]): SetSpec[] {
+  return uniformSets(defaultTarget(exercise), setCount);
+}
+
 /**
- * Satırın geçerli ilerleme kuralı: tür ve yedekte tekrar satırdan (değiştirildiyse) ya da
- * egzersizden, hedef aralığı her zaman satırdan. `nextSession()`'a doğrudan verilir.
+ * Kuralın kaynağından geçerli ilerleme kuralı: tür ve yedekte tekrar satırdan (değiştirildiyse)
+ * ya da egzersizden, hedef aralığı verilen hedeften. `nextSession()`'a doğrudan verilir.
  */
-export function ruleFor(row: Pick<TemplateRow, 'rule' | 'target'>, exercise: RuleSource): ProgressionRule {
+export function ruleFor(row: { rule?: RuleOverride; target: TemplateTarget }, exercise: RuleSource): ProgressionRule {
   const base = progressionOf(exercise);
   return {
     scheme: row.rule?.scheme ?? base.scheme,
@@ -191,6 +245,20 @@ export function ruleFor(row: Pick<TemplateRow, 'rule' | 'target'>, exercise: Rul
     targetMin: row.target.min,
     targetMax: row.target.max,
   };
+}
+
+/** Satırın kuralı: hedef aralığı referans setten (ilk tam yük seti; `describeRule` için). */
+export function rowRule(row: Pick<TemplateRow, 'rule' | 'sets'>, exercise: RuleSource): ProgressionRule {
+  return ruleFor({ rule: row.rule, target: referenceSet(row.sets) }, exercise);
+}
+
+/** Antrenman ekranının `planSession` girdisi: satırın kuralı (tür, yedek) ve setleri. */
+export function planInputFor(
+  row: Pick<TemplateRow, 'rule' | 'sets'>,
+  exercise: RuleSource,
+): { rule: Pick<ProgressionRule, 'scheme' | 'targetRir'>; sets: SetSpec[] } {
+  const { scheme, targetRir } = rowRule(row, exercise);
+  return { rule: { scheme, targetRir }, sets: row.sets };
 }
 
 /** Satırın cihazı: şablonda değiştirildiyse ve cihaz hâlâ varsa o, yoksa egzersizin kendi cihazı (SPEC §7.4). */
@@ -206,15 +274,19 @@ export function effectiveDeviceId(
 /**
  * Antrenmandaki set sırası. Tek harekette setler arka arkaya; grupta her tur, satırlar
  * sırayla (süperset ve komplekste aralarında dinlenme yok, devrede istasyon geçişi),
- * dinlenme turun sonunda. Şablonun son setinden sonra dinlenme yok.
+ * dinlenme turun sonunda. Setleri biten hareket sonraki turlarda atlanır (v1 kuralı):
+ * turun son hareketi, o turda kalan son harekettir. `round` satırın kaçıncı setidir.
+ * Şablonun son setinden sonra dinlenme yok.
  */
 export function setSlots(template: TemplateBody): SetSlot[] {
   const slots: SetSlot[] = [];
   for (const block of template.blocks) {
     const between = block.kind === 'circuit' ? (block.transitionSeconds ?? DEFAULT_TRANSITION_SECONDS) : 0;
-    for (let round = 0; round < block.sets; round++) {
-      block.rows.forEach((row, index) => {
-        const last = index === block.rows.length - 1;
+    const rounds = roundsOf(block);
+    for (let round = 0; round < rounds; round++) {
+      const active = block.rows.filter((row) => row.sets.length > round);
+      active.forEach((row, index) => {
+        const last = index === active.length - 1;
         slots.push({ blockId: block.id, rowId: row.id, round, restAfterSeconds: last ? block.restSeconds : between });
       });
     }
@@ -252,12 +324,17 @@ export function templateMuscleLoad<E extends PlanExercise>(
       }
       if (NO_LOAD_CATEGORIES.has(exercise.category)) continue;
       for (const [muscle, weight] of Object.entries(setWeightsOf(exercise))) {
-        if (weight) load[muscle] = (load[muscle] ?? 0) + block.sets * weight;
+        if (weight) load[muscle] = (load[muscle] ?? 0) + row.sets.length * weight;
       }
     }
   }
   for (const muscle of Object.keys(load)) load[muscle] = clean(load[muscle] ?? 0);
   return { load, missingRowIds };
+}
+
+/** Kas yükünü bir çarpanla ölçekler (haftalık yük = bir tur × sıklık ÷ gün sayısı). */
+export function scaleLoad(load: Readonly<Record<string, number>>, factor: number): Record<string, number> {
+  return Object.fromEntries(Object.entries(load).map(([muscle, value]) => [muscle, clean(value * factor)]));
 }
 
 /** Haritanın tonu: şablonun en çok çalışan kası 1; sıfırlar ve kardiyo dışarıda. */
@@ -269,9 +346,17 @@ export function loadIntensity(load: Readonly<Record<string, number>>): Record<st
 }
 
 /**
- * Tahmini süre (dk, 5'e yuvarlanır): her set hedefin ortası kadar sürer (tekrarda
- * tekrar başına 3 sn, süreli harekette saniye) + ardındaki dinlenme. Isınma setleri
- * hariç. Kütüphanede olmayan egzersiz tekrarlı sayılır.
+ * Bir setin tahmini süresi (sn): hedefin ortası (AMRAP'ta üst sınır); tekrarda tekrar
+ * başına 3 sn, süreli harekette saniye.
+ */
+export function setSeconds(set: SetSpec, trackingType: TrackingType): number {
+  const value = set.amrap ? set.max : (set.min + set.max) / 2;
+  return trackingType === 'duration' ? value : value * SECONDS_PER_REP;
+}
+
+/**
+ * Tahmini süre (dk, 5'e yuvarlanır): her set kendi hedefine göre (`setSeconds`) +
+ * ardındaki dinlenme. Isınma setleri hariç. Kütüphanede olmayan egzersiz tekrarlı sayılır.
  */
 export function estimateMinutes(template: TemplateBody, exercises: ReadonlyMap<string, Pick<PlanExercise, 'trackingType'>>): number {
   const rows = new Map(template.blocks.flatMap((block) => block.rows.map((row) => [row.id, row] as const)));
@@ -280,10 +365,9 @@ export function estimateMinutes(template: TemplateBody, exercises: ReadonlyMap<s
   let seconds = 0;
   for (const slot of slots) {
     const row = rows.get(slot.rowId);
-    if (!row) continue;
-    const middle = (row.target.min + row.target.max) / 2;
-    const isDuration = exercises.get(row.exerciseId)?.trackingType === 'duration';
-    seconds += (isDuration ? middle : middle * SECONDS_PER_REP) + slot.restAfterSeconds;
+    const set = row?.sets[slot.round];
+    if (!row || !set) continue;
+    seconds += setSeconds(set, exercises.get(row.exerciseId)?.trackingType ?? 'weight_reps') + slot.restAfterSeconds;
   }
   return Math.ceil(seconds / 300) * 5;
 }
@@ -329,7 +413,7 @@ export function rowLabels(template: TemplateBody): Map<string, string> {
 export type TemplateSummary = {
   /** Kütüphanede olan hareketler (silinmiş egzersizin satırı sayılmaz). */
   rows: number;
-  /** Çalışma setleri: satır başına bloğun set/tur sayısı, bütün türler. */
+  /** Çalışma setleri: satırların set sayılarının toplamı, bütün türler. */
   workingSets: number;
   groups: { superset: number; circuit: number; complex: number };
   missingRowIds: string[];
@@ -358,7 +442,7 @@ export function templateSummary(
         continue;
       }
       rows += 1;
-      workingSets += block.sets;
+      workingSets += row.sets.length;
       const deviceId = effectiveDeviceId(row, exercise, knownDeviceIds);
       if (deviceId && !deviceIds.includes(deviceId)) deviceIds.push(deviceId);
     }
@@ -398,8 +482,11 @@ function restPhrase(seconds: number, where: string): string {
   return seconds > 0 ? `${where}${formatRest(seconds)} dinlenme` : `${where}dinlenme yok`;
 }
 
-/** Bloğun tek satırlık anlatımı (detayda grup başlığı, düzenleyicide ipucu). */
-export function describeBlock(block: Pick<TemplateBlock, 'kind' | 'sets' | 'restSeconds' | 'transitionSeconds'>): string {
+/**
+ * Bloğun tek satırlık anlatımı (detayda grup başlığı, düzenleyicide ipucu). `sets`: tek
+ * harekette set sayısı, grupta tur; çağıran `{ ...block, sets: roundsOf(block) }` verir.
+ */
+export function describeBlock(block: Pick<TemplateBlock, 'kind' | 'restSeconds' | 'transitionSeconds'> & { sets: number }): string {
   const rounds = `${count(block.sets)} tur`;
   switch (block.kind) {
     case 'single':
@@ -421,7 +508,8 @@ const REPS_TRACKING = new Set<TrackingType>(['weight_reps', 'bodyweight_reps']);
 /**
  * Kayıttan önce sunucuda: kütüphaneye ve cihazlara göre denetim ve sadeleştirme.
  * Hata anahtarları Formisch yollarıdır (`blocks.0.rows.1.deviceId`).
- * - Kütüphanede olmayan egzersiz ya da cihaz reddedilir; tekrarda hedef en fazla 100.
+ * - Kütüphanede olmayan egzersiz ya da cihaz reddedilir; tekrarda her setin hedefi en fazla 100.
+ * - Yük yüzdesi yalnız ağırlıklı harekette ve %100'ün altındaysa yazılır; AMRAP yalnız açıksa.
  * - Egzersizin kuralıyla aynı olan kural değişikliği ve egzersizin kendi cihazı yazılmaz.
  * - Not kırpılır, boşsa yazılmaz; istasyon geçişi yalnız devrede durur (yoksa 15 sn).
  */
@@ -435,9 +523,19 @@ export function normalizeTemplate(
       const at = `blocks.${i}.rows.${j}`;
       const exercise = ctx.exercises.get(row.exerciseId);
       if (!exercise) errors[`${at}.exerciseId`] = 'Bu egzersiz kütüphanede yok; değiştir ya da kaldır.';
-      if (exercise && REPS_TRACKING.has(exercise.trackingType) && row.target.max > TEMPLATE_LIMITS.repsMax) {
-        errors[`${at}.target.max`] = `Tekrar hedefi en fazla ${TEMPLATE_LIMITS.repsMax}.`;
-      }
+      const sets = row.sets.map((set, k): SetSpec => {
+        if (exercise && REPS_TRACKING.has(exercise.trackingType) && set.max > TEMPLATE_LIMITS.repsMax) {
+          errors[`${at}.sets.${k}.max`] = `Tekrar hedefi en fazla ${TEMPLATE_LIMITS.repsMax}.`;
+        }
+        // Egzersiz yoksa (hata zaten bildirildi) yüzde olduğu gibi kalır.
+        const keepPct = set.loadPct !== undefined && set.loadPct < 100 && (!exercise || exercise.trackingType === 'weight_reps');
+        return {
+          min: set.min,
+          max: set.max,
+          ...(keepPct ? { loadPct: set.loadPct } : {}),
+          ...(set.amrap === true ? { amrap: true } : {}),
+        };
+      });
       let deviceId = row.deviceId;
       if (deviceId !== undefined && !ctx.deviceIds.has(deviceId)) errors[`${at}.deviceId`] = 'Bu cihaz artık yok.';
       if (exercise && deviceId === exercise.deviceId) deviceId = undefined;
@@ -451,7 +549,7 @@ export function normalizeTemplate(
       return {
         id: row.id,
         exerciseId: row.exerciseId,
-        target: { min: row.target.min, max: row.target.max },
+        sets,
         ...(rule ? { rule: { scheme: rule.scheme, targetRir: rule.targetRir } } : {}),
         ...(deviceId ? { deviceId } : {}),
         ...(note ? { note } : {}),
@@ -460,7 +558,6 @@ export function normalizeTemplate(
     return {
       id: block.id,
       kind: block.kind,
-      sets: block.sets,
       restSeconds: block.restSeconds,
       ...(block.kind === 'circuit' ? { transitionSeconds: block.transitionSeconds ?? DEFAULT_TRANSITION_SECONDS } : {}),
       rows,

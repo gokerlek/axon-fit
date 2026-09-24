@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Item, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item';
 import { listExercises } from '@/lib/exercises';
-import { currentPhaseOf, nextDayId, phaseStatus } from '@/lib/program-plan';
+import { currentPhaseOf, frequencyLabel, nextDayId, phaseStatus } from '@/lib/program-plan';
 import { readProgramFile } from '@/lib/programs';
 import { templateSummary } from '@/lib/template-plan';
 
@@ -21,8 +21,10 @@ function Unavailable() {
 }
 
 /**
- * Danışanın sıradaki antrenmanı: kendi programında şu anki evrenin sıradaki günü,
- * yapılış sırasıyla; altında evrenin diğer günleri dönüş sırasıyla. Yalnız gösterim:
+ * Danışanın sıradaki antrenmanı: kendi programında (evreliyse şu anki evrenin) sıradaki
+ * günü, yapılış sırasıyla; altında diğer günler dönüş sırasıyla. Evresiz programda evreden
+ * söz edilmez; haftada kaç gün belirtildiyse yazılır ("bu hafta x/3" antrenman ekranıyla
+ * gelecek: `weekProgress`). Yalnız gösterim:
  * antrenman ekranı (set kaydı, başka gün seçme) sonraki adımda. `clientId` oturumdan
  * doğrulanmış kayıttan gelir (`currentClient`).
  */
@@ -61,6 +63,16 @@ export async function ProgramCard({ clientId }: { clientId: string }) {
   const byId = new Map(exercises.map((exercise) => [exercise.id, exercise]));
   const summary = templateSummary({ blocks: day.blocks }, byId);
   const status = phaseStatus(program, new Date());
+  const frequency = frequencyLabel(phase.daysPerWeek);
+  const context = program.phased
+    ? [
+        phase.name,
+        phase.weeks !== undefined ? `${Math.min(status.week, phase.weeks)}. hafta / ${phase.weeks}` : null,
+        frequency?.toLocaleLowerCase('tr') ?? null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : frequency;
   // Dönüş sırası: sıradaki günün arkasından başlayıp başa sarar.
   const following = [...phase.days.slice(index + 1), ...phase.days.slice(0, index)];
 
@@ -71,10 +83,7 @@ export async function ProgramCard({ clientId }: { clientId: string }) {
           <CardDescription>Sıradaki antrenman</CardDescription>
           <CardTitle className="text-xl">{day.name}</CardTitle>
           <CardDescription>
-            <span className="block">
-              {phase.name}
-              {phase.weeks !== undefined ? ` · ${Math.min(status.week, phase.weeks)}. hafta / ${phase.weeks}` : null}
-            </span>
+            {context ? <span className="block">{context}</span> : null}
             <span className="tabular-nums">{summary.rows}</span> hareket ·{' '}
             <span className="tabular-nums">{summary.workingSets}</span> set · ≈{' '}
             <span className="tabular-nums">{summary.minutes}</span> dk
@@ -82,7 +91,7 @@ export async function ProgramCard({ clientId }: { clientId: string }) {
         </CardHeader>
         <CardContent>
           {summary.rows > 0 ? (
-            <DayPlan blocks={day.blocks} exercises={byId} missing="hide" />
+            <DayPlan blocks={day.blocks} exercises={byId} missing="hide" audience="client" />
           ) : (
             <p className="text-sm text-muted-foreground">Bu günün hareketleri şu an açılamıyor. Antrenörüne haber ver.</p>
           )}
@@ -100,7 +109,7 @@ export async function ProgramCard({ clientId }: { clientId: string }) {
         <Card>
           <CardHeader>
             <CardTitle>Sonraki günler</CardTitle>
-            <CardDescription>Bu evrede günler sırayla döner.</CardDescription>
+            <CardDescription>{program.phased ? 'Bu evrede günler sırayla döner.' : 'Günler sırayla döner.'}</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="flex flex-col gap-2">

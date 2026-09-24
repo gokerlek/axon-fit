@@ -17,6 +17,9 @@ import type { Category, Equipment } from '@/lib/schemas/exercise';
  * - Hedefin altında kalınan antrenmandan sonra ağırlık korunur; setlerin hiçbiri hedefe
  *   ulaşmadıysa yaklaşık %5 (en az bir adım) iner; 3 antrenman üst üste tıkanırsa hafifletilir.
  * - Hafifletme ve ısınma v1 kararlarıyla aynı (K16, §7.8).
+ * - Set başına hedef (`planSession`): her setin kendi aralığı, yük yüzdesi ve AMRAP'ı olur;
+ *   kararı tam yükteki setler verir, yüzdeli setler üst ağırlığı izler. Isınma setleri
+ *   ilk çalışma setinin ağırlığına göre hesaplanır (piramitte en hafif set).
  *
  * Bu dosya yol takma adıyla (`@/…`) çalışma zamanı içe aktarması yapmaz: testler
  * Node'un kendi test aracıyla doğrudan çalışır (`npm test`).
@@ -79,12 +82,38 @@ export const RIR_LABELS: Record<number, string> = {
   4: '4 tekrar yedekte',
 };
 
+/** Satırın bir seti (şablon ve programda saklanır). */
+export type SetTarget = {
+  /** Tekrar ya da (süreli harekette) saniye; min = max → sabit hedef. */
+  min: number;
+  max: number;
+  /** Tam yükteki (en ağır) setin yüzdesi, 40–99; yoksa tam yük. Yalnız ağırlıklı harekette. */
+  loadPct?: number;
+  /** "Yapabildiği kadar": aralık yine hedeftir; zorluk düğmesi tıkanma sayılmaz. */
+  amrap?: boolean;
+};
+
 /** Bir set: ağırlık ve tekrar ya da saniye (`value`). */
-export type SetResult = { weightKg: number; value: number; effort: Effort };
+export type SetResult = {
+  weightKg: number;
+  value: number;
+  effort: Effort;
+  /** Satırın kaçıncı seti (0'dan, `PlannedSet.setIndex`); yoksa yapılış sırası. */
+  setIndex?: number;
+};
 /** Bir antrenmandaki çalışma setleri (ısınma hariç), yapılış sırasıyla. */
 export type SessionResult = readonly SetResult[];
 
 export type Plan = { weightKg: number; target: number };
+
+/** Planlanan set: ağırlık, hedef, AMRAP ve satırdaki yeri (hafifletmede set atlanınca da doğru sete bağlansın). */
+export type PlannedSet = Plan & { amrap: boolean; loadPct?: number; setIndex: number };
+export type SessionPlan = {
+  sets: PlannedSet[];
+  /** Tam yükteki setin ağırlığı. */
+  topWeightKg: number;
+  reason: SuggestionReason;
+};
 
 export type SuggestionReason =
   | 'first_time'
@@ -129,6 +158,8 @@ export const DURATION_STEP_SECONDS = 5;
 /** Aşırı yük uyarısı: hedef + max(hedef × %20, 5 kg) (v1 K14). */
 export const OVERLOAD_RATIO = 0.2;
 export const OVERLOAD_MIN_KG = 5;
+/** AMRAP sette aralığın bu kadar üstü → iki adım. */
+export const AMRAP_EXTRA_REPS = 3;
 
 /** Ekipmana göre ağırlık adımı ve taban ağırlık varsayılanı (formda ekipman seçilince gelir). */
 export const EQUIPMENT_LOAD_DEFAULTS: Record<Equipment, { loadStepKg: number; minLoadKg: number }> = {
@@ -404,6 +435,291 @@ export function nextSet({
     return { weightKg: grid.up(last.weightKg, 1), target: plan.target, reason: 'increase' };
   }
   return { weightKg: last.weightKg, target: plan.target, reason: 'hold' };
+}
+
+/* --- set başına plan: her setin kendi hedefi, yük yüzdesi ve AMRAP'ı --- */
+
+/** Tam yükte mi (yüzde yok ya da %100). */
+export function isFullLoad(set: Pick<SetTarget, 'loadPct'>): boolean {
+  return set.loadPct === undefined || set.loadPct >= 100;
+}
+
+/** Tam yükteki setlerin sırası (ilerlemeye bunlar karar verir). */
+export function topSetIndexes(sets: readonly SetTarget[]): number[] {
+  return sets.flatMap((set, index) => (isFullLoad(set) ? [index] : []));
+}
+
+/**
+ * Üst ağırlığın yüzdesi: ızgaraya aşağı yuvarlanır, tabanın altına inmez, üst ağırlığı
+ * geçmez; ağırlıksızda (vücut ağırlığı, süre, adımı 0 olan bant) üst ağırlık.
+ */
+export function percentOfTop(topKg: number, loadPct: number | undefined, spec: LoadSpec): number {
+  if (loadPct === undefined || loadPct >= 100) return topKg;
+  const grid = usesWeight(spec) ? gridOf(spec) : null;
+  if (!grid) return topKg;
+  return Math.min(topKg, grid.floor(clean((topKg * loadPct) / 100)));
+}
+
+type Pair = { set: SetTarget; result: SetResult };
+
+/** Sonucu planın setiyle eşler: `setIndex` ya da yapılış sırası; setsiz sonuç atılır. */
+function pairsOf(session: SessionResult, sets: readonly SetTarget[]): Pair[] {
+  return session.flatMap((result, position) => {
+    const set = sets[result.setIndex ?? position];
+    return set ? [{ set, result }] : [];
+  });
+}
+
+/** Karar veren setler: tam yükteki setler; antrenman üst setten önce bittiyse hepsi. */
+function deciding(pairs: readonly Pair[]): Pair[] {
+  const top = pairs.filter((pair) => isFullLoad(pair.set));
+  return top.length > 0 ? top : [...pairs];
+}
+
+/** AMRAP'ta zorluk düğmesi tıkanma sayılmaz; yalnız alt sınırın altı. */
+function missedPair({ set, result }: Pair): boolean {
+  return set.amrap ? result.value < set.min : result.effort === 'fail' || result.value < set.min;
+}
+
+function reachedPair({ set, result }: Pair): boolean {
+  return set.amrap ? result.value >= set.max : result.effort !== 'fail' && result.value >= set.max;
+}
+
+/**
+ * Antrenmanın referans ağırlığı: tam yükteki en ağır set. Tam yükte set yoksa (piramit
+ * tepeye varmadan bitti) yüzdeli setlerden çıkarılır ve ızgaraya aşağı yuvarlanır.
+ */
+function referenceWeight(pairs: readonly Pair[], spec: LoadSpec): number {
+  const top = pairs.filter((pair) => isFullLoad(pair.set));
+  if (top.length > 0) return Math.max(...top.map((pair) => pair.result.weightKg));
+  const grid = usesWeight(spec) ? gridOf(spec) : null;
+  if (!grid) return Math.max(...pairs.map((pair) => pair.result.weightKg));
+  const implied = Math.max(...pairs.map((pair) => (pair.result.weightKg * 100) / (pair.set.loadPct ?? 100)));
+  return grid.floor(clean(implied));
+}
+
+/** Aynı aralıktaki setler birlikte ilerler: grubun geçen seferki en düşük değeri + adım (aralıkta). */
+function groupTargets(sets: readonly SetTarget[], pairs: readonly Pair[], unit: number): number[] {
+  const key = (set: SetTarget) => `${set.min}-${set.max}`;
+  const lowest = new Map<string, number>();
+  for (const { set, result } of pairs) {
+    const previous = lowest.get(key(set));
+    lowest.set(key(set), previous === undefined ? result.value : Math.min(previous, result.value));
+  }
+  return sets.map((set) => {
+    const value = lowest.get(key(set));
+    return value === undefined ? set.min : Math.min(set.max, Math.max(set.min, value + unit));
+  });
+}
+
+/** Hafifletmede kalan setler: önce tam yükteki setler, sonra baştakiler; satır sırasıyla. */
+function deloadIndexes(sets: readonly SetTarget[]): number[] {
+  const keep = deloadSets(sets.length);
+  const order = [...topSetIndexes(sets), ...sets.flatMap((set, index) => (isFullLoad(set) ? [] : [index]))];
+  return order.slice(0, keep).sort((a, b) => a - b);
+}
+
+function plannedSets(
+  sets: readonly SetTarget[],
+  spec: LoadSpec,
+  topWeightKg: number,
+  targets: readonly number[],
+  options: { indexes?: readonly number[]; amrap?: boolean } = {},
+): PlannedSet[] {
+  const indexes = options.indexes ?? sets.map((_, index) => index);
+  return indexes.flatMap((index) => {
+    const set = sets[index];
+    if (!set) return [];
+    return [
+      {
+        weightKg: percentOfTop(topWeightKg, set.loadPct, spec),
+        target: targets[index] ?? set.min,
+        amrap: options.amrap === false ? false : Boolean(set.amrap),
+        ...(isFullLoad(set) ? {} : { loadPct: set.loadPct }),
+        setIndex: index,
+      },
+    ];
+  });
+}
+
+/**
+ * Set başına hedefli bir sonraki antrenman. Kararı tam yükteki (üst) setler verir;
+ * yüzdeli setler (back-off, piramidin alt basamakları) üst ağırlığı yüzdeleriyle izler.
+ * AMRAP sette zorluk düğmesi tıkanma sayılmaz: alt sınırın altı tıkanma, tepe ulaşma;
+ * aralığın `AMRAP_EXTRA_REPS` üstü iki adım artırır.
+ *
+ * Bütün setleri aynı (aralık aynı, yüzde ve AMRAP yok) satırda sonuç `nextSession` ile
+ * aynıdır (testte karşılaştırılır). Tek bilinçli fark: planın set sayısından fazla sonuç
+ * (danışanın fazladan yaptığı set) karara girmez.
+ */
+export function planSession({
+  spec,
+  rule,
+  sets,
+  history,
+  startWeightKg,
+}: {
+  spec: LoadSpec;
+  rule: Pick<ProgressionRule, 'scheme' | 'targetRir'>;
+  sets: readonly SetTarget[];
+  history: readonly SessionResult[];
+  startWeightKg?: number;
+}): SessionPlan {
+  const grid = usesWeight(spec) ? gridOf(spec) : null;
+  const mins = sets.map((set) => set.min);
+  const build = (topWeightKg: number, targets: readonly number[], reason: SuggestionReason): SessionPlan => ({
+    sets: plannedSets(sets, spec, topWeightKg, targets),
+    topWeightKg,
+    reason,
+  });
+
+  const sessions = history.map((session) => pairsOf(session, sets)).filter((pairs) => pairs.length > 0);
+  const last = sessions.at(-1);
+  if (!last) {
+    const start = startWeightKg ?? grid?.min ?? spec.minLoadKg;
+    return build(grid ? grid.floor(start) : start, mins, 'first_time');
+  }
+
+  const weight = referenceWeight(last, spec);
+  if (rule.scheme === 'none') return build(weight, mins, 'no_progression');
+
+  let failedStreak = 0;
+  for (let i = sessions.length - 1; i >= 0; i--) {
+    const session = sessions[i];
+    if (!session || !deciding(session).some(missedPair)) break;
+    failedStreak++;
+  }
+  if (failedStreak >= DELOAD_AFTER_FAILED) {
+    const topWeightKg = deloadWeight(weight, spec);
+    return {
+      sets: plannedSets(sets, spec, topWeightKg, mins, { indexes: deloadIndexes(sets), amrap: false }),
+      topWeightKg,
+      reason: 'deload',
+    };
+  }
+
+  const decisive = deciding(last);
+  if (grid) {
+    // Bütün setler tıkandıysa iner; karar setlerinden biri tıkandıysa (yüzdeli setler iyi olsa da) korunur.
+    if (last.every(missedPair)) {
+      const lowered = decreaseWeight(weight, spec);
+      return build(lowered, mins, lowered < weight ? 'decrease' : 'hold');
+    }
+    if (decisive.some(missedPair)) return build(weight, mins, 'hold');
+    if (rule.scheme === 'linear') return build(grid.up(weight, 1), mins, 'increase');
+    if (decisive.every(reachedPair)) {
+      const rated = decisive.filter((pair) => !pair.set.amrap);
+      const averageRir = rated.reduce((sum, pair) => sum + EFFORT_RIR[pair.result.effort], 0) / (rated.length || 1);
+      const easy = rated.length > 0 && averageRir >= rule.targetRir + 2;
+      const beyond = last.some((pair) => pair.set.amrap && pair.result.value >= pair.set.max + AMRAP_EXTRA_REPS);
+      return build(grid.up(weight, easy || beyond ? 2 : 1), mins, 'increase');
+    }
+    const grouped = groupTargets(sets, last, 1);
+    return build(
+      weight,
+      sets.map((set, index) => (set.amrap ? set.min : (grouped[index] ?? set.min))),
+      'add_rep',
+    );
+  }
+
+  // Ağırlıksız ilerleme: vücut ağırlığı, bant ya da süre.
+  const isDuration = spec.trackingType === 'duration';
+  if (decisive.some(missedPair)) return build(weight, mins, 'hold');
+  if (decisive.every(reachedPair)) return build(weight, sets.map((set) => set.max), 'harder_variant');
+  return build(weight, groupTargets(sets, last, isDuration ? DURATION_STEP_SECONDS : 1), isDuration ? 'add_time' : 'add_rep');
+}
+
+/**
+ * Aynı antrenmanda bir sonraki set. Yüzde aynıysa `nextSet` kuralı (önceki setin kendi
+ * aralığıyla); yüzde değişiyorsa (üst setten back-off'a, piramidin bir basamağına) bu
+ * antrenmanda yapılan son tam yük setinin gerçek ağırlığından hesaplanır; önceki set
+ * belirgin tıkandıysa o ağırlık önce ~%5 iner.
+ */
+export function nextSetInPlan({
+  spec,
+  rule,
+  sets,
+  plan,
+  done,
+}: {
+  spec: LoadSpec;
+  rule: Pick<ProgressionRule, 'scheme'>;
+  sets: readonly SetTarget[];
+  plan: SessionPlan;
+  done: SessionResult;
+}): PlannedSet & { reason: SuggestionReason } {
+  const i = done.length;
+  const fallback: PlannedSet = { weightKg: plan.topWeightKg, target: sets[0]?.min ?? 0, amrap: false, setIndex: 0 };
+  if (i >= plan.sets.length) return { ...(plan.sets.at(-1) ?? fallback), reason: 'hold' };
+  const next = plan.sets[i] as PlannedSet;
+  const last = done[i - 1];
+  const previous = plan.sets[i - 1];
+  const lastSpec = previous ? sets[previous.setIndex] : undefined;
+  const nextSpec = sets[next.setIndex];
+  if (!last || !lastSpec || !nextSpec) return { ...next, reason: 'hold' };
+
+  const samePct = (lastSpec.loadPct ?? 100) === (nextSpec.loadPct ?? 100);
+  const grid = usesWeight(spec) ? gridOf(spec) : null;
+  if (!grid || rule.scheme === 'none') return { ...next, weightKg: samePct ? last.weightKg : next.weightKg, reason: 'hold' };
+
+  const failedBadly = (!lastSpec.amrap && last.effort === 'fail') || last.value <= lastSpec.min - 3;
+  if (samePct) {
+    if (failedBadly) {
+      const lowered = decreaseWeight(last.weightKg, spec);
+      return { ...next, weightKg: lowered, reason: lowered < last.weightKg ? 'decrease' : 'hold' };
+    }
+    if (!lastSpec.amrap && last.effort === 'easy' && last.value >= lastSpec.max) {
+      return { ...next, weightKg: grid.up(last.weightKg, 1), reason: 'increase' };
+    }
+    return { ...next, weightKg: last.weightKg, reason: 'hold' };
+  }
+
+  // Bu antrenmanda yapılan son tam yük seti; yoksa planın üst ağırlığı.
+  let reference = plan.topWeightKg;
+  done.forEach((result, index) => {
+    const planned = plan.sets[index];
+    const target = planned ? sets[planned.setIndex] : undefined;
+    if (target && isFullLoad(target)) reference = result.weightKg;
+  });
+  if (failedBadly) reference = decreaseWeight(reference, spec);
+  const weightKg = percentOfTop(reference, nextSpec.loadPct, spec);
+  const reason: SuggestionReason = weightKg < next.weightKg ? 'decrease' : weightKg > next.weightKg ? 'increase' : 'hold';
+  return { ...next, weightKg, reason };
+}
+
+/** Tolerans vb. üst ağırlığı değiştirince setleri yeniden hesaplar (hedef ve AMRAP aynı). */
+export function rescalePlan(
+  plan: SessionPlan,
+  sets: readonly SetTarget[],
+  spec: LoadSpec,
+  topWeightKg: number,
+  reason: SuggestionReason,
+): SessionPlan {
+  return {
+    sets: plan.sets.map((planned) => ({
+      ...planned,
+      weightKg: percentOfTop(topWeightKg, sets[planned.setIndex]?.loadPct ?? planned.loadPct, spec),
+    })),
+    topWeightKg,
+    reason,
+  };
+}
+
+/** Set düzeninin kuralları (düzenleyicide kural anlatımının altında); düz sette `null`. */
+export function describeSetRules(sets: readonly SetTarget[], spec: LoadSpec): string | null {
+  const weighted = usesWeight(spec);
+  const parts: string[] = [];
+  if (weighted && sets.some((set) => !isFullLoad(set))) {
+    parts.push('Yüzdeli setler tam yükteki setin ağırlığını izler; ağırlık artışına yalnız tam yükteki setler karar verir.');
+  }
+  if (sets.some((set) => set.amrap)) {
+    parts.push(
+      `AMRAP sette zorluk düğmesi tıkanma sayılmaz; alt sınırın altında kalınırsa tıkanma sayılır.${
+        weighted ? ` Aralığın ${AMRAP_EXTRA_REPS}+ tekrar üstüne çıkılırsa ağırlık iki adım artar.` : ''
+      }`,
+    );
+  }
+  return parts.length > 0 ? parts.join(' ') : null;
 }
 
 /**

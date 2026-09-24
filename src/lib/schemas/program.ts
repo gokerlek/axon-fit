@@ -7,6 +7,8 @@ import {
   countDays,
   duplicateNames,
   duplicateProgramIds,
+  upgradeProgram,
+  upgradeProgramBody,
 } from '../program-plan.ts';
 import { TEMPLATE_ID_PATTERN, TEMPLATE_LIMITS, countRows } from '../template-plan.ts';
 import { templateBlockSchema } from './template.ts';
@@ -15,9 +17,14 @@ import { templateBlockSchema } from './template.ts';
  * Danışana özel program şeması — sunucu ve istemci ortak (SPEC §4, §7.4).
  *
  * Program danışanın kendi repo'sunda `program.json`'dur: evreler → günler → bloklar.
+ * Evreler isteğe bağlıdır: `phased: false` programda tek, süresiz, gizli bir evre olur.
  * Günün blokları şablonla aynı yapıdadır (`templateBlockSchema`). Yapı kuralları ve
  * sabitler `src/lib/program-plan.ts`'te. Node'un test aracı doğrudan çalıştırdığı için
  * çalışma zamanı içe aktarmaları göreli ve `.ts` uzantılıdır.
+ *
+ * Sürüm 1 dosyalar (ve eski sekmeden gelen kayıtlar) okunurken sürüm 2'ye çevrilir
+ * (`upgradeProgram`): `phased` evrelerden çıkarılır, satırlar set başına hedefe geçer.
+ * Düzenleyicinin şeması yalnız yeni biçimi kabul eder.
  */
 
 const timestamp = v.pipe(v.string(), v.isoTimestamp());
@@ -65,6 +72,8 @@ export const programPhaseSchema = v.object({
   ),
   /** Süre (hafta); yoksa süresiz evre, geçiş önerilmez. */
   weeks: v.optional(int(1, L.weeks, ' hafta')),
+  /** Haftada kaç gün; evresiz programda programın sıklığı. */
+  daysPerWeek: v.optional(int(1, L.daysPerWeek, ' gün')),
   days: v.pipe(
     v.array(programDaySchema),
     v.minLength(1, 'Evrede en az bir gün olmalı.'),
@@ -82,35 +91,35 @@ export const programPhasesSchema = v.pipe(
   v.check((phases) => duplicateProgramIds(phases).length === 0, 'Evre, gün, blok ve satır kimlikleri benzersiz olmalı.'),
 );
 
-const bodyFields = { currentPhaseId: phaseIdSchema, phases: programPhasesSchema };
+const bodyFields = { phased: v.boolean('Evre seçimi okunamadı.'), currentPhaseId: phaseIdSchema, phases: programPhasesSchema };
 const CURRENT_MISSING = 'Şu anki evre programda yok.';
+const UNPHASED_PROBLEM = 'Evresiz programda tek, süresiz gün listesi olur.';
 
-/** Düzenleyicinin şeması: evreler + şu anki evre (geçmiş, rotasyon, revision yok; onlar sunucunun). */
+const currentExists = (input: { currentPhaseId: string; phases: readonly { id: string }[] }) =>
+  input.phases.some((phase) => phase.id === input.currentPhaseId);
+/** Evresiz programda tek evre olur ve süresi yoktur. */
+const unphasedOk = (input: { phased: boolean; phases: readonly { weeks?: number }[] }) =>
+  input.phased || (input.phases.length === 1 && input.phases[0]?.weeks === undefined);
+
+/** Düzenleyicinin şeması: evrelere bölündü mü, evreler, şu anki evre (geçmiş, rotasyon, revision sunucunun). */
 export const programFormSchema = v.pipe(
   v.object(bodyFields),
-  v.forward(
-    v.partialCheck(
-      [['currentPhaseId'], ['phases']],
-      (input) => input.phases.some((phase) => phase.id === input.currentPhaseId),
-      CURRENT_MISSING,
-    ),
-    ['currentPhaseId'],
-  ),
+  v.forward(v.partialCheck([['currentPhaseId'], ['phases']], currentExists, CURRENT_MISSING), ['currentPhaseId']),
+  v.forward(v.partialCheck([['phased'], ['phases']], unphasedOk, UNPHASED_PROBLEM), ['phases']),
 );
 export type ProgramFormInput = v.InferInput<typeof programFormSchema>;
 export type ProgramFormValues = v.InferOutput<typeof programFormSchema>;
 
-/** Kayıt ucu: `baseRevision` null = yeni program; sayı = düzenleyicinin yüklediği sürüm. */
+/**
+ * Kayıt ucu: `baseRevision` null = yeni program; sayı = düzenleyicinin yüklediği sürüm.
+ * Eski biçimle açık kalmış sekmenin kaydı da kabul edilir (`phased` evrelerden, setler satıra).
+ */
 export const programSaveSchema = v.pipe(
+  v.unknown(),
+  v.transform(upgradeProgramBody),
   v.object({ ...bodyFields, baseRevision: v.nullable(positive) }),
-  v.forward(
-    v.partialCheck(
-      [['currentPhaseId'], ['phases']],
-      (input) => input.phases.some((phase) => phase.id === input.currentPhaseId),
-      CURRENT_MISSING,
-    ),
-    ['currentPhaseId'],
-  ),
+  v.forward(v.partialCheck([['currentPhaseId'], ['phases']], currentExists, CURRENT_MISSING), ['currentPhaseId']),
+  v.forward(v.partialCheck([['phased'], ['phases']], unphasedOk, UNPHASED_PROBLEM), ['phases']),
 );
 
 /** Evre geçişi (program sayfasındaki öneri). */
@@ -128,10 +137,14 @@ export const programLogEntrySchema = v.object({
   changes: v.pipe(v.array(programChangeSchema), v.minLength(1), v.maxLength(L.changesPerEntry)),
 });
 
-/** Repo'daki dosya. Bilinmeyen alanlar atılır (`v.object`). */
+/** Repo'daki dosya: sürüm 1 önce çevrilir. Bilinmeyen alanlar atılır (`v.object`). */
 export const programSchema = v.pipe(
+  v.unknown(),
+  v.transform(upgradeProgram),
   v.object({
-    version: v.literal(1),
+    version: v.literal(2),
+    /** Evrelere bölündü mü; false: tek, süresiz gün listesi. */
+    phased: v.boolean(),
     /** PT'nin her kaydında +1; düzenleyici çakışmayı bununla yakalar. */
     revision: positive,
     createdAt: timestamp,
@@ -144,5 +157,6 @@ export const programSchema = v.pipe(
     log: v.pipe(v.array(programLogEntrySchema), v.maxLength(L.log)),
   }),
   v.check((program) => program.phases.some((phase) => phase.id === program.current.phaseId), CURRENT_MISSING),
+  v.forward(v.partialCheck([['phased'], ['phases']], unphasedOk, UNPHASED_PROBLEM), ['phases']),
 );
 export type Program = v.InferOutput<typeof programSchema>;

@@ -2,6 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as v from 'valibot';
 import type { ProgramDay, ProgramLogEntry, ProgramPhase, ProgramState } from '../program-plan.ts';
+import { uniformSets } from '../set-plan.ts';
 import type { TemplateBlock } from '../template-plan.ts';
 import { programFormSchema, programSaveSchema, programSchema } from './program.ts';
 
@@ -11,9 +12,8 @@ function block(tail: string): TemplateBlock {
   return {
     id: `b_${tail}`,
     kind: 'single',
-    sets: 3,
     restSeconds: 120,
-    rows: [{ id: `r_${tail}`, exerciseId: 'goblet-squat', target: { min: 8, max: 12 } }],
+    rows: [{ id: `r_${tail}`, exerciseId: 'goblet-squat', sets: uniformSets({ min: 8, max: 12 }, 3) }],
   };
 }
 
@@ -35,7 +35,8 @@ const log: ProgramLogEntry = { at, revision: 1, kind: 'create', changes: [{ text
 
 function program(fields: Partial<ProgramState> = {}): ProgramState {
   return {
-    version: 1,
+    version: 2,
+    phased: true,
     revision: 1,
     createdAt: at,
     updatedAt: at,
@@ -94,7 +95,7 @@ describe('program şeması', () => {
   test('iki günde aynı satır kimliği olmaz', () => {
     const base = program();
     const second = day('bbbbbb', 'Gün B', {
-      blocks: [{ ...block('bbbbbb'), rows: [{ id: 'r_aaaaaa', exerciseId: 'leg-press', target: { min: 8, max: 12 } }] }],
+      blocks: [{ ...block('bbbbbb'), rows: [{ id: 'r_aaaaaa', exerciseId: 'leg-press', sets: uniformSets({ min: 8, max: 12 }, 3) }] }],
     });
     const dup = { ...base, phases: [{ ...base.phases[0], days: [day('aaaaaa', 'Gün A'), second] }, base.phases[1]] };
     const parsed = v.safeParse(programSchema, dup);
@@ -104,7 +105,7 @@ describe('program şeması', () => {
 
   test('şu anki evre programda olmalı; formda hata şu anki evre alanında', () => {
     assert.equal(v.safeParse(programSchema, program({ current: { phaseId: 'p_yok000', startedAt: at } })).success, false);
-    const form = v.safeParse(programFormSchema, { currentPhaseId: 'p_yok000', phases: program().phases });
+    const form = v.safeParse(programFormSchema, { phased: true, currentPhaseId: 'p_yok000', phases: program().phases });
     assert.equal(form.success, false);
     assert.deepEqual(paths(form), ['currentPhaseId']);
   });
@@ -141,9 +142,106 @@ describe('program şeması', () => {
   });
 
   test('kayıt ucu: baseRevision null (yeni) ya da 1 ve üstü', () => {
-    const body = { currentPhaseId: 'p_uyum01', phases: program().phases };
+    const body = { phased: true, currentPhaseId: 'p_uyum01', phases: program().phases };
     assert.equal(v.safeParse(programSaveSchema, { ...body, baseRevision: null }).success, true);
     assert.equal(v.safeParse(programSaveSchema, { ...body, baseRevision: 7 }).success, true);
     assert.equal(v.safeParse(programSaveSchema, { ...body, baseRevision: 0 }).success, false);
+  });
+});
+
+describe('evresiz program, sıklık ve eski dosyalar', () => {
+  /** Sürüm 1: blokta set sayısı, satırda tek hedef, `phased` yok. */
+  function legacyBlock(tail: string) {
+    return { id: `b_${tail}`, kind: 'single', sets: 4, restSeconds: 120, rows: [{ id: `r_${tail}`, exerciseId: 'goblet-squat', target: { min: 5, max: 8 } }] };
+  }
+  function legacy(phaseList: Record<string, unknown>[]) {
+    return {
+      version: 1,
+      revision: 1,
+      createdAt: at,
+      updatedAt: at,
+      phases: phaseList,
+      current: { phaseId: 'p_uyum01', startedAt: at },
+      rotation: {},
+      log: [log],
+    };
+  }
+  const onePhase = (fields: Record<string, unknown> = {}) => ({
+    id: 'p_uyum01',
+    name: 'Evre 1',
+    days: [{ id: 'd_aaaaaa', name: 'Gün A', blocks: [legacyBlock('aaaaaa')] }],
+    ...fields,
+  });
+
+  test('sürüm 1, tek süresiz evre: evresiz sürüm 2, satırlar sete çevrilir', () => {
+    const parsed = v.safeParse(programSchema, legacy([onePhase()]));
+    assert.equal(parsed.success, true, parsed.issues?.[0]?.message ?? '');
+    if (!parsed.success) return;
+    assert.equal(parsed.output.version, 2);
+    assert.equal(parsed.output.phased, false);
+    assert.deepEqual(parsed.output.phases[0]?.days[0]?.blocks[0]?.rows[0]?.sets, uniformSets({ min: 5, max: 8 }, 4));
+    assert.equal('sets' in (parsed.output.phases[0]?.days[0]?.blocks[0] ?? {}), false);
+  });
+
+  test('sürüm 1: iki evre ya da süreli tek evre evreli', () => {
+    const two = legacy([
+      onePhase(),
+      { id: 'p_guc001', name: 'Güç', days: [{ id: 'd_bbbbbb', name: 'Gün A', blocks: [legacyBlock('bbbbbb')] }] },
+    ]);
+    const parsedTwo = v.safeParse(programSchema, two);
+    assert.equal(parsedTwo.success && parsedTwo.output.phased, true);
+    const timed = v.safeParse(programSchema, legacy([onePhase({ weeks: 2 })]));
+    assert.equal(timed.success && timed.output.phased, true);
+  });
+
+  test('evresiz programda tek, süresiz evre olur', () => {
+    const two = v.safeParse(programSchema, program({ phased: false }));
+    assert.equal(two.success, false);
+    assert.deepEqual(
+      two.issues?.map((issue) => [issue.path?.map((segment) => String(segment.key)).join('.'), issue.message]),
+      [['phases', 'Evresiz programda tek, süresiz gün listesi olur.']],
+    );
+    const base = program();
+    const timed = { ...base, phased: false, phases: [base.phases[0]] };
+    assert.deepEqual(paths(v.safeParse(programSchema, timed)), ['phases']);
+    const open = { ...base, phased: false, phases: [{ ...base.phases[0], weeks: undefined }] };
+    assert.equal(v.safeParse(programSchema, open).success, true);
+  });
+
+  test('sürüm 2 dosyada evre seçimi zorunlu (onarılmaz)', () => {
+    const { phased: _phased, ...rest } = program();
+    assert.equal(v.safeParse(programSchema, rest).success, false);
+  });
+
+  test('haftada en fazla 7 gün', () => {
+    const base = program();
+    const withFrequency = (daysPerWeek: number) => ({ ...base, phases: [{ ...base.phases[0], daysPerWeek }, base.phases[1]] });
+    assert.equal(v.safeParse(programSchema, withFrequency(3)).success, true);
+    const parsed = v.safeParse(programSchema, withFrequency(8));
+    assert.deepEqual(
+      parsed.issues?.map((issue) => [issue.path?.map((segment) => String(segment.key)).join('.'), issue.message]),
+      [['phases.0.daysPerWeek', 'En fazla 7 gün.']],
+    );
+    assert.equal(v.safeParse(programSchema, withFrequency(0)).success, false);
+  });
+
+  test('kayıt ucu: evre seçimi yoksa evrelerden; eski bloklar çevrilir', () => {
+    const body = {
+      currentPhaseId: 'p_uyum01',
+      phases: [{ id: 'p_uyum01', name: 'Evre 1', days: [{ id: 'd_aaaaaa', name: 'Gün A', blocks: [legacyBlock('aaaaaa')] }] }],
+      baseRevision: 1,
+    };
+    const parsed = v.safeParse(programSaveSchema, body);
+    assert.equal(parsed.success, true, parsed.issues?.[0]?.message ?? '');
+    if (!parsed.success) return;
+    assert.equal(parsed.output.phased, false);
+    assert.equal(parsed.output.phases[0]?.days[0]?.blocks[0]?.rows[0]?.sets.length, 4);
+  });
+
+  test('düzenleyicinin şeması evre seçimini ister', () => {
+    const { phased: _phased, ...rest } = { phased: true, currentPhaseId: 'p_uyum01', phases: program().phases };
+    assert.equal(v.safeParse(programFormSchema, rest).success, false);
+    assert.equal(v.safeParse(programFormSchema, { ...rest, phased: 'evet' }).success, false);
+    assert.equal(v.safeParse(programFormSchema, { ...rest, phased: true }).success, true);
   });
 });

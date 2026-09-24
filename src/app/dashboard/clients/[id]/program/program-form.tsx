@@ -16,7 +16,10 @@ import {
   addDay,
   dayFromTemplate,
   locateDay,
+  mergePhases,
+  mergePhasesCheck,
   missingExerciseDays,
+  moveDayToPhase,
   nextDayId,
   prepareProgramForEditing,
   programIdSource,
@@ -36,6 +39,7 @@ import type { EditorDevice, PickerExercise } from '@/lib/template-edit';
 import type { TemplateBlock } from '@/lib/template-plan';
 import { AddDayDialog } from './add-day-dialog';
 import { DayEditor } from './day-editor';
+import { DaysCard } from './days-card';
 import { PhasesCard } from './phases-card';
 import { SaveTemplateDialog } from './save-template-dialog';
 
@@ -54,9 +58,16 @@ export type PhaseActions = {
   updateWithUndo: (change: (phases: ProgramPhase[]) => ProgramPhase[], message: string, options?: { select?: string }) => void;
   select: (dayId: string) => void;
   setCurrentPhase: (phaseId: string) => void;
+  /** Evrelere böl (açık) ya da evreleri kaldır (günler şu anki evrede tek listede birleşir); geri alınabilir. */
+  setPhased: (phased: boolean) => void;
+  /** Günü başka evreye taşır (sona). */
+  moveDay: (dayId: string, phaseId: string) => void;
   openAddDay: (phaseId: string) => void;
   openSaveTemplate: () => void;
 };
+
+/** Geri alma için formun yapısal hâli: evre seçimi ve evreler. */
+type Snapshot = { phased: boolean; phases: ProgramPhase[] };
 
 const NO_TEMPLATE = 'none';
 const DAY_ERROR_KEY = /^phases\.(\d+)\.days\.(\d+)\./;
@@ -75,7 +86,8 @@ function toInput(phases: readonly ProgramPhase[]): ProgramFormInput['phases'] {
 /**
  * Danışana özel program düzenleyici — oluşturma ve düzenleme, kendi sayfasında (SPEC §6).
  *
- * Tek Formisch formu: evreler, günler ve şu anki evre. Evre ve gün işlemleri
+ * Tek Formisch formu: evre seçimi, evreler, günler ve şu anki evre. Evresiz programda
+ * günler tek listededir ("Günler" kartı); "Evrelere böl" evreleri açar. Evre ve gün işlemleri
  * (`program-plan.ts`) evre dizisine tek seferde yazılır; seçili günün hareketleri
  * şablonlarla ortak hareket düzenleyicide (`BlockEditor`). Kimlikler bütün programda
  * benzersiz üretilir. Kayıtta sunucu farkı çıkarır, program geçmişine yazar.
@@ -110,7 +122,7 @@ export function ProgramForm({
   // Düzenlemede artık olmayan cihaza yazılmış satırlar egzersizin cihazına döner (kaydedince kalıcı).
   const [start] = useState(() => {
     const prepared = prepareProgramForEditing(initial.phases, new Set(devices.map((device) => device.id)));
-    const input: ProgramFormInput = { currentPhaseId: initial.currentPhaseId, phases: toInput(prepared.phases) };
+    const input: ProgramFormInput = { phased: initial.phased, currentPhaseId: initial.currentPhaseId, phases: toInput(prepared.phases) };
     return {
       input,
       dropped: prepared.droppedDeviceRowIds.length,
@@ -120,6 +132,7 @@ export function ProgramForm({
   const form = useForm({ schema: programFormSchema, initialInput: start.input });
   const phases = (useField(form, { path: ['phases'] }).input ?? []) as unknown as ProgramPhase[];
   const currentPhaseId = useField(form, { path: ['currentPhaseId'] }).input ?? '';
+  const phased = useField(form, { path: ['phased'] }).input ?? false;
   const exerciseIds = useMemo(() => new Set(exercises.map((exercise) => exercise.id)), [exercises]);
   // Canlı evrelerden: değiştirilen/kaldırılan satır ya da silinen gün uyarıdan hemen düşer.
   const missing = useMemo(() => missingExerciseDays(phases, exerciseIds), [phases, exerciseIds]);
@@ -170,34 +183,80 @@ export function ProgramForm({
     [current, write],
   );
 
+  const snapshot = useCallback(
+    (): Snapshot => ({ phased: getInput(form, { path: ['phased'] }) ?? false, phases: current() }),
+    [form, current],
+  );
+  // Evresiz hâlde tek evre olur: sıra, ara hâlde iki evreli evresiz program oluşmasın diye.
+  const restore = useCallback(
+    (state: Snapshot) => {
+      if (state.phased) {
+        setInput(form, { path: ['phased'], input: true });
+        write(state.phases);
+      } else {
+        write(state.phases);
+        setInput(form, { path: ['phased'], input: false });
+      }
+    },
+    [form, write],
+  );
+
   const undoToast = useRef<string | number | null>(null);
-  const updateWithUndo = useCallback<PhaseActions['updateWithUndo']>(
-    (change, message, options) => {
-      const before = current();
-      const after = change(before);
-      if (after === before) return;
-      write(after);
-      if (options?.select) setSelectedDayId(options.select);
-      // Geri al yalnız bu işlemden sonra başka değişiklik yoksa geçerli; yoksa sonraki düzenlemeler silinirdi.
-      const snapshot = JSON.stringify(current());
+  /** "Geri al" bildirimi: yalnız bu işlemden sonra başka değişiklik yoksa geçerli; yoksa sonraki düzenlemeler silinirdi. */
+  const offerUndo = useCallback(
+    (before: Snapshot, message: string) => {
+      const after = JSON.stringify(snapshot());
       setAnnouncement(message);
       if (undoToast.current !== null) toast.dismiss(undoToast.current);
       undoToast.current = toast(message, {
         action: {
           label: 'Geri al',
           onClick: () => {
-            if (JSON.stringify(current()) !== snapshot) {
+            if (JSON.stringify(snapshot()) !== after) {
               toast.error('Sonrasında başka değişiklik yapıldı; geri alınamadı.');
               return;
             }
-            write(before);
+            restore(before);
           },
         },
         duration: 8000,
       });
     },
-    [current, write],
+    [snapshot, restore],
   );
+
+  const updateWithUndo = useCallback<PhaseActions['updateWithUndo']>(
+    (change, message, options) => {
+      const before = snapshot();
+      const after = change(before.phases);
+      if (after === before.phases) return;
+      write(after);
+      if (options?.select) setSelectedDayId(options.select);
+      offerUndo(before, message);
+    },
+    [snapshot, write, offerUndo],
+  );
+
+  const setPhased = (next: boolean) => {
+    const before = snapshot();
+    if (before.phased === next) return;
+    if (next) {
+      setInput(form, { path: ['phased'], input: true });
+      offerUndo(before, "Evrelere bölündü; günleri 'Evreye taşı' ile dağıt.");
+      return;
+    }
+    const check = mergePhasesCheck(before.phases);
+    if (!check.ok) {
+      toast.error(`Birleşince ${check.days} gün olur; tek listede en fazla 7 gün olabilir. Önce bazı günleri sil.`);
+      return;
+    }
+    const merged = mergePhases(before.phases, getInput(form, { path: ['currentPhaseId'] }) ?? '');
+    const mergedId = merged.phases[0]?.id;
+    write(merged.phases);
+    if (mergedId) setInput(form, { path: ['currentPhaseId'], input: mergedId });
+    setInput(form, { path: ['phased'], input: false });
+    offerUndo(before, 'Evreler kaldırıldı; günler tek listede sırayla döner.');
+  };
 
   const actions: PhaseActions = {
     current,
@@ -205,6 +264,17 @@ export function ProgramForm({
     updateWithUndo,
     select: setSelectedDayId,
     setCurrentPhase: (phaseId) => setInput(form, { path: ['currentPhaseId'], input: phaseId }),
+    setPhased,
+    moveDay: (dayId, phaseId) => {
+      const all = current();
+      const day = all.flatMap((phase) => phase.days).find((item) => item.id === dayId);
+      const target = all.find((phase) => phase.id === phaseId);
+      if (!day || !target) return;
+      update((phasesNow) => moveDayToPhase(phasesNow, dayId, phaseId), {
+        select: dayId,
+        announce: `${day.name} '${target.name}' evresine taşındı`,
+      });
+    },
     openAddDay: (phaseId) => {
       setDialogKey((key) => key + 1);
       setAddDayPhaseId(phaseId);
@@ -217,7 +287,7 @@ export function ProgramForm({
     },
   };
 
-  // Oluştururken: "Evre 1 · Gün A" başlangıç şablonuyla dolar ya da boşalır.
+  // Oluştururken: ilk gün ("Gün A") başlangıç şablonuyla dolar ya da boşalır.
   const chooseStart = (value: string) => {
     setStartChoice(value);
     const before = current();
@@ -332,14 +402,19 @@ export function ProgramForm({
   const detailHref = `/dashboard/clients/${clientId}`;
   const programHref = `${detailHref}/program`;
   const missingRows = missing.reduce((sum, item) => sum + item.rowIds.length, 0);
+  const dayLabel = (phaseName: string, dayName: string) => (phased ? `${phaseName} · ${dayName}` : dayName);
   const missingLabels = missing
     .map((item) => {
       const phase = phases.find((entry) => entry.id === item.phaseId);
       const day = phase?.days.find((entry) => entry.id === item.dayId);
-      return phase && day ? `${phase.name} · ${day.name}` : null;
+      return phase && day ? dayLabel(phase.name, day.name) : null;
     })
     .filter(Boolean)
     .join(', ');
+  const skeleton = locateDay(phases, start.skeletonDayId);
+  const skeletonPhase = skeleton ? phases[skeleton.phaseIndex] : phases[0];
+  const skeletonDay = skeleton ? skeletonPhase?.days[skeleton.dayIndex] : skeletonPhase?.days[0];
+  const startTarget = skeletonPhase && skeletonDay ? dayLabel(skeletonPhase.name, skeletonDay.name) : 'İlk gün';
   const addDayPhase = phases.find((phase) => phase.id === addDayPhaseId);
   const startLabels: Record<string, string> = {
     [NO_TEMPLATE]: 'Şablonsuz (boş)',
@@ -380,32 +455,45 @@ export function ProgramForm({
               <FieldLabel htmlFor="startTemplate">Başlangıç şablonu</FieldLabel>
               <LabeledSelect id="startTemplate" value={startChoice} labels={startLabels} onChange={chooseStart} />
               <FieldDescription>
-                Evre 1 · Gün A bu şablonla dolar. Başka günleri &quot;Gün ekle → Şablondan&quot; ile eklersin.
+                {startTarget} bu şablonla dolar. Başka günleri &quot;Gün ekle → Şablondan&quot; ile eklersin.
               </FieldDescription>
             </Field>
           </CardContent>
         </Card>
       ) : null}
 
-      <PhasesCard
-        form={form}
-        phases={phases}
-        currentPhaseId={currentPhaseId}
-        stored={stored}
-        selectedDayId={selectedDay?.id ?? null}
-        nextDayId={next}
-        missingDayIds={missingDayIds}
-        hasTemplates={templateList.length > 0}
-        now={now}
-        timeZone={timeZone}
-        actions={actions}
-      />
+      {phased ? (
+        <PhasesCard
+          form={form}
+          phases={phases}
+          currentPhaseId={currentPhaseId}
+          stored={stored}
+          selectedDayId={selectedDay?.id ?? null}
+          nextDayId={next}
+          missingDayIds={missingDayIds}
+          hasTemplates={templateList.length > 0}
+          now={now}
+          timeZone={timeZone}
+          actions={actions}
+        />
+      ) : (
+        <DaysCard
+          form={form}
+          phases={phases}
+          selectedDayId={selectedDay?.id ?? null}
+          nextDayId={next}
+          missingDayIds={missingDayIds}
+          hasTemplates={templateList.length > 0}
+          actions={actions}
+        />
+      )}
 
       {located && selectedPhase && selectedDay ? (
         <DayEditor
           key={selectedDay.id}
           form={form}
           phases={phases}
+          phased={phased}
           phase={selectedPhase}
           phaseIndex={located.phaseIndex}
           day={selectedDay}
@@ -453,7 +541,7 @@ export function ProgramForm({
           <AlertTitle>Kaydedilemedi</AlertTitle>
           <AlertDescription>
             {hiddenPhase && hiddenDay
-              ? `${hiddenPhase.name} · ${hiddenDay.name} gününde düzeltilecek alan var: ${hidden.errors[0] ?? ''}`
+              ? `${dayLabel(hiddenPhase.name, hiddenDay.name)} gününde düzeltilecek alan var: ${hidden.errors[0] ?? ''}`
               : hidden.errors[0]}
           </AlertDescription>
           {hiddenDay && hiddenDay.id !== selectedDay?.id ? (
@@ -482,7 +570,7 @@ export function ProgramForm({
         onOpenChange={(open) => {
           if (!open) setAddDayPhaseId(null);
         }}
-        phaseName={addDayPhase?.name ?? ''}
+        phaseName={phased ? (addDayPhase?.name ?? '') : null}
         templates={templateList}
         exercises={exerciseById}
         onAdd={addFromTemplate}

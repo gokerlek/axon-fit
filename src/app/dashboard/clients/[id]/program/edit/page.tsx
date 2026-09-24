@@ -59,7 +59,7 @@ export default async function EditProgramPage({ params }: { params: Promise<{ id
       <ProgramForm
         clientId={id}
         mode="edit"
-        initial={{ currentPhaseId: program.current.phaseId, phases: program.phases }}
+        initial={{ phased: program.phased, currentPhaseId: program.current.phaseId, phases: program.phases }}
         baseRevision={program.revision}
         stored={{ current: program.current, rotation: program.rotation }}
         templates={templates}

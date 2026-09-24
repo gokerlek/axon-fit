@@ -9,9 +9,19 @@ import {
   prescriptionText,
   type DiffContext,
 } from './program-diff.ts';
-import { dissolveGroup, joinBlocks, ungroupRow, type IdSource } from './template-edit.ts';
-import type { ProgramBody, ProgramChange, ProgramDay, ProgramPhase, ProgramState } from './program-plan.ts';
-import type { TemplateBlock, TemplateRow } from './template-plan.ts';
+import { applySetPreset, dissolveGroup, joinBlocks, setRounds, setRowSetCount, ungroupRow, type IdSource } from './template-edit.ts';
+import {
+  derivePhased,
+  mergePhases,
+  moveDayToPhase,
+  type ProgramBody,
+  type ProgramChange,
+  type ProgramDay,
+  type ProgramPhase,
+  type ProgramState,
+} from './program-plan.ts';
+import { resizeSets, uniformSets } from './set-plan.ts';
+import { roundsOf, type TemplateBlock, type TemplateRow } from './template-plan.ts';
 
 const ctx: DiffContext = {
   exercises: new Map([
@@ -28,16 +38,25 @@ const ctx: DiffContext = {
 /** Egzersiz türleri (grup dağıtırken dinlenme için). */
 const kinds = new Map([...ctx.exercises.keys()].map((id) => [id, { category: 'compound' as const }]));
 
+/** Satır: 3 düz set, `min`–`max`. */
 function row(id: string, exerciseId: string, min: number, max: number, fields: Partial<TemplateRow> = {}): TemplateRow {
-  return { id, exerciseId, target: { min, max }, ...fields };
+  return { id, exerciseId, sets: uniformSets({ min, max }, 3), ...fields };
 }
 
+/** Tek hareket: satırın set sayısı `sets`'e çekilir. */
 function single(id: string, r: TemplateRow, sets = 3, restSeconds = 120): TemplateBlock {
-  return { id, kind: 'single', sets, restSeconds, rows: [r] };
+  return { id, kind: 'single', restSeconds, rows: [{ ...r, sets: resizeSets(r.sets, sets) }] };
 }
 
+/** Grup: her hareketin set sayısı `sets`'e (tura) çekilir. */
 function group(id: string, kind: TemplateBlock['kind'], rows: TemplateRow[], sets = 3, restSeconds = 90, transitionSeconds?: number): TemplateBlock {
-  return { id, kind, sets, restSeconds, ...(transitionSeconds !== undefined ? { transitionSeconds } : {}), rows };
+  return {
+    id,
+    kind,
+    restSeconds,
+    ...(transitionSeconds !== undefined ? { transitionSeconds } : {}),
+    rows: rows.map((item) => ({ ...item, sets: resizeSets(item.sets, sets) })),
+  };
 }
 
 const goblet = row('r_goblet', 'goblet-squat', 8, 12);
@@ -50,10 +69,11 @@ function gun(id: string, name: string, blocks: TemplateBlock[], fields: Partial<
 }
 
 const beforeA = gun('d_aaaaaa', 'Gün A', [single('b_goblet', goblet), single('b_press1', press)]);
-const afterA = gun('d_aaaaaa', 'Gün A', [single('b_goblet', { ...goblet, target: { min: 6, max: 10 } }, 4), single('b_hip001', hip)]);
+const afterA = gun('d_aaaaaa', 'Gün A', [single('b_goblet', { ...goblet, sets: uniformSets({ min: 6, max: 10 }, 3) }, 4), single('b_hip001', hip)]);
 
-function body(phases: ProgramPhase[], currentPhaseId = phases[0]?.id ?? ''): ProgramBody {
-  return { currentPhaseId, phases };
+/** Gövde: evre seçimi verilmezse eski dosyalardaki gibi evrelerden çıkarılır. */
+function body(phases: ProgramPhase[], currentPhaseId = phases[0]?.id ?? '', phased = derivePhased(phases)): ProgramBody {
+  return { phased, currentPhaseId, phases };
 }
 
 const evre1 = (days: ProgramDay[], fields: Partial<ProgramPhase> = {}): ProgramPhase => ({ id: 'p_evre01', name: 'Evre 1', days, ...fields });
@@ -74,7 +94,7 @@ describe('gün farkı', () => {
 
   test('evre eklenince kapsam "Evre · Gün", evre en sonda', () => {
     const guc: ProgramPhase = { id: 'p_guc001', name: 'Güç', weeks: 6, days: [gun('d_bbbbbb', 'Gün A', [single('b_other1', row('r_other1', 'plank', 30, 60))])] };
-    const changes = diffProgram(body([evre1([beforeA])]), body([evre1([afterA]), guc]), ctx);
+    const changes = diffProgram(body([evre1([beforeA])], 'p_evre01', true), body([evre1([afterA]), guc], 'p_evre01', true), ctx);
     assert.equal(changes[0]?.scope, 'Evre 1 · Gün A');
     assert.deepEqual(changes.at(-1), { text: "Evre 'Güç' eklendi (6 hafta)" });
     assert.equal(changes.length, 4);
@@ -88,7 +108,7 @@ describe('gün farkı', () => {
   test('süreli hedef', () => {
     const plank = row('r_plank1', 'plank', 30, 60);
     const before = gun('d_aaaaaa', 'Gün A', [single('b_plank1', plank)]);
-    const after = gun('d_aaaaaa', 'Gün A', [single('b_plank1', { ...plank, target: { min: 45, max: 45 } })]);
+    const after = gun('d_aaaaaa', 'Gün A', [single('b_plank1', { ...plank, sets: uniformSets({ min: 45, max: 45 }, 3) })]);
     assert.deepEqual(diffDay(before, after, ctx), ['Plank 3×30–60 sn → 3×45 sn']);
     assert.equal(prescriptionText(5, { min: 5, max: 5 }, 'weight_reps'), '5×5');
   });
@@ -104,10 +124,22 @@ describe('gün farkı', () => {
   const singles = gun('d_aaaaaa', 'Gün A', [single('b_goblet', goblet, 4), single('b_curl01', curl, 3)]);
   const superset = gun('d_aaaaaa', 'Gün A', [group('b_goblet', 'superset', [goblet, curl], 3)]);
 
-  test('iki tek hareket süperset olur', () => {
+  test('iki tek hareket süperset olur: setler hareketlerde kalır', () => {
     const joined = gun('d_aaaaaa', 'Gün A', joinBlocks(singles.blocks, 'b_goblet', 'next'));
-    assert.equal(joined.blocks[0]?.sets, 4);
-    assert.deepEqual(diffDay(singles, joined, ctx), ['Leg Curl 3×10–15 → 4×10–15', 'Yeni süperset: Goblet Squat + Leg Curl']);
+    assert.equal(roundsOf(joined.blocks[0] as TemplateBlock), 4);
+    assert.deepEqual(diffDay(singles, joined, ctx), ['Yeni süperset: Goblet Squat + Leg Curl']);
+  });
+
+  test('tur değişimi (bütün hareketler aynı sayıda): yalnız grup cümlesi', () => {
+    const more = gun('d_aaaaaa', 'Gün A', setRounds(superset.blocks, 'b_goblet', 4));
+    assert.deepEqual(diffDay(superset, more, ctx), ['Süperset (Goblet Squat + Leg Curl): 3 → 4 tur']);
+  });
+
+  test('gruptaki bir hareketin seti azalır: yalnız o hareketin cümlesi', () => {
+    const fewer = gun('d_aaaaaa', 'Gün A', setRowSetCount(superset.blocks, curl.id, 2));
+    assert.deepEqual(diffDay(superset, fewer, ctx), ['Leg Curl 3×10–15 → 2×10–15']);
+    const back = gun('d_aaaaaa', 'Gün A', setRounds(fewer.blocks, 'b_goblet', 4));
+    assert.deepEqual(diffDay(fewer, back, ctx), ['Goblet Squat 3×8–12 → 4×8–12']);
   });
 
   test('süperset turu yalnız grupta yazılır', () => {
@@ -156,7 +188,8 @@ describe('gün farkı', () => {
 
       const at = '2026-09-01T00:00:00.000Z';
       const stored: ProgramState = {
-        version: 1,
+        version: 2,
+        phased: false,
         revision: 1,
         createdAt: at,
         updatedAt: at,
@@ -300,7 +333,8 @@ describe('kaydın uygulanması', () => {
   const uyum = evre1([{ ...beforeA, source }, B, C], { name: 'Uyum', weeks: 2 });
   const guc: ProgramPhase = { id: 'p_guc001', name: 'Güç', days: [gun('d_dddddd', 'Gün A', [single('b_dddddd', row('r_dddddd', 'hip-thrust', 8, 12))])] };
   const stored: ProgramState = {
-    version: 1,
+    version: 2,
+    phased: true,
     revision: 5,
     createdAt: at,
     updatedAt: at,
@@ -311,12 +345,12 @@ describe('kaydın uygulanması', () => {
   };
 
   test('değişiklik yoksa null', () => {
-    assert.equal(applyProgramEdit(stored, { currentPhaseId: uyum.id, phases: stored.phases }, ctx, simdi), null);
+    assert.equal(applyProgramEdit(stored, { phased: true, currentPhaseId: uyum.id, phases: stored.phases }, ctx, simdi), null);
   });
 
   test('revision artar, kayıt en üste "Düzenlendi" olarak girer', () => {
     const phases = [{ ...uyum, days: [{ ...afterA, source }, B, C] }, guc];
-    const result = applyProgramEdit(stored, { currentPhaseId: uyum.id, phases }, ctx, simdi);
+    const result = applyProgramEdit(stored, { phased: true, currentPhaseId: uyum.id, phases }, ctx, simdi);
     assert.ok(result);
     assert.equal(result.program.revision, 6);
     assert.equal(result.program.updatedAt, simdi.toISOString());
@@ -336,7 +370,7 @@ describe('kaydın uygulanması', () => {
   });
 
   test('yalnız şu anki evre değiştiyse "Evre geçişi": yeni başlangıç, son gün düşer', () => {
-    const result = applyProgramEdit(stored, { currentPhaseId: guc.id, phases: stored.phases }, ctx, simdi);
+    const result = applyProgramEdit(stored, { phased: true, currentPhaseId: guc.id, phases: stored.phases }, ctx, simdi);
     assert.ok(result);
     assert.equal(result.program.log[0]?.kind, 'phase');
     assert.deepEqual(result.program.current, { phaseId: guc.id, startedAt: simdi.toISOString() });
@@ -345,14 +379,14 @@ describe('kaydın uygulanması', () => {
 
   test('son gün silinince rotasyon uzlaşır', () => {
     const phases = [{ ...uyum, days: uyum.days.filter((day) => day.id !== 'd_bbbbbb') }, guc];
-    const result = applyProgramEdit(stored, { currentPhaseId: uyum.id, phases }, ctx, simdi);
+    const result = applyProgramEdit(stored, { phased: true, currentPhaseId: uyum.id, phases }, ctx, simdi);
     assert.deepEqual(result?.program.rotation, { lastDayId: 'd_aaaaaa', lastCompletedAt: '2026-09-20T10:00:00.000Z' });
   });
 
   test('düzenleyici göndermediyse kayıttaki kaynak korunur', () => {
     const { source: _source, ...withoutSource } = uyum.days[0] as ProgramDay;
     const phases = [{ ...uyum, name: 'Uyum 2', days: [withoutSource, B, C] }, guc];
-    const result = applyProgramEdit(stored, { currentPhaseId: uyum.id, phases }, ctx, simdi);
+    const result = applyProgramEdit(stored, { phased: true, currentPhaseId: uyum.id, phases }, ctx, simdi);
     assert.deepEqual(result?.program.phases[0]?.days[0]?.source, source);
     assert.deepEqual(result?.changes, [{ text: "Evre adı: 'Uyum' → 'Uyum 2'" }]);
   });
@@ -361,20 +395,150 @@ describe('kaydın uygulanması', () => {
     const rows = Array.from({ length: 33 }, (_, index) => row(`r_x${String(index).padStart(5, '0')}`, 'leg-press', 10, 15));
     const many = gun('d_eeeeee', 'Gün D', rows.map((item, index) => single(`b_x${String(index).padStart(5, '0')}`, item)));
     const base: ProgramState = { ...stored, phases: [{ ...uyum, days: [...uyum.days, many] }, guc] };
-    // 33 satırın her birinde reçete değişir, 32'sinin notu eklenir: 65 değişiklik.
+    // 33 satırın her birinde set sayısı değişir, 32'sinin notu eklenir: 65 değişiklik.
+    const counted = many.blocks.reduce((blocks, block) => setRowSetCount(blocks, block.rows[0]?.id ?? '', 4), many.blocks);
     const changed = {
       ...many,
-      blocks: many.blocks.map((block, index) => ({
+      blocks: counted.map((block, index) => ({
         ...block,
-        sets: 4,
         rows: block.rows.map((item) => (index < 32 ? { ...item, note: 'yavaş' } : item)),
       })),
     };
-    const result = applyProgramEdit(base, { currentPhaseId: uyum.id, phases: [{ ...uyum, days: [...uyum.days, changed] }, guc] }, ctx, simdi);
+    const result = applyProgramEdit(
+      base,
+      { phased: true, currentPhaseId: uyum.id, phases: [{ ...uyum, days: [...uyum.days, changed] }, guc] },
+      ctx,
+      simdi,
+    );
     assert.ok(result);
     assert.equal(result.changes.length, 65);
     const entry = result.program.log[0];
     assert.equal(entry?.changes.length, 60);
     assert.deepEqual(entry?.changes.at(-1), { text: '… ve 6 değişiklik daha' });
+  });
+});
+
+describe('set başına hedef', () => {
+  const day = (blocks: TemplateBlock[]) => gun('d_aaaaaa', 'Gün A', blocks);
+  const before = day([single('b_goblet', goblet), single('b_press1', press)]);
+
+  test('piramit', () => {
+    const after = day(applySetPreset(before.blocks, goblet.id, 'pyramid'));
+    assert.deepEqual(diffDay(before, after, ctx), ['Goblet Squat 3×8–12 → 12/10/8 (piramit)']);
+  });
+
+  test('son set AMRAP açılır ve kapanır', () => {
+    const after = day(applySetPreset(before.blocks, press.id, 'lastAmrap'));
+    assert.deepEqual(diffDay(before, after, ctx), ['Leg Press: son set AMRAP']);
+    assert.deepEqual(diffDay(after, before, ctx), ['Leg Press: son set AMRAP kaldırıldı']);
+  });
+
+  test('AMRAP başka setlerde ya da hepsinde', () => {
+    const all = day([single('b_goblet', goblet), single('b_press1', { ...press, sets: press.sets.map((set) => ({ ...set, amrap: true })) })]);
+    assert.deepEqual(diffDay(before, all, ctx), ['Leg Press: bütün setler AMRAP']);
+    assert.deepEqual(diffDay(all, before, ctx), ['Leg Press: AMRAP kaldırıldı']);
+    const some = day([
+      single('b_goblet', goblet),
+      single('b_press1', { ...press, sets: press.sets.map((set, index) => (index > 0 ? { ...set, amrap: true } : set)) }),
+    ]);
+    assert.deepEqual(diffDay(before, some, ctx), ['Leg Press: AMRAP 2., 3. set']);
+  });
+
+  test('back-off yüzdesi değişir', () => {
+    const backoff = (pct: number) =>
+      day([single('b_goblet', { ...goblet, sets: [{ min: 8, max: 12 }, { min: 8, max: 12, loadPct: pct }] }, 2), single('b_press1', press)]);
+    assert.deepEqual(diffDay(backoff(85), backoff(80), ctx), ['Goblet Squat 8–12/8–12 (back-off %85) → 8–12/8–12 (back-off %80)']);
+  });
+});
+
+describe('sıklık ve evreler', () => {
+  const B = gun('d_bbbbbb', 'Gün B', [single('b_bbbbbb', row('r_bbbbbb', 'leg-curl', 10, 15))]);
+  const C = gun('d_cccccc', 'Gün C', [single('b_cccccc', row('r_cccccc', 'plank', 30, 60))]);
+  const D = gun('d_dddddd', 'Gün A', [single('b_dddddd', row('r_dddddd', 'hip-thrust', 8, 12))]);
+  const liste = (fields: Partial<ProgramPhase> = {}) => evre1([beforeA, B, C], fields);
+
+  test('evresiz programın sıklığı', () => {
+    const at = (daysPerWeek?: number) => body([liste(daysPerWeek === undefined ? {} : { daysPerWeek })]);
+    assert.deepEqual(texts(diffProgram(at(2), at(3), ctx)), ['Haftada 2 → 3 gün']);
+    assert.deepEqual(texts(diffProgram(at(), at(3), ctx)), ['Sıklık: haftada 3 gün']);
+    assert.deepEqual(texts(diffProgram(at(3), at(), ctx)), ['Sıklık kaldırıldı (önce haftada 3 gün)']);
+  });
+
+  test('evrenin sıklığı', () => {
+    const guc: ProgramPhase = { id: 'p_guc001', name: 'Güç', daysPerWeek: 2, days: [D] };
+    const before = body([liste({ weeks: 2 }), guc]);
+    assert.deepEqual(texts(diffProgram(before, body([liste({ weeks: 2 }), { ...guc, daysPerWeek: 3 }]), ctx)), ["'Güç': haftada 2 → 3 gün"]);
+    assert.deepEqual(texts(diffProgram(before, body([liste({ weeks: 2 }), { ...guc, daysPerWeek: undefined }]), ctx)), [
+      "'Güç' sıklığı kaldırıldı (önce haftada 2 gün)",
+    ]);
+    const kuvvet: ProgramPhase = { id: 'p_kuvvet', name: 'Kuvvet', weeks: 6, daysPerWeek: 3, days: [gun('d_eeeeee', 'Gün A', [single('b_eeeeee', row('r_eeeeee', 'plank', 30, 60))])] };
+    assert.deepEqual(texts(diffProgram(before, body([liste({ weeks: 2 }), guc, kuvvet]), ctx)), [
+      "Evre 'Kuvvet' eklendi (6 hafta · haftada 3 gün)",
+    ]);
+  });
+
+  const unphased = body([liste({ daysPerWeek: 3 })]);
+  const split = (currentPhaseId = 'p_evre01') =>
+    body(
+      [
+        { id: 'p_evre01', name: 'Uyum', weeks: 2, daysPerWeek: 3, days: [beforeA, B] },
+        { id: 'p_guc001', name: 'Güç', weeks: 6, daysPerWeek: 3, days: [C] },
+      ],
+      currentPhaseId,
+      true,
+    );
+
+  test('evrelere bölme tek cümle', () => {
+    assert.deepEqual(texts(diffProgram(unphased, split(), ctx)), [
+      "Evrelere bölündü: 'Uyum' (2 hafta · haftada 3 gün · Gün A, Gün B), 'Güç' (6 hafta · haftada 3 gün · Gün C)",
+    ]);
+  });
+
+  test('bölerken şu anki evre değişirse söylenir', () => {
+    assert.deepEqual(texts(diffProgram(unphased, split('p_guc001'), ctx)).at(-1), "Şu anki evre: 'Güç'");
+  });
+
+  test('tek süresiz evreyle bölmek de yazılır', () => {
+    assert.deepEqual(texts(diffProgram(body([liste()], 'p_evre01', false), body([liste()], 'p_evre01', true), ctx)), [
+      "Evrelere bölündü: 'Evre 1' (Gün A, Gün B, Gün C)",
+    ]);
+  });
+
+  const uyum: ProgramPhase = { id: 'p_uyum01', name: 'Uyum', weeks: 2, daysPerWeek: 2, days: [beforeA, B] };
+  const guc: ProgramPhase = { id: 'p_guc001', name: 'Güç', weeks: 6, daysPerWeek: 3, days: [D, C] };
+
+  test('evreleri kaldırma: yeniden adlanan gün ve tek cümle', () => {
+    const merged = mergePhases([uyum, guc], guc.id).phases;
+    assert.deepEqual(texts(diffProgram(body([uyum, guc], guc.id), body(merged, guc.id, false), ctx)), [
+      "Gün adı: 'Gün A' → 'Gün A 2'",
+      'Evreler kaldırıldı; günler tek listede: Gün A, Gün B, Gün A 2, Gün C',
+    ]);
+  });
+
+  test('gün başka evreye taşınır', () => {
+    const moved = moveDayToPhase([uyum, { ...guc, days: [D] }], B.id, guc.id);
+    assert.deepEqual(texts(diffProgram(body([uyum, { ...guc, days: [D] }]), body(moved), ctx)), ["Gün B → 'Güç' evresine taşındı"]);
+  });
+
+  test('yalnız evreleri kaldıran kayıt "Düzenlendi"; rotasyon sürer', () => {
+    const at = '2026-09-01T00:00:00.000Z';
+    const stored: ProgramState = {
+      version: 2,
+      phased: true,
+      revision: 4,
+      createdAt: at,
+      updatedAt: at,
+      phases: [uyum, guc],
+      current: { phaseId: guc.id, startedAt: at },
+      rotation: { lastDayId: D.id, lastCompletedAt: at },
+      log: [],
+    };
+    const merged = mergePhases(stored.phases, guc.id).phases;
+    const result = applyProgramEdit(stored, { phased: false, currentPhaseId: guc.id, phases: merged }, ctx, new Date('2026-09-24T09:00:00.000Z'));
+    assert.ok(result);
+    assert.equal(result.program.phased, false);
+    assert.equal(result.program.log[0]?.kind, 'edit');
+    assert.deepEqual(result.program.rotation, stored.rotation);
+    assert.equal(result.program.current, stored.current);
   });
 });

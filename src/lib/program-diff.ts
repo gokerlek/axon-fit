@@ -12,10 +12,12 @@ import {
   type ProgramState,
 } from './program-plan.ts';
 import { PROGRESSION_LABELS, RIR_LABELS, type TrackingType } from './progression.ts';
+import { amrapIndexes, resizeSets, setShape, setsText, type SetSpec } from './set-plan.ts';
 import {
   BLOCK_KIND_LABELS,
   DEFAULT_TRANSITION_SECONDS,
   formatRest,
+  roundsOf,
   type BlockKind,
   type TemplateBlock,
   type TemplateRow,
@@ -24,12 +26,13 @@ import {
 
 /**
  * Program geçmişi (SPEC §7.4): PT'nin her kaydında eski ve yeni program karşılaştırılır,
- * okunur Türkçe cümleler çıkar ("Gün A: Goblet Squat 3×8–12 → 4×6–10 · Leg Press
- * çıkarıldı"). Gerekçe alanı yok. Cümleler `program.json`'daki geçmişe (kırpılmış) ve
- * commit mesajına (tamamı) girer.
+ * okunur Türkçe cümleler çıkar ("Gün A: Goblet Squat 3×8–12 → 12/10/8 (piramit) · Leg
+ * Press: son set AMRAP · Haftada 2 → 3 gün"). Gerekçe alanı yok. Cümleler
+ * `program.json`'daki geçmişe (kırpılmış) ve commit mesajına (tamamı) girer.
  *
  * Satırlar satır kimliğiyle, bloklar blok kimliğiyle, günler ve evreler kendi
- * kimlikleriyle eşlenir: sıralama ya da gruplama "sil + ekle" diye yazılmaz.
+ * kimlikleriyle eşlenir: sıralama ya da gruplama "sil + ekle" diye yazılmaz. Setler
+ * satırla taşındığı için gruplama ve gruptan çıkarma set cümlesi üretmez.
  *
  * Saf fonksiyonlar; yol takma adıyla çalışma zamanı içe aktarması yapmaz.
  */
@@ -56,7 +59,7 @@ function targetShort(target: TemplateTarget, trackingType: TrackingType): string
   return trackingType === 'duration' ? `${range} sn` : range;
 }
 
-/** Reçete: "3×8–12", "5×5", "3×30–60 sn". */
+/** Reçete: "3×8–12", "5×5", "3×30–60 sn" (düz setler; set başına biçim `setsText`). */
 export function prescriptionText(sets: number, target: TemplateTarget, trackingType: TrackingType): string {
   return `${count(sets)}×${targetShort(target, trackingType)}`;
 }
@@ -86,6 +89,36 @@ function sameRule(a: TemplateRow['rule'], b: TemplateRow['rule']): boolean {
 
 function sameOrder(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
+/** Bütün hareketlerin set sayısı aynı mı (tur değişimi grup cümlesiyle anlatılabilir). */
+function uniformCount(block: TemplateBlock): boolean {
+  const first = block.rows[0]?.sets.length;
+  return block.rows.every((row) => row.sets.length === first);
+}
+
+/** Yalnız AMRAP işaretleri mi değişti (sayı, aralık, yüzde aynı). */
+function amrapOnly(a: readonly SetSpec[], b: readonly SetSpec[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((set, index) => {
+      const other = b[index];
+      return other !== undefined && set.min === other.min && set.max === other.max && set.loadPct === other.loadPct;
+    })
+  );
+}
+
+/** AMRAP değişiminin cümlesi: "son set AMRAP", "AMRAP 2., 3. set", "AMRAP kaldırıldı"… */
+function amrapChange(a: readonly SetSpec[], b: readonly SetSpec[]): string {
+  const before = setShape(a).amrap;
+  const after = setShape(b).amrap;
+  const single = b.length === 1;
+  if (after === 'none') return before === 'last' && !single ? 'son set AMRAP kaldırıldı' : 'AMRAP kaldırıldı';
+  if (after === 'last') return single ? 'AMRAP' : 'son set AMRAP';
+  if (after === 'all') return 'bütün setler AMRAP';
+  return `AMRAP ${amrapIndexes(b)
+    .map((index) => `${index + 1}.`)
+    .join(', ')} set`;
 }
 
 /** Bir günün değişiklikleri (kapsamsız cümleler). */
@@ -123,8 +156,11 @@ export function diffDay(before: Pick<ProgramDay, 'blocks'>, after: Pick<ProgramD
       groupLines.push(`${label} güncellendi: ${names(block)}`);
     }
     if (old && old.kind !== 'single') {
-      if (old.sets !== block.sets) {
-        groupLines.push(`${label} (${names(block)}): ${count(old.sets)} → ${count(block.sets)} tur`);
+      // Tur cümlesi yalnız hareketlerin set sayısı önce de sonra da eşitse; değilse satır cümleleri anlatır.
+      const oldRounds = roundsOf(old);
+      const newRounds = roundsOf(block);
+      if (oldRounds !== newRounds && uniformCount(old) && uniformCount(block)) {
+        groupLines.push(`${label} (${names(block)}): ${count(oldRounds)} → ${count(newRounds)} tur`);
         roundsReported.add(block.id);
       }
       if (old.restSeconds !== block.restSeconds) {
@@ -159,13 +195,15 @@ export function diffDay(before: Pick<ProgramDay, 'blocks'>, after: Pick<ProgramD
       rowLines.push(`${name} gruptan çıkarıldı (dinlenme ${restText(next.block.restSeconds)})`);
     }
 
-    const targetChanged = targetShort(a.target, tt(a)) !== targetShort(b.target, tt(b));
-    const setsChanged =
-      previous.block.sets !== next.block.sets && !(roundsReported.has(next.block.id) && previous.block.id === next.block.id);
-    if (targetChanged || setsChanged) {
-      rowLines.push(
-        `${name} ${prescriptionText(previous.block.sets, a.target, tt(a))} → ${prescriptionText(next.block.sets, b.target, tt(b))}`,
-      );
+    const textA = setsText(a.sets, tt(a));
+    const textB = setsText(b.sets, tt(b));
+    if (textA !== textB) {
+      const roundsOnly =
+        roundsReported.has(next.block.id) &&
+        previous.block.id === next.block.id &&
+        setsText(resizeSets(a.sets, b.sets.length), tt(a)) === textB;
+      if (tt(a) === tt(b) && amrapOnly(a.sets, b.sets)) rowLines.push(`${name}: ${amrapChange(a.sets, b.sets)}`);
+      else if (!roundsOnly) rowLines.push(`${name} ${textA} → ${textB}`);
     }
 
     if (previous.block.kind === 'single' && next.block.kind === 'single' && previous.block.restSeconds !== next.block.restSeconds) {
@@ -201,43 +239,80 @@ export function diffDay(before: Pick<ProgramDay, 'blocks'>, after: Pick<ProgramD
   return [...rowLines, ...groupLines, ...removed, ...added, ...order];
 }
 
+/** "haftada 3 gün". */
+function perWeek(daysPerWeek: number): string {
+  return `haftada ${count(daysPerWeek)} gün`;
+}
+
+/** Evre özetinin parçaları: süre, sıklık, günler ("2 hafta · haftada 3 gün · Gün A, Gün B"). */
+function phaseParts(phase: ProgramPhase, withDays: boolean): string {
+  return [
+    phase.weeks !== undefined ? weeksText(phase.weeks) : null,
+    phase.daysPerWeek !== undefined ? perWeek(phase.daysPerWeek) : null,
+    withDays ? phase.days.map((day) => day.name).join(', ') : null,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(' · ');
+}
+
+/** Sıklık değişimi: evresizde programın, evreli programda evrenin. */
+function frequencyChange(before: number | undefined, after: number | undefined, phaseName: string | null): string | null {
+  if (before === after) return null;
+  if (phaseName === null) {
+    if (before === undefined) return `Sıklık: ${perWeek(after as number)}`;
+    if (after === undefined) return `Sıklık kaldırıldı (önce ${perWeek(before)})`;
+    return `Haftada ${count(before)} → ${count(after)} gün`;
+  }
+  if (before === undefined) return `'${phaseName}' sıklığı: ${perWeek(after as number)}`;
+  if (after === undefined) return `'${phaseName}' sıklığı kaldırıldı (önce ${perWeek(before)})`;
+  return `'${phaseName}': haftada ${count(before)} → ${count(after)} gün`;
+}
+
 /**
- * Programın değişiklikleri, sırayla: günlerin içi, evrelerde gün ekleme/silme/sıra,
- * evreler (ad, süre, ekleme, silme, sıra), şu anki evre. Evre birden çoksa kapsam
- * "Evre · Gün", tek evrede yalnız gün adı.
+ * Programın değişiklikleri, sırayla: günlerin içi, günler (ad, ekleme, silme, sıra, evre
+ * değişimi), evreler (bölme/kaldırma, ad, süre, sıklık, ekleme, silme, sıra), şu anki
+ * evre. Evre birden çoksa kapsam "Evre · Gün", tek evrede yalnız gün adı. Evrelere
+ * bölme ve evreleri kaldırma tek cümledir: o kayıtta evre adı, süre, ekleme ve günlerin
+ * evre değiştirmesi ayrıca yazılmaz.
  */
 export function diffProgram(before: ProgramBody, after: ProgramBody, ctx: DiffContext): ProgramChange[] {
   const changes: ProgramChange[] = [];
   const push = (text: string, scope?: string) =>
     changes.push({ ...(scope ? { scope: clip(scope, PROGRAM_LIMITS.changeScope) } : {}), text: clip(text, PROGRAM_LIMITS.changeText) });
 
+  const toggledOn = !before.phased && after.phased;
+  const toggledOff = before.phased && !after.phased;
+  const toggled = toggledOn || toggledOff;
   const multi = after.phases.length > 1;
   const dayScope = (phase: ProgramPhase, day: ProgramDay) => (multi ? `${phase.name} · ${day.name}` : day.name);
   const phaseScope = (phase: ProgramPhase) => (multi ? phase.name : undefined);
 
-  const beforeDays = new Map(before.phases.flatMap((phase) => phase.days.map((day) => [day.id, day] as const)));
-  const afterDays = new Map(after.phases.flatMap((phase) => phase.days.map((day) => [day.id, day] as const)));
+  const phaseOfDay = (phases: readonly ProgramPhase[]) =>
+    new Map(phases.flatMap((phase) => phase.days.map((day) => [day.id, { phase, day }] as const)));
+  const beforeDays = phaseOfDay(before.phases);
+  const afterDays = phaseOfDay(after.phases);
   const beforePhases = new Map(before.phases.map((phase) => [phase.id, phase]));
   const afterPhases = new Map(after.phases.map((phase) => [phase.id, phase]));
 
   // 1. Günlerin içi.
   for (const phase of after.phases) {
     for (const day of phase.days) {
-      const old = beforeDays.get(day.id);
+      const old = beforeDays.get(day.id)?.day;
       if (!old) continue;
       for (const text of diffDay(old, day, ctx)) push(text, dayScope(phase, day));
     }
   }
 
-  // 2. Her iki sürümde de olan evrelerde günler: ad, ekleme, silme, sıra.
+  // 2. Günler: ad (programın her yerinde); her iki sürümde de olan evrelerde ekleme, silme,
+  // sıra (yeni evrenin günleri evreyle birlikte yazılır); evresi değişen gün.
   for (const phase of after.phases) {
-    const old = beforePhases.get(phase.id);
-    if (!old) continue;
     const scope = phaseScope(phase);
     for (const day of phase.days) {
-      const previous = old.days.find((item) => item.id === day.id);
+      const previous = beforeDays.get(day.id)?.day;
       if (previous && previous.name !== day.name) push(`Gün adı: '${previous.name}' → '${day.name}'`, scope);
     }
+    const old = beforePhases.get(phase.id);
+    if (!old) continue;
     for (const day of phase.days) {
       if (beforeDays.has(day.id)) continue;
       push(day.source ? `${day.name} eklendi ('${day.source.templateName}' şablonundan)` : `${day.name} eklendi`, scope);
@@ -251,30 +326,66 @@ export function diffProgram(before: ProgramBody, after: ProgramBody, ctx: DiffCo
     const keptAfter = phase.days.filter((day) => oldIds.has(day.id)).map((day) => day.id);
     if (!sameOrder(keptBefore, keptAfter)) push(`Gün sırası: ${phase.days.map((day) => day.name).join(', ')}`, scope);
   }
+  // Silinen evrenin günleri evreyle birlikte yazılır; evreler kaldırılırken silinen gün ayrıca.
+  if (toggledOff) {
+    for (const phase of before.phases) {
+      if (afterPhases.has(phase.id)) continue;
+      for (const day of phase.days) if (!afterDays.has(day.id)) push(`${day.name} silindi`);
+    }
+  }
+  if (!toggled) {
+    for (const phase of after.phases) {
+      for (const day of phase.days) {
+        const previous = beforeDays.get(day.id);
+        if (previous && previous.phase.id !== phase.id) push(`${day.name} → '${phase.name}' evresine taşındı`);
+      }
+    }
+  }
 
   // 3. Evreler.
-  for (const phase of after.phases) {
-    const old = beforePhases.get(phase.id);
-    if (!old) continue;
-    if (old.name !== phase.name) push(`Evre adı: '${old.name}' → '${phase.name}'`);
-    if (old.weeks !== phase.weeks) push(`'${phase.name}' süresi: ${weeksText(old.weeks)} → ${weeksText(phase.weeks)}`);
+  if (toggledOn) {
+    push(`Evrelere bölündü: ${after.phases.map((phase) => `'${phase.name}' (${phaseParts(phase, true)})`).join(', ')}`);
+  } else if (toggledOff) {
+    push(`Evreler kaldırıldı; günler tek listede: ${after.phases.flatMap((phase) => phase.days.map((day) => day.name)).join(', ')}`);
+  } else {
+    for (const phase of after.phases) {
+      const old = beforePhases.get(phase.id);
+      if (!old) continue;
+      if (old.name !== phase.name) push(`Evre adı: '${old.name}' → '${phase.name}'`);
+      if (old.weeks !== phase.weeks) push(`'${phase.name}' süresi: ${weeksText(old.weeks)} → ${weeksText(phase.weeks)}`);
+    }
   }
-  for (const phase of after.phases) {
-    if (!beforePhases.has(phase.id)) push(`Evre '${phase.name}' eklendi${phase.weeks !== undefined ? ` (${weeksText(phase.weeks)})` : ''}`);
+  if (!toggledOn) {
+    for (const phase of after.phases) {
+      const old = beforePhases.get(phase.id);
+      if (!old) continue;
+      const text = frequencyChange(old.daysPerWeek, phase.daysPerWeek, after.phased ? phase.name : null);
+      if (text) push(text);
+    }
   }
-  for (const phase of before.phases) {
-    if (!afterPhases.has(phase.id)) push(`Evre '${phase.name}' silindi`);
+  if (!toggled) {
+    for (const phase of after.phases) {
+      if (beforePhases.has(phase.id)) continue;
+      const parts = phaseParts(phase, false);
+      push(`Evre '${phase.name}' eklendi${parts ? ` (${parts})` : ''}`);
+    }
+    for (const phase of before.phases) {
+      if (!afterPhases.has(phase.id)) push(`Evre '${phase.name}' silindi`);
+    }
+    const keptBefore = before.phases.filter((phase) => afterPhases.has(phase.id)).map((phase) => phase.id);
+    const keptAfter = after.phases.filter((phase) => beforePhases.has(phase.id)).map((phase) => phase.id);
+    if (!sameOrder(keptBefore, keptAfter)) push(`Evre sırası: ${after.phases.map((phase) => phase.name).join(', ')}`);
   }
-  const keptBefore = before.phases.filter((phase) => afterPhases.has(phase.id)).map((phase) => phase.id);
-  const keptAfter = after.phases.filter((phase) => beforePhases.has(phase.id)).map((phase) => phase.id);
-  if (!sameOrder(keptBefore, keptAfter)) push(`Evre sırası: ${after.phases.map((phase) => phase.name).join(', ')}`);
 
-  // 4. Şu anki evre.
-  if (before.currentPhaseId !== after.currentPhaseId) {
-    const from = beforePhases.get(before.currentPhaseId)?.name ?? '';
+  // 4. Şu anki evre (evreler kaldırılırken yazılmaz: tek liste kalır).
+  if (!toggledOff && before.currentPhaseId !== after.currentPhaseId) {
     const to = afterPhases.get(after.currentPhaseId)?.name ?? '';
-    const change = currentPhaseChange(from, to);
-    push(change.text);
+    if (toggledOn) {
+      push(`Şu anki evre: '${to}'`);
+    } else {
+      const from = beforePhases.get(before.currentPhaseId)?.name ?? '';
+      push(currentPhaseChange(from, to).text);
+    }
   }
 
   return changes;
@@ -320,7 +431,8 @@ export function commitMessage(kind: LogKind, changes: readonly ProgramChange[]):
 /**
  * PT'nin kaydı: farkı çıkarır, değişiklik yoksa `null` (hiçbir şey yazılmaz). Varsa
  * revision +1, geçmişe kayıt (en fazla 60 değişiklik), şu anki evre değiştiyse yeni evre
- * şimdi başlar ve rotasyon onun ilk gününden; değişmediyse silinen son gün uzlaştırılır.
+ * şimdi başlar ve rotasyon onun ilk gününden; değişmediyse silinen ya da başka evreye
+ * taşınan son gün uzlaştırılır. Evrelere bölme/kaldırma "Düzenlendi" kaydıdır.
  * Dönen `changes` kırpılmamıştır (commit mesajı için).
  */
 export function applyProgramEdit(
@@ -340,8 +452,8 @@ export function applyProgramEdit(
   }));
 
   const changes = diffProgram(
-    { currentPhaseId: stored.current.phaseId, phases: stored.phases },
-    { currentPhaseId: body.currentPhaseId, phases },
+    { phased: stored.phased, currentPhaseId: stored.current.phaseId, phases: stored.phases },
+    { phased: body.phased, currentPhaseId: body.currentPhaseId, phases },
     ctx,
   );
   if (changes.length === 0) return null;
@@ -349,12 +461,14 @@ export function applyProgramEdit(
   const at = now.toISOString();
   const revision = stored.revision + 1;
   const currentChanged = body.currentPhaseId !== stored.current.phaseId;
-  const kind: LogKind = currentChanged && changes.length === 1 ? 'phase' : 'edit';
+  const toggled = stored.phased !== body.phased;
+  const kind: LogKind = currentChanged && changes.length === 1 && !toggled ? 'phase' : 'edit';
   const { lastDayId: _dropped, ...withoutDay } = stored.rotation;
 
   return {
     program: {
       ...stored,
+      phased: body.phased,
       revision,
       updatedAt: at,
       phases,

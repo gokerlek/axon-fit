@@ -15,12 +15,17 @@ import {
   firstForMuscleRowIds,
   formatRest,
   formatTarget,
+  groupSkipNote,
   kindOptions,
   loadIntensity,
   normalizeTemplate,
   randomId,
+  roundsOf,
   rowLabels,
+  rowRule,
   ruleFor,
+  scaleLoad,
+  setSeconds,
   setSlots,
   settleKind,
   templateMuscleLoad,
@@ -29,7 +34,9 @@ import {
   type PlanExercise,
   type TemplateBlock,
   type TemplateRow,
+  type TemplateTarget,
 } from './template-plan.ts';
+import { resizeSets, uniformSets } from './set-plan.ts';
 
 /**
  * `muscles.ts` `@/` takma adıyla içe aktarma yaptığı için `node --test` altında
@@ -84,14 +91,19 @@ const stretch = exercise('esneme', { category: 'cooldown', trackingType: 'durati
 const LIBRARY = new Map([squat, rdl, legPress, bench, curl, plank, bike, stretch].map((item) => [item.id, item]));
 
 let serial = 0;
-function row(exerciseId: string, fields: Partial<TemplateRow> = {}): TemplateRow {
+/** Satır: `target` (varsayılan 8–12) ile `count` (varsayılan 3) düz set. */
+function row(exerciseId: string, fields: Partial<TemplateRow> & { target?: TemplateTarget; count?: number } = {}): TemplateRow {
   serial += 1;
-  return { id: `r_${String(serial).padStart(6, '0')}`, exerciseId, target: { min: 8, max: 12 }, ...fields };
+  const { target = { min: 8, max: 12 }, count = 3, ...rest } = fields;
+  return { id: `r_${String(serial).padStart(6, '0')}`, exerciseId, sets: uniformSets(target, count), ...rest };
 }
 
-function block(kind: BlockKind, rows: TemplateRow[], fields: Partial<TemplateBlock> = {}): TemplateBlock {
+/** Blok: `sets` verilirse her satırın set sayısı ona çekilir. */
+function block(kind: BlockKind, rows: TemplateRow[], fields: Partial<TemplateBlock> & { sets?: number } = {}): TemplateBlock {
   serial += 1;
-  return { id: `b_${String(serial).padStart(6, '0')}`, kind, sets: 3, restSeconds: 90, rows, ...fields };
+  const { sets, ...rest } = fields;
+  const sized = sets === undefined ? rows : rows.map((item) => ({ ...item, sets: resizeSets(item.sets, sets) }));
+  return { id: `b_${String(serial).padStart(6, '0')}`, kind, restSeconds: 90, rows: sized, ...rest };
 }
 
 describe('blok şekli', () => {
@@ -207,6 +219,11 @@ describe('kural ve cihaz', () => {
     });
   });
 
+  test('satırın kuralı referans setin aralığıyla', () => {
+    const pyramidRow = row('squat', { sets: [{ min: 12, max: 12, loadPct: 80 }, { min: 8, max: 8 }] });
+    assert.deepEqual(rowRule(pyramidRow, squat), { scheme: 'double', targetRir: 2, targetMin: 8, targetMax: 8 });
+  });
+
   test('egzersizin kendi kuralı taban olur', () => {
     const own = exercise('own', { progression: { scheme: 'none', targetMin: 20, targetMax: 20, targetRir: 3 } });
     assert.deepEqual(ruleFor({ target: { min: 10, max: 12 } }, own), { scheme: 'none', targetRir: 3, targetMin: 10, targetMax: 12 });
@@ -258,6 +275,36 @@ describe('set sırası', () => {
     ]);
   });
 
+  test('süperset A 3 / B 2 set: B biten turda atlanır, son hareket dinlenmeyi alır', () => {
+    const a = row('curl', { count: 3 });
+    const b = row('bench', { count: 2 });
+    const template = { blocks: [block('superset', [a, b], { restSeconds: 90 })] };
+    assert.deepEqual(shape(template), [`${a.id}:0:0`, `${b.id}:0:90`, `${a.id}:1:0`, `${b.id}:1:90`, `${a.id}:2:0`]);
+  });
+
+  test('devre A 3 / B 1 / C 2: atlanan istasyonda geçiş yok', () => {
+    const [a, b, c] = [row('squat', { count: 3 }), row('bench', { count: 1 }), row('curl', { count: 2 })];
+    const template = { blocks: [block('circuit', [a, b, c], { restSeconds: 120, transitionSeconds: 15 })] };
+    assert.deepEqual(shape(template), [
+      `${a.id}:0:15`,
+      `${b.id}:0:15`,
+      `${c.id}:0:120`,
+      `${a.id}:1:15`,
+      `${c.id}:1:120`,
+      `${a.id}:2:0`,
+    ]);
+  });
+
+  test('tur sayısı en çok seti olan hareketinki; farklıysa atlanma notu', () => {
+    const grouped = block('superset', [row('curl', { count: 3 }), row('bench', { count: 5 })]);
+    assert.equal(roundsOf(grouped), 5);
+    assert.equal(groupSkipNote(grouped, (item) => item.exerciseId), 'curl 3 sette biter; sonraki turlarda atlanır.');
+    const circuit = block('circuit', [row('curl', { count: 3 }), row('plank', { count: 2 }), row('bench', { count: 5 })]);
+    assert.equal(groupSkipNote(circuit, (item) => item.exerciseId), 'curl 3, plank 2 sette biter; sonraki turlarda atlanır.');
+    assert.equal(groupSkipNote(block('superset', [row('curl'), row('bench')]), (item) => item.exerciseId), null);
+    assert.equal(groupSkipNote(block('single', [row('curl')]), (item) => item.exerciseId), null);
+  });
+
   test('kompleks süperset gibi: aradan dinlenme yok', () => {
     const [a, b, c] = [row('squat'), row('rdl'), row('bench')];
     const template = { blocks: [block('complex', [a, b, c], { sets: 1, restSeconds: 120 }), block('single', [row('curl')], { sets: 1 })] };
@@ -288,6 +335,22 @@ describe('şablon kas yükü', () => {
     assert.equal(load.biceps, 3);
     assert.equal(load.chest_lower, 3);
     assert.equal(load.triceps_long, 1.5);
+  });
+
+  test('süperset curl 4 / bench 2: her hareket kendi seti kadar', () => {
+    const { load } = templateMuscleLoad(
+      { blocks: [block('superset', [row('curl', { count: 4 }), row('bench', { count: 2 })])] },
+      LIBRARY,
+      setWeights,
+    );
+    assert.equal(load.biceps, 4);
+    assert.equal(load.chest_lower, 2);
+    assert.equal(load.triceps_long, 1);
+  });
+
+  test('yükün ölçeklenmesi (haftalık yük)', () => {
+    assert.deepEqual(scaleLoad({ quadriceps: 20 }, 3), { quadriceps: 60 });
+    assert.deepEqual(scaleLoad({ quadriceps: 10, glutes: 1 }, 0.6), { quadriceps: 6, glutes: 0.6 });
   });
 
   test('dengeleyici 0,25 × 3 tam 0,75', () => {
@@ -334,6 +397,19 @@ describe('süre tahmini', () => {
 
   test('boş şablon 0', () => {
     assert.equal(estimateMinutes({ blocks: [] }, LIBRARY), 0);
+  });
+
+  test('set süresi: hedefin ortası, AMRAP üst sınır', () => {
+    assert.equal(setSeconds({ min: 8, max: 12 }, 'weight_reps'), 30);
+    assert.equal(setSeconds({ min: 8, max: 12, amrap: true }, 'weight_reps'), 36);
+    assert.equal(setSeconds({ min: 30, max: 60 }, 'duration'), 45);
+    assert.equal(setSeconds({ min: 30, max: 60, amrap: true }, 'duration'), 60);
+  });
+
+  test('piramit setleri kendi hedefiyle sayılır', () => {
+    const pyramidRow = row('bench', { sets: [{ min: 12, max: 12, loadPct: 80 }, { min: 10, max: 10, loadPct: 90 }, { min: 8, max: 8 }] });
+    // (36 + 90) + (30 + 90) + 24 = 270 sn → 5 dk
+    assert.equal(estimateMinutes({ blocks: [block('single', [pyramidRow], { restSeconds: 90 })] }, LIBRARY), 5);
   });
 
   test('gerçekçi bir alt vücut şablonu 40–70 dk arası', () => {
@@ -398,6 +474,8 @@ describe('etiketler ve özet', () => {
     const summary = templateSummary(template, LIBRARY);
     assert.equal(summary.rows, 8);
     assert.equal(summary.workingSets, 4 + 3 * 2 + 2 * 3 + 2 * 2);
+    const uneven = templateSummary({ blocks: [block('superset', [row('curl', { count: 4 }), row('bench', { count: 2 })])] }, LIBRARY);
+    assert.equal(uneven.workingSets, 6);
     assert.deepEqual(summary.groups, { superset: 1, circuit: 1, complex: 1 });
     assert.deepEqual(summary.deviceIds, ['olimpik-bar', 'leg-press-a']);
     assert.deepEqual(summary.missingRowIds, []);
@@ -457,20 +535,24 @@ describe('sunucuda denetim ve sadeleştirme', () => {
     {
       id: 'b_aaaaaa',
       kind: 'single',
-      sets: 4,
       restSeconds: 150,
-      rows: [{ id: 'r_aaaaaa', exerciseId: 'squat', target: { min: 5, max: 8 } }],
+      rows: [
+        {
+          id: 'r_aaaaaa',
+          exerciseId: 'squat',
+          sets: [{ min: 5, max: 5 }, { min: 8, max: 8, loadPct: 85 }, { min: 8, max: 12, loadPct: 85, amrap: true }],
+        },
+      ],
     },
     {
       id: 'b_bbbbbb',
       kind: 'circuit',
-      sets: 3,
       restSeconds: 120,
       transitionSeconds: 20,
       rows: [
-        { id: 'r_bbbbbb', exerciseId: 'leg-press', target: { min: 10, max: 15 }, deviceId: 'leg-press-b', note: 'Tepede 1 sn tut' },
-        { id: 'r_cccccc', exerciseId: 'curl', target: { min: 10, max: 15 }, rule: { scheme: 'linear', targetRir: 1 } },
-        { id: 'r_dddddd', exerciseId: 'plank', target: { min: 30, max: 45 } },
+        { id: 'r_bbbbbb', exerciseId: 'leg-press', sets: uniformSets({ min: 10, max: 15 }, 3), deviceId: 'leg-press-b', note: 'Tepede 1 sn tut' },
+        { id: 'r_cccccc', exerciseId: 'curl', sets: uniformSets({ min: 10, max: 15 }, 2), rule: { scheme: 'linear', targetRir: 1 } },
+        { id: 'r_dddddd', exerciseId: 'plank', sets: uniformSets({ min: 30, max: 45 }, 3) },
       ],
     },
   ];
@@ -495,12 +577,44 @@ describe('sunucuda denetim ve sadeleştirme', () => {
     const { errors } = normalizeTemplate(
       {
         blocks: [
-          block('superset', [row('curl', { target: { min: 10, max: 120 } }), row('plank', { target: { min: 60, max: 300 } })]),
+          block('superset', [row('curl', { target: { min: 10, max: 120 }, count: 1 }), row('plank', { target: { min: 60, max: 300 } })]),
         ],
       },
       ctx,
     );
-    assert.deepEqual(errors, { 'blocks.0.rows.0.target.max': 'Tekrar hedefi en fazla 100.' });
+    assert.deepEqual(errors, { 'blocks.0.rows.0.sets.0.max': 'Tekrar hedefi en fazla 100.' });
+  });
+
+  test('her setin tekrarı ayrı denetlenir', () => {
+    const { errors } = normalizeTemplate(
+      { blocks: [block('single', [row('bench', { sets: [{ min: 8, max: 12 }, { min: 10, max: 150 }] })])] },
+      ctx,
+    );
+    assert.deepEqual(errors, { 'blocks.0.rows.0.sets.1.max': 'Tekrar hedefi en fazla 100.' });
+  });
+
+  test('yüzde yalnız ağırlıklı harekette ve %100 altında; AMRAP yalnız açıksa; blokta set sayısı yok', () => {
+    const { blocks } = normalizeTemplate(
+      {
+        blocks: [
+          block('single', [row('plank', { sets: [{ min: 30, max: 60, loadPct: 80 }, { min: 30, max: 60, amrap: false }] })]),
+          block('single', [row('bench', { sets: [{ min: 8, max: 8, loadPct: 100 }, { min: 8, max: 8, loadPct: 85, amrap: true }] })]),
+          block('single', [row('silinmis', { sets: [{ min: 8, max: 8 }, { min: 8, max: 8, loadPct: 85 }] })]),
+        ],
+      },
+      ctx,
+    );
+    assert.deepEqual(blocks[0]?.rows[0]?.sets, [
+      { min: 30, max: 60 },
+      { min: 30, max: 60 },
+    ]);
+    assert.deepEqual(blocks[1]?.rows[0]?.sets, [
+      { min: 8, max: 8 },
+      { min: 8, max: 8, loadPct: 85, amrap: true },
+    ]);
+    // Egzersiz yoksa yüzde kalır (hata egzersiz alanında).
+    assert.equal(blocks[2]?.rows[0]?.sets[1]?.loadPct, 85);
+    assert.ok(blocks.every((item) => !('sets' in item)));
   });
 
   test('egzersizin kuralıyla aynı değişiklik yazılmaz', () => {

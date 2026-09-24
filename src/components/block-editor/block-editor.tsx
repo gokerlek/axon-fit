@@ -13,7 +13,8 @@ import { formatNumber } from '@/lib/format';
 import type { TemplateInput } from '@/lib/schemas/template';
 import { appendExercise, canAdd, reorderBlocks, replaceExercise, type EditorDevice, type IdSource, type PickerExercise } from '@/lib/template-edit';
 import { rowLabels, templateSummary, type TemplateBlock } from '@/lib/template-plan';
-import { BlockItem, EditorContext, blockField, rowTitle, type BlocksFormStore, type BlocksPath, type Editor } from './block-items';
+import { BlockItem } from './block-items';
+import { EditorContext, blockField, rowTitle, setInputId, type BlocksFormStore, type BlocksPath, type Editor } from './editor-context';
 import { ExercisePicker, type ReplaceTarget } from './exercise-picker';
 
 const DEFAULT_DESCRIPTION = 'Sürükleyerek sırala; arka arkaya yapılacakları grupla (süperset, devre, kompleks).';
@@ -28,6 +29,13 @@ function focusLibrary(scroll: boolean) {
   document.getElementById('kutuphane-ara')?.focus({ preventScroll: scroll });
 }
 
+function toggled(open: ReadonlySet<string>, rowId: string): ReadonlySet<string> {
+  const next = new Set(open);
+  if (next.has(rowId)) next.delete(rowId);
+  else next.add(rowId);
+  return next;
+}
+
 /** Ebeveynin kas yükü gibi hesapları için bloklar (abone olur). */
 export function useBlocks(form: BlocksFormStore, path: BlocksPath): TemplateBlock[] {
   const field = useField(form, { path: blockField(path) });
@@ -38,13 +46,14 @@ export function useBlocks(form: BlocksFormStore, path: BlocksPath): TemplateBloc
  * Hareket düzenleyici: formdaki bir blok dizisini (şablonun blokları ya da program
  * gününün blokları) düzenler — liste, sürükle-bırak, gruplar ve kütüphane paneli.
  *
- * Yaprak alanlar (set, dinlenme, hedef, kural, cihaz, not) alan olarak bağlanır; yapısal
- * işlemler (ekleme, sıralama, gruplama…) `template-edit.ts`'teki saf fonksiyonlarla
- * hesaplanıp dizinin yoluna tek seferde yazılır. Kimlikleri `newIds` üretir (programda
+ * Yaprak alanlar (dinlenme, setlerin hedefi, yüzdesi ve AMRAP'ı, kural, cihaz, not) alan
+ * olarak bağlanır; yapısal işlemler (ekleme, sıralama, gruplama, set sayısı, tur, hazır
+ * düzenler…) `template-edit.ts`'teki saf fonksiyonlarla hesaplanıp dizinin yoluna tek
+ * seferde yazılır. Kimlikleri `newIds` üretir (programda
  * bütün programın kimliklerini bilir).
  *
- * Sayfada tek düzenleyici olabilir: `kutuphane`, `kutuphane-ara`, `sira-ipucu`, `row-*`
- * ve `handle-*` DOM kimlikleri geneldir.
+ * Sayfada tek düzenleyici olabilir: `kutuphane`, `kutuphane-ara`, `sira-ipucu`, `row-*`,
+ * `handle-*`, `sets-*` ve `set-*` DOM kimlikleri geneldir.
  */
 export function BlockEditor({
   form,
@@ -80,6 +89,7 @@ export function BlockEditor({
 
   const [replacingId, setReplacingId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const [expandedSets, setExpandedSets] = useState<ReadonlySet<string>>(() => new Set());
   const [highlight, setHighlight] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
 
@@ -144,16 +154,13 @@ export function BlockEditor({
     requestAnimationFrame(() => focusLibrary(!isWide()));
   }, []);
 
-  const toggleExpanded = useCallback(
-    (rowId: string) =>
-      setExpanded((open) => {
-        const next = new Set(open);
-        if (next.has(rowId)) next.delete(rowId);
-        else next.add(rowId);
-        return next;
-      }),
-    [],
-  );
+  const toggleExpanded = useCallback((rowId: string) => setExpanded((open) => toggled(open, rowId)), []);
+  const toggleSets = useCallback((rowId: string) => setExpandedSets((open) => toggled(open, rowId)), []);
+  const openSets = useCallback((rowId: string) => setExpandedSets((open) => (open.has(rowId) ? open : new Set([...open, rowId]))), []);
+  const focusSet = useCallback<Editor['focusSet']>((rowId, index, column) => {
+    // Tablo açılıp yeniden çizildikten sonra.
+    requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(setInputId(rowId, index, column))?.focus()));
+  }, []);
 
   const labels = useMemo(() => rowLabels({ blocks }), [blocks]);
   const summary = useMemo(() => templateSummary({ blocks }, exerciseById), [blocks, exerciseById]);
@@ -210,6 +217,10 @@ export function BlockEditor({
     labels,
     expanded,
     toggleExpanded,
+    expandedSets,
+    toggleSets,
+    openSets,
+    focusSet,
     highlight,
     startReplace,
   };

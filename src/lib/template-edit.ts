@@ -2,17 +2,25 @@ import { alternativeForDevice, type AlternativeCandidate } from './alternatives.
 import { KIND_EQUIPMENT, type DeviceKind, type DeviceLoadSettings } from './device-loads.ts';
 import type { Equipment, Muscle } from '@/lib/schemas/exercise';
 import {
+  backoffPreset,
+  pyramidPreset,
+  resizeSets,
+  straightPreset,
+  toggleLastAmrap,
+  type SetSpec,
+} from './set-plan.ts';
+import {
   BLOCK_ROWS,
   DEFAULT_GROUP_REST_SECONDS,
   DEFAULT_REST_SECONDS,
-  DEFAULT_SETS,
   DEFAULT_TRANSITION_SECONDS,
   FALLBACK_REST_SECONDS,
   TEMPLATE_LIMITS,
   countRows,
-  defaultTarget,
+  defaultSets,
   kindOptions,
   randomId,
+  roundsOf,
   settleKind,
   type BlockKind,
   type PlanExercise,
@@ -23,7 +31,9 @@ import {
 
 /**
  * Şablon düzenleyicinin işlemleri: ekleme, değiştirme, kaldırma, kopyalama, sıralama,
- * gruplama, grubu dağıtma, tür değiştirme ve satırın cihazını değiştirme.
+ * gruplama, grubu dağıtma, tür değiştirme, satırın cihazını ve setlerini (sayı, tur,
+ * hazır düzenler) değiştirme. Setler satırla birlikte taşınır: gruplama ve gruptan
+ * çıkarma hareketin setlerini değiştirmez.
  *
  * Hepsi saf ve değiştirmez (yeni dizi döner); düzenleyici sonucu forma tek seferde
  * yazar. Satır kimliği yalnız satır oluşurken üretilir: sıralama, gruplama, hareket ya
@@ -69,16 +79,16 @@ export function canAdd(blocks: readonly TemplateBlock[]): boolean {
   return countRows(blocks) < TEMPLATE_LIMITS.rows && blocks.length < TEMPLATE_LIMITS.blocks;
 }
 
+/** Yeni satır: egzersizin aralığıyla düz setler, sayısı türüne göre. */
 export function newRow(exercise: PlanExercise, id: string): TemplateRow {
-  return { id, exerciseId: exercise.id, target: defaultTarget(exercise) };
+  return { id, exerciseId: exercise.id, sets: defaultSets(exercise) };
 }
 
-/** Tek hareketlik yeni blok: set ve dinlenme egzersizin türüne göre. */
+/** Tek hareketlik yeni blok: setler ve dinlenme egzersizin türüne göre. */
 export function newSingle(exercise: PlanExercise, ids: IdSource): TemplateBlock {
   return {
     id: ids('b'),
     kind: 'single',
-    sets: DEFAULT_SETS[exercise.category],
     restSeconds: DEFAULT_REST_SECONDS[exercise.category],
     rows: [newRow(exercise, ids('r'))],
   };
@@ -97,9 +107,9 @@ function singleRest(row: TemplateRow, exercises: Lookup): number {
   return category ? DEFAULT_REST_SECONDS[category] : FALLBACK_REST_SECONDS;
 }
 
-/** Tek hareketlik blok (gruptan çıkan satır): set = grubun turu, dinlenme türün varsayılanı. */
-function singleOf(id: string, row: TemplateRow, sets: number, exercises: Lookup): TemplateBlock {
-  return { id, kind: 'single', sets, restSeconds: singleRest(row, exercises), rows: [row] };
+/** Tek hareketlik blok (gruptan çıkan satır): setleri kendi setleri, dinlenme türün varsayılanı. */
+function singleOf(id: string, row: TemplateRow, exercises: Lookup): TemplateBlock {
+  return { id, kind: 'single', restSeconds: singleRest(row, exercises), rows: [row] };
 }
 
 /** Türü uygular: istasyon geçişi yalnız devrede (yoksa 15 sn). */
@@ -114,7 +124,7 @@ function withKind(block: TemplateBlock, kind: BlockKind): TemplateBlock {
 function reshape(block: TemplateBlock, rows: TemplateRow[], exercises: Lookup): TemplateBlock | null {
   const [only] = rows;
   if (!only) return null;
-  if (rows.length === 1) return block.kind === 'single' ? { ...block, rows } : singleOf(block.id, only, block.sets, exercises);
+  if (rows.length === 1) return block.kind === 'single' ? { ...block, rows } : singleOf(block.id, only, exercises);
   return withKind({ ...block, rows }, settleKind(block.kind, rows.length));
 }
 
@@ -124,6 +134,10 @@ function locate(blocks: readonly TemplateBlock[], rowId: string): { blockIndex: 
     if (rowIndex >= 0) return { blockIndex, rowIndex };
   }
   return null;
+}
+
+function copySets(sets: readonly SetSpec[]): SetSpec[] {
+  return sets.map((set) => ({ ...set }));
 }
 
 function updateRow(blocks: readonly TemplateBlock[], rowId: string, update: (row: TemplateRow) => TemplateRow): TemplateBlock[] {
@@ -136,14 +150,15 @@ function updateRow(blocks: readonly TemplateBlock[], rowId: string, update: (row
 
 /**
  * Satırın egzersizi değişir: kimlik ve not kalır, cihaz değişikliği düşer. Kayıt türü
- * aynıysa hedef ve kural da kalır; değiştiyse (tekrar ↔ saniye) yeni egzersizin varsayılanı.
+ * aynıysa setler ve kural da kalır; değiştiyse (tekrar ↔ saniye) set sayısı kalır, hedef
+ * yeni egzersizin varsayılanı olur (yüzde ve AMRAP düşer).
  */
 function rowWithExercise(row: TemplateRow, next: PlanExercise, previous?: Pick<PlanExercise, 'trackingType'>): TemplateRow {
   const sameTracking = previous?.trackingType === next.trackingType;
   return {
     id: row.id,
     exerciseId: next.id,
-    target: sameTracking ? { ...row.target } : defaultTarget(next),
+    sets: sameTracking ? copySets(row.sets) : defaultSets(next, row.sets.length),
     ...(sameTracking && row.rule ? { rule: { ...row.rule } } : {}),
     ...(row.note ? { note: row.note } : {}),
   };
@@ -158,14 +173,14 @@ export function replaceExercise(
   return updateRow(blocks, rowId, (row) => rowWithExercise(row, next, previous));
 }
 
-/** Satırı yerine koyar (alanları düzenleyici değiştirir: hedef, kural, cihaz, not). */
+/** Satırı yerine koyar (alanları düzenleyici değiştirir: setler, kural, cihaz, not). */
 export function setRow(blocks: readonly TemplateBlock[], row: TemplateRow): TemplateBlock[] {
   return updateRow(blocks, row.id, () => row);
 }
 
 /**
  * Satırı kaldırır. Tek hareketse blok gider; gruptan kalan tek satır tekleşir (grubun
- * kimliği ve turu ile, dinlenme türün varsayılanı); gruplarda tür yeni sayıya uyar.
+ * kimliğiyle, kendi setleriyle, dinlenme türün varsayılanı); gruplarda tür yeni sayıya uyar.
  */
 export function removeRow(blocks: readonly TemplateBlock[], rowId: string, exercises: Lookup): TemplateBlock[] {
   return blocks.flatMap((block) => {
@@ -188,7 +203,7 @@ export function duplicateRow(blocks: readonly TemplateBlock[], rowId: string, id
   const copy: TemplateRow = {
     ...source,
     id: ids('r'),
-    target: { ...source.target },
+    sets: copySets(source.sets),
     ...(source.rule ? { rule: { ...source.rule } } : {}),
   };
 
@@ -267,24 +282,20 @@ export function moveRowInGroup(blocks: readonly TemplateBlock[], rowId: string, 
   return next;
 }
 
-/** İki komşu bloğun birleşimi (öncekinin kimliğiyle); olmuyorsa `null`. */
+/** İki komşu bloğun birleşimi (öncekinin kimliğiyle); olmuyorsa `null`. Her hareket kendi setlerini korur. */
 function merged(first: TemplateBlock, second: TemplateBlock): TemplateBlock | null {
   const rows = [...first.rows, ...second.rows];
   if (rows.length > BLOCK_ROWS.circuit.max) return null;
   if (first.kind === 'single' && second.kind === 'single') {
     const kind = settleKind('superset', rows.length);
-    return withKind(
-      { id: first.id, kind, sets: Math.max(first.sets, second.sets), restSeconds: DEFAULT_GROUP_REST_SECONDS.superset, rows },
-      kind,
-    );
+    return withKind({ id: first.id, kind, restSeconds: DEFAULT_GROUP_REST_SECONDS.superset, rows }, kind);
   }
-  // Gruba katılan tek hareket grubun ayarlarını alır; iki grupta öncekininkiler geçer.
+  // Gruba katılan tek hareket grubun türünü ve dinlenmesini alır; iki grupta öncekininkiler geçer.
   const settings = first.kind === 'single' ? second : first;
   const { transitionSeconds, kind } = settings;
   const base: TemplateBlock = {
     id: first.id,
     kind,
-    sets: settings.sets,
     restSeconds: settings.restSeconds,
     ...(transitionSeconds !== undefined ? { transitionSeconds } : {}),
     rows,
@@ -308,9 +319,10 @@ export function canJoin(blocks: readonly TemplateBlock[], blockId: string, direc
 
 /**
  * Komşu blokla gruplar. Satırlar yerlerindeki sırayla (öncekinin satırları önce),
- * sonuç öncekinin kimliğini alır. İki tek hareket süperset olur (tur = büyük set sayısı,
- * dinlenme 90 sn); gruba katılan tek hareket grubun ayarlarını alır ve tür uyar
- * (süperset + tek = devre); iki grupta öncekinin ayarları geçer.
+ * sonuç öncekinin kimliğini alır. İki tek hareket süperset olur (dinlenme 90 sn; tur =
+ * en çok seti olan hareketinki); gruba katılan tek hareket grubun türünü ve dinlenmesini
+ * alır, tür uyar (süperset + tek = devre); iki grupta öncekinin ayarları geçer. Her
+ * hareketin set sayısı kendisinde kalır.
  */
 export function joinBlocks(blocks: readonly TemplateBlock[], blockId: string, direction: 'previous' | 'next'): TemplateBlock[] {
   const pair = neighbours(blocks, blockId, direction);
@@ -322,7 +334,7 @@ export function joinBlocks(blocks: readonly TemplateBlock[], blockId: string, di
 }
 
 /**
- * Satırı gruptan çıkarır: yeni kimlikli tek hareket olur (set = grubun turu, dinlenme
+ * Satırı gruptan çıkarır: yeni kimlikli tek hareket olur (kendi setleriyle, dinlenme
  * türün varsayılanı). İlk satır grubun önüne, diğerleri arkasına gider; grupta tek satır
  * kalırsa o da tekleşir (grubun kimliğiyle).
  */
@@ -331,7 +343,7 @@ export function ungroupRow(blocks: readonly TemplateBlock[], rowId: string, exer
   const block = found ? blocks[found.blockIndex] : undefined;
   if (!found || !block || block.kind === 'single' || block.rows.length < 2) return blocks as TemplateBlock[];
   const row = block.rows[found.rowIndex] as TemplateRow;
-  const leaving = singleOf(ids('b'), row, block.sets, exercises);
+  const leaving = singleOf(ids('b'), row, exercises);
   const rest = reshape(block, block.rows.filter((item) => item.id !== rowId), exercises);
   const replacement = found.rowIndex === 0 ? [leaving, ...(rest ? [rest] : [])] : [...(rest ? [rest] : []), leaving];
   const next = [...blocks];
@@ -344,10 +356,69 @@ export function dissolveGroup(blocks: readonly TemplateBlock[], blockId: string,
   const index = blocks.findIndex((block) => block.id === blockId);
   const block = blocks[index];
   if (!block || block.kind === 'single') return blocks as TemplateBlock[];
-  const singles = block.rows.map((row, rowIndex) => singleOf(rowIndex === 0 ? block.id : ids('b'), row, block.sets, exercises));
+  const singles = block.rows.map((row, rowIndex) => singleOf(rowIndex === 0 ? block.id : ids('b'), row, exercises));
   const next = [...blocks];
   next.splice(index, 1, ...singles);
   return next;
+}
+
+/** Satırın setlerini değiştirir; sonuç aynıysa aynı dizi döner. */
+export function updateRowSets(
+  blocks: readonly TemplateBlock[],
+  rowId: string,
+  change: (sets: SetSpec[]) => SetSpec[],
+): TemplateBlock[] {
+  let changed = false;
+  const next = updateRow(blocks, rowId, (row) => {
+    const sets = change(row.sets);
+    if (JSON.stringify(sets) === JSON.stringify(row.sets)) return row;
+    changed = true;
+    return { ...row, sets };
+  });
+  return changed ? next : (blocks as TemplateBlock[]);
+}
+
+/** Satırın set sayısı (1–10): artarken son set kopyalanır; "son set AMRAP" son sette kalır. */
+export function setRowSetCount(blocks: readonly TemplateBlock[], rowId: string, count: number): TemplateBlock[] {
+  return updateRowSets(blocks, rowId, (sets) => resizeSets(sets, count));
+}
+
+/**
+ * Grubun turu: turu dolduran (en çok seti olan) hareketler yeni tura geçer, daha az setli
+ * olanlar yeni turu aşmadıkça kendi sayısında kalır. Tek harekette set sayısıdır.
+ */
+export function setRounds(blocks: readonly TemplateBlock[], blockId: string, rounds: number): TemplateBlock[] {
+  const target = Math.min(TEMPLATE_LIMITS.sets, Math.max(1, Math.round(rounds)));
+  let changed = false;
+  const next = blocks.map((block) => {
+    if (block.id !== blockId) return block;
+    const current = roundsOf(block);
+    let touched = false;
+    const rows = block.rows.map((row) => {
+      const count = row.sets.length === current ? target : Math.min(row.sets.length, target);
+      if (count === row.sets.length) return row;
+      touched = true;
+      return { ...row, sets: resizeSets(row.sets, count) };
+    });
+    if (!touched) return block;
+    changed = true;
+    return { ...block, rows };
+  });
+  return changed ? next : (blocks as TemplateBlock[]);
+}
+
+export type SetPreset = 'straight' | 'pyramid' | 'backoff' | 'lastAmrap';
+
+const PRESETS: Record<SetPreset, (sets: SetSpec[]) => SetSpec[]> = {
+  straight: straightPreset,
+  pyramid: (sets) => pyramidPreset(sets, TEMPLATE_LIMITS.repsMax),
+  backoff: backoffPreset,
+  lastAmrap: toggleLastAmrap,
+};
+
+/** Hazır düzen: düz, piramit, back-off ya da "son set AMRAP" aç/kapa. */
+export function applySetPreset(blocks: readonly TemplateBlock[], rowId: string, preset: SetPreset): TemplateBlock[] {
+  return updateRowSets(blocks, rowId, PRESETS[preset]);
 }
 
 /** Grubun türünü değiştirir; hareket sayısına uymayan tür reddedilir (değişmez). */
@@ -385,7 +456,7 @@ function withoutDevice(row: TemplateRow): TemplateRow {
  *    geçmiş egzersiz + cihaz olarak ayrı tutulur).
  * 4. Başka kalıpta da olsa muadil varsa → ona geçer.
  * 5. Hiçbiri yoksa bu cihaz seçilemez.
- * Hareket değişince satırın kimliği ve notu kalır; hedef ve kural yalnız kayıt türü aynıysa.
+ * Hareket değişince satırın kimliği, notu ve set sayısı kalır; hedefler ve kural yalnız kayıt türü aynıysa.
  */
 export function swapDevice(row: TemplateRow, deviceId: string | null, ctx: SwapContext): DeviceSwap {
   const exercise = ctx.exercises.find((item) => item.id === row.exerciseId);
