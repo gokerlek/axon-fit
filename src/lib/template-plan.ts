@@ -522,7 +522,7 @@ export function normalizeTemplate(
     const rows = block.rows.map((row, j): TemplateRow => {
       const at = `blocks.${i}.rows.${j}`;
       const exercise = ctx.exercises.get(row.exerciseId);
-      if (!exercise) errors[`${at}.exerciseId`] = 'Bu egzersiz kütüphanede yok; değiştir ya da kaldır.';
+      if (!exercise) errors[`${at}.exerciseId`] = 'Bu egzersiz kütüphanede yok; kartı sil, yerine yenisini ekle.';
       const sets = row.sets.map((set, k): SetSpec => {
         if (exercise && REPS_TRACKING.has(exercise.trackingType) && set.max > TEMPLATE_LIMITS.repsMax) {
           errors[`${at}.sets.${k}.max`] = `Tekrar hedefi en fazla ${TEMPLATE_LIMITS.repsMax}.`;

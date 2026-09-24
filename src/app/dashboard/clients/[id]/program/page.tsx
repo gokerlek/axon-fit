@@ -197,7 +197,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
           <WarningCircle weight="fill" />
           <AlertTitle>{missingRows} hareket kütüphanede bulunamadı</AlertTitle>
           <AlertDescription>
-            Silinmiş bir egzersize bağlı; danışanın ekranında görünmez. Programı düzenleyip değiştir ya da kaldır.
+            Silinmiş bir egzersize bağlı; danışanın ekranında görünmez. Programı düzenleyip kaldır, yerine yenisini ekle.
           </AlertDescription>
         </Alert>
       ) : null}

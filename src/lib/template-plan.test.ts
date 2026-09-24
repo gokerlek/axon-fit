@@ -565,7 +565,7 @@ describe('sunucuda denetim ve sadeleştirme', () => {
 
   test('kütüphanede olmayan egzersiz', () => {
     const { errors } = normalizeTemplate({ blocks: [block('single', [row('silinmis')])] }, ctx);
-    assert.deepEqual(errors, { 'blocks.0.rows.0.exerciseId': 'Bu egzersiz kütüphanede yok; değiştir ya da kaldır.' });
+    assert.deepEqual(errors, { 'blocks.0.rows.0.exerciseId': 'Bu egzersiz kütüphanede yok; kartı sil, yerine yenisini ekle.' });
   });
 
   test('olmayan cihaz', () => {

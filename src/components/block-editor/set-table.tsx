@@ -2,51 +2,51 @@
 
 import { useRef, useState } from 'react';
 import { getInput, setInput, useField, useFieldArray, type FieldElementProps } from '@formisch/react';
-import { CaretDown, Copy, DotsThreeVertical, Plus, Trash } from '@phosphor-icons/react';
+import { CaretDown } from '@phosphor-icons/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
+import { Stepper, type StepperSource } from '@/components/ui/stepper';
 import { Toggle } from '@/components/ui/toggle';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { loadSpecFor } from '@/lib/device-loads';
 import { formatNumber } from '@/lib/format';
 import { describeSetRules } from '@/lib/progression';
-import {
-  BACKOFF_PCT,
-  PRESET_MIN_SETS,
-  SET_LIMITS,
-  formatSets,
-  pyramidPreset,
-  referenceSet,
-  removeSetAt,
-  resizeSets,
-  setShape,
-  targetToAll,
-  type SetSpec,
-} from '@/lib/set-plan';
+import { SET_LIMITS, isStraight, resizeSets, setShape, type SetSpec } from '@/lib/set-plan';
 import { applySetPreset, setRounds, setRowSetCount, updateRowSets, type PickerExercise, type SetPreset } from '@/lib/template-edit';
 import { TEMPLATE_LIMITS, type TemplateBlock, type TemplateRow } from '@/lib/template-plan';
 import { cn } from '@/lib/utils';
-import { MENU_TOUCH, blockField, setInputId, useEditor, type SetColumn } from './editor-context';
+import { blockField, setInputId, useEditor, type SetColumn } from './editor-context';
 
 /**
- * Satırın setleri (SPEC §7.4): set sayısı, grubun turu, setlerin özeti ve set tablosu
- * (her setin hedefi, yük yüzdesi, AMRAP; hazır düzenler). Düz setler (hepsi aynı)
- * satırda tek "Hedef" alanıyla bugünkü kadar hızlı düzenlenir; tablo gerektiğinde açılır.
+ * Satırın setleri (SPEC §7.4): set sayısı ve dinlenme stepper'ı, düz setlerde tek "Hedef"
+ * (min–max) ve tekrar çipleri; düz olmayan setlerde özet düğmesi. "Setleri ayrı düzenle"
+ * her seti açar (hedef, yük yüzdesi, AMRAP) ve düzeni seçtirir (Düz / Piramit / Back-off).
+ * Vakaların çoğu düz set: çip bir dokunuşta bütün setlere yazar.
  */
 
 type RowProps = { blockIndex: number; rowIndex: number; row: TemplateRow; exercise: PickerExercise | undefined };
 
 const COUNT_ERROR = `1–${SET_LIMITS.perRow} arası bir sayı gir.`;
+
+/** Setler düzken çipler (v1): tekrar ve süre. Çip bütün setlere yazar. */
+const REP_CHIPS: readonly (readonly [number, number])[] = [
+  [5, 5],
+  [8, 8],
+  [10, 10],
+  [12, 12],
+  [6, 8],
+  [8, 12],
+  [12, 15],
+];
+const TIME_CHIPS: readonly (readonly [number, number])[] = [
+  [20, 20],
+  [30, 30],
+  [45, 45],
+  [60, 60],
+];
 
 /** Sayı kutusunun değeri: boş → yok, çözülemeyen giriş → NaN (şema "Sayı gir." der). */
 function numberOf(input: HTMLInputElement): number | undefined {
@@ -58,71 +58,70 @@ function shown(value: unknown): number | '' {
   return typeof value === 'number' && !Number.isNaN(value) ? value : '';
 }
 
-/** Taslak metin 1–10 arası tam sayı mı. */
-function parseCount(text: string): number | null {
-  if (text.trim() === '') return null;
-  const value = Number(text);
-  return Number.isInteger(value) && value >= 1 && value <= SET_LIMITS.perRow ? value : null;
-}
-
 function rangeText(set: Pick<SetSpec, 'min' | 'max'>): string {
   const format = (value: number) => (Number.isFinite(value) ? formatNumber(value) : '?');
   return set.min === set.max ? format(set.min) : `${format(set.min)}–${format(set.max)}`;
 }
 
 /**
- * Sayı taslağı: yazarken geçersiz değer kutuda kalır ve hata söylenir, geçerli değer hemen
- * uygulanır; odak çıkınca kutu gerçek değere döner. Uygulama odaklanıldığı andaki hâlden
- * yapılır: "1" yazıp "10"a giderken aradaki 1 set diğer setleri silmez.
+ * Sayı taslağı (set sayısı, tur): yazılan geçerli değer hemen uygulanır, geçersizi kutuda
+ * kalır ve hata söylenir. Yazarken uygulama odaklanıldığı andaki hâlden yapılır: "1" yazıp
+ * "10"a giderken aradaki 1 set diğer setleri silmez. Düğme ve ↑/↓ o anki hâle uygulanır.
  */
-function useCountDraft<T>(snapshot: () => T, apply: (base: T, count: number) => void) {
-  const [draft, setDraft] = useState<string | null>(null);
+function useCountDraft<T>(snapshot: () => T, applyFrom: (base: T, count: number) => void, applyNow: (count: number) => void, max: number) {
+  const [invalid, setInvalid] = useState(false);
   const base = useRef<T | null>(null);
   return {
-    draft,
-    invalid: draft !== null && parseCount(draft) === null,
+    invalid,
     onFocus: () => {
       base.current = snapshot();
     },
-    onChange: (text: string) => {
-      setDraft(text);
-      const count = parseCount(text);
-      if (count !== null) apply(base.current ?? snapshot(), count);
-    },
-    onBlur: () => {
-      setDraft(null);
-      base.current = null;
+    // Base UI boş kutuyu bırakırken de bildirir (`null`); hata ondan sonra silinir, kutu değere döner.
+    onBlur: () => window.setTimeout(() => setInvalid(false), 0),
+    change: (value: number | null, source: StepperSource) => {
+      const count = value !== null && Number.isInteger(value) && value >= 1 && value <= max ? value : null;
+      if (source === 'step') {
+        setInvalid(false);
+        base.current = null;
+        if (count !== null) applyNow(count);
+        return;
+      }
+      setInvalid(count === null);
+      if (count === null) return;
+      base.current ??= snapshot();
+      applyFrom(base.current, count);
     },
   };
 }
 
-/** Satırın set sayısı (tek harekette "Set", grupta hareketin kendi seti). */
-export function SetCountField({ row, exercise, className }: Pick<RowProps, 'row' | 'exercise'> & { className?: string }) {
+/** Satırın set sayısı: "−" son seti siler, "+" son seti kopyalar. */
+export function SetCountField({ row, exercise }: Pick<RowProps, 'row' | 'exercise'>) {
   const editor = useEditor();
   const id = `setcount-${row.id}`;
   const count = useCountDraft(
     () => row.sets.map((set) => ({ ...set })),
     (base, value) => editor.update((before) => updateRowSets(before, row.id, () => resizeSets(base, value))),
+    (value) => editor.update((before) => setRowSetCount(before, row.id, value)),
+    SET_LIMITS.perRow,
   );
   return (
-    <Field data-invalid={count.invalid || undefined} className={cn('gap-1.5', className)}>
+    <Field data-invalid={count.invalid || undefined} className="w-auto gap-1.5">
       <FieldLabel htmlFor={id} className="text-xs text-muted-foreground">
         Set
       </FieldLabel>
-      <Input
+      <Stepper
         id={id}
-        type="number"
-        inputMode="numeric"
+        size="auto"
+        value={row.sets.length}
         min={1}
         max={SET_LIMITS.perRow}
-        step={1}
         disabled={!exercise}
-        aria-invalid={count.invalid || undefined}
-        className="tabular-nums touch:h-11"
-        value={count.draft ?? String(row.sets.length)}
+        invalid={count.invalid}
+        decrementLabel="Son seti sil"
+        incrementLabel="Son seti kopyala"
         onFocus={count.onFocus}
-        onChange={(event) => count.onChange(event.currentTarget.value)}
         onBlur={count.onBlur}
+        onValueChange={count.change}
       />
       {count.invalid ? <FieldError>{COUNT_ERROR}</FieldError> : null}
     </Field>
@@ -130,7 +129,7 @@ export function SetCountField({ row, exercise, className }: Pick<RowProps, 'row'
 }
 
 /** Grubun turu: turu dolduran hareketler yeni tura geçer, daha az setliler kendi sayısında kalır. */
-export function RoundsField({ block, rounds, className }: { block: TemplateBlock; rounds: number; className?: string }) {
+export function RoundsField({ block, rounds }: { block: TemplateBlock; rounds: number }) {
   const editor = useEditor();
   const id = `rounds-${block.id}`;
   const count = useCountDraft(
@@ -143,48 +142,197 @@ export function RoundsField({ block, rounds, className }: { block: TemplateBlock
           value,
         ),
       ),
+    (value) => editor.update((before) => setRounds(before, block.id, value)),
+    TEMPLATE_LIMITS.sets,
   );
   return (
-    <Field data-invalid={count.invalid || undefined} className={cn('gap-1.5', className)}>
+    <Field data-invalid={count.invalid || undefined} className="w-auto gap-1.5">
       <FieldLabel htmlFor={id} className="text-xs text-muted-foreground">
         Tur
       </FieldLabel>
-      <Input
+      <Stepper
         id={id}
-        type="number"
-        inputMode="numeric"
+        size="auto"
+        value={rounds}
         min={1}
         max={TEMPLATE_LIMITS.sets}
-        step={1}
-        aria-invalid={count.invalid || undefined}
-        className="tabular-nums touch:h-11"
-        value={count.draft ?? String(rounds)}
+        invalid={count.invalid}
+        decrementLabel="Bir tur eksilt"
+        incrementLabel="Bir tur ekle"
         onFocus={count.onFocus}
-        onChange={(event) => count.onChange(event.currentTarget.value)}
         onBlur={count.onBlur}
+        onValueChange={count.change}
       />
       {count.invalid ? <FieldError>{COUNT_ERROR}</FieldError> : null}
     </Field>
   );
 }
 
-/** Düz olmayan setlerin özeti: dokununca set tablosu açılır. */
-export function SetsSummary({ row, exercise, className }: Pick<RowProps, 'row' | 'exercise'> & { className?: string }) {
-  const editor = useEditor();
-  const text = formatSets(row.sets, exercise?.trackingType ?? 'weight_reps');
+/** Blok ayarı (saniye): tek harekette dinlenme, grupta tur sonu dinlenme ve istasyon arası. */
+export function BlockSecondsField({
+  blockIndex,
+  blockId,
+  name,
+  label,
+  max,
+  step,
+  disabled,
+}: {
+  blockIndex: number;
+  blockId: string;
+  name: 'restSeconds' | 'transitionSeconds';
+  label: string;
+  max: number;
+  step: number;
+  disabled?: boolean;
+}) {
+  const { form, path } = useEditor();
+  const field = useField(form, { path: blockField(path, blockIndex, name) });
+  const id = `${name}-${blockId}`;
+  const value = typeof field.input === 'number' && !Number.isNaN(field.input) ? field.input : null;
   return (
-    <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
+    <Field data-invalid={Boolean(field.errors) || undefined} className="w-auto gap-1.5">
+      <FieldLabel htmlFor={id} className="text-xs text-muted-foreground">
+        {label}
+      </FieldLabel>
+      <Stepper
+        id={id}
+        size="auto"
+        unit="sn"
+        value={value}
+        min={0}
+        max={max}
+        step={step}
+        disabled={disabled}
+        invalid={Boolean(field.errors)}
+        decrementLabel={`${label}: ${step} sn azalt`}
+        incrementLabel={`${label}: ${step} sn artır`}
+        inputRef={field.props.ref}
+        onFocus={field.props.onFocus}
+        onBlur={field.props.onBlur}
+        onValueChange={(next) => setInput(form, { path: blockField(path, blockIndex, name), input: (next ?? undefined) as number })}
+      />
+      <FieldError>{field.errors?.[0]}</FieldError>
+    </Field>
+  );
+}
+
+/**
+ * Düz setlerin hedefi: iki kutu ilk sete bağlıdır (hata ve odak), yazılan değer bütün setlere
+ * tek seferde gider. Altında çipler (tekrar ya da süre); basılı çip şu anki hedeftir.
+ */
+export function TargetField({ blockIndex, rowIndex, row, exercise }: RowProps) {
+  const editor = useEditor();
+  const { form, path } = editor;
+  const setsPath = blockField(path, blockIndex, 'rows', rowIndex, 'sets');
+  const minField = useField(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'sets', 0, 'min') });
+  const maxField = useField(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'sets', 0, 'max') });
+  const isDuration = exercise?.trackingType === 'duration';
+  const max = isDuration ? TEMPLATE_LIMITS.secondsMax : TEMPLATE_LIMITS.repsMax;
+  const step = isDuration ? 5 : 1;
+  const errors = minField.errors ?? maxField.errors;
+  const amrap = setShape(row.sets).amrap;
+  const amrapBadge = amrap === 'none' ? null : amrap === 'last' ? (row.sets.length === 1 ? 'AMRAP' : 'son set AMRAP') : amrap === 'all' ? 'hepsi AMRAP' : 'AMRAP';
+  const first = row.sets[0];
+  const chips = isDuration ? TIME_CHIPS : REP_CHIPS;
+  const unit = isDuration ? 'sn' : 'tekrar';
+
+  const writeAll = (patch: Partial<Pick<SetSpec, 'min' | 'max'>>) => {
+    const sets = (getInput(form, { path: setsPath }) ?? []) as SetSpec[];
+    setInput(form, { path: setsPath, input: sets.map((set) => ({ ...set, ...patch })) as SetSpec[] });
+  };
+
+  return (
+    <Field data-invalid={Boolean(errors) || undefined} className="min-w-0 basis-full gap-1.5 sm:w-auto sm:basis-auto">
+      <FieldLabel htmlFor={`min-${row.id}`} className="text-xs text-muted-foreground">
+        Hedef
+      </FieldLabel>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          {...minField.props}
+          id={`min-${row.id}`}
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={max}
+          step={step}
+          disabled={!exercise}
+          aria-label="En az"
+          aria-invalid={Boolean(minField.errors) || undefined}
+          className="h-8 w-14 text-center tabular-nums touch:h-11"
+          value={shown(minField.input)}
+          onChange={(event) => writeAll({ min: numberOf(event.currentTarget) as number })}
+        />
+        <span className="text-muted-foreground" aria-hidden>
+          –
+        </span>
+        <Input
+          {...maxField.props}
+          id={`max-${row.id}`}
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={max}
+          step={step}
+          disabled={!exercise}
+          aria-label="En çok"
+          aria-invalid={Boolean(maxField.errors) || undefined}
+          className="h-8 w-14 text-center tabular-nums touch:h-11"
+          value={shown(maxField.input)}
+          onChange={(event) => writeAll({ max: numberOf(event.currentTarget) as number })}
+        />
+        <span className="text-sm text-muted-foreground">{unit}</span>
+        {amrapBadge ? <Badge variant="secondary">{amrapBadge}</Badge> : null}
+      </div>
+      <FieldError>{errors?.[0]}</FieldError>
+      {exercise ? (
+        <div
+          role="group"
+          aria-label="Hazır hedefler"
+          className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pt-1 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0">
+          {chips.map(([min, max]) => {
+            const pressed = first?.min === min && first?.max === max;
+            const label = min === max ? formatNumber(min) : `${formatNumber(min)}–${formatNumber(max)}`;
+            return (
+              <Toggle
+                key={label}
+                variant="outline"
+                size="sm"
+                pressed={pressed}
+                onPressedChange={() => writeAll({ min, max })}
+                aria-label={`${label} ${unit}`}
+                className="h-8 min-w-11 shrink-0 rounded-full px-3 tabular-nums touch:h-10 aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-foreground">
+                {isDuration ? `${label} sn` : label}
+              </Toggle>
+            );
+          })}
+        </div>
+      ) : null}
+    </Field>
+  );
+}
+
+/** Düz olmayan setlerin özeti ("12 / 10 / 8 · piramit"): dokununca "Setleri ayrı düzenle" açılır. */
+export function SetsSummary({ row, exercise }: Pick<RowProps, 'row' | 'exercise'>) {
+  const editor = useEditor();
+  const shape = setShape(row.sets).kind;
+  const steps = row.sets.map((set) => `${rangeText(set)}${set.amrap ? '+' : ''}`).join(' / ');
+  const unit = exercise?.trackingType === 'duration' ? ' sn' : '';
+  const suffix = shape === 'pyramid' ? ' · piramit' : shape === 'backoff' ? ' · back-off' : '';
+  const text = `${steps}${unit}${suffix}`;
+  return (
+    <div className="flex min-w-0 basis-full flex-col gap-1.5 sm:basis-auto">
       <span className="text-xs text-muted-foreground" aria-hidden>
         Hedef
       </span>
       <Button
         type="button"
-        variant="ghost"
-        className="h-auto min-h-8 w-full min-w-0 justify-start px-2 py-1.5 text-left font-normal tabular-nums touch:min-h-11"
+        variant="outline"
+        className="h-8 w-full min-w-0 justify-start px-2.5 font-normal tabular-nums touch:h-11 sm:w-auto"
         disabled={!exercise}
-        aria-label={`Setleri düzenle: ${text}`}
+        aria-label={`Setleri ayrı düzenle: ${text}`}
         onClick={() => {
-          editor.openSets(row.id);
+          editor.setSetsOpen(row.id, true);
           editor.focusSet(row.id, 0, 'min');
         }}>
         <span className="truncate">{text}</span>
@@ -199,52 +347,15 @@ const PRESET_MESSAGES: Record<Exclude<SetPreset, 'lastAmrap'>, string> = {
   backoff: 'Back-off uygulandı',
 };
 
-/** "Hazır düzen": her seçenek sonucunu gösterir (Düz · 3 × 8–12, Piramit · 12 / 10 / 8…). */
-export function SetPresetMenu({ row, exercise }: Pick<RowProps, 'row' | 'exercise'>) {
-  const editor = useEditor();
-  const weighted = exercise?.trackingType === 'weight_reps';
-  const duration = exercise?.trackingType === 'duration';
-  const n = row.sets.length;
-  const ref = referenceSet(row.sets);
-  const lastAmrap = ['last', 'all'].includes(setShape(row.sets).amrap);
-  const pyramid = pyramidPreset(row.sets, TEMPLATE_LIMITS.repsMax)
-    .map((set) => rangeText(set))
-    .join(' / ');
-  const backoffCount = (n >= 2 ? n : PRESET_MIN_SETS) - 1;
-  const apply = (preset: SetPreset, message: string) => editor.updateWithUndo((before) => applySetPreset(before, row.id, preset), message);
+const PRESET_LABELS: Record<Exclude<SetPreset, 'lastAmrap'>, string> = {
+  straight: 'Düz',
+  pyramid: 'Piramit',
+  backoff: 'Back-off',
+};
 
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button type="button" variant="outline" size="sm" className="touch:h-11" disabled={!exercise} />}>
-        Hazır düzen
-        <CaretDown data-icon="inline-end" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className={cn('min-w-56', MENU_TOUCH)}>
-        <DropdownMenuItem onClick={() => apply('straight', PRESET_MESSAGES.straight)}>
-          Düz · {formatNumber(n)} × {rangeText(ref)}
-        </DropdownMenuItem>
-        {weighted ? (
-          <>
-            <DropdownMenuItem onClick={() => apply('pyramid', PRESET_MESSAGES.pyramid)}>Piramit · {pyramid}</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => apply('backoff', PRESET_MESSAGES.backoff)}>
-              Back-off · {rangeText(ref)} + {formatNumber(backoffCount)} × %{BACKOFF_PCT}
-            </DropdownMenuItem>
-          </>
-        ) : null}
-        <DropdownMenuSeparator />
-        <DropdownMenuCheckboxItem
-          checked={lastAmrap}
-          onCheckedChange={() => apply('lastAmrap', lastAmrap ? 'AMRAP kaldırıldı' : 'Son set AMRAP')}>
-          {duration ? 'Son set: yapabildiği kadar tut' : 'Son set AMRAP'}
-        </DropdownMenuCheckboxItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
+type NumberFieldStore = { input: unknown; errors: readonly string[] | null; props: FieldElementProps };
 
-type NumberField = { input: unknown; errors: readonly string[] | null; props: FieldElementProps };
-
-/** Set tablosunun sayı kutusu: Enter sonraki setin aynı sütununa, Shift+Enter öncekine gider. */
+/** Set satırının sayı kutusu: Enter aynı sütunda sonraki, Shift+Enter önceki sete gider. */
 function SetNumberInput({
   rowId,
   index,
@@ -261,7 +372,7 @@ function SetNumberInput({
   index: number;
   count: number;
   column: SetColumn;
-  field: NumberField;
+  field: NumberFieldStore;
   label: string;
   max: number;
   step: number;
@@ -284,7 +395,7 @@ function SetNumberInput({
       disabled={disabled}
       aria-label={label}
       aria-invalid={Boolean(field.errors) || undefined}
-      className={cn('tabular-nums', column === 'pct' ? 'touch:h-11' : 'h-10 w-16 touch:h-11')}
+      className={cn('text-center tabular-nums', column === 'pct' ? 'touch:h-11' : 'h-10 w-13 touch:h-11')}
       value={shown(field.input)}
       onChange={(event) => onValue(numberOf(event.currentTarget))}
       onKeyDown={(event) => {
@@ -292,18 +403,16 @@ function SetNumberInput({
         // Enter formu göndermesin: aynı sütunda sonraki (Shift ile önceki) sete geç.
         event.preventDefault();
         const target = event.shiftKey ? index - 1 : index + 1;
-        if (target < 0) return;
-        const next = target >= count ? document.getElementById(`set-add-${rowId}`) : document.getElementById(setInputId(rowId, target, column));
-        next?.focus();
+        if (target < 0 || target >= count) return;
+        document.getElementById(setInputId(rowId, target, column))?.focus();
       }}
     />
   );
 }
 
-/** Tablonun bir seti: hedef aralığı, yük yüzdesi (ağırlıklı harekette), AMRAP, set menüsü. */
-export function SetRowEditor({ blockIndex, rowIndex, row, exercise, index }: RowProps & { index: number }) {
-  const editor = useEditor();
-  const { form, path } = editor;
+/** Bir set: n · min–max · % (ağırlıklı harekette) · AMRAP. 360 px'in altında % ve AMRAP alt satıra iner. */
+function SetRow({ blockIndex, rowIndex, row, exercise, index }: RowProps & { index: number }) {
+  const { form, path } = useEditor();
   const at = (name: 'min' | 'max' | 'loadPct' | 'amrap') => blockField(path, blockIndex, 'rows', rowIndex, 'sets', index, name);
   const minField = useField(form, { path: at('min') });
   const maxField = useField(form, { path: at('max') });
@@ -321,8 +430,8 @@ export function SetRowEditor({ blockIndex, rowIndex, row, exercise, index }: Row
 
   return (
     <li className="flex flex-col gap-1">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="w-7 shrink-0 text-sm tabular-nums text-muted-foreground">{n}.</span>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+        <span className="w-5 shrink-0 text-sm tabular-nums text-muted-foreground">{n}</span>
         <SetNumberInput
           rowId={row.id}
           index={index}
@@ -350,11 +459,12 @@ export function SetRowEditor({ blockIndex, rowIndex, row, exercise, index }: Row
           disabled={disabled}
           onValue={(value) => write('max', value)}
         />
-        <span className="text-sm text-muted-foreground">{duration ? 'sn' : 'tekrar'}</span>
-        <div className="flex basis-full flex-wrap items-center gap-2 pl-9 sm:basis-auto sm:pl-0">
+        <div className="flex basis-full items-center gap-2 pl-7 min-[360px]:basis-auto min-[360px]:pl-0">
           {weighted ? (
-            <InputGroup className="h-10 w-24 touch:h-11" data-disabled={disabled || undefined}>
-              <InputGroupAddon align="inline-start">%</InputGroupAddon>
+            <InputGroup className="h-10 w-16 touch:h-11" data-disabled={disabled || undefined}>
+              <InputGroupAddon align="inline-start" className="pr-0">
+                %
+              </InputGroupAddon>
               <SetNumberInput
                 rowId={row.id}
                 index={index}
@@ -371,164 +481,97 @@ export function SetRowEditor({ blockIndex, rowIndex, row, exercise, index }: Row
           ) : null}
           <Toggle
             variant="outline"
-            className="h-10 touch:h-11"
+            className="h-10 w-18 aria-pressed:border-primary aria-pressed:bg-primary/10 touch:h-11"
             disabled={disabled}
             pressed={Boolean(set?.amrap)}
             onPressedChange={(pressed) => setInput(form, { path: at('amrap'), input: pressed ? true : undefined })}
             aria-label={`Set ${n} AMRAP (yapabildiği kadar)`}>
             AMRAP
           </Toggle>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={disabled}
-              render={<Button type="button" variant="ghost" size="icon" className="ml-auto size-8 touch:size-11 sm:ml-0" aria-label={`Set ${n} işlemleri`} />}>
-              <DotsThreeVertical weight="bold" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className={cn('min-w-56', MENU_TOUCH)}>
-              <DropdownMenuItem
-                onClick={() =>
-                  editor.update((before) => updateRowSets(before, row.id, (sets) => targetToAll(sets, index)), {
-                    announce: `Set ${n} hedefi bütün setlere uygulandı`,
-                  })
-                }>
-                <Copy />
-                Hedefi bütün setlere uygula
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant="destructive"
-                disabled={count <= 1}
-                onClick={() => {
-                  editor.update((before) => updateRowSets(before, row.id, (sets) => removeSetAt(sets, index)), { announce: `Set ${n} silindi` });
-                  editor.focusSet(row.id, Math.max(0, index - 1), 'min');
-                }}>
-                <Trash />
-                Seti sil
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
-      <FieldError className="pl-9">{errors?.[0]}</FieldError>
+      <FieldError className="pl-7">{errors?.[0]}</FieldError>
     </li>
   );
 }
 
-/** Set tablosu: her set bir satır; hazır düzenler, "Set ekle", setlerin kuralları. */
-export function SetTable({ blockIndex, rowIndex, row, exercise, title }: RowProps & { title: string }) {
+/**
+ * "Setleri ayrı düzenle": açılır bölüm (44 px başlık). Ağırlıklı harekette düzen seçimi
+ * [Düz][Piramit][Back-off] (hiçbiri değilse "Özel düzen"); her set bir satır. Setler düz
+ * değilse ya da bir sette hata varsa kendiliğinden açıktır (hatada kapanmaz).
+ */
+export function SetsSection({ blockIndex, rowIndex, row, exercise, title, open, forced }: RowProps & { title: string; open: boolean; forced: boolean }) {
   const editor = useEditor();
   const setsArray = useFieldArray(editor.form, { path: blockField(editor.path, blockIndex, 'rows', rowIndex, 'sets') });
+  const weighted = exercise?.trackingType === 'weight_reps';
+  const shape = setShape(row.sets).kind;
   const deviceId = row.deviceId ?? exercise?.deviceId;
   const device = deviceId ? editor.devices.get(deviceId) : undefined;
   const rules = exercise ? describeSetRules(row.sets, loadSpecFor(exercise, device)) : null;
-  const count = row.sets.length;
-  const add = () => {
-    editor.update((before) => setRowSetCount(before, row.id, count + 1), { announce: `Set ${count + 1} eklendi` });
-    editor.focusSet(row.id, count, 'min');
+  const contentId = `sets-${row.id}`;
+
+  const apply = (preset: Exclude<SetPreset, 'lastAmrap'>) => {
+    editor.setSetsOpen(row.id, true);
+    editor.updateWithUndo((before) => applySetPreset(before, row.id, preset), PRESET_MESSAGES[preset]);
   };
 
   return (
-    <div id={`sets-${row.id}`} className="flex flex-col gap-3 border-t p-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium">Setler</span>
-        <SetPresetMenu row={row} exercise={exercise} />
-      </div>
-      <ol className="flex flex-col gap-2" aria-label={`${title} setleri`}>
-        {row.sets.map((_, index) => (
-          <SetRowEditor key={index} blockIndex={blockIndex} rowIndex={rowIndex} row={row} exercise={exercise} index={index} />
-        ))}
-      </ol>
-      <div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="touch:h-11"
-          id={`set-add-${row.id}`}
-          disabled={!exercise || count >= SET_LIMITS.perRow}
-          onClick={add}>
-          <Plus data-icon="inline-start" />
-          Set ekle
-        </Button>
-      </div>
-      {setsArray.errors ? <FieldError>{setsArray.errors[0]}</FieldError> : null}
-      {rules ? <FieldDescription>{rules}</FieldDescription> : null}
-    </div>
-  );
-}
-
-/**
- * Düz setlerin hedefi (tablo kapalıyken): iki kutu ilk sete bağlıdır (hata ve odak), yazılan
- * değer bütün setlere tek seferde gider.
- */
-export function StraightTargetField({ blockIndex, rowIndex, row, exercise, className }: RowProps & { className?: string }) {
-  const { form, path } = useEditor();
-  const setsPath = blockField(path, blockIndex, 'rows', rowIndex, 'sets');
-  const minField = useField(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'sets', 0, 'min') });
-  const maxField = useField(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'sets', 0, 'max') });
-  const isDuration = exercise?.trackingType === 'duration';
-  const max = isDuration ? TEMPLATE_LIMITS.secondsMax : TEMPLATE_LIMITS.repsMax;
-  const step = isDuration ? 5 : 1;
-  const errors = minField.errors ?? maxField.errors;
-  const amrap = setShape(row.sets).amrap;
-  const amrapBadge =
-    amrap === 'none'
-      ? null
-      : amrap === 'last'
-        ? row.sets.length === 1
-          ? 'AMRAP'
-          : 'son set AMRAP'
-        : amrap === 'all'
-          ? 'hepsi AMRAP'
-          : 'AMRAP';
-  const writeAll = (name: 'min' | 'max', value: number | undefined) => {
-    const sets = (getInput(form, { path: setsPath }) ?? []) as SetSpec[];
-    setInput(form, { path: setsPath, input: sets.map((set) => ({ ...set, [name]: value })) as SetSpec[] });
-  };
-
-  return (
-    <Field data-invalid={Boolean(errors) || undefined} className={cn('gap-1.5', className)}>
-      <FieldLabel htmlFor={`min-${row.id}`} className="text-xs text-muted-foreground">
-        Hedef
-      </FieldLabel>
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          {...minField.props}
-          id={`min-${row.id}`}
-          type="number"
-          inputMode="numeric"
-          min={1}
-          max={max}
-          step={step}
-          disabled={!exercise}
-          aria-label="En az"
-          aria-invalid={Boolean(minField.errors) || undefined}
-          className="w-16 tabular-nums touch:h-11"
-          value={shown(minField.input)}
-          onChange={(event) => writeAll('min', numberOf(event.currentTarget))}
-        />
-        <span className="text-muted-foreground" aria-hidden>
-          –
+    <div className="border-t">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={contentId}
+        disabled={forced}
+        onClick={() => editor.setSetsOpen(row.id, !open)}
+        className="group/sets flex h-11 w-full items-center justify-between gap-2 px-3 text-left text-sm outline-none hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset disabled:cursor-default disabled:hover:bg-transparent">
+        <span>
+          Setleri ayrı düzenle <span className="text-muted-foreground">· {weighted ? '%, AMRAP' : 'AMRAP'}</span>
         </span>
-        <Input
-          {...maxField.props}
-          id={`max-${row.id}`}
-          type="number"
-          inputMode="numeric"
-          min={1}
-          max={max}
-          step={step}
-          disabled={!exercise}
-          aria-label="En çok"
-          aria-invalid={Boolean(maxField.errors) || undefined}
-          className="w-16 tabular-nums touch:h-11"
-          value={shown(maxField.input)}
-          onChange={(event) => writeAll('max', numberOf(event.currentTarget))}
+        <CaretDown
+          aria-hidden
+          className="size-4 shrink-0 text-muted-foreground group-aria-expanded/sets:rotate-180 motion-safe:transition-transform motion-safe:duration-160"
         />
-        <span className="text-sm text-muted-foreground">{isDuration ? 'sn' : 'tekrar'}</span>
-        {amrapBadge ? <Badge variant="secondary">{amrapBadge}</Badge> : null}
-      </div>
-      <FieldError>{errors?.[0]}</FieldError>
-    </Field>
+      </button>
+      {open ? (
+        <div id={contentId} className="flex flex-col gap-3 px-3 pb-3">
+          {weighted ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground" id={`layout-${row.id}`}>
+                Düzen
+              </span>
+              <ToggleGroup
+                variant="outline"
+                spacing={0}
+                aria-labelledby={`layout-${row.id}`}
+                value={shape === 'custom' ? [] : [shape]}
+                onValueChange={(value) => {
+                  const next = value[0] as Exclude<SetPreset, 'lastAmrap'> | undefined;
+                  if (next && next !== shape) apply(next);
+                }}>
+                {(['straight', 'pyramid', 'backoff'] as const).map((preset) => (
+                  <ToggleGroupItem key={preset} value={preset} className="h-8 px-3 touch:h-11">
+                    {PRESET_LABELS[preset]}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              {shape === 'custom' ? <span className="text-xs text-muted-foreground">Özel düzen</span> : null}
+            </div>
+          ) : !isStraight(row.sets) ? (
+            <div>
+              <Button type="button" variant="outline" size="sm" className="touch:h-11" onClick={() => apply('straight')}>
+                Setleri eşitle
+              </Button>
+            </div>
+          ) : null}
+          <ol className="flex flex-col gap-2" aria-label={`${title} setleri`}>
+            {row.sets.map((_, index) => (
+              <SetRow key={index} blockIndex={blockIndex} rowIndex={rowIndex} row={row} exercise={exercise} index={index} />
+            ))}
+          </ol>
+          {setsArray.errors ? <FieldError>{setsArray.errors[0]}</FieldError> : null}
+          {rules ? <FieldDescription>{rules}</FieldDescription> : null}
+        </div>
+      ) : null}
+    </div>
   );
 }

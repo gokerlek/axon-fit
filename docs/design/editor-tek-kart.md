@@ -13,6 +13,9 @@
 > 6. **Tutamak = kartın üst ortasında tek yatay çizgi** (bottom-sheet tutamağı gibi). Basıp kaydırınca sürükleme hemen başlar; basılı tutma yok. Grubun ve her üyenin kendi çizgisi var. Rozet yalnız etiket (§1, §2).
 > 7. **Seçim modu** (v1'deki gibi): başlıkta "Seç", kartlarda onay kutusu, altta [Vazgeç] [Grupla (n)] [Kopyala] [Sil]. "+ Grup kur" sayfasının yerine geçer. Üstüne bırakıp gruplama hızlı yol olarak kalır (§4, §5).
 > 8. **Yapışkan alt çubuk** her iki düzenleyicide: [+ Hareket ekle] ve [Kaydet] / "Kaydedildi". Telefonda bu sayfalarda dock gizlenir. Başlıktaki "Hareket ekle" kalkar (§6).
+>
+> *2026-09-24, üçüncü tur*
+> 9. **Kart yüzünde açma oku (⌄/⌃) yok.** Tek harekette, grup yüzünde ve üyede. Yüze dokunmak zaten açıp kapatıyor; ok gereksizdi. En sağdaki denetim ⧉ Kopyala. Erişilebilirlik okla gitmez: yüz gerçek bir `<button aria-expanded aria-controls>` olarak kalır, odak halkası görünür, adı "Plank, ayrıntıları aç/kapat" (grupta "Süperset 2, ayarları aç/kapat"), meta satırı açıklama olarak okunur. Açık kart görsel olarak belli: yüz koyulaşır (`bg-muted/50`), rozet ana renge döner, altında gövde durur. Açık gövdenin içindeki "Setleri ayrı düzenle" ve "Ayrıntılar · kural · not" bölüm başlıkları küçük oklarını korur (kart yüzü değiller) (§1).
 
 Temel C. Üstüne A'nın jestleri ve set düzenlemesi, B'nin kısayolları, v1'in seçim modu ve alt çubuğu eklendi.
 
@@ -42,18 +45,18 @@ Sayfa kenar boşluğu 16 px, liste 343 px. Telefonda "Hareketler" Card'ının ç
 ```
 ┌──────────────────────────────────────────┐ 343
 │                   ━━━━                   │ şerit 20 px · çizgi 32×4
-│ ┌──┐ Barbell Bench Press          [⧉]  ⌄ │ yüz: üst 8, içerik ≥ 36, alt 12
+│ ┌──┐ Barbell Bench Press             [⧉] │ yüz: üst 8, içerik ≥ 36, alt 12
 │ │ 1│ 3 × 8–12 · son set AMRAP · 90 sn  🗒 │
 │ └──┘                                     │
 └──────────────────────────────────────────┘ ≈ 78 px
- rozet 28 | 12 | başlık ≈205 (2 satır) | ⧉ 44 | ⌄ 20
+ rozet 28 | 12 | başlık ≈229 (2 satır) | 12 | ⧉ 44 (sağ kenardan 4 px)
 ```
 - **Tutamak çizgisi:** kartın üst ortasında, 20 px'lik şeridin içinde. Görsel 32×4 `rounded-full bg-muted-foreground/40` (grupta `primary/50`); üstüne gelince ya da basılıyken koyulaşır, sürüklerken primary.
   - Dokunma alanı **64×44**: şerit (20) + yüzün üst boşluğu (8) + üstteki kart aralığı ve önceki kartın boş alt kenarı (16). Başlık ve meta metninin üstüne binmez. İlk kartın üstünde en az 16 px boşluk olur.
   - `touch-action: none`, masaüstünde `cursor: grab`, sürüklerken `grabbing`, `title="Sürükleyerek taşı"`.
   - Basıp **4 px** kaydırınca sürükleme hemen başlar. Kartın başka hiçbir yerinden sürükleme başlamaz.
   - `aria-hidden` ve odaklanmaz (her kartta fazladan sekme durağı olmasın). Klavye ve ekran okuyucu yolu §2'de.
-- Yüzün tamamı gerilmiş bir `<button aria-expanded>`. ⧉ bu düğmenin üstünde duran kardeş bir düğme: `z-10`, 44×44, `aria-label="Kopyala: Bench Press"`.
+- Yüzün tamamı gerilmiş bir `<button aria-expanded aria-controls>`, adı "Bench Press, ayrıntıları aç/kapat" (meta satırı `aria-describedby`). Açma oku yok (karar 9): açık kartta yüz koyulaşır ve rozet ana renge döner. ⧉ en sağda, bu düğmenin üstünde duran kardeş bir düğme: `z-10`, 44×44, `aria-label="Kopyala: Bench Press"`.
 - Rozet yalnız etiket.
 - Meta satırı `setsText()` + dinlenmeden oluşur. Kural, cihaz ve not işaretleri meta satırının sonunda 14 px ikon olarak durur (her birinin aria-label'ı var). Bugünkü rozet satırı kalkar.
 - Kütüphanede olmayan hareket: başlık kırmızı "Silinmiş egzersiz", ⧉'nin yerinde 🗑 "Sil".
@@ -64,7 +67,7 @@ Sayfa kenar boşluğu 16 px, liste 343 px. Telefonda "Hareketler" Card'ının ç
 ┌──────────────────────────────┐ ┌──────────────────────────────┐
 │             ━━━━             │ │             ━━━━             │
 ├────────┬─────────────────────┤ ├─────────────────────┬────────┤
-│   ⧉    │ 1 Bench Press     ⌄ │ │ Bench Press   [⧉] ⌄ │   🗑    │
+│   ⧉    │ 1 Bench Press       │ │ Bench Press     [⧉] │   🗑    │
 │Kopyala │   3×8–12 · 90 sn    │ │ 3×8–12 · 90 sn      │  Sil   │
 └────────┴─────────────────────┘ └─────────────────────┴────────┘
   72 px, primary                               72 px, destructive
@@ -74,7 +77,7 @@ Sayfa kenar boşluğu 16 px, liste 343 px. Telefonda "Hareketler" Card'ının ç
 ```
 ┌──────────────────────────────────────────┐
 │                   ━━━━                   │
-│ ┌──┐ Barbell Bench Press          [⧉]  ⌃ │
+│ ┌──┐ Barbell Bench Press             [⧉] │ açık: yüz koyu, rozet primary
 │ │ 1│ 3 × 8–12 · 90 sn                    │
 ├──────────────────────────────────────────┤
 │ Set               Dinlenme               │
@@ -101,7 +104,7 @@ Sayfa kenar boşluğu 16 px, liste 343 px. Telefonda "Hareketler" Card'ının ç
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
 │                                 ━━━━                                  │
-│ [1] Barbell Bench Press                                        [⧉]  ⌄ │
+│ [1] Barbell Bench Press                                           [⧉] │
 │     3 × 8–12 · son set AMRAP · 90 sn · Göğüs · Olympic Bar            │
 ├───────────────────────────────────────────────────────────────────────┤
 │ Set [−] 3 [+]   Dinlenme [−] 90 sn [+]   Hedef [8]–[12] tekrar        │
@@ -116,15 +119,15 @@ Sayfa kenar boşluğu 16 px, liste 343 px. Telefonda "Hareketler" Card'ının ç
 ```
 ╭──────────────────────────────────────────╮
 │                   ━━━━                   │ grubun çizgisi (primary/50)
-│ ┌──┐ Süperset                     [⧉]  ⌄ │ grup yüzü
+│ ┌──┐ Süperset                        [⧉] │ grup yüzü
 │ │ 2│ 2 hareket · 3 tur · 90 sn tur sonu  │
 ├──────────────────────────────────────────┤
 │                   ━━━━                   │ üyenin çizgisi
-│ 2a  Bench Press                   [⧉]  ⌄ │ üye yüzü (aynı anatomi)
+│ 2a  Bench Press                      [⧉] │ üye yüzü (aynı anatomi)
 │     3 × 8–12                             │
 ├──────────────────────────────────────────┤
 │                   ━━━━                   │
-│ 2b  Cable Row                     [⧉]  ⌄ │
+│ 2b  Cable Row                        [⧉] │
 │     3 × 10–12                            │
 ├──────────────────────────────────────────┤
 │ [ + Gruba hareket ekle ]            h-11 │
@@ -187,7 +190,7 @@ Kural: sağda olumlu işlemler, solda sil ve dağıt. Bir tarafta tek işlem var
 
 ## 4. Gruplama
 **Üç yol:**
-1. **Üstüne bırak (hızlı yol).** Hedef kartın (şerit dahil) yüksekliği üç banda ayrılır: üst %25 = önüne, alt %25 = arkasına, orta %50 = birleştir. Birleştirme ancak parmak ortada **250 ms** bekleyince devreye girer; o zamana kadar en yakın çizgi görünür, yani hızlı geçişte grup oluşmaz. Birleştirme devreye girince hedefte ring-2 primary ve bg-primary/8 belirir, vibrate(8) olur, ⧉ ile ⌄'nin yerine sonucu söyleyen bir hap çıkar (`combineOutcome`):
+1. **Üstüne bırak (hızlı yol).** Hedef kartın (şerit dahil) yüksekliği üç banda ayrılır: üst %25 = önüne, alt %25 = arkasına, orta %50 = birleştir. Birleştirme ancak parmak ortada **250 ms** bekleyince devreye girer; o zamana kadar en yakın çizgi görünür, yani hızlı geçişte grup oluşmaz. Birleştirme devreye girince hedefte ring-2 primary ve bg-primary/8 belirir, vibrate(8) olur, ⧉'nin yerine sonucu söyleyen bir hap çıkar (`combineOutcome`):
    - tek → tek: **"Süperset yap"**
    - bir süpersete: **"Ekle · devre olur"**
    - devre ya da komplekse: **"Gruba ekle"** (kompleksin 7. hareketinde "Ekle · devre olur")
@@ -257,7 +260,7 @@ Gruplamak, kopyalamak ya da silmek istediklerini seç.
  masaüstü tek satır:  2 seçili · süperset olur   [Vazgeç] [Grupla (2)] [Kopyala] [Sil]
 ```
 - **Kartlar:** her üst düzey kartta rozetin yerinde 28 px onay kutusu (başlık kaymaz). Yüz `role="checkbox"` + `aria-checked`; dokunmak seçer ya da bırakır. Grup tek onay kutusu taşır; üyeler görünür ama soluk (%60) ve `inert`, grubun herhangi bir yerine dokunmak grubu seçer. Üye tek başına seçilmez.
-- **Kapananlar:** çizgi söner (şerit yerinde kalır, kartlar zıplamaz), ⧉ ve ⌄ gizlenir. Sürükleme, bırakma, kaydırma, Alt kısayolları, akordeon ve "+ Gruba hareket ekle" kapalı.
+- **Kapananlar:** çizgi söner (şerit yerinde kalır, kartlar zıplamaz), ⧉ gizlenir. Sürükleme, bırakma, kaydırma, Alt kısayolları, akordeon ve "+ Gruba hareket ekle" kapalı.
 - **Başlık:** [Seç] yerine [Tümünü seç] / [Seçimi kaldır]; açıklama "Gruplamak, kopyalamak ya da silmek istediklerini seç."
 - **Masaüstü:** Shift+tık aralık seçer. Liste odaktayken Ctrl/⌘+A tümünü seçer, Delete "Sil" gibi çalışır.
 
@@ -359,7 +362,7 @@ masaüstü (≥ md): içerik sütununun altında sticky, dock'un üstünde
   - SwipeGroup ile aynı anda tek panel açık kalır.
   - Spinner ve ✓ durumları atılır.
   - İkonlar Phosphor, renkler token'lardan.
-  - `expandable-swipe-row.tsx`'teki alttaki `Thumb` alınmaz: bizde çizgi sürükleme tutamağıdır ve kartın üstündedir; açılabilirliği ⌄ gösterir.
+  - `expandable-swipe-row.tsx`'teki alttaki `Thumb` alınmaz: bizde çizgi sürükleme tutamağıdır ve kartın üstündedir; açılabilirliği yüzün kendisi gösterir (karar 9).
 - **Reddedilenler:**
   - Özel motor: otomatik kaydırma, kaydırma sırasında ölçüm ve gruplar arası taşıma için hata yüzeyi büyük.
   - sortable + combine: hedef parmağın altından kayar.

@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from 'react';
 import type { FormStore } from '@formisch/react';
+import type { ReorderTarget } from '@/lib/reorder';
 import type { blocksHostSchema } from '@/lib/schemas/template';
 import type { EditorDevice, IdSource, PickerExercise } from '@/lib/template-edit';
 import { BLOCK_KIND_LABELS, type TemplateBlock, type TemplateRow } from '@/lib/template-plan';
@@ -17,13 +18,52 @@ export function blockField<const T extends readonly (string | number)[]>(path: B
   return [...path, ...rest] as unknown as ['blocks', ...T];
 }
 
-/** Set tablosunda odaklanılabilen sütunlar. */
+/** Set satırlarında odaklanılabilen sütunlar. */
 export type SetColumn = 'min' | 'max' | 'pct';
 
-/** Set tablosundaki kutunun DOM kimliği (Enter ile sonraki sete geçiş, "Set ekle" sonrası odak). */
+/** Set satırındaki kutunun DOM kimliği (Enter ile sonraki sete geçiş). */
 export function setInputId(rowId: string, index: number, column: SetColumn): string {
   return `set-${rowId}-${index}-${column}`;
 }
+
+/**
+ * Kartın yüzünün DOM kimliği. Öğe kimliği: tek harekette ve üyede satırın, grupta bloğun
+ * kimliği (taşıma, gruplama ve gruptan çıkarma satır kimliğini korur; odak ona döner).
+ */
+export function faceId(itemId: string): string {
+  return `face-${itemId}`;
+}
+
+/** Kartın açık gövdesinin DOM kimliği (`aria-controls`). */
+export function bodyId(itemId: string): string {
+  return `body-${itemId}`;
+}
+
+/** Geri alınabilir güncellemenin seçenekleri. */
+export type UndoOptions = {
+  /** Sonra vurgulanacak öğe (1,2 sn). */
+  highlight?: string;
+  /** Çizimden sonra yüzüne odaklanılacak öğe. */
+  focus?: string;
+};
+
+/** Kartın işlemleri (yüzdeki ⧉, açık gövdedeki düğmeler, yüzdeki klavye kısayolları). */
+export type ItemActions = {
+  /** ⧉: tek hareket arkasına, grup bütünüyle arkasına, üye grupta ya da grubun arkasına. */
+  duplicate: (itemId: string) => void;
+  /** 🗑: tek hareket, üye ya da grubun tamamı (8 sn "Geri al"). */
+  remove: (itemId: string) => void;
+  /** Üyeyi gruptan çıkarır. */
+  ungroup: (rowId: string) => void;
+  /** Grubu dağıtır (her üye tek hareket olur). */
+  dissolve: (blockId: string) => void;
+  /** Klavyeyle taşıma (Alt+↑/↓, Alt+Home/End). */
+  step: (itemId: string, target: ReorderTarget) => void;
+  /** Alt+→: önceki blokla gruplar. */
+  groupWithPrevious: (itemId: string) => void;
+  /** Alt+←: üyede gruptan çıkar, grup yüzünde grubu dağıt. */
+  split: (itemId: string) => void;
+};
 
 /** Düzenleyicinin ortak durumu: form, bloklar ve yapısal işlemler (block-editor.tsx sağlar). */
 export type Editor = {
@@ -36,27 +76,36 @@ export type Editor = {
   noteHint: string;
   /** Ekrandaki bloklar (çizim için). İşlemler `update` ile olay anındaki güncel bloklara uygulanır. */
   blocks: TemplateBlock[];
+  /** Olay anındaki güncel bloklar (formdan). */
+  current: () => TemplateBlock[];
   /** Blokları günceller ve forma tek seferde yazar; satır vurgusu ve ekran okuyucu duyurusu isteğe bağlı. */
   update: (change: (blocks: TemplateBlock[]) => TemplateBlock[], options?: { highlight?: string; announce?: string }) => void;
-  /** Geri alınabilir güncelleme: önceki hâl saklanır, bildirimde "Geri al" çıkar. */
-  updateWithUndo: (change: (blocks: TemplateBlock[]) => TemplateBlock[], message: string) => void;
+  /** Geri alınabilir güncelleme: önceki hâl saklanır, bildirimde "Geri al" çıkar (8 sn); aynı cümle duyurulur. */
+  updateWithUndo: (change: (blocks: TemplateBlock[]) => TemplateBlock[], message: string, options?: UndoOptions) => void;
+  /** Ekran okuyucuya kibarca duyurur (sheet açıksa kapanınca). */
+  announce: (text: string) => void;
   exercises: ReadonlyMap<string, PickerExercise>;
   exerciseList: readonly PickerExercise[];
   devices: ReadonlyMap<string, EditorDevice>;
   deviceList: readonly EditorDevice[];
   labels: ReadonlyMap<string, string>;
-  /** Ayrıntıları (kural, cihaz, not) açık satırlar. */
-  expanded: ReadonlySet<string>;
-  toggleExpanded: (rowId: string) => void;
-  /** Set tablosu açık satırlar. */
-  expandedSets: ReadonlySet<string>;
-  toggleSets: (rowId: string) => void;
-  openSets: (rowId: string) => void;
-  /** Set tablosundaki bir kutuya odaklanır (çizimden sonra). */
+  /** Açık kartlar (öğe kimliği). lg altında aynı anda tek kart açık. */
+  open: ReadonlySet<string>;
+  toggleOpen: (itemId: string) => void;
+  /** Kartı kapatır (bırakınca kart kapalı oturur). */
+  close: (itemId: string) => void;
+  /** Kartı kapatır ve odağı yüzüne verir (Esc). */
+  closeAndFocus: (itemId: string) => void;
+  /** "Setleri ayrı düzenle": kullanıcının açıp kapattıkları (yoksa setlerin düzenine göre). */
+  setsOpen: ReadonlyMap<string, boolean>;
+  setSetsOpen: (rowId: string, open: boolean) => void;
+  /** "Ayrıntılar · kural · not" açık satırlar. */
+  detailsOpen: ReadonlySet<string>;
+  toggleDetails: (rowId: string) => void;
+  /** Set satırlarındaki bir kutuya odaklanır (çizimden sonra). */
   focusSet: (rowId: string, index: number, column: SetColumn) => void;
   highlight: string | null;
-  /** Kütüphane sheet'ini değiştirme kipinde açar: seçilen hareket satırın yerine geçer. */
-  startReplace: (rowId: string) => void;
+  actions: ItemActions;
 };
 
 export const EditorContext = createContext<Editor | null>(null);
@@ -72,19 +121,28 @@ export function rowTitle(row: TemplateRow, exercises: ReadonlyMap<string, Picker
   return exercises.get(row.exerciseId)?.title ?? 'Silinmiş egzersiz';
 }
 
-/**
- * Bloğun adı (tutamak ve sıralama duyurusu): tek harekette hareketin adı, grupta türü ve
- * ilk iki hareket ("Süperset (Bench Press, Cable Row, …)").
- */
-export function blockTitle(block: TemplateBlock | undefined, exercises: ReadonlyMap<string, PickerExercise>): string {
-  if (!block) return '';
-  if (block.kind === 'single') {
-    const row = block.rows[0];
-    return row ? rowTitle(row, exercises) : '';
-  }
-  const titles = block.rows.map((row) => rowTitle(row, exercises));
-  return `${BLOCK_KIND_LABELS[block.kind]} (${titles.slice(0, 2).join(', ')}${titles.length > 2 ? ', …' : ''})`;
+/** Grubun adı: türü ve sırası ("Süperset 2"). */
+export function groupTitle(block: TemplateBlock, blockIndex: number): string {
+  return `${BLOCK_KIND_LABELS[block.kind]} ${blockIndex + 1}`;
 }
 
-/** Düzenleyicinin açılır menüleri: dokunmatikte ya da dar ekranda öğeler 44 px. */
-export const MENU_TOUCH = 'touch:**:data-[slot=dropdown-menu-item]:min-h-11 touch:**:data-[slot=dropdown-menu-checkbox-item]:min-h-11';
+/**
+ * Öğenin adı (duyurular, toast'lar, düğme adları): satırda hareketin adı, grupta türü ve
+ * sırası. Bilinmeyen kimlikte boş.
+ */
+export function itemTitle(blocks: readonly TemplateBlock[], itemId: string, exercises: ReadonlyMap<string, PickerExercise>): string {
+  for (const [blockIndex, block] of blocks.entries()) {
+    if (block.id === itemId) {
+      const only = block.rows[0];
+      return block.kind === 'single' && only ? rowTitle(only, exercises) : groupTitle(block, blockIndex);
+    }
+    const row = block.rows.find((item) => item.id === itemId);
+    if (row) return rowTitle(row, exercises);
+  }
+  return '';
+}
+
+/** Bloğun öğe kimliği: tek harekette satırın, grupta bloğun kimliği. */
+export function blockItemId(block: TemplateBlock): string {
+  return block.kind === 'single' ? (block.rows[0]?.id ?? block.id) : block.id;
+}

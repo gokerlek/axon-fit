@@ -377,7 +377,7 @@ export function ProgramForm({
             firstDay ??= day.id;
             setErrors(form, {
               path: ['phases', i, 'days', j, 'blocks', b, 'rows', r, 'exerciseId'],
-              errors: ['Bu egzersiz kütüphanede yok; değiştir ya da kaldır.'],
+              errors: ['Bu egzersiz kütüphanede yok; kartı sil, yerine yenisini ekle.'],
             });
           }),
         ),
@@ -439,7 +439,7 @@ export function ProgramForm({
         <Alert variant="destructive">
           <WarningCircle />
           <AlertDescription>
-            {missingRows} hareket kütüphanede yok ({missingLabels}); kaydetmeden önce değiştir ya da kaldır.
+            {missingRows} hareket kütüphanede yok ({missingLabels}); kaydetmeden önce kartlarını sil, yerine yenisini ekle.
           </AlertDescription>
         </Alert>
       ) : null}

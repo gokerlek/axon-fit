@@ -10,7 +10,6 @@ import {
   appendGroup,
   applySetPreset,
   canDuplicate,
-  canJoin,
   changeKind,
   combineInto,
   combineOutcome,
@@ -19,7 +18,6 @@ import {
   duplicateBlock,
   duplicateRow,
   idSource,
-  joinBlocks,
   moveCheck,
   moveItem,
   newGroupCapacity,
@@ -27,8 +25,6 @@ import {
   prepareForEditing,
   removeBlock,
   removeRow,
-  reorderBlocks,
-  reorderRows,
   replaceExercise,
   setRounds,
   setRowSetCount,
@@ -418,96 +414,6 @@ describe('kopyalama', () => {
     assert.equal(canDuplicate(forty, 'r_t'), false);
     assert.equal(duplicateRow(forty, 'r_t', sequentialIds()), forty);
     assert.equal(canDuplicate(forty, 'r_nope'), false);
-  });
-});
-
-describe('sıralama', () => {
-  const blocks = [
-    block('b_1', 'single', [row('r_1', 'squat')]),
-    block('b_2', 'superset', [row('r_2', 'curl'), row('r_3', 'halter-bench')]),
-    block('b_3', 'single', [row('r_4', 'plank')]),
-  ];
-
-  test('kimlik sırasına dizer; bilinmeyen yok sayılır, eksik sona eklenir', () => {
-    assert.deepEqual(reorderBlocks(blocks, ['b_3', 'b_1', 'b_2']).map((item) => item.id), ['b_3', 'b_1', 'b_2']);
-    assert.deepEqual(reorderBlocks(blocks, ['b_x', 'b_2']).map((item) => item.id), ['b_2', 'b_1', 'b_3']);
-    assert.equal(reorderBlocks(blocks, ['b_1', 'b_2', 'b_3']), blocks);
-  });
-
-  test('grubun içinde sıralama', () => {
-    assert.deepEqual(rowIds(reorderRows(blocks, 'b_2', ['r_3', 'r_2']))[1], ['r_3', 'r_2']);
-    assert.equal(reorderRows(blocks, 'b_2', ['r_2', 'r_3']), blocks);
-  });
-});
-
-describe('gruplama', () => {
-  test('iki tek hareket süperset: her hareket kendi seti (tur = büyüğü), dinlenme 90, öncekinin kimliği', () => {
-    const blocks = [
-      block('b_1', 'single', [row('r_1', 'squat')], { sets: 4, restSeconds: 150 }),
-      block('b_2', 'single', [row('r_2', 'curl')], { sets: 3, restSeconds: 60 }),
-    ];
-    const expected = [{ id: 'b_1', kind: 'superset', restSeconds: 90, rows: [row('r_1', 'squat', { count: 4 }), row('r_2', 'curl')] }];
-    assert.deepEqual(joinBlocks(blocks, 'b_1', 'next'), expected);
-    assert.deepEqual(joinBlocks(blocks, 'b_2', 'previous'), expected);
-    assert.equal(roundsOf(joinBlocks(blocks, 'b_1', 'next')[0] as TemplateBlock), 4);
-  });
-
-  test('süperset + tek = devre (3), grubun ayarları, geçiş 15', () => {
-    const blocks = [
-      block('b_1', 'superset', [row('r_1', 'squat'), row('r_2', 'curl')], { sets: 4, restSeconds: 75 }),
-      block('b_2', 'single', [row('r_3', 'plank')], { sets: 2, restSeconds: 30 }),
-    ];
-    const [result] = joinBlocks(blocks, 'b_2', 'previous');
-    assert.deepEqual(
-      { id: result?.id, kind: result?.kind, sets: roundsOf(result as TemplateBlock), rest: result?.restSeconds, transition: result?.transitionSeconds },
-      { id: 'b_1', kind: 'circuit', sets: 4, rest: 75, transition: 15 },
-    );
-    assert.deepEqual(
-      result?.rows.map((item) => item.sets.length),
-      [4, 4, 2],
-    );
-    assert.deepEqual(rowIds(joinBlocks(blocks, 'b_2', 'previous')), [['r_1', 'r_2', 'r_3']]);
-  });
-
-  test('tek hareket öndeyse sıra korunur, kimlik öndekinin', () => {
-    const blocks = [
-      block('b_1', 'single', [row('r_1', 'squat')]),
-      block('b_2', 'complex', [row('r_2', 'halter-bench'), row('r_3', 'squat')], { sets: 5, restSeconds: 180 }),
-    ];
-    const [result] = joinBlocks(blocks, 'b_1', 'next');
-    assert.deepEqual(
-      { id: result?.id, kind: result?.kind, sets: roundsOf(result as TemplateBlock), rest: result?.restSeconds, rows: result?.rows.map((r) => r.id) },
-      { id: 'b_1', kind: 'complex', sets: 5, rest: 180, rows: ['r_1', 'r_2', 'r_3'] },
-    );
-  });
-
-  test('iki grup: öncekinin ayarları, tür uyar; setler hareketlerde kalır', () => {
-    const blocks = [
-      block('b_1', 'superset', [row('r_1', 'squat'), row('r_2', 'curl')], { sets: 3, restSeconds: 60 }),
-      block('b_2', 'superset', [row('r_3', 'plank'), row('r_4', 'halter-bench')], { sets: 5, restSeconds: 120 }),
-    ];
-    const [result] = joinBlocks(blocks, 'b_2', 'previous');
-    assert.deepEqual(
-      { id: result?.id, kind: result?.kind, rest: result?.restSeconds, rows: result?.rows.length },
-      { id: 'b_1', kind: 'circuit', rest: 60, rows: 4 },
-    );
-    assert.deepEqual(
-      result?.rows.map((item) => item.sets.length),
-      [3, 3, 5, 5],
-    );
-  });
-
-  test('komşu yoksa ya da 8 hareketi aşarsa gruplanmaz', () => {
-    const big = block('b_2', 'circuit', Array.from({ length: 8 }, (_, i) => row(`r_${i}`, 'squat')), { transitionSeconds: 15 });
-    const blocks = [block('b_1', 'single', [row('r_x', 'curl')]), big];
-    assert.equal(canJoin(blocks, 'b_1', 'previous'), false);
-    assert.equal(canJoin(blocks, 'b_1', 'next'), false);
-    assert.equal(canJoin(blocks, 'b_2', 'next'), false);
-    assert.equal(joinBlocks(blocks, 'b_1', 'next'), blocks);
-    const complexSix = block('b_3', 'complex', Array.from({ length: 6 }, (_, i) => row(`r_c${i}`, 'squat')));
-    const result = joinBlocks([complexSix, block('b_4', 'single', [row('r_y', 'curl')])], 'b_3', 'next');
-    assert.equal(result[0]?.kind, 'circuit');
-    assert.equal(canJoin([block('b_1', 'single', [row('r_1', 'squat')]), block('b_2', 'single', [row('r_2', 'curl')])], 'b_1', 'next'), true);
   });
 });
 

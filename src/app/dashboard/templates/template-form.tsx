@@ -33,8 +33,8 @@ const LOAD_DESCRIPTION =
  *
  * Tek Formisch formu: şablonun adı ve açıklaması burada, hareketler ortak hareket
  * düzenleyicide (`BlockEditor`, program günleriyle aynı). Listelerin anahtarları blok ve
- * satır kimlikleridir; sürükle-bırak yalnız sıralama içindir, ekleme kütüphaneden
- * dokunarak yapılır.
+ * satır kimlikleridir; sürükle-bırak sıralar ve gruplar, ekleme kütüphaneden dokunarak
+ * yapılır.
  */
 export function TemplateForm({
   editing,
@@ -101,7 +101,7 @@ export function TemplateForm({
         missing = true;
         setErrors(form, {
           path: ['blocks', blockIndex, 'rows', rowIndex, 'exerciseId'],
-          errors: ['Bu egzersiz kütüphanede yok; değiştir ya da kaldır.'],
+          errors: ['Bu egzersiz kütüphanede yok; kartı sil, yerine yenisini ekle.'],
         });
       }),
     );

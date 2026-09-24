@@ -31,10 +31,10 @@ import {
 } from './template-plan.ts';
 
 /**
- * Şablon düzenleyicinin işlemleri: ekleme, değiştirme, kaldırma, kopyalama, sıralama,
- * gruplama, grubu dağıtma, tür değiştirme, satırın cihazını ve setlerini (sayı, tur,
- * hazır düzenler) değiştirme. Setler satırla birlikte taşınır: gruplama ve gruptan
- * çıkarma hareketin setlerini değiştirmez.
+ * Şablon düzenleyicinin işlemleri: ekleme, değiştirme, kaldırma, kopyalama, taşıma
+ * (`moveItem`), üstüne bırakıp gruplama (`combineInto`), grubu dağıtma, tür değiştirme,
+ * satırın cihazını ve setlerini (sayı, tur, hazır düzenler) değiştirme. Setler satırla
+ * birlikte taşınır: gruplama ve gruptan çıkarma hareketin setlerini değiştirmez.
  *
  * Hepsi saf ve değiştirmez (yeni dizi döner); düzenleyici sonucu forma tek seferde
  * yazar. Reddedilen ya da etkisiz işlem aynı diziyi döner (çağıran `===` ile anlar);
@@ -272,99 +272,6 @@ export function duplicateBlock(blocks: readonly TemplateBlock[], blockId: string
   const copy: TemplateBlock = { ...block, id, rows: block.rows.map((row) => cloneRow(row, ids('r'))) };
   const next = [...blocks];
   next.splice(index + 1, 0, copy);
-  return next;
-}
-
-/**
- * Sürükle-bırakın verdiği sıraya dizer. Bilinmeyen kimlik yok sayılır, sırada olmayan
- * blok sona eklenir (eski bir sürüklemede kaybolmasın). Sıra aynıysa aynı dizi döner.
- * Eski düzenleyicinin (motion Reorder) işlemi; yerini `moveItem` alır, geçişte kalkar.
- */
-export function reorderBlocks(blocks: readonly TemplateBlock[], orderedIds: readonly string[]): TemplateBlock[] {
-  const next = inOrder(blocks, orderedIds);
-  return next.every((block, index) => block === blocks[index]) ? (blocks as TemplateBlock[]) : next;
-}
-
-/** Grubun içinde sıralama (aynı kurallarla). Yerini `moveItem` alır, geçişte kalkar. */
-export function reorderRows(blocks: readonly TemplateBlock[], blockId: string, orderedRowIds: readonly string[]): TemplateBlock[] {
-  let changed = false;
-  const next = blocks.map((block) => {
-    if (block.id !== blockId) return block;
-    const rows = inOrder(block.rows, orderedRowIds);
-    if (rows.every((row, index) => row === block.rows[index])) return block;
-    changed = true;
-    return { ...block, rows };
-  });
-  return changed ? next : (blocks as TemplateBlock[]);
-}
-
-function inOrder<T extends { id: string }>(items: readonly T[], orderedIds: readonly string[]): T[] {
-  const byId = new Map(items.map((item) => [item.id, item]));
-  const placed = new Set<string>();
-  const result: T[] = [];
-  for (const id of orderedIds) {
-    const item = byId.get(id);
-    if (item && !placed.has(id)) {
-      result.push(item);
-      placed.add(id);
-    }
-  }
-  for (const item of items) if (!placed.has(item.id)) result.push(item);
-  return result;
-}
-
-/** İki komşu bloğun birleşimi (öncekinin kimliğiyle); olmuyorsa `null`. Her hareket kendi setlerini korur. */
-function merged(first: TemplateBlock, second: TemplateBlock): TemplateBlock | null {
-  const rows = [...first.rows, ...second.rows];
-  if (rows.length > BLOCK_ROWS.circuit.max) return null;
-  if (first.kind === 'single' && second.kind === 'single') {
-    const kind = settleKind('superset', rows.length);
-    return withKind({ id: first.id, kind, restSeconds: DEFAULT_GROUP_REST_SECONDS.superset, rows }, kind);
-  }
-  // Gruba katılan tek hareket grubun türünü ve dinlenmesini alır; iki grupta öncekininkiler geçer.
-  const settings = first.kind === 'single' ? second : first;
-  const { transitionSeconds, kind } = settings;
-  const base: TemplateBlock = {
-    id: first.id,
-    kind,
-    restSeconds: settings.restSeconds,
-    ...(transitionSeconds !== undefined ? { transitionSeconds } : {}),
-    rows,
-  };
-  return withKind(base, settleKind(kind, rows.length));
-}
-
-function neighbours(blocks: readonly TemplateBlock[], blockId: string, direction: 'previous' | 'next') {
-  const index = blocks.findIndex((block) => block.id === blockId);
-  const other = direction === 'previous' ? index - 1 : index + 1;
-  if (index < 0 || other < 0 || other >= blocks.length) return null;
-  const firstIndex = Math.min(index, other);
-  return { firstIndex, first: blocks[firstIndex] as TemplateBlock, second: blocks[firstIndex + 1] as TemplateBlock };
-}
-
-/**
- * Komşuyla gruplanabilir mi (komşu var ve toplam en fazla 8 hareket).
- * Eski düzenleyicinin menüsü için; yerini `combineOutcome` alır, geçişte kalkar.
- */
-export function canJoin(blocks: readonly TemplateBlock[], blockId: string, direction: 'previous' | 'next'): boolean {
-  const pair = neighbours(blocks, blockId, direction);
-  return pair !== null && merged(pair.first, pair.second) !== null;
-}
-
-/**
- * Komşu blokla gruplar. Satırlar yerlerindeki sırayla (öncekinin satırları önce),
- * sonuç öncekinin kimliğini alır. İki tek hareket süperset olur (dinlenme 90 sn; tur =
- * en çok seti olan hareketinki); gruba katılan tek hareket grubun türünü ve dinlenmesini
- * alır, tür uyar (süperset + tek = devre); iki grupta öncekinin ayarları geçer. Her
- * hareketin set sayısı kendisinde kalır.
- * Eski düzenleyicinin menüsü için; yerini `combineInto` alır (grup gruba girmez), geçişte kalkar.
- */
-export function joinBlocks(blocks: readonly TemplateBlock[], blockId: string, direction: 'previous' | 'next'): TemplateBlock[] {
-  const pair = neighbours(blocks, blockId, direction);
-  const result = pair ? merged(pair.first, pair.second) : null;
-  if (!pair || !result) return blocks as TemplateBlock[];
-  const next = [...blocks];
-  next.splice(pair.firstIndex, 2, result);
   return next;
 }
 

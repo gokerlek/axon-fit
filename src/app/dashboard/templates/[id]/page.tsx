@@ -105,7 +105,7 @@ export default async function TemplateDetailPage({ params }: { params: Promise<{
           <WarningCircle weight="fill" />
           <AlertTitle>{summary.missingRowIds.length} hareket kütüphanede bulunamadı</AlertTitle>
           <AlertDescription>
-            Silinmiş bir egzersize bağlı; haritaya ve sayılara girmez. Şablonu düzenleyip değiştir ya da kaldır.
+            Silinmiş bir egzersize bağlı; haritaya ve sayılara girmez. Şablonu düzenleyip kaldır, yerine yenisini ekle.
           </AlertDescription>
         </Alert>
       ) : null}

@@ -4,27 +4,64 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getInput, setInput, useField, useFieldArray } from '@formisch/react';
 import { Plus } from '@phosphor-icons/react';
 import { toast } from 'sonner';
-import { SortableList } from '@/components/sortable/sortable-list';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { FieldError } from '@/components/ui/field';
+import { useMediaQuery } from '@/hooks/use-media-query';
+import { isJoining } from '@/lib/drop-target';
+import { combineMessage, edgeMessage, moveMessage } from '@/lib/edit-messages';
 import { formatNumber } from '@/lib/format';
+import { DRAG } from '@/lib/motion';
 import type { TemplateInput } from '@/lib/schemas/template';
-import { appendExercise, canAdd, reorderBlocks, replaceExercise, type EditorDevice, type IdSource, type PickerExercise } from '@/lib/template-edit';
-import { rowLabels, templateSummary, type TemplateBlock } from '@/lib/template-plan';
-import { BlockItem } from './block-items';
-import { EditorContext, blockField, blockTitle, rowTitle, setInputId, type BlocksFormStore, type BlocksPath, type Editor } from './editor-context';
-import type { ReplaceTarget } from './exercise-picker';
+import {
+  appendExercise,
+  canAdd,
+  combineInto,
+  combineOutcome,
+  dissolveGroup,
+  duplicateBlock,
+  duplicateRow,
+  moveItem,
+  removeBlock,
+  removeRow,
+  stepDestination,
+  ungroupRow,
+  type EditorDevice,
+  type IdSource,
+  type PickerExercise,
+} from '@/lib/template-edit';
+import { TEMPLATE_LIMITS, rowLabels, templateSummary, type TemplateBlock } from '@/lib/template-plan';
+import { BlockItem, FULL_MESSAGE, ItemPreview } from './block-items';
+import { EditorDnd } from './drag/editor-dnd';
+import {
+  EditorContext,
+  blockField,
+  blockItemId,
+  faceId,
+  itemTitle,
+  setInputId,
+  type BlocksFormStore,
+  type BlocksPath,
+  type Editor,
+  type ItemActions,
+} from './editor-context';
 import { ExerciseSheet, type PickerState } from './exercise-sheet';
 
-const DEFAULT_DESCRIPTION =
-  'Numarayı basılı tutup sürükleyerek sırala; arka arkaya yapılacakları satırın menüsünden grupla (süperset, devre, kompleks).';
+/** Açıklama (SPEC §6, tasarım §2): dokunmatikte ve masaüstünde ayrı. */
+const DEFAULT_DESCRIPTION = (
+  <>
+    <span className="hidden touch:inline">Karta dokun: düzenle. Üstteki çizgiden sürükle: sırala; bir kartın ortasına bırak: grupla.</span>
+    <span className="touch:hidden">
+      Karta tıkla: düzenle. Üstteki çizgiden sürükle: sırala; bir kartın ortasına bırak: grupla. Alt + ok tuşları taşır.
+    </span>
+  </>
+);
 
-function toggled(open: ReadonlySet<string>, rowId: string): ReadonlySet<string> {
+function toggled(open: ReadonlySet<string>, id: string): ReadonlySet<string> {
   const next = new Set(open);
-  if (next.has(rowId)) next.delete(rowId);
-  else next.add(rowId);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
   return next;
 }
 
@@ -34,18 +71,42 @@ export function useBlocks(form: BlocksFormStore, path: BlocksPath): TemplateBloc
   return (field.input ?? []) as unknown as TemplateBlock[];
 }
 
+/** İşlemden sonra yeni çıkan kimlik (kopya): önce satırlar, yoksa blok. */
+function addedId(before: readonly TemplateBlock[], after: readonly TemplateBlock[], wholeBlock: boolean): string | undefined {
+  const blockIds = new Set(before.map((block) => block.id));
+  if (wholeBlock) return after.find((block) => !blockIds.has(block.id))?.id;
+  const rowIds = new Set(before.flatMap((block) => block.rows.map((row) => row.id)));
+  return after.flatMap((block) => block.rows).find((row) => !rowIds.has(row.id))?.id;
+}
+
+/** Silinen öğeden sonra odak: sonraki kart, yoksa önceki; grupta sonraki üye, önceki üye ya da grubun yüzü. */
+function neighbourOf(blocks: readonly TemplateBlock[], itemId: string): string | null {
+  const index = blocks.findIndex((block) => blockItemId(block) === itemId);
+  if (index >= 0) {
+    const next = blocks[index + 1] ?? blocks[index - 1];
+    return next ? blockItemId(next) : null;
+  }
+  const group = blocks.find((block) => block.kind !== 'single' && block.rows.some((row) => row.id === itemId));
+  if (!group) return null;
+  const rowIndex = group.rows.findIndex((row) => row.id === itemId);
+  const other = group.rows[rowIndex + 1] ?? group.rows[rowIndex - 1];
+  // Grupta tek üye kalırsa grup teke döner (grubun kimliğiyle); odak o satırın yüzüne.
+  if (group.rows.length === 2 && other) return other.id;
+  return other?.id ?? group.id;
+}
+
 /**
  * Hareket düzenleyici: formdaki bir blok dizisini (şablonun blokları ya da program
- * gününün blokları) düzenler — tam genişlik liste, sürükle-bırakla sıralama, gruplar ve
- * kütüphane sheet'i ("Hareket ekle" kart başlığında ve listenin sonunda).
+ * gününün blokları) düzenler. Tek kart tasarımı: kapalı kartlar; dokununca açılır (lg
+ * altında aynı anda tek kart). Kartın üstündeki çizgiden sürükleyerek sıralanır, bir
+ * kartın ortasına bırakıp gruplanır; klavyede yüz odaktayken Alt + ok, Delete.
  *
  * Yaprak alanlar (dinlenme, setlerin hedefi, yüzdesi ve AMRAP'ı, kural, cihaz, not) alan
- * olarak bağlanır; yapısal işlemler (ekleme, sıralama, gruplama, set sayısı, tur, hazır
+ * olarak bağlanır; yapısal işlemler (ekleme, taşıma, gruplama, set sayısı, tur, hazır
  * düzenler…) `template-edit.ts`'teki saf fonksiyonlarla hesaplanıp dizinin yoluna tek
- * seferde yazılır. Kimlikleri `newIds` üretir (programda
- * bütün programın kimliklerini bilir).
+ * seferde yazılır. Kimlikleri `newIds` üretir (programda bütün programın kimliklerini bilir).
  *
- * Sayfada tek düzenleyici olabilir: `row-*`, `row-menu-*`, `sets-*` ve `set-*` DOM
+ * Sayfada tek düzenleyici olabilir: `row-*`, `face-*`, `body-*`, `sets-*` ve `set-*` DOM
  * kimlikleri geneldir.
  */
 export function BlockEditor({
@@ -67,7 +128,7 @@ export function BlockEditor({
   devices: EditorDevice[];
   newIds: (blocks: readonly TemplateBlock[]) => IdSource;
   noteHint: string;
-  /** Kütüphane sheet'inin ekleme kipindeki açıklaması. */
+  /** Kütüphane sheet'inin açıklaması. */
   libraryDescription: string;
   title?: React.ReactNode;
   description?: React.ReactNode;
@@ -80,35 +141,72 @@ export function BlockEditor({
   const deviceById = useMemo(() => new Map(devices.map((device) => [device.id, device])), [devices]);
   const blocks = useBlocks(form, path);
   const blocksArray = useFieldArray(form, { path: blockField(path) });
+  /** lg ve üstünde birden çok kart açık kalabilir. */
+  const wide = useMediaQuery('(min-width: 64rem)');
 
   const [picker, setPicker] = useState<PickerState | null>(null);
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
-  const [expandedSets, setExpandedSets] = useState<ReadonlySet<string>>(() => new Set());
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+  const [setsOpen, setSetsOpenState] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+  const [detailsOpen, setDetailsOpen] = useState<ReadonlySet<string>>(() => new Set());
   const [highlight, setHighlight] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
 
+  const listRef = useRef<HTMLOListElement>(null);
   /** Sheet'i açan düğme (kapanınca odak döner) ve listenin sonundaki "Hareket ekle". */
   const returnFocus = useRef<HTMLElement | null>(null);
   const endAddRef = useRef<HTMLButtonElement>(null);
-  /** Kapanan sheet'in kipi (odak dönüşü kapanış anında okunur; `picker` o an boştur). */
-  const lastPicker = useRef<PickerState | null>(null);
   /** Sheet açıkken eklenen son satır ve bekleyen duyuru: sheet kapanınca vurgulanır/duyurulur. */
   const lastAdded = useRef<string | null>(null);
   const pendingAnnouncement = useRef<string | null>(null);
+  const emptyAddRef = useRef<HTMLButtonElement>(null);
+  const sheetOpen = useRef(false);
+  const lastSaid = useRef('');
+
+  useEffect(() => {
+    sheetOpen.current = picker !== null;
+  }, [picker]);
 
   useEffect(() => {
     if (!highlight) return;
-    const timer = window.setTimeout(() => setHighlight(null), 1200);
+    // Vurgulanan kart görünür olsun (kopya, bırakılan kart, sheet'ten eklenen).
+    const card = document.getElementById(`row-${highlight}`) ?? document.getElementById(`group-${highlight}`);
+    card?.scrollIntoView({ block: 'nearest' });
+    const timer = window.setTimeout(() => setHighlight(null), DRAG.highlightMs);
     return () => window.clearTimeout(timer);
   }, [highlight]);
 
-  /** Formdaki güncel bloklar (olay anında; sürüklemede ardışık çağrılar birbirini ezmesin). */
+  /** Canlı bölgeye kibarca: aynı cümle art arda gelirse yeniden okunsun diye sonuna boşluk. Sheet açıkken bekler. */
+  const announce = useCallback((text: string) => {
+    if (!text) return;
+    if (sheetOpen.current) {
+      pendingAnnouncement.current = text;
+      return;
+    }
+    const next = text === lastSaid.current ? `${text} ` : text;
+    lastSaid.current = next;
+    setAnnouncement(next);
+  }, []);
+
+  /** Formdaki güncel bloklar (olay anında; ardışık çağrılar birbirini ezmesin). */
   const current = useCallback(() => (getInput(form, { path: blockField(path) }) ?? []) as unknown as TemplateBlock[], [form, path]);
 
   const write = useCallback(
     (next: TemplateBlock[]) => setInput(form, { path: blockField(path), input: next as TemplateInput['blocks'] }),
     [form, path],
   );
+
+  /** Çizimden sonra öğenin yüzüne odaklanır (taşınan kart yeniden kurulmuş olabilir). */
+  const focusFace = useCallback((itemId: string | null) => {
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const face = itemId ? document.getElementById(faceId(itemId)) : null;
+        // Liste boşaldıysa boş durumdaki "Hareket ekle".
+        const target = face ?? endAddRef.current ?? emptyAddRef.current;
+        target?.focus({ preventScroll: true });
+        target?.scrollIntoView({ block: 'nearest' });
+      }),
+    );
+  }, []);
 
   const update = useCallback<Editor['update']>(
     (change, options) => {
@@ -117,22 +215,24 @@ export function BlockEditor({
       if (next === before) return;
       write(next);
       if (options?.highlight) setHighlight(options.highlight);
-      if (options?.announce) setAnnouncement(options.announce);
+      if (options?.announce) announce(options.announce);
     },
-    [current, write],
+    [current, write, announce],
   );
 
   const undoToast = useRef<string | number | null>(null);
 
   const updateWithUndo = useCallback<Editor['updateWithUndo']>(
-    (change, message) => {
+    (change, message, options) => {
       const before = current();
       const next = change(before);
       if (next === before) return;
       write(next);
       // Geri al yalnız bu işlemden sonra başka değişiklik yoksa geçerli; yoksa sonraki düzenlemeler silinirdi.
       const after = JSON.stringify(current());
-      setAnnouncement(message);
+      announce(message);
+      if (options?.highlight) setHighlight(options.highlight);
+      if (options?.focus !== undefined) focusFace(options.focus);
       if (undoToast.current !== null) toast.dismiss(undoToast.current);
       undoToast.current = toast(message, {
         action: {
@@ -143,38 +243,137 @@ export function BlockEditor({
               return;
             }
             write(before);
+            announce('Geri alındı');
           },
         },
         duration: 8000,
       });
     },
-    [current, write],
+    [current, write, announce, focusFace],
   );
 
   const openAdd = useCallback((event: React.MouseEvent<HTMLElement>) => {
     returnFocus.current = event.currentTarget;
     lastAdded.current = null;
-    const next: PickerState = { kind: 'add' };
-    lastPicker.current = next;
-    setPicker(next);
+    setPicker({ kind: 'add' });
   }, []);
 
-  const startReplace = useCallback((rowId: string) => {
-    // Menü kendi odak dönüşünü bitirsin; sheet bir kare sonra açılır.
-    requestAnimationFrame(() => {
-      const next: PickerState = { kind: 'replace', rowId };
-      lastPicker.current = next;
-      setPicker(next);
-    });
-  }, []);
-
-  const toggleExpanded = useCallback((rowId: string) => setExpanded((open) => toggled(open, rowId)), []);
-  const toggleSets = useCallback((rowId: string) => setExpandedSets((open) => toggled(open, rowId)), []);
-  const openSets = useCallback((rowId: string) => setExpandedSets((open) => (open.has(rowId) ? open : new Set([...open, rowId]))), []);
+  const toggleOpen = useCallback(
+    (itemId: string) =>
+      setOpen((now) => {
+        if (wide) return toggled(now, itemId);
+        return now.has(itemId) ? new Set() : new Set([itemId]);
+      }),
+    [wide],
+  );
+  const close = useCallback(
+    (itemId: string) =>
+      setOpen((now) => {
+        if (!now.has(itemId)) return now;
+        const next = new Set(now);
+        next.delete(itemId);
+        return next;
+      }),
+    [],
+  );
+  const closeAndFocus = useCallback(
+    (itemId: string) => {
+      close(itemId);
+      document.getElementById(faceId(itemId))?.focus();
+    },
+    [close],
+  );
+  const setSetsOpen = useCallback((rowId: string, value: boolean) => setSetsOpenState((now) => new Map(now).set(rowId, value)), []);
+  const toggleDetails = useCallback((rowId: string) => setDetailsOpen((now) => toggled(now, rowId)), []);
   const focusSet = useCallback<Editor['focusSet']>((rowId, index, column) => {
-    // Tablo açılıp yeniden çizildikten sonra.
+    // Bölüm açılıp yeniden çizildikten sonra.
     requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(setInputId(rowId, index, column))?.focus()));
   }, []);
+
+  const titleOf = useCallback((exerciseId: string) => exerciseById.get(exerciseId)?.title ?? 'Silinmiş egzersiz', [exerciseById]);
+
+  const actions = useMemo<ItemActions>(() => {
+    const titleFor = (blocksNow: readonly TemplateBlock[], itemId: string) => itemTitle(blocksNow, itemId, exerciseById);
+    const isGroup = (blocksNow: readonly TemplateBlock[], itemId: string) =>
+      blocksNow.some((block) => block.id === itemId && block.kind !== 'single');
+    const memberOf = (blocksNow: readonly TemplateBlock[], itemId: string) =>
+      blocksNow.find((block) => block.kind !== 'single' && block.rows.some((row) => row.id === itemId));
+
+    const ungroup = (rowId: string) => {
+      const before = current();
+      if (!memberOf(before, rowId)) return;
+      if (before.length >= TEMPLATE_LIMITS.blocks) return announce(FULL_MESSAGE);
+      const title = titleFor(before, rowId);
+      updateWithUndo((now) => ungroupRow(now, rowId, exerciseById, newIds(now)), `${title} gruptan çıktı`, { focus: rowId, highlight: rowId });
+      close(rowId);
+    };
+
+    const dissolve = (blockId: string) => {
+      const before = current();
+      const group = before.find((block) => block.id === blockId && block.kind !== 'single');
+      if (!group) return;
+      if (before.length - 1 + group.rows.length > TEMPLATE_LIMITS.blocks) return announce(FULL_MESSAGE);
+      const title = titleFor(before, blockId);
+      updateWithUndo((now) => dissolveGroup(now, blockId, exerciseById, newIds(now)), `${title} dağıtıldı`, {
+        focus: group.rows[0]?.id,
+      });
+      close(blockId);
+    };
+
+    return {
+      duplicate: (itemId) => {
+        const before = current();
+        const whole = isGroup(before, itemId);
+        const next = whole ? duplicateBlock(before, itemId, newIds(before)) : duplicateRow(before, itemId, newIds(before), exerciseById);
+        if (next === before) return announce(FULL_MESSAGE);
+        const copy = addedId(before, next, whole);
+        updateWithUndo(() => next, `${titleFor(before, itemId)} kopyalandı`, copy ? { highlight: copy } : undefined);
+      },
+      remove: (itemId) => {
+        const before = current();
+        const whole = before.some((block) => block.id === itemId);
+        const next = whole ? removeBlock(before, itemId) : removeRow(before, itemId, exerciseById);
+        if (next === before) return;
+        updateWithUndo(() => next, `${titleFor(before, itemId)} silindi`, { focus: neighbourOf(before, itemId) ?? '' });
+        close(itemId);
+      },
+      ungroup,
+      dissolve,
+      step: (itemId, target) => {
+        const before = current();
+        const destination = stepDestination(before, itemId, target);
+        if (!destination) return announce(edgeMessage(before, itemId, target === 'up' || target === 'top', titleOf));
+        const next = moveItem(before, itemId, destination, exerciseById, newIds(before));
+        if (next === before) return;
+        update(() => next, { announce: moveMessage(before, next, itemId, titleOf) });
+        focusFace(itemId);
+      },
+      groupWithPrevious: (itemId) => {
+        const before = current();
+        const title = titleFor(before, itemId);
+        if (isGroup(before, itemId)) return announce('Grup başka bir gruba eklenemez');
+        if (memberOf(before, itemId)) return announce(`${title} zaten bir grupta; çıkarmak için Alt + sol ok`);
+        const index = before.findIndex((block) => block.rows[0]?.id === itemId);
+        const previous = before[index - 1];
+        if (!previous) return announce(`${title} ilk sırada; öncesinde gruplanacak hareket yok`);
+        const targetId = blockItemId(previous);
+        const outcome = combineOutcome(before, itemId, targetId);
+        if (outcome === 'full') return announce('Grup dolu (8)');
+        if (!isJoining(outcome)) return;
+        updateWithUndo(
+          (now) => combineInto(now, itemId, targetId, exerciseById),
+          combineMessage(before, itemId, targetId, outcome, titleOf),
+          { focus: itemId, highlight: itemId },
+        );
+      },
+      split: (itemId) => {
+        const before = current();
+        if (isGroup(before, itemId)) return dissolve(itemId);
+        if (memberOf(before, itemId)) return ungroup(itemId);
+        announce(`${titleFor(before, itemId)} bir grupta değil`);
+      },
+    };
+  }, [current, exerciseById, newIds, announce, update, updateWithUndo, close, focusFace, titleOf]);
 
   const labels = useMemo(() => rowLabels({ blocks }), [blocks]);
   const summary = useMemo(() => templateSummary({ blocks }, exerciseById), [blocks, exerciseById]);
@@ -183,12 +382,6 @@ export function BlockEditor({
     for (const row of blocks.flatMap((block) => block.rows)) counts.set(row.exerciseId, (counts.get(row.exerciseId) ?? 0) + 1);
     return counts;
   }, [blocks]);
-
-  const replacingId = picker?.kind === 'replace' ? picker.rowId : null;
-  const replacing = useMemo<ReplaceTarget | null>(() => {
-    const row = replacingId ? blocks.flatMap((block) => block.rows).find((item) => item.id === replacingId) : undefined;
-    return row ? { rowId: row.id, label: labels.get(row.id) ?? '', title: rowTitle(row, exerciseById), exerciseId: row.exerciseId } : null;
-  }, [replacingId, blocks, labels, exerciseById]);
 
   const add = (exercise: PickerExercise): number | null => {
     const before = current();
@@ -201,27 +394,15 @@ export function BlockEditor({
     return next.length;
   };
 
-  const replace = (exercise: PickerExercise) => {
-    if (!replacing) return;
-    const { rowId, label, exerciseId } = replacing;
-    update((before) => replaceExercise(before, rowId, exercise, exerciseById.get(exerciseId)), { highlight: rowId });
-    // Sheet açıkken sayfa ekran okuyucuya kapalı: duyuru sheet kapanınca yapılır.
-    pendingAnnouncement.current = `${label} · ${exercise.title} seçildi`;
-    setPicker(null);
-  };
-
-  const sheetFinalFocus = () => {
-    const closed = lastPicker.current;
-    if (closed?.kind === 'replace') return document.getElementById(`row-menu-${closed.rowId}`);
-    // Boş durumdaki düğme ilk eklemeden sonra kalkar: odak listenin sonundakine döner.
-    return returnFocus.current?.isConnected ? returnFocus.current : endAddRef.current;
-  };
+  // Boş durumdaki düğme ilk eklemeden sonra kalkar: odak listenin sonundakine döner.
+  const sheetFinalFocus = () => (returnFocus.current?.isConnected ? returnFocus.current : endAddRef.current);
 
   const sheetClosed = () => {
     if (lastAdded.current) setHighlight(lastAdded.current);
     lastAdded.current = null;
-    if (pendingAnnouncement.current) setAnnouncement(pendingAnnouncement.current);
+    const pending = pendingAnnouncement.current;
     pendingAnnouncement.current = null;
+    if (pending) announce(pending);
   };
 
   const editor: Editor = {
@@ -230,21 +411,26 @@ export function BlockEditor({
     newIds,
     noteHint,
     blocks,
+    current,
     update,
     updateWithUndo,
+    announce,
     exercises: exerciseById,
     exerciseList: exercises,
     devices: deviceById,
     deviceList: devices,
     labels,
-    expanded,
-    toggleExpanded,
-    expandedSets,
-    toggleSets,
-    openSets,
+    open,
+    toggleOpen,
+    close,
+    closeAndFocus,
+    setsOpen,
+    setSetsOpen,
+    detailsOpen,
+    toggleDetails,
     focusSet,
     highlight,
-    startReplace,
+    actions,
   };
 
   return (
@@ -253,8 +439,9 @@ export function BlockEditor({
         {announcement}
       </p>
 
-      <Card className="overflow-visible max-sm:[--card-spacing:--spacing(3)]">
-        <CardHeader>
+      {/* Telefonda dış kartın çerçevesi kalkar: kartlar sayfa kenarından 16 px içeride, 343 px. */}
+      <Card className="overflow-visible max-sm:rounded-none max-sm:bg-transparent max-sm:py-0 max-sm:ring-0">
+        <CardHeader className="max-sm:px-0">
           <CardTitle>{title}</CardTitle>
           {blocks.length > 0 ? (
             <CardAction className="row-span-1 self-center">
@@ -271,26 +458,19 @@ export function BlockEditor({
             </p>
           ) : null}
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+        <CardContent className="flex flex-col gap-3 max-sm:px-0">
           {notice}
 
           {blocks.length > 0 ? (
             <>
-              <SortableList
-                values={blocks.map((block) => block.id)}
-                onReorder={(ids) => update((before) => reorderBlocks(before, ids))}
-                getLabel={(id) =>
-                  blockTitle(
-                    blocks.find((block) => block.id === id),
-                    exerciseById,
-                  )
-                }
-                aria-label={listLabel}
-                className="flex flex-col gap-3">
-                {blocks.map((block, blockIndex) => (
-                  <BlockItem key={block.id} block={block} blockIndex={blockIndex} />
-                ))}
-              </SortableList>
+              <EditorDnd listRef={listRef} preview={(itemId) => <ItemPreview itemId={itemId} />}>
+                {/* Üstte 16 px: ilk kartın tutamak alanı üstteki içeriğe binmez. */}
+                <ol ref={listRef} aria-label={listLabel} className="flex flex-col gap-3 pt-2">
+                  {blocks.map((block, blockIndex) => (
+                    <BlockItem key={block.id} block={block} blockIndex={blockIndex} count={blocks.length} />
+                  ))}
+                </ol>
+              </EditorDnd>
               <Button
                 ref={endAddRef}
                 type="button"
@@ -306,10 +486,10 @@ export function BlockEditor({
             <Empty className="border border-dashed">
               <EmptyHeader>
                 <EmptyTitle>Henüz hareket yok</EmptyTitle>
-                <EmptyDescription>Kütüphaneden ekle; sonra numarayı basılı tutup sürükleyerek sırala.</EmptyDescription>
+                <EmptyDescription>Kütüphaneden hareket ekle.</EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
-                <Button type="button" className="touch:h-11" aria-haspopup="dialog" onClick={openAdd}>
+                <Button ref={emptyAddRef} type="button" className="touch:h-11" aria-haspopup="dialog" onClick={openAdd}>
                   <Plus data-icon="inline-start" />
                   Hareket ekle
                 </Button>
@@ -327,10 +507,8 @@ export function BlockEditor({
         devices={deviceById}
         usage={usage}
         canAdd={canAdd(blocks)}
-        replacing={replacing}
         addDescription={libraryDescription}
         onAdd={add}
-        onReplace={replace}
         finalFocus={sheetFinalFocus}
         onClosed={sheetClosed}
       />

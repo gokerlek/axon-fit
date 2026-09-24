@@ -9,7 +9,7 @@ import {
   prescriptionText,
   type DiffContext,
 } from './program-diff.ts';
-import { applySetPreset, dissolveGroup, joinBlocks, setRounds, setRowSetCount, ungroupRow, type IdSource } from './template-edit.ts';
+import { applySetPreset, combineInto, dissolveGroup, setRounds, setRowSetCount, ungroupRow, type IdSource } from './template-edit.ts';
 import {
   derivePhased,
   mergePhases,
@@ -125,7 +125,7 @@ describe('gün farkı', () => {
   const superset = gun('d_aaaaaa', 'Gün A', [group('b_goblet', 'superset', [goblet, curl], 3)]);
 
   test('iki tek hareket süperset olur: setler hareketlerde kalır', () => {
-    const joined = gun('d_aaaaaa', 'Gün A', joinBlocks(singles.blocks, 'b_goblet', 'next'));
+    const joined = gun('d_aaaaaa', 'Gün A', combineInto(singles.blocks, 'b_curl01', 'b_goblet', kinds));
     assert.equal(roundsOf(joined.blocks[0] as TemplateBlock), 4);
     assert.deepEqual(diffDay(singles, joined, ctx), ['Yeni süperset: Goblet Squat + Leg Curl']);
   });
@@ -161,7 +161,7 @@ describe('gün farkı', () => {
   test('devreye hareket katılır; istasyon arası değişir', () => {
     const circuit = group('b_circ01', 'circuit', [goblet, press, curl], 3, 120, 15);
     const before = gun('d_aaaaaa', 'Gün A', [circuit, single('b_hip001', hip, 3)]);
-    const after = gun('d_aaaaaa', 'Gün A', joinBlocks(before.blocks, 'b_hip001', 'previous'));
+    const after = gun('d_aaaaaa', 'Gün A', combineInto(before.blocks, 'b_hip001', 'b_circ01', kinds));
     assert.deepEqual(diffDay(before, after, ctx), ['Devre güncellendi: Goblet Squat + Leg Press + Leg Curl + Kalça Köprüsü']);
     const slower = gun('d_aaaaaa', 'Gün A', [{ ...circuit, transitionSeconds: 20 }]);
     assert.deepEqual(diffDay(gun('d_aaaaaa', 'Gün A', [circuit]), slower, ctx), [
