@@ -6,12 +6,12 @@ import { cn } from '@/lib/utils';
 
 /**
  * Hareket kartı kabuğu (SPEC §6): şablon ve program günü düzenleyicisi, danışanın antrenman
- * ekranı. Yukarıdan aşağı: tutamak şeridi (üst ortada tek yatay çizgi), yüz (gerilmiş
- * düğme: [rozet][başlık + meta][⧉]), açıkken gövde bölümleri.
+ * ekranı. Yukarıdan aşağı: yüz (gerilmiş düğme: [rozet][başlık + meta][⧉]; üst ortasında
+ * `absolute` tutamak çizgisi, yer kaplamaz), açıkken gövde bölümleri.
  *
- * `overflow-hidden` yoktur: tutamağın dokunma alanı kartın 16 px üstüne taşar, halkalar
+ * `overflow-hidden` yoktur: tutamağın dokunma alanı kartın 12 px üstüne taşar, halkalar
  * kesilmez. Sürüklenen kartın yerinde kesik çizgili bir yer tutucu kalır (`data-dragging`:
- * içerik gizlenir, yükseklik aynı kalır; liste zıplamaz). Kaydırırken yalnız yüz kayar;
+ * içerik gizlenir, yükseklik aynı kalır; liste zıplamaz). Kaydırırken yüz (çizgisiyle) kayar;
  * kayan yüzün zemini `--face-bg`'dir (kartın zemini; grubun üyeleri grubunkini miras alır).
  * Seçim modunda seçili kartta halka ve hafif zemin (`selected`).
  */
@@ -79,22 +79,29 @@ type GrabberProps = Omit<React.ComponentProps<'div'>, 'children'> & {
   tone?: 'default' | 'group';
   /** Sürükleme sürüyor: çizgi ana renkte. */
   dragging?: boolean;
-  /** Seçim modunda çizgi söner (şerit yerinde kalır, kart zıplamaz). */
+  /** Seçim modunda çizgi söner ve dokunuşu alttaki yüze bırakır. */
   inactive?: boolean;
+  /** Kıpırdamadan dokunmak (sürükleme değil): yüze dokunmakla aynı iş (kartı açar/kapatır). */
+  onTap?: () => void;
 };
 
+/** Bu kadar kayan basış dokunma sayılmaz (sürükleme 4 px'te başlar). */
+const TAP_SLOP = 4;
+
 /**
- * Tutamak: kartın üst ortasında tek yatay çizgi (bottom-sheet tutamağı gibi). Görsel 32×4,
- * 20 px'lik şeridin ortasında; dokunma alanı 64×44: kartın 16 px üstü, şerit ve yüzün üst
- * boşluğundan 8 px (başlık ve meta metninin üstüne binmez).
+ * Tutamak: kartın üst ortasında tek yatay çizgi (bottom-sheet tutamağı gibi). Ayrı bir şerit
+ * değil: yüzün içinde `absolute` durur (yer kaplamaz, yüzle birlikte kayar). Görsel 32×4,
+ * kartın üstünden 6 px içeride; dokunma alanı 64×40: kartın 12 px üstünden yüzün 28 px'ine.
+ * Başlığın ortasına binen kısmına dokunmak yüze dokunmakla aynıdır (`onTap`), ölü bölge yok.
  *
  * `touch-action: none`: çizgiye basıp kaydırmak sayfayı kaydırmaz, sürükleme 4 px'te başlar
  * (basılı tutma yok). Klavyede odaklanmaz ve ekran okuyucuya kapalıdır (yol yüzde: Alt + ok).
  * Kalem sayfayı kaydırabildiği için kalem basılıyken `touchmove` engellenir.
  */
-export function CardGrabber({ tone = 'default', dragging = false, inactive = false, className, ref, onPointerDown, ...props }: GrabberProps) {
+export function CardGrabber({ tone = 'default', dragging = false, inactive = false, onTap, className, ref, onPointerDown, ...props }: GrabberProps) {
   const own = useRef<HTMLDivElement | null>(null);
   const penDown = useRef(false);
+  const down = useRef<{ x: number; y: number } | null>(null);
 
   // Pasif olmayan dinleyici: dokunuştan önce bağlanmalı (iOS ancak öyle iptal edilebilir sayar).
   useEffect(() => {
@@ -108,46 +115,54 @@ export function CardGrabber({ tone = 'default', dragging = false, inactive = fal
   }, []);
 
   return (
-    <div data-slot="card-grabber" className="relative h-5 shrink-0" aria-hidden>
-      <div
-        ref={(element) => {
-          own.current = element;
-          if (typeof ref === 'function') return ref(element);
-          if (ref) ref.current = element;
-        }}
-        tabIndex={-1}
-        title={inactive ? undefined : 'Sürükleyerek taşı'}
-        data-dragging={dragging || undefined}
-        data-inactive={inactive || undefined}
+    <div
+      ref={(element) => {
+        own.current = element;
+        if (typeof ref === 'function') return ref(element);
+        if (ref) ref.current = element;
+      }}
+      data-slot="card-grabber"
+      aria-hidden
+      tabIndex={-1}
+      title={inactive ? undefined : 'Sürükleyerek taşı'}
+      data-dragging={dragging || undefined}
+      data-inactive={inactive || undefined}
+      className={cn(
+        'group/grab absolute -top-3 left-1/2 z-10 h-10 w-16 -translate-x-1/2 cursor-grab touch-none outline-none select-none [-webkit-touch-callout:none] data-dragging:cursor-grabbing data-inactive:pointer-events-none',
+        className,
+      )}
+      onPointerDown={(event) => {
+        down.current = { x: event.clientX, y: event.clientY };
+        if (event.pointerType === 'pen') {
+          penDown.current = true;
+          const end = () => {
+            window.removeEventListener('pointerup', end, true);
+            window.removeEventListener('pointercancel', end, true);
+            penDown.current = false;
+          };
+          window.addEventListener('pointerup', end, true);
+          window.addEventListener('pointercancel', end, true);
+        }
+        onPointerDown?.(event);
+      }}
+      onClick={(event) => {
+        // Sürüklemeden sonra gelen click dokunma değildir.
+        const start = down.current;
+        down.current = null;
+        if (!start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > TAP_SLOP) return;
+        onTap?.();
+      }}
+      onContextMenu={(event) => event.preventDefault()}
+      {...props}>
+      <span
         className={cn(
-          'group/grab absolute -top-4 left-1/2 z-10 h-11 w-16 -translate-x-1/2 cursor-grab touch-none outline-none select-none [-webkit-touch-callout:none] data-dragging:cursor-grabbing data-inactive:pointer-events-none',
-          className,
+          'absolute top-4.5 left-1/2 h-1 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full motion-safe:transition-colors motion-safe:duration-100',
+          tone === 'group'
+            ? 'bg-primary/50 group-hover/grab:bg-primary/70 group-active/grab:bg-primary/80'
+            : 'bg-muted-foreground/40 group-hover/grab:bg-muted-foreground/70 group-active/grab:bg-muted-foreground/80',
+          'group-data-dragging/grab:bg-primary group-data-inactive/grab:bg-muted-foreground/15',
         )}
-        onPointerDown={(event) => {
-          if (event.pointerType === 'pen') {
-            penDown.current = true;
-            const end = () => {
-              window.removeEventListener('pointerup', end, true);
-              window.removeEventListener('pointercancel', end, true);
-              penDown.current = false;
-            };
-            window.addEventListener('pointerup', end, true);
-            window.addEventListener('pointercancel', end, true);
-          }
-          onPointerDown?.(event);
-        }}
-        onContextMenu={(event) => event.preventDefault()}
-        {...props}>
-        <span
-          className={cn(
-            'absolute top-6 left-1/2 h-1 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full motion-safe:transition-colors motion-safe:duration-100',
-            tone === 'group'
-              ? 'bg-primary/50 group-hover/grab:bg-primary/70 group-active/grab:bg-primary/80'
-              : 'bg-muted-foreground/40 group-hover/grab:bg-muted-foreground/70 group-active/grab:bg-muted-foreground/80',
-            'group-data-dragging/grab:bg-primary group-data-inactive/grab:bg-muted-foreground/15',
-          )}
-        />
-      </div>
+      />
     </div>
   );
 }
@@ -182,7 +197,9 @@ type FaceProps = {
    * kutusu durur; ⧉ ve sr-only şerit gizlenir. Seçimi kartın kabı değiştirir (click yukarı çıkar).
    */
   selection?: { checked: boolean };
-  /** Yüzü (düğme, ⧉, hap) saran katman: kaydırma (`SwipeRow`). Şerit ve gövde kaymaz. */
+  /** Üst ortadaki tutamak çizgisi (`CardGrabber`): yüzün içinde `absolute`, yüzle birlikte kayar. */
+  grabber?: React.ReactNode;
+  /** Yüzü (düğme, çizgi, ⧉, hap) saran katman: kaydırma (`SwipeRow`). Gövde kaymaz. */
   slide?: (face: React.ReactNode) => React.ReactNode;
   className?: string;
 };
@@ -211,6 +228,7 @@ export function CardFace({
   static: isStatic = false,
   invalid = false,
   selection,
+  grabber,
   slide,
   className,
 }: FaceProps) {
@@ -235,7 +253,7 @@ export function CardFace({
     </>
   );
   const shared = cn(
-    'group/face flex w-full min-w-0 items-center gap-3 rounded-[inherit] px-3 pt-2 pb-3 text-left select-none [-webkit-touch-callout:none]',
+    'group/face flex w-full min-w-0 items-center gap-3 rounded-[inherit] px-3 pt-4 pb-3.5 text-left select-none [-webkit-touch-callout:none]',
     invalid && '[&_[data-slot=card-title]]:text-destructive',
   );
 
@@ -269,10 +287,11 @@ export function CardFace({
       )}
       {selecting ? (
         // Görsel onay kutusu: durum yüz düğmesinde (`aria-checked`); bu kopya odak ve dokunma almaz.
-        <span inert className="pointer-events-none absolute inset-y-0 left-3 flex items-center pt-2 pb-3">
+        <span inert className="pointer-events-none absolute inset-y-0 left-3 flex items-center pt-4 pb-3.5">
           <Checkbox checked={selection.checked} className="size-7 rounded-md bg-background [&_svg]:size-4.5!" />
         </span>
       ) : null}
+      {grabber}
       {action && !selecting ? (
         <div className="absolute top-1/2 right-1 z-10 -translate-y-1/2 group-has-[[data-slot=drop-pill]]/card:invisible">{action}</div>
       ) : null}

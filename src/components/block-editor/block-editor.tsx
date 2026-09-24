@@ -77,7 +77,8 @@ const DEFAULT_DESCRIPTION = (
       kopyala.
     </span>
     <span className="touch:hidden">
-      Karta tıkla: düzenle. Üstteki çizgiden sürükle: sırala; bir kartın ortasına bırak: grupla. Alt + ok tuşları taşır.
+      Karta tıkla: düzenle. Üstteki çizgiden sürükle: sırala; bir kartın ortasına bırak: grupla. Kartı sola çek: sil, sağa
+      çek: kopyala. Alt + ok tuşları taşır.
     </span>
   </>
 );

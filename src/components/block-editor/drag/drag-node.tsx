@@ -29,12 +29,12 @@ type Handle = {
 
 const HandleContext = createContext<Handle | null>(null);
 
-/** En yakın sürüklenen düğümün tutamak çizgisi. */
-export function Grabber({ tone }: { tone?: 'default' | 'group' }) {
+/** En yakın sürüklenen düğümün tutamak çizgisi; kıpırdamadan dokunmak `onTap` (kartı açar/kapatır). */
+export function Grabber({ tone, onTap }: { tone?: 'default' | 'group'; onTap?: () => void }) {
   const handle = useContext(HandleContext);
   if (!handle || handle.disabled) return <CardGrabber tone={tone} inactive />;
   const { activator, dragging, listeners } = handle;
-  return <CardGrabber tone={tone} ref={activator} dragging={dragging} {...listeners} />;
+  return <CardGrabber tone={tone} ref={activator} dragging={dragging} onTap={onTap} {...listeners} />;
 }
 
 const selectArmed = (id: string) => (view: DragView) => (view.armed?.targetId === id ? view.armed.outcome : null);

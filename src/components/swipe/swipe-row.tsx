@@ -4,9 +4,8 @@
  * Kaydırılan satır: Easy Dude'un `swipe-row.tsx` dosyasından kopyalandı (bağımlılık değil).
  *
  * Değişenler (tasarım §3, §9):
- * - Yalnız dokunmatikte çalışır: motion'un kendi dinleyicisi kapalı (`dragListener=false`),
- *   kaydırmayı `useCardGesture` hakemi `dragControls` ile başlatır. Fare ve kalemle kaydırma
- *   yok (aynı işlemler kartın görünür düğmelerinde).
+ * - Parmak, kalem ve farenin sol tuşuyla çalışır: motion'un kendi dinleyicisi kapalı
+ *   (`dragListener=false`), kaydırmayı `useCardGesture` hakemi `dragControls` ile başlatır.
  * - Paneller `aria-hidden`; kapalıyken `inert`. Düğmeleri sekme sırasına girmez: hepsi
  *   başka yerdeki görünür düğmelerin kopyası. `role=button` sarmalayıcı yok (yüz zaten düğme).
  * - Reduced-motion'da panel anında oturur, silmede yüz kaymaz.
@@ -15,7 +14,8 @@
  * - Aynı anda tek panel açık (`SwipeGroup`); dışarı dokunmak ve Esc kapatır.
  * - Spinner ve ✓ durumları yok (işlemler anında; geri alma toast'ta). İkonlar Phosphor,
  *   renkler tema token'larından.
- * - Yalnız yüz kayar: tutamak şeridi ve açık gövde bu bileşenin dışındadır.
+ * - Yüz tutamak çizgisiyle birlikte kayar; açık gövde bu bileşenin dışındadır. Çizgiye basış
+ *   kaydırma değil sürüklemedir (hakem onu yok sayar).
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -101,12 +101,12 @@ export function SwipeGroup({ children }: { children: React.ReactNode }) {
 // ─── Hakem: dokunma, sayfa kaydırması ya da yatay kaydırma ─────────────────────────────
 
 /**
- * Kart yüzündeki dokunuşun hakemi (yalnız `pointerType === 'touch'`): |dx| > 10 ve
+ * Kart yüzündeki basışın hakemi (parmak, kalem ya da farenin sol tuşu): |dx| > 10 ve
  * |dx| > 1,5·|dy| olursa kaydırma başlar (`onSwipe`, basılan anın olayıyla: yüz parmağı
- * baştan izler); |dy| > 8 olursa sayfa kayar (`touch-action: pan-y pinch-zoom`, tarayıcının işi);
- * 8 px'ten az hareket dokunmadır (yüzün kendi click'i). Kaydırmadan sonra gelen click
- * `consumeClick` ile yutulur. Sürükleme yalnız tutamak çizgisinden başladığı için süre
- * yarışı yok.
+ * baştan izler); |dy| > 8 olursa dokunmatikte sayfa kayar (`touch-action: pan-y pinch-zoom`,
+ * tarayıcının işi), farede hiçbir şey olmaz; 8 px'ten az hareket dokunmadır (yüzün kendi
+ * click'i). Kaydırmadan sonra gelen click `consumeClick` ile yutulur. Sürükleme yalnız
+ * tutamak çizgisinden başladığı için süre yarışı yok.
  */
 export function useCardGesture({ enabled, onSwipe }: { enabled: boolean; onSwipe: (down: PointerEvent) => void }) {
   const track = useRef<{ id: number; x: number; y: number; down: PointerEvent } | null>(null);
@@ -115,8 +115,9 @@ export function useCardGesture({ enabled, onSwipe }: { enabled: boolean; onSwipe
   const handlers = {
     onPointerDown: (event: React.PointerEvent) => {
       swiped.current = false;
+      const onGrabber = event.target instanceof Element && event.target.closest('[data-slot=card-grabber]') !== null;
       track.current =
-        enabled && event.pointerType === 'touch' && event.isPrimary
+        enabled && !onGrabber && event.isPrimary && (event.pointerType !== 'mouse' || event.button === 0)
           ? { id: event.pointerId, x: event.clientX, y: event.clientY, down: event.nativeEvent }
           : null;
     },

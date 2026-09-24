@@ -494,7 +494,6 @@ function RowCard({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; b
 
   const content = (
     <>
-      <Grabber />
       <CardFace
         id={faceId(row.id)}
         badge={<CardBadge>{labels.get(row.id)}</CardBadge>}
@@ -512,6 +511,7 @@ function RowCard({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; b
         after={<MoveStrip itemId={row.id} kind={single ? 'single' : 'member'} title={title} />}
         invalid={invalid}
         selection={selecting && single ? { checked } : undefined}
+        grabber={<Grabber onTap={() => editor.toggleOpen(row.id)} />}
         slide={
           selecting
             ? undefined
@@ -525,8 +525,9 @@ function RowCard({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; b
                   disabled={dragging}
                   nudge={editor.nudgeId === row.id}
                   onNudged={editor.onNudged}
-                  // Kapalı tek kartta yüz kartın altına kadar iner: panel köşeleri kartın yuvarlaklığında.
-                  className={single && !isOpen ? 'rounded-b-[calc(var(--radius)-1px)]' : undefined}>
+                  // Yüz kartın üst kenarından başlar (kapalıyken altına kadar iner): kayan yüz ve panel
+                  // kartın yuvarlak köşelerinden taşmaz.
+                  className={single ? (isOpen ? 'rounded-t-[calc(var(--radius)-1px)]' : 'rounded-[calc(var(--radius)-1px)]') : undefined}>
                   {face}
                 </SwipeRow>
               )
@@ -693,7 +694,6 @@ function GroupCard({ block, blockIndex }: { block: TemplateBlock; blockIndex: nu
 
   const head = (
     <>
-      <Grabber tone="group" />
       <CardFace
         id={faceId(block.id)}
         badge={<CardBadge tone="group">{blockIndex + 1}</CardBadge>}
@@ -719,6 +719,7 @@ function GroupCard({ block, blockIndex }: { block: TemplateBlock; blockIndex: nu
         after={<MoveStrip itemId={block.id} kind="group" title={title} />}
         invalid={invalid}
         selection={selecting ? { checked } : undefined}
+        grabber={<Grabber tone="group" onTap={() => editor.toggleOpen(block.id)} />}
         slide={
           selecting
             ? undefined
@@ -729,7 +730,9 @@ function GroupCard({ block, blockIndex }: { block: TemplateBlock; blockIndex: nu
                   end={end}
                   disabled={dragging}
                   nudge={editor.nudgeId === block.id}
-                  onNudged={editor.onNudged}>
+                  onNudged={editor.onNudged}
+                  // Grup yüzü kabın üst kenarından başlar: kayan yüz yuvarlak köşeden taşmaz.
+                  className="rounded-t-[calc(var(--radius-xl)-1px)]">
                   {face}
                 </SwipeRow>
               )
@@ -802,7 +805,7 @@ export function BlockItem({ block, blockIndex, count }: { block: TemplateBlock; 
   );
 }
 
-/** Sürüklenen overlay: kartın şeridi ve yüzü (açık gövde yok), hafif büyümüş ve halkalı. */
+/** Sürüklenen overlay: kartın yüzü ve çizgisi (açık gövde yok), hafif büyümüş ve halkalı. */
 export function ItemPreview({ itemId }: { itemId: string }) {
   const { blocks, exercises, labels } = useEditor();
   const blockIndex = blocks.findIndex((block) => block.id === itemId || block.rows.some((row) => row.id === itemId));
@@ -817,10 +820,10 @@ export function ItemPreview({ itemId }: { itemId: string }) {
         'origin-top rounded-lg border bg-card text-sm shadow-lg ring-2 ring-primary/40 motion-safe:scale-[1.02]',
         group && 'rounded-xl border-primary/40 bg-[color-mix(in_oklab,var(--primary)_4%,var(--card))]',
       )}>
-      <CardGrabber tone={group ? 'group' : 'default'} dragging />
       {group || !row ? (
         <CardFace
           static
+          grabber={<CardGrabber tone="group" dragging />}
           badge={<CardBadge tone="group">{blockIndex + 1}</CardBadge>}
           title={BLOCK_KIND_LABELS[block.kind]}
           meta={<span className="truncate">{`${block.rows.length} hareket · ${roundsOf(block)} tur`}</span>}
@@ -828,6 +831,7 @@ export function ItemPreview({ itemId }: { itemId: string }) {
       ) : (
         <CardFace
           static
+          grabber={<CardGrabber dragging />}
           badge={<CardBadge>{labels.get(row.id)}</CardBadge>}
           title={rowTitle(row, exercises)}
           titleClassName={exercise ? undefined : 'text-destructive'}
