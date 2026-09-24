@@ -35,8 +35,10 @@ export function ClientTabs({ clientId }: { clientId: string }) {
                 {tab.label}
               </TabsTrigger>
             ) : (
-              <TabsTrigger key={tab.key} value={tab.key} disabled className="px-3" title="Antrenman ekranıyla gelecek">
+              // `title` erişilebilir adı ezerdi ("Antrenmanlar" yerine ipucu okunurdu): ipucu ayrı metin.
+              <TabsTrigger key={tab.key} value={tab.key} disabled className="px-3">
                 {tab.label}
+                <span className="sr-only"> (antrenman ekranıyla gelecek)</span>
               </TabsTrigger>
             ),
           )}
