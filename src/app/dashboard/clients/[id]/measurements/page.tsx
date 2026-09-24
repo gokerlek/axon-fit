@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Plus } from '@phosphor-icons/react/dist/ssr';
-import { PageHeader } from '@/components/page-header';
+import { SectionHeader } from '@/components/section-header';
 import { Button } from '@/components/ui/button';
 import { requirePt } from '@/lib/guards';
 import { loadMeasurements } from '@/lib/health';
@@ -30,10 +30,7 @@ export default async function MeasurementsPage({
   if (!loaded.ok) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader
-          crumbs={[{ label: 'Danışanlar', href: '/dashboard/clients' }, { label: id, href: `/dashboard/clients/${id}` }, { label: 'Ölçümler' }]}
-          title="Ölçümler"
-        />
+        <SectionHeader title="Ölçümler" />
         <MeasurementProblemAlert title="Danışan kaydı okunamadı" problem={loaded.problem} />
       </div>
     );
@@ -45,12 +42,7 @@ export default async function MeasurementsPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        crumbs={[
-          { label: 'Danışanlar', href: '/dashboard/clients' },
-          { label: client.name, href: `/dashboard/clients/${id}` },
-          { label: 'Ölçümler' },
-        ]}
+      <SectionHeader
         title="Ölçümler"
         description="Periyodik ölçümlerin seyri. Ölçüm hatasının altındaki değişim gelişme sayılmaz."
         actions={

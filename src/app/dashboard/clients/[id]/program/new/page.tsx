@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import { PageHeader } from '@/components/page-header';
+import { SectionHeader } from '@/components/section-header';
 import { loadClient } from '@/lib/clients';
 import { readAppConfig } from '@/lib/config';
 import { listDevices } from '@/lib/devices';
@@ -34,12 +34,8 @@ export default async function NewProgramPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        crumbs={[
-          { label: 'Danışanlar', href: '/dashboard/clients' },
-          { label: loaded.client.name, href: `/dashboard/clients/${id}` },
-          { label: 'Program oluştur' },
-        ]}
+      <SectionHeader
+        back={{ href: `/dashboard/clients/${id}/program`, label: 'Program' }}
         title="Program oluştur"
         description="Program yalnız bu danışanın repo'sunda durur. Şablondan başlarsan şablonda sonradan yapılan değişiklikler buraya yansımaz."
       />

@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import { PageHeader } from '@/components/page-header';
+import { SectionHeader } from '@/components/section-header';
 import { loadClient } from '@/lib/clients';
 import { readAppConfig } from '@/lib/config';
 import { listDevices } from '@/lib/devices';
@@ -24,17 +24,15 @@ export default async function EditProgramPage({ params }: { params: Promise<{ id
   if (!file) redirect(`/dashboard/clients/${id}/program/new`);
 
   const detailHref = `/dashboard/clients/${id}`;
-  const crumbs = [
-    { label: 'Danışanlar', href: '/dashboard/clients' },
-    { label: loaded.client.name, href: detailHref },
-    { label: 'Program', href: `${detailHref}/program` },
-    { label: 'Düzenle' },
-  ];
 
   if (!file.program) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader crumbs={crumbs} title="Programı düzenle" actions={<ProgramActions clientId={id} />} />
+        <SectionHeader
+          back={{ href: `/dashboard/clients/${id}/program`, label: 'Program' }}
+          title="Programı düzenle"
+          actions={<ProgramActions clientId={id} />}
+        />
         <InvalidProgramAlert problem={file.problem} />
       </div>
     );
@@ -53,7 +51,11 @@ export default async function EditProgramPage({ params }: { params: Promise<{ id
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader crumbs={crumbs} title="Programı düzenle" actions={<ProgramActions clientId={id} />} />
+      <SectionHeader
+        back={{ href: `/dashboard/clients/${id}/program`, label: 'Program' }}
+        title="Programı düzenle"
+        actions={<ProgramActions clientId={id} />}
+      />
       <ProgramForm
         clientId={id}
         mode="edit"

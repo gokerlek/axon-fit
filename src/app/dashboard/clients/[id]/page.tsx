@@ -2,8 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowSquareOut, Barbell, ListChecks, Plus, QrCode } from '@phosphor-icons/react/dist/ssr';
 import { EditButton } from '@/components/edit-button';
-import { PageHeader } from '@/components/page-header';
-import { ChangeLog } from '@/components/program/change-log';
+import { SectionHeader } from '@/components/section-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -153,9 +152,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   if (!loaded.ok) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader
-          crumbs={[{ label: 'Danışanlar', href: '/dashboard/clients' }, { label: id }]}
-          title={id}
+        <SectionHeader
+          title="Genel"
           description="Kayıt okunamadı"
           actions={<EditButton href={`/dashboard/clients/${id}/edit`} />}
         />
@@ -178,7 +176,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     loadMeasurements(client).catch(() => undefined),
   ]);
   const exerciseById = new Map(exercises.map((exercise) => [exercise.id, exercise]));
-  const log = programFile?.program?.log ?? [];
   const repo = clientRepoName(id);
   const access = accessOf(client, invite?.invite ?? null);
   const health = healthConsentState(client);
@@ -186,10 +183,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        crumbs={[{ label: 'Danışanlar', href: '/dashboard/clients' }, { label: client.name }]}
-        title={client.name}
-        description={`${CLIENT_STATUS_LABELS[client.status]} · ${formatDate(client.createdAt, config.timeZone)} tarihinde eklendi`}
+      <SectionHeader
+        title="Genel"
+        description="Profil, giriş, sağlık modülü ve özetler. Ayrıntılar kendi sekmelerinde."
         actions={<EditButton href={`/dashboard/clients/${id}/edit`} />}
       />
 
@@ -285,25 +281,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       </div>
 
       <ProgramCard clientId={id} file={programFile} exercises={exerciseById} timeZone={config.timeZone} />
-
-      {log.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Program geçmişi</CardTitle>
-            <CardDescription>Her kayıtta otomatik yazılır; tamamı danışanın repo&apos;sunun git geçmişinde.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ChangeLog entries={log.slice(0, 5)} timeZone={config.timeZone} />
-          </CardContent>
-          {log.length > 5 ? (
-            <CardFooter>
-              <Button variant="ghost" size="sm" nativeButton={false} render={<Link href={`/dashboard/clients/${id}/program#gecmis`} />}>
-                Tüm geçmiş
-              </Button>
-            </CardFooter>
-          ) : null}
-        </Card>
-      ) : null}
 
       <Card>
         <CardHeader>

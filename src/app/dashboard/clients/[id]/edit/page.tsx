@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { PageHeader } from '@/components/page-header';
+import { SectionHeader } from '@/components/section-header';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { loadClient } from '@/lib/clients';
 import { requirePt } from '@/lib/guards';
@@ -18,9 +18,9 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
   if (!loaded.ok) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader
-          crumbs={[{ label: 'Danışanlar', href: '/dashboard/clients' }, { label: id, href: `/dashboard/clients/${id}` }, { label: 'Düzenle' }]}
-          title="Danışanı düzenle"
+        <SectionHeader
+          back={{ href: `/dashboard/clients/${id}`, label: 'Genel' }}
+          title="Kişisel bilgiler ve izinler"
           actions={<ClientActions id={id} name={null} />}
         />
         <Card>
@@ -38,13 +38,10 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
   const { client } = loaded;
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        crumbs={[
-          { label: 'Danışanlar', href: '/dashboard/clients' },
-          { label: client.name, href: `/dashboard/clients/${id}` },
-          { label: 'Düzenle' },
-        ]}
-        title="Danışanı düzenle"
+      <SectionHeader
+        back={{ href: `/dashboard/clients/${id}`, label: 'Genel' }}
+        title="Kişisel bilgiler ve izinler"
+        description="Ad, not, durum ve sağlık modülü. Program ve ölçümler kendi sekmelerinde."
         actions={<ClientActions id={id} name={client.name} />}
       />
       <ClientForm editing={client} />

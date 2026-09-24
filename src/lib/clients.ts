@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import { revalidateTag, unstable_cache } from 'next/cache';
 import * as v from 'valibot';
 import { checkInvite, newClientId, newInvite, type InviteCheck } from './client-access';
@@ -94,11 +95,14 @@ async function writeClient(client: Client, sha: string | undefined, message: str
 }
 
 /**
- * PT ekranları için: kayıt, ya da listede olup okunamayan danışanın sorunu (repo dışarıdan
+ * PT ekranları için (istek başına bir kez okunur: danışan çatısı ve sayfa aynı kaydı paylaşır):
+ * kayıt, ya da listede olup okunamayan danışanın sorunu (repo dışarıdan
  * silinmiş, kayıt bozuk). İkincisinde sayfa 404 vermez; PT kimliği yazarak listeden siler.
  * Listede de yoksa null (gerçekten yok).
  */
-export async function loadClient(id: string): Promise<{ ok: true; client: Client } | { ok: false; problem: string } | null> {
+export const loadClient = cache(async function loadClient(
+  id: string,
+): Promise<{ ok: true; client: Client } | { ok: false; problem: string } | null> {
   let problem = "Danışanın repo'su ya da kaydı bulunamadı.";
   try {
     const stored = await readClient(id);
@@ -108,7 +112,7 @@ export async function loadClient(id: string): Promise<{ ok: true; client: Client
     problem = error.message;
   }
   return (await isKnownClient(id)) ? { ok: false, problem } : null;
-}
+});
 
 export async function readInvite(id: string): Promise<{ invite: Invite; sha: string } | null> {
   const stored = await readJson<unknown>(clientRepoName(id), INVITE_PATH);

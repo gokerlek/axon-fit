@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { PageHeader } from '@/components/page-header';
+import { SectionHeader } from '@/components/section-header';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { readClient, readInvite } from '@/lib/clients';
@@ -26,12 +26,7 @@ export default async function InvitePage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        crumbs={[
-          { label: 'Danışanlar', href: '/dashboard/clients' },
-          { label: client.name, href: `/dashboard/clients/${id}` },
-          { label: 'Davet' },
-        ]}
+      <SectionHeader
         title="Davet"
         description={`${client.name} kare kodu okutup kendi ekranına girer; GitHub hesabı gerekmez.`}
       />

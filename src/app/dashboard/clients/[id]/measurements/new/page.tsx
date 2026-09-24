@@ -1,4 +1,4 @@
-import { PageHeader } from '@/components/page-header';
+import { SectionHeader } from '@/components/section-header';
 import { readAppConfig } from '@/lib/config';
 import { todayIn } from '@/lib/format';
 import { requirePt } from '@/lib/guards';
@@ -17,13 +17,8 @@ export default async function NewMeasurementPage({ params }: { params: Promise<{
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        crumbs={[
-          { label: 'Danışanlar', href: '/dashboard/clients' },
-          { label: name, href: `/dashboard/clients/${id}` },
-          { label: 'Ölçümler', href: `/dashboard/clients/${id}/measurements` },
-          { label: 'Ölçüm gir' },
-        ]}
+      <SectionHeader
+        back={{ href: `/dashboard/clients/${id}/measurements`, label: 'Ölçümler' }}
         title="Ölçüm gir"
         description="Yalnız doldurduğun alanlar kaydedilir. Ölçümler danışanın kendi repo'sunda, sağlık kaydında durur."
       />

@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { ListChecks, Plus, WarningCircle } from '@phosphor-icons/react/dist/ssr';
 import { EditButton } from '@/components/edit-button';
 import { TemplateMuscleMap } from '@/components/muscle-map/template-muscle-map';
-import { PageHeader } from '@/components/page-header';
+import { SectionHeader } from '@/components/section-header';
 import { ChangeLog } from '@/components/program/change-log';
 import { DayPlan } from '@/components/program/day-plan';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -58,13 +58,12 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
     templateChoices().catch(() => []),
   ]);
   const detailHref = `/dashboard/clients/${id}`;
-  const crumbs = [{ label: 'Danışanlar', href: '/dashboard/clients' }, { label: client.name, href: detailHref }, { label: 'Program' }];
   const editHref = `${detailHref}/program/edit`;
 
   if (!file) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader crumbs={crumbs} title="Program" />
+        <SectionHeader title="Program" />
         <Card>
           <Empty>
             <EmptyHeader>
@@ -91,7 +90,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
   if (!file.program) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader crumbs={crumbs} title="Program" actions={<EditButton href={editHref} />} />
+        <SectionHeader title="Program" actions={<EditButton href={editHref} />} />
         <InvalidProgramAlert problem={file.problem} />
       </div>
     );
@@ -113,8 +112,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        crumbs={crumbs}
+      <SectionHeader
         title="Program"
         description={`${program.phases.length} evre · ${countDays(program.phases)} gün · ${formatDate(program.createdAt, timeZone)} tarihinde oluşturuldu`}
         actions={<EditButton href={editHref} />}

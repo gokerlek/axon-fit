@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { PageHeader } from '@/components/page-header';
+import { SectionHeader } from '@/components/section-header';
 import { formatDay } from '@/lib/format';
 import { requirePt } from '@/lib/guards';
 import { loadMeasurements } from '@/lib/health';
@@ -23,13 +23,8 @@ export default async function EditMeasurementPage({ params }: { params: Promise<
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        crumbs={[
-          { label: 'Danışanlar', href: '/dashboard/clients' },
-          { label: name, href: `/dashboard/clients/${id}` },
-          { label: 'Ölçümler', href: `/dashboard/clients/${id}/measurements` },
-          { label: dateLabel },
-        ]}
+      <SectionHeader
+        back={{ href: `/dashboard/clients/${id}/measurements`, label: 'Ölçümler' }}
         title={`${dateLabel} ölçümleri`}
         description="Değerleri düzelt; boşalttığın alan o günden çıkar."
         actions={view?.state === 'ok' ? <MeasurementActions clientId={id} date={date} dateLabel={dateLabel} /> : null}
