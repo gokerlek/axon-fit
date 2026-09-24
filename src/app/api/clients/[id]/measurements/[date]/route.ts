@@ -4,7 +4,7 @@ import { deleteMeasurementDay, replaceMeasurementDay } from '@/lib/health';
 import { isCalendarDate } from '@/lib/measurement-log';
 import { clientIdSchema } from '@/lib/schemas/client';
 import { measurementDaySchema } from '@/lib/schemas/measurement';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 import { checkDay, failed, forbidden, invalid } from '../respond';
 
 type Context = { params: Promise<{ id: string; date: string }> };
@@ -16,7 +16,7 @@ async function target(context: Context): Promise<{ id: string; date: string } | 
 
 /** Günün değerlerini verilenlerle değiştirir (yalnız PT); boşaltılan alan kayıttan çıkar. */
 export async function PUT(request: Request, context: Context) {
-  if ((await readSession())?.role !== 'pt') return forbidden();
+  if ((await readPtSession())?.role !== 'pt') return forbidden();
   const day = await target(context);
   if (!day) return NextResponse.json({ error: 'Ölçüm bulunamadı.' }, { status: 404 });
 
@@ -36,7 +36,7 @@ export async function PUT(request: Request, context: Context) {
 
 /** Günün bütün ölçümlerini siler (yalnız PT). Git geçmişinde danışanın repo'sunda kalır. */
 export async function DELETE(_request: Request, context: Context) {
-  if ((await readSession())?.role !== 'pt') return forbidden();
+  if ((await readPtSession())?.role !== 'pt') return forbidden();
   const day = await target(context);
   if (!day) return NextResponse.json({ error: 'Ölçüm bulunamadı.' }, { status: 404 });
 

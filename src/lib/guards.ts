@@ -1,31 +1,31 @@
 import 'server-only';
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { readClient } from './clients';
 import type { Client } from './schemas/client';
-import { readSession, type Session } from './session';
+import { readClientSession, readPtSession, type ClientSession, type PtSession } from './session';
 
 /**
  * Rol ayrımı (SPEC §5).
  *
- * PT alanı `/dashboard/**`, danışan alanı `/me/**`. Yanlış roldeki ziyaretçiye yönlendirme
- * DEĞİL, 404 döner: danışan PT ekranlarının varlığını bile görmez.
+ * PT alanı `/dashboard/**`, danışan alanı `/me/**`. İki rolün oturumu ayrı çerezdedir: aynı
+ * tarayıcıda PT ve danışan oturumu yan yana açık kalabilir. Oturumu olmayan kendi giriş
+ * sayfasına gider — öteki rolün oturumu olsa da (PT çıkış yapınca danışan sekmesi açık
+ * kalabilir; 404 değil giriş sayfası görmeli). PT verisi zaten oturumsuz okunamaz.
  *
  * Her SAYFA kendisi çağırır, layout'taki kontrol yetmez: Next 16'da layout kardeş sayfanın
  * çalışmasını durdurmaz, sayfanın okuduğu veri RSC yanıtına girer (bkz. Next'in kimlik
  * doğrulama rehberi, "Layouts and auth checks").
  */
 
-export async function requirePt(): Promise<Extract<Session, { role: 'pt' }>> {
-  const session = await readSession();
+export async function requirePt(): Promise<PtSession> {
+  const session = await readPtSession();
   if (!session) redirect('/login');
-  if (session.role !== 'pt') notFound();
   return session;
 }
 
-export async function requireClient(): Promise<Extract<Session, { role: 'client' }>> {
-  const session = await readSession();
+export async function requireClient(): Promise<ClientSession> {
+  const session = await readClientSession();
   if (!session) redirect('/join');
-  if (session.role !== 'client') notFound();
   return session;
 }
 
@@ -34,7 +34,7 @@ export async function requireClient(): Promise<Extract<Session, { role: 'client'
  * yetmez: PT erişimi kapattıysa (kuşak arttı), danışanı arşivlediyse ya da sildiyse
  * oturum düşer. GitHub'a ulaşılamazsa hata fırlar — "erişimin kapandı" denmez.
  */
-export async function sessionClient(session: Extract<Session, { role: 'client' }>): Promise<Client | null> {
+export async function sessionClient(session: ClientSession): Promise<Client | null> {
   const stored = await readClient(session.clientId);
   if (!stored) return null;
   const { client } = stored;

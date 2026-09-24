@@ -26,6 +26,7 @@ export default async function MePage() {
         </div>
         {/* Çıkış POST'tur: bağlantı önizlemesi ya da yanlış dokunuş oturumu kapatmasın. */}
         <form action="/api/auth/logout" method="post">
+          <input type="hidden" name="rol" value="danisan" />
           <Button type="submit" variant="ghost" size="sm">
             <SignOut data-icon="inline-start" weight="fill" />
             Çıkış

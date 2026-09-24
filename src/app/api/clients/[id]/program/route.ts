@@ -8,7 +8,7 @@ import { normalizeProgram } from '@/lib/program-plan';
 import { deleteProgram, programDiffContext, saveProgram } from '@/lib/programs';
 import { clientIdSchema } from '@/lib/schemas/client';
 import { programSaveSchema } from '@/lib/schemas/program';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 
 function forbidden() {
   return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
@@ -30,7 +30,7 @@ function failed(error: unknown, fallback: string) {
  * yazılmaz; varsa geçmişe ve commit mesajına otomatik özet girer.
  */
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  if ((await readSession())?.role !== 'pt') return forbidden();
+  if ((await readPtSession())?.role !== 'pt') return forbidden();
   const { id } = await params;
   if (!v.is(clientIdSchema, id)) return clientMissing();
 
@@ -89,7 +89,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
 /** Programı siler (okunamayan dosya da silinebilir). Git geçmişinde kaydı durur. */
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  if ((await readSession())?.role !== 'pt') return forbidden();
+  if ((await readPtSession())?.role !== 'pt') return forbidden();
   const { id } = await params;
   if (!v.is(clientIdSchema, id)) return clientMissing();
   try {

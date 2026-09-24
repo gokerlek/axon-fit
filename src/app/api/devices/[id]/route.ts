@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { appRepo, GithubError } from '@/lib/github/client';
 import { deleteFile, getFileSha } from '@/lib/github/files';
 import { readCustomDevices, writeCustomDevices } from '@/lib/devices';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 
 /**
  * PT'nin cihazını siler; hazır bir cihazın PT sürümüyse varsayılana döner. Hazır
@@ -11,7 +11,7 @@ import { readSession } from '@/lib/session';
  * havuzda kalır (başka cihazlarda da kullanılıyor olabilir).
  */
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
 
   const { id } = await params;

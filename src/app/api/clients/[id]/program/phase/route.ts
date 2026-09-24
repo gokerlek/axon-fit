@@ -4,14 +4,14 @@ import { GithubError } from '@/lib/github/client';
 import { switchPhase } from '@/lib/programs';
 import { clientIdSchema } from '@/lib/schemas/client';
 import { programPhaseSwitchSchema } from '@/lib/schemas/program';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 
 /**
  * PT onaylı evre geçişi (program sayfasındaki "Sonraki evreye geç"). Geçiş program
  * geçmişine yazılır; sayfa yüklendikten sonra program değiştiyse 412 döner.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  if ((await readSession())?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
+  if ((await readPtSession())?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
   const { id } = await params;
   if (!v.is(clientIdSchema, id)) return NextResponse.json({ error: 'Danışan bulunamadı.' }, { status: 404 });
 

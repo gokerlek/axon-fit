@@ -5,7 +5,7 @@ import { listExercises } from '@/lib/exercises';
 import { GithubError } from '@/lib/github/client';
 import { dayToTemplate } from '@/lib/program-plan';
 import { templateBlocksSchema, templateNameSchema, type Template } from '@/lib/schemas/template';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 import { normalizeTemplate, randomId } from '@/lib/template-plan';
 import { writeTemplate } from '@/lib/templates';
 
@@ -17,7 +17,7 @@ const bodySchema = v.object({ name: templateNameSchema, blocks: templateBlocksSc
  * düzenleyiciden gelir (kaydedilmemiş gün de olur): PT ne görüyorsa o kaydedilir.
  */
 export async function POST(request: Request) {
-  if ((await readSession())?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
+  if ((await readPtSession())?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
 
   const parsed = v.safeParse(bodySchema, await request.json().catch(() => null));
   if (!parsed.success) {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 import { appRepo, gh, GithubError, owner } from '@/lib/github/client';
 import { listClientIds } from '@/lib/github/repos';
 
@@ -9,7 +9,7 @@ import { listClientIds } from '@/lib/github/repos';
  * Yalnız okuma yapar.
  */
 export async function GET() {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') {
     return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
   }

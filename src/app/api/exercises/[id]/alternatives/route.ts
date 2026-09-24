@@ -3,7 +3,7 @@ import * as v from 'valibot';
 import { EXERCISE_LIBRARY } from '@/data/exercise-library';
 import { GithubError } from '@/lib/github/client';
 import { readCustomExercises, writeCustomExercises } from '@/lib/exercises';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 
 const bodySchema = v.object({
   alternatives: v.pipe(
@@ -17,7 +17,7 @@ const bodySchema = v.object({
  * düzenlemede olduğu gibi PT'nin sürümünü oluşturur.
  */
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
 
   const { id } = await params;

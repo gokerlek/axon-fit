@@ -201,6 +201,8 @@ Kodun kendisi hiçbir yerde saklanmaz; `localStorage`'da yalnızca "hangi danı�
 
 **Kural (PT ekranları):** her PT sayfası `requirePt()`'yi kendisi çağırır; layout'taki kontrol yetmez. Next 16'da layout kardeş sayfanın çalışmasını durdurmaz ve sayfanın okuduğu veri RSC yanıtına girer (oturumsuz `RSC: 1` isteği egzersiz listesini böyle alabiliyordu).
 
+**Kural (iki ayrı oturum):** PT ve danışanın oturumu **ayrı çerezdedir** (`pc_oturum`, `pc_danisan`). Aynı tarayıcıda PT bir sekmede panelde, başka sekmede danışan olarak açık kalabilir; biri girince ya da çıkınca öteki etkilenmez (çıkış formu hangi rolden çıkıldığını söyler). Her uç yalnız kendi rolünün çerezine bakar; ikisine de açık okumalar (cihaz fotoğrafı, egzersiz listesi) ikisinden birini kabul eder. Oturumu olmayan kendi giriş sayfasına gider (`/login`, `/join`).
+
 **Kural (danışan):** girişten sonra sunucu yetkiyi **oturum çerezinden** okur, adresteki kimlikten değil. Danışan adrese başka bir kimlik yazarsa sunucu reddeder. Çerez danışanın **oturum kuşağını** (`access.version`) taşır; her danışan ekranı kaydı okurken karşılaştırır. PT düzenleme sayfasında **"Erişimi kapat"** derse kuşak artar: açık bütün oturumlar bir sonraki istekte düşer ve bekleyen davet silinir (ör. telefon kayboldu). Arşivlenen ya da silinen danışan da giremez. Danışanın ekranında "Çıkış" düğmesi vardır.
 
 ---

@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { readAppConfig } from '@/lib/config';
 import { CLIENT_ID_PATTERN } from '@/lib/schemas/client';
-import { readSession } from '@/lib/session';
+import { readClientSession } from '@/lib/session';
 import { JoinForm } from './join-form';
 
 const errors: Record<string, string> = {
@@ -25,12 +25,9 @@ export default async function JoinPage({
   searchParams: Promise<{ c?: string; k?: string; error?: string }>;
 }) {
   const { c, k, error: errorCode } = await searchParams;
-  const session = await readSession();
   // Hata varsa yönlendirme yok: /me geçersiz oturumu buraya geri gönderir, döngü olmasın.
-  if (!errorCode && !c) {
-    if (session?.role === 'client') redirect('/me');
-    if (session?.role === 'pt') redirect('/dashboard');
-  }
+  // PT oturumu buraya engel değil: aynı tarayıcıda danışan olarak da girilebilir (ayrı çerez).
+  if (!errorCode && !c && (await readClientSession())) redirect('/me');
 
   const config = await readAppConfig();
   const clientId = c && CLIENT_ID_PATTERN.test(c) ? c : null;

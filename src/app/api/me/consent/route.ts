@@ -4,7 +4,7 @@ import { setHealthConsent } from '@/lib/clients';
 import { GithubError } from '@/lib/github/client';
 import { sessionClient } from '@/lib/guards';
 import { HEALTH_FIELDS } from '@/lib/schemas/client';
-import { readSession } from '@/lib/session';
+import { readClientSession } from '@/lib/session';
 
 /** Danışanın ekranda gördüğü parçalar ve metin sürümü de gelir: onay yalnız onları kapsar. */
 const bodySchema = v.object({
@@ -18,7 +18,7 @@ const bodySchema = v.object({
  * kendisi verebilir; kimlik adresten değil oturumdan okunur.
  */
 export async function POST(request: Request) {
-  const session = await readSession();
+  const session = await readClientSession();
   if (session?.role !== 'client') return NextResponse.json({ error: 'Oturum gerekli.' }, { status: 401 });
 
   const body = v.safeParse(bodySchema, await request.json().catch(() => null));

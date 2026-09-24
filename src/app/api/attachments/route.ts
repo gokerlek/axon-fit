@@ -5,7 +5,7 @@ import { listAttachments, readCustomAttachments, writeCustomAttachments } from '
 import { slugify } from '@/lib/exercises';
 import { GithubError } from '@/lib/github/client';
 import { attachmentSaveSchema } from '@/lib/schemas/attachment';
-import { readSession } from '@/lib/session';
+import { readAnySession, readPtSession } from '@/lib/session';
 
 function failed(error: unknown, fallback: string) {
   const failure = error instanceof GithubError ? error : null;
@@ -13,7 +13,7 @@ function failed(error: unknown, fallback: string) {
 }
 
 export async function GET() {
-  if (!(await readSession())) return NextResponse.json({ error: 'Oturum gerekli.' }, { status: 401 });
+  if (!(await readAnySession())) return NextResponse.json({ error: 'Oturum gerekli.' }, { status: 401 });
   try {
     return NextResponse.json({ attachments: await listAttachments() });
   } catch (error) {
@@ -23,7 +23,7 @@ export async function GET() {
 
 /** Yeni aparat ya da (kimlikle) güncelleme. Hazır bir aparatı değiştirmek PT'nin sürümünü oluşturur. */
 export async function POST(request: Request) {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
 
   const parsed = v.safeParse(attachmentSaveSchema, await request.json().catch(() => null));

@@ -4,13 +4,13 @@ import { EXERCISE_LIBRARY } from '@/data/exercise-library';
 import { GithubError } from '@/lib/github/client';
 import { listExercises, readCustomExercises, slugify, writeCustomExercises } from '@/lib/exercises';
 import { exerciseSchema } from '@/lib/schemas/exercise';
-import { readSession } from '@/lib/session';
+import { readAnySession, readPtSession } from '@/lib/session';
 
 /** Kimliksiz gelen istek yeni egzersizdir: kimlik başlıktan üretilir. */
 const saveSchema = v.object({ ...exerciseSchema.entries, id: v.optional(exerciseSchema.entries.id) });
 
 export async function GET() {
-  const session = await readSession();
+  const session = await readAnySession();
   // Danışan da egzersizleri görür (kendi antrenmanını kurarken); yazma yalnız PT'de.
   if (!session) return NextResponse.json({ error: 'Oturum gerekli.' }, { status: 401 });
 
@@ -26,7 +26,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') {
     return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
   }

@@ -5,7 +5,7 @@ import { getAttachment, readCustomAttachments, writeCustomAttachments } from '@/
 import { appRepo, GithubError } from '@/lib/github/client';
 import { deleteFile, getFileSha, readBinary, writeBinary } from '@/lib/github/files';
 import { IMAGE_CONTENT_TYPES, IMAGE_MAX_BYTES, IMAGE_TYPES, imageVersion, sniffImage, type ImageExtension } from '@/lib/image';
-import { readSession } from '@/lib/session';
+import { readAnySession, readPtSession } from '@/lib/session';
 
 /**
  * Aparat fotoğrafı: PT'nin uygulama repo'sunda `media/attachments/` altında. Havuzda
@@ -22,7 +22,7 @@ function failed(error: unknown, fallback: string) {
 
 export async function GET(request: Request, { params }: Params) {
   // Danışan da antrenmanda görecek; oturum yeterli.
-  if (!(await readSession())) return new NextResponse(null, { status: 401 });
+  if (!(await readAnySession())) return new NextResponse(null, { status: 401 });
 
   const { id } = await params;
   const attachment = await getAttachment(id);
@@ -45,7 +45,7 @@ export async function GET(request: Request, { params }: Params) {
 }
 
 export async function POST(request: Request, { params }: Params) {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
 
   const { id } = await params;
@@ -87,7 +87,7 @@ export async function POST(request: Request, { params }: Params) {
 }
 
 export async function DELETE(_request: Request, { params }: Params) {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
 
   const { id } = await params;

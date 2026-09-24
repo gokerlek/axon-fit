@@ -3,7 +3,7 @@ import * as v from 'valibot';
 import { addMeasurementDay } from '@/lib/health';
 import { clientIdSchema } from '@/lib/schemas/client';
 import { measurementAddSchema } from '@/lib/schemas/measurement';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 import { checkDay, failed, forbidden, invalid } from './respond';
 
 /**
@@ -11,7 +11,7 @@ import { checkDay, failed, forbidden, invalid } from './respond';
  * Modül ve danışan onayı veri katmanında, danışan kaydı taze okunarak denetlenir (SPEC §4).
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  if ((await readSession())?.role !== 'pt') return forbidden();
+  if ((await readPtSession())?.role !== 'pt') return forbidden();
 
   const { id } = await params;
   if (!v.is(clientIdSchema, id)) return NextResponse.json({ error: 'Danışan bulunamadı.' }, { status: 404 });

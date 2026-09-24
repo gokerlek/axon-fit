@@ -3,7 +3,7 @@ import * as v from 'valibot';
 import { deleteClient, readClient } from '@/lib/clients';
 import { GithubError } from '@/lib/github/client';
 import { clientIdSchema } from '@/lib/schemas/client';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 
 const bodySchema = v.object({ confirmName: v.string() });
 
@@ -13,7 +13,7 @@ const bodySchema = v.object({ confirmName: v.string() });
  * ad bilinmediği için kimliği yazılır.
  */
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
 
   const { id } = await params;

@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
-import { endSession, readSession } from '@/lib/session';
+import { endSession } from '@/lib/session';
 
 /**
- * Oturumu kapatır. POST: bir bağlantıya tıklanarak ya da önizlemeyle yanlışlıkla tetiklenmesin.
- * Danışan kendi giriş sayfasına, PT kendisininkine döner.
+ * Oturumu kapatır — yalnız istenen rolün: PT'nin çıkışı danışan oturumunu (aynı tarayıcıda
+ * başka sekmede) kapatmaz, danışanınki de PT'ninkini. Danışan formu `rol=danisan` gönderir;
+ * rol yoksa PT. POST: bir bağlantıya tıklanarak ya da önizlemeyle yanlışlıkla tetiklenmesin.
  */
 export async function POST(request: Request) {
-  const session = await readSession();
-  await endSession();
-  const target = session?.role === 'client' ? '/join' : '/login';
-  return NextResponse.redirect(new URL(target, request.url), { status: 303 });
+  const form = await request.formData().catch(() => null);
+  const role = form?.get('rol') === 'danisan' ? 'client' : 'pt';
+  await endSession(role);
+  return NextResponse.redirect(new URL(role === 'client' ? '/join' : '/login', request.url), { status: 303 });
 }

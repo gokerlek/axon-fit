@@ -3,7 +3,7 @@ import * as v from 'valibot';
 import { issueInvite } from '@/lib/clients';
 import { GithubError } from '@/lib/github/client';
 import { clientIdSchema } from '@/lib/schemas/client';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 import { origin } from '@/lib/urls';
 
 /**
@@ -11,7 +11,7 @@ import { origin } from '@/lib/urls';
  * özeti yazılır, sayfadan çıkınca bir daha gösterilemez (SPEC §5).
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
 
   const { id } = await params;

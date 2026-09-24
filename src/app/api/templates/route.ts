@@ -4,7 +4,7 @@ import { listDevices } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
 import { GithubError } from '@/lib/github/client';
 import { templateSaveSchema, type Template } from '@/lib/schemas/template';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 import { normalizeTemplate, randomId } from '@/lib/template-plan';
 import { readTemplateFile, writeTemplate } from '@/lib/templates';
 
@@ -19,7 +19,7 @@ function failed(error: unknown, fallback: string) {
  * yerde değiştiyse 412 döner ve kayıt yapılmaz (PT'nin değişiklikleri kaybolmasın).
  */
 export async function POST(request: Request) {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
 
   const parsed = v.safeParse(templateSaveSchema, await request.json().catch(() => null));

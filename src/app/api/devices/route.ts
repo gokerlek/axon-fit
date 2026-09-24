@@ -6,7 +6,7 @@ import { slugify } from '@/lib/exercises';
 import { GithubError } from '@/lib/github/client';
 import { takesAttachments } from '@/lib/device-loads';
 import { deviceSaveSchema, needsBase, needsMax, needsStep, needsWeights, takesAddOns, type Device } from '@/lib/schemas/device';
-import { readSession } from '@/lib/session';
+import { readAnySession, readPtSession } from '@/lib/session';
 
 function failed(error: unknown, fallback: string) {
   const failure = error instanceof GithubError ? error : null;
@@ -14,7 +14,7 @@ function failed(error: unknown, fallback: string) {
 }
 
 export async function GET() {
-  if (!(await readSession())) return NextResponse.json({ error: 'Oturum gerekli.' }, { status: 401 });
+  if (!(await readAnySession())) return NextResponse.json({ error: 'Oturum gerekli.' }, { status: 401 });
   try {
     return NextResponse.json({ devices: await listDevices() });
   } catch (error) {
@@ -24,7 +24,7 @@ export async function GET() {
 
 /** Yeni cihaz ya da (kimlikle) güncelleme. Hazır bir cihazı güncellemek PT'nin sürümünü oluşturur. */
 export async function POST(request: Request) {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
 
   const parsed = v.safeParse(deviceSaveSchema, await request.json().catch(() => null));

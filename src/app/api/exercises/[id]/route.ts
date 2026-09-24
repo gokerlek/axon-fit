@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { GithubError } from '@/lib/github/client';
 import { readCustomExercises, writeCustomExercises } from '@/lib/exercises';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 
 /**
  * PT'nin kendi egzersizini siler (hazır bir egzersizin sürümüyse varsayılana döner).
  * Hazır kütüphanedekiler silinemez (pakette gelir).
  */
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') {
     return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
   }

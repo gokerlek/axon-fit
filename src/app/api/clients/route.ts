@@ -3,7 +3,7 @@ import * as v from 'valibot';
 import { createClient, updateClient } from '@/lib/clients';
 import { GithubError } from '@/lib/github/client';
 import { clientSaveSchema } from '@/lib/schemas/client';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 
 /**
  * Yeni danışan ya da (kimlikle) güncelleme. Yeni danışanda sunucu `client-<id>` özel
@@ -11,7 +11,7 @@ import { readSession } from '@/lib/session';
  * Program burada kurulmaz: danışanın sayfasından oluşturulur (danışanın bir özelliği değil).
  */
 export async function POST(request: Request) {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
 
   const parsed = v.safeParse(clientSaveSchema, await request.json().catch(() => null));

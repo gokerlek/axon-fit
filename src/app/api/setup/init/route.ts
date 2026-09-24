@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 import { appRepo, GithubError } from '@/lib/github/client';
 import { createAppRepo } from '@/lib/github/repos';
 import { readJson, writeJson } from '@/lib/github/files';
@@ -16,7 +16,7 @@ import { defaultConfig, type AppConfig } from '@/lib/schemas/config';
  * Aynı istek iki kez gelirse ikincisi hiçbir şeyi bozmaz.
  */
 export async function POST() {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') {
     return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
   }

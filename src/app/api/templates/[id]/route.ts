@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { GithubError } from '@/lib/github/client';
 import { TEMPLATE_ID_PATTERN } from '@/lib/schemas/template';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 import { deleteTemplateFile, readTemplateFile } from '@/lib/templates';
 
 /**
@@ -9,7 +9,7 @@ import { deleteTemplateFile, readTemplateFile } from '@/lib/templates';
  * Kimlik kalıba uymuyorsa GitHub'a hiç gidilmez.
  */
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
 
   const { id } = await params;

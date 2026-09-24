@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import * as v from 'valibot';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 import { GithubError } from '@/lib/github/client';
 import { readAppConfig, writeAppConfig } from '@/lib/config';
 import { setupFormSchema } from '@/lib/schemas/setup';
 
 /** Marka ayarını kaydeder (kurulum sihirbazı ve Ayarlar → Görünüm). */
 export async function POST(request: Request) {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') {
     return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
   }

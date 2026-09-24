@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readSession } from '@/lib/session';
+import { readPtSession } from '@/lib/session';
 import { appRepo, GithubError } from '@/lib/github/client';
 import { deleteFile, getFileSha, writeBinary } from '@/lib/github/files';
 import { readAppConfig, writeAppConfig } from '@/lib/config';
@@ -20,7 +20,7 @@ const ALLOWED = new Map<string, string>([
 const MAX_BYTES = 512 * 1024;
 
 export async function POST(request: Request) {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') {
     return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
   }
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
-  const session = await readSession();
+  const session = await readPtSession();
   if (session?.role !== 'pt') {
     return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
   }
