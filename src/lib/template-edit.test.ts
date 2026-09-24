@@ -2,31 +2,47 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { DeviceKind } from './device-loads.ts';
 import { resizeSets, setShape, uniformSets } from './set-plan.ts';
+import { moveKey } from './reorder.ts';
 import {
+  addToGroup,
+  addToGroupOutcome,
   appendExercise,
+  appendGroup,
   applySetPreset,
+  canDuplicate,
   canJoin,
   changeKind,
+  combineInto,
+  combineOutcome,
   deviceChoices,
   dissolveGroup,
+  duplicateBlock,
   duplicateRow,
   idSource,
   joinBlocks,
+  moveCheck,
+  moveItem,
+  newGroupCapacity,
+  newGroupKind,
   prepareForEditing,
+  removeBlock,
   removeRow,
   reorderBlocks,
   reorderRows,
   replaceExercise,
   setRounds,
   setRowSetCount,
+  stepDestination,
   swapDevice,
   ungroupRow,
   type EditorExercise,
   type IdSource,
+  type MoveDestination,
 } from './template-edit.ts';
 import {
   BLOCK_ID_PATTERN,
   ROW_ID_PATTERN,
+  countRows,
   duplicateIds,
   roundsOf,
   type BlockKind,
@@ -143,6 +159,15 @@ const rowIds = (blocks: TemplateBlock[]) => blocks.map((item) => item.rows.map((
 /** Özet: blok türü, set/tur, dinlenme, satırlar. */
 const outline = (blocks: TemplateBlock[]) =>
   blocks.map(({ id, kind, restSeconds, rows }) => ({ id, kind, sets: roundsOf({ rows }), restSeconds, rows: rows.map((r) => r.id) }));
+/** Kısa özet: blok türü ve satırları ("single:r_1"). */
+const shape = (blocks: TemplateBlock[]) => blocks.map((item) => `${item.kind}:${item.rows.map((r) => r.id).join(',')}`);
+/** `n` tek hareket: `b_i` / `r_i`. */
+const singles = (n: number) => Array.from({ length: n }, (_, i) => block(`b_${i}`, 'single', [row(`r_${i}`, 'squat')]));
+/** `n` devre, her biri `size` hareketli: `b_ci` / `r_ci_j`. */
+const circuits = (n: number, size: number) =>
+  Array.from({ length: n }, (_, i) =>
+    block(`b_c${i}`, 'circuit', Array.from({ length: size }, (_, j) => row(`r_c${i}_${j}`, 'squat')), { transitionSeconds: 15 }),
+  );
 
 describe('ekleme ve kimlikler', () => {
   test('bileşik: 3 set, 120 sn, 6–10; izolasyon 60 sn, 10–15; süreli saniye', () => {
@@ -247,6 +272,24 @@ describe('kaldırma', () => {
     const complex = [block('b_2', 'complex', [row('r_5', 'squat'), row('r_6', 'halter-bench'), row('r_7', 'squat')])];
     assert.equal(removeRow(complex, 'r_6', LIBRARY)[0]?.kind, 'complex');
   });
+
+  test('bilinmeyen satırda aynı dizi', () => {
+    const blocks = [block('b_1', 'single', [row('r_1', 'squat')])];
+    assert.equal(removeRow(blocks, 'r_x', LIBRARY), blocks);
+  });
+
+  test('grup yüzünde Sil: bloğun tamamı gider', () => {
+    const blocks = [
+      block('b_1', 'single', [row('r_1', 'squat')]),
+      block('b_2', 'circuit', [row('r_2', 'curl'), row('r_3', 'plank'), row('r_4', 'halter-bench')], { transitionSeconds: 15 }),
+      block('b_3', 'single', [row('r_5', 'curl')]),
+    ];
+    assert.deepEqual(rowIds(removeBlock(blocks, 'b_2')), [['r_1'], ['r_5']]);
+    assert.deepEqual(rowIds(removeBlock(blocks, 'b_1')), [['r_2', 'r_3', 'r_4'], ['r_5']]);
+    assert.equal(removeBlock(blocks, 'b_x'), blocks);
+    // Satır kimliği blok değildir.
+    assert.equal(removeBlock(blocks, 'r_1'), blocks);
+  });
 });
 
 describe('kopyalama', () => {
@@ -271,12 +314,35 @@ describe('kopyalama', () => {
     assert.deepEqual(blocks[0]?.rows[0]?.sets, uniformSets({ min: 8, max: 12 }, 3));
   });
 
-  test('grupta kaynağın arkasına; süperset devre olur', () => {
-    const blocks = [block('b_1', 'superset', [row('r_1', 'squat'), row('r_2', 'curl')])];
-    const result = duplicateRow(blocks, 'r_1', sequentialIds());
-    assert.deepEqual(rowIds(result), [['r_1', 'r_new001', 'r_2']]);
-    assert.equal(result[0]?.kind, 'circuit');
-    assert.equal(result[0]?.transitionSeconds, 15);
+  test('süperset üyesi grubun arkasına tek olur; süperset devreye dönmez', () => {
+    const blocks = [
+      block('b_1', 'superset', [row('r_1', 'squat', { count: 4 }), row('r_2', 'curl')], { restSeconds: 75 }),
+      block('b_2', 'single', [row('r_3', 'plank')]),
+    ];
+    const result = duplicateRow(blocks, 'r_1', sequentialIds(), LIBRARY);
+    assert.deepEqual(outline(result), [
+      { id: 'b_1', kind: 'superset', sets: 4, restSeconds: 75, rows: ['r_1', 'r_2'] },
+      // Kendi setleriyle, dinlenme türün varsayılanı (bileşik 120 sn).
+      { id: 'b_new002', kind: 'single', sets: 4, restSeconds: 120, rows: ['r_new001'] },
+      { id: 'b_2', kind: 'single', sets: 3, restSeconds: 90, rows: ['r_3'] },
+    ]);
+    assert.equal(result[0], blocks[0]);
+    // Egzersiz bilgisi verilmezse grubun dinlenmesi.
+    assert.equal(duplicateRow(blocks, 'r_2', sequentialIds())[1]?.restSeconds, 75);
+  });
+
+  test('devre ve kompleks üyesi yer varsa grubun içinde kaynağın arkasına; tür değişmez', () => {
+    const circuit = [block('b_1', 'circuit', [row('r_1', 'squat'), row('r_2', 'curl'), row('r_3', 'plank')], { transitionSeconds: 20 })];
+    const result = duplicateRow(circuit, 'r_2', sequentialIds(), LIBRARY);
+    assert.deepEqual(rowIds(result), [['r_1', 'r_2', 'r_new001', 'r_3']]);
+    assert.deepEqual({ kind: result[0]?.kind, transition: result[0]?.transitionSeconds }, { kind: 'circuit', transition: 20 });
+
+    const five = [block('b_2', 'complex', Array.from({ length: 5 }, (_, i) => row(`r_c${i}`, 'squat')))];
+    const six = duplicateRow(five, 'r_c4', sequentialIds(), LIBRARY);
+    assert.deepEqual(outline(six).map(({ kind, rows }) => [kind, rows.length]), [['complex', 6]]);
+    // 6'lı kompleks kopyayla devreye dönmez: kopya grubun arkasına tek olur.
+    const seven = duplicateRow(six, 'r_c0', sequentialIds(), LIBRARY);
+    assert.deepEqual(outline(seven).map(({ kind, rows }) => [kind, rows.length]), [['complex', 6], ['single', 1]]);
   });
 
   test('dolu devrede (8) grubun arkasına tek hareket', () => {
@@ -291,6 +357,67 @@ describe('kopyalama', () => {
       rows: ['r_new001'],
     });
     assert.equal('transitionSeconds' in (result[1] ?? {}), false);
+  });
+
+  test('grubun tamamı hemen arkasına: blok ve satırlar yeni kimlikle, ayarlar aynı', () => {
+    const blocks = [
+      block('b_1', 'circuit', [row('r_1', 'squat', { rule: { scheme: 'linear', targetRir: 1 }, note: 'Yavaş' }), row('r_2', 'curl'), row('r_3', 'plank')], {
+        restSeconds: 150,
+        transitionSeconds: 20,
+      }),
+      block('b_2', 'single', [row('r_4', 'halter-bench')]),
+    ];
+    const result = duplicateBlock(blocks, 'b_1', sequentialIds());
+    assert.deepEqual(outline(result), [
+      { id: 'b_1', kind: 'circuit', sets: 3, restSeconds: 150, rows: ['r_1', 'r_2', 'r_3'] },
+      { id: 'b_new001', kind: 'circuit', sets: 3, restSeconds: 150, rows: ['r_new002', 'r_new003', 'r_new004'] },
+      { id: 'b_2', kind: 'single', sets: 3, restSeconds: 90, rows: ['r_4'] },
+    ]);
+    const copy = result[1] as TemplateBlock;
+    assert.equal(copy.transitionSeconds, 20);
+    assert.deepEqual(copy.rows[0], { ...row('r_new002', 'squat', { rule: { scheme: 'linear', targetRir: 1 }, note: 'Yavaş' }) });
+    assert.deepEqual(duplicateIds(result), []);
+    // Kopya bağımsız: setleri ve kuralı kaynağa dokunmaz.
+    copy.rows[0]!.sets[0]!.min = 1;
+    copy.rows[0]!.rule!.targetRir = 3;
+    assert.deepEqual(blocks[0]?.rows[0]?.sets[0], { min: 8, max: 12 });
+    assert.equal(blocks[0]?.rows[0]?.rule?.targetRir, 1);
+    assert.equal(duplicateBlock(blocks, 'b_x', sequentialIds()), blocks);
+  });
+
+  test('sınırda kopya olmaz (aynı dizi): 40 hareket, 30 blok', () => {
+    const thirty = singles(30);
+    assert.equal(canDuplicate(thirty, 'b_0'), false);
+    assert.equal(canDuplicate(thirty, 'r_0'), false);
+    assert.equal(duplicateRow(thirty, 'r_0', sequentialIds()), thirty);
+    assert.equal(duplicateBlock(thirty, 'b_0', sequentialIds()), thirty);
+
+    // 30 blokta devre üyesinin kopyası grubun içinde kalabilir.
+    const withCircuit = [...singles(29), block('b_c', 'circuit', [row('r_a', 'squat'), row('r_b', 'curl'), row('r_c', 'plank')])];
+    assert.equal(canDuplicate(withCircuit, 'r_b'), true);
+    assert.equal(duplicateRow(withCircuit, 'r_b', sequentialIds()).at(-1)?.rows.length, 4);
+    // Süperset üyesininki blok ister.
+    const withSuperset = [...singles(29), block('b_s', 'superset', [row('r_a', 'squat'), row('r_b', 'curl')])];
+    assert.equal(canDuplicate(withSuperset, 'r_a'), false);
+    assert.equal(duplicateRow(withSuperset, 'r_a', sequentialIds()), withSuperset);
+
+    // 38 hareket (7 blok): 3'lük grup sığmaz, süperset ve tek satır sığar.
+    const rows38 = [
+      ...circuits(4, 8),
+      block('b_3', 'circuit', [row('r_x', 'squat'), row('r_y', 'curl'), row('r_z', 'plank')]),
+      block('b_s', 'superset', [row('r_p', 'squat'), row('r_q', 'curl')]),
+      block('b_t', 'single', [row('r_t', 'curl')]),
+    ];
+    assert.equal(countRows(rows38), 38);
+    assert.equal(canDuplicate(rows38, 'b_3'), false);
+    assert.equal(duplicateBlock(rows38, 'b_3', sequentialIds()), rows38);
+    assert.equal(canDuplicate(rows38, 'b_s'), true);
+    assert.equal(canDuplicate(rows38, 'r_t'), true);
+    const forty = duplicateBlock(rows38, 'b_s', sequentialIds());
+    assert.equal(countRows(forty), 40);
+    assert.equal(canDuplicate(forty, 'r_t'), false);
+    assert.equal(duplicateRow(forty, 'r_t', sequentialIds()), forty);
+    assert.equal(canDuplicate(forty, 'r_nope'), false);
   });
 });
 
@@ -434,6 +561,366 @@ describe('gruptan çıkarma ve dağıtma', () => {
         { id: 'b_new002', kind: 'single', sets: 2, restSeconds: 90 },
       ],
     );
+  });
+});
+
+describe('taşıma (sürükle-bırak ve klavye)', () => {
+  const list = () => [
+    block('b_1', 'single', [row('r_1', 'squat')], { restSeconds: 150 }),
+    block('b_2', 'superset', [row('r_2', 'curl'), row('r_3', 'halter-bench', { count: 4 })], { restSeconds: 75 }),
+    block('b_3', 'single', [row('r_4', 'plank')]),
+    block('b_4', 'circuit', [row('r_5', 'squat'), row('r_6', 'curl'), row('r_7', 'plank')], { restSeconds: 100, transitionSeconds: 20 }),
+  ];
+  const move = (blocks: TemplateBlock[], id: string, destination: MoveDestination) => moveItem(blocks, id, destination, LIBRARY, sequentialIds());
+  const order = (blocks: TemplateBlock[]) => blocks.map((item) => item.id);
+
+  test('üst düzeyde sıralama: boşluk şu anki listede; tekin blok ve satır kimliği aynı öğe', () => {
+    const blocks = list();
+    assert.deepEqual(order(move(blocks, 'b_1', { at: 'top', index: 3 })), ['b_2', 'b_3', 'b_1', 'b_4']);
+    assert.deepEqual(order(move(blocks, 'r_1', { at: 'top', index: 3 })), ['b_2', 'b_3', 'b_1', 'b_4']);
+    assert.deepEqual(order(move(blocks, 'b_3', { at: 'top', index: 0 })), ['b_3', 'b_1', 'b_2', 'b_4']);
+    assert.deepEqual(order(move(blocks, 'b_1', { at: 'top', index: 4 })), ['b_2', 'b_3', 'b_4', 'b_1']);
+    const groupFirst = move(blocks, 'b_4', { at: 'top', index: 0 });
+    assert.deepEqual(order(groupFirst), ['b_4', 'b_1', 'b_2', 'b_3']);
+    assert.equal(groupFirst[0], blocks[3]);
+  });
+
+  test('kendi yanındaki boşluk: yerinde kalır, aynı dizi', () => {
+    const blocks = list();
+    assert.equal(moveCheck(blocks, 'b_2', { at: 'top', index: 1 }), 'same');
+    assert.equal(moveCheck(blocks, 'b_2', { at: 'top', index: 2 }), 'same');
+    assert.equal(moveCheck(blocks, 'b_2', { at: 'top', index: 3 }), 'ok');
+    assert.equal(move(blocks, 'b_2', { at: 'top', index: 2 }), blocks);
+    assert.equal(moveCheck(blocks, 'r_6', { at: 'group', blockId: 'b_4', index: 1 }), 'same');
+    assert.equal(moveCheck(blocks, 'r_6', { at: 'group', blockId: 'b_4', index: 2 }), 'same');
+    assert.equal(move(blocks, 'r_6', { at: 'group', blockId: 'b_4', index: 1 }), blocks);
+  });
+
+  test('grup gruba girmez; hedef grup değilse, öğe ya da boşluk yoksa olmaz', () => {
+    const blocks = list();
+    const rejected: [string, MoveDestination][] = [
+      ['b_2', { at: 'group', blockId: 'b_4', index: 0 }],
+      ['b_4', { at: 'group', blockId: 'b_2', index: 2 }],
+      ['r_1', { at: 'group', blockId: 'b_3', index: 0 }],
+      ['r_1', { at: 'group', blockId: 'b_x', index: 0 }],
+      ['r_1', { at: 'group', blockId: 'b_4', index: 4 }],
+      ['r_1', { at: 'top', index: -1 }],
+      ['r_1', { at: 'top', index: 5 }],
+      ['r_1', { at: 'top', index: 1.5 }],
+      ['r_x', { at: 'top', index: 0 }],
+    ];
+    for (const [id, destination] of rejected) {
+      assert.equal(moveCheck(blocks, id, destination), 'not_allowed', `${id} → ${JSON.stringify(destination)}`);
+      assert.equal(move(blocks, id, destination), blocks);
+    }
+  });
+
+  test('üye kendi grubunda sıralanır; grubun ayarları ve öteki bloklar aynı', () => {
+    const blocks = list();
+    const last = move(blocks, 'r_5', { at: 'group', blockId: 'b_4', index: 3 });
+    assert.deepEqual(rowIds(last)[3], ['r_6', 'r_7', 'r_5']);
+    assert.deepEqual({ kind: last[3]?.kind, rest: last[3]?.restSeconds, transition: last[3]?.transitionSeconds }, { kind: 'circuit', rest: 100, transition: 20 });
+    assert.deepEqual(rowIds(move(blocks, 'r_7', { at: 'group', blockId: 'b_4', index: 0 }))[3], ['r_7', 'r_5', 'r_6']);
+    assert.deepEqual(rowIds(move(blocks, 'r_3', { at: 'group', blockId: 'b_2', index: 0 }))[1], ['r_3', 'r_2']);
+    for (const index of [0, 1, 2]) assert.equal(last[index], blocks[index]);
+  });
+
+  test('üst düzeye giden üye gruptan çıkar: yeni kimlikli tek; kalan süperset tekleşir', () => {
+    const blocks = list();
+    assert.deepEqual(outline(move(blocks, 'r_3', { at: 'top', index: 0 })), [
+      { id: 'b_new001', kind: 'single', sets: 4, restSeconds: 120, rows: ['r_3'] },
+      { id: 'b_1', kind: 'single', sets: 3, restSeconds: 150, rows: ['r_1'] },
+      { id: 'b_2', kind: 'single', sets: 3, restSeconds: 60, rows: ['r_2'] },
+      { id: 'b_3', kind: 'single', sets: 3, restSeconds: 90, rows: ['r_4'] },
+      { id: 'b_4', kind: 'circuit', sets: 3, restSeconds: 100, rows: ['r_5', 'r_6', 'r_7'] },
+    ]);
+    // Grubun hemen önü ve arkası da üst düzey boşluktur.
+    assert.deepEqual(shape(move(blocks, 'r_2', { at: 'top', index: 1 })).slice(0, 3), ['single:r_1', 'single:r_2', 'single:r_3']);
+    assert.deepEqual(order(move(blocks, 'r_2', { at: 'top', index: 2 })), ['b_1', 'b_2', 'b_new001', 'b_3', 'b_4']);
+    assert.deepEqual(order(move(blocks, 'r_2', { at: 'top', index: 4 })), ['b_1', 'b_2', 'b_3', 'b_4', 'b_new001']);
+    assert.equal(moveCheck(blocks, 'r_2', { at: 'top', index: 1 }), 'ok');
+  });
+
+  test('devreden çıkan: devre 3 süperset olur, geçiş kalkar, dinlenme kalır', () => {
+    const result = move(list(), 'r_6', { at: 'top', index: 4 });
+    const circuit = result[3];
+    assert.deepEqual({ id: circuit?.id, kind: circuit?.kind, rest: circuit?.restSeconds, rows: circuit?.rows.map((r) => r.id) }, {
+      id: 'b_4',
+      kind: 'superset',
+      rest: 100,
+      rows: ['r_5', 'r_7'],
+    });
+    assert.equal('transitionSeconds' in (circuit ?? {}), false);
+    assert.deepEqual(outline(result).at(-1), { id: 'b_new001', kind: 'single', sets: 3, restSeconds: 60, rows: ['r_6'] });
+  });
+
+  test('tek hareket grubun içine: katılır, grubun ayarları kalır, tür uyar; tekin bloğu gider', () => {
+    const blocks = list();
+    const result = move(blocks, 'r_1', { at: 'group', blockId: 'b_2', index: 1 });
+    assert.deepEqual(outline(result), [
+      { id: 'b_2', kind: 'circuit', sets: 4, restSeconds: 75, rows: ['r_2', 'r_1', 'r_3'] },
+      { id: 'b_3', kind: 'single', sets: 3, restSeconds: 90, rows: ['r_4'] },
+      { id: 'b_4', kind: 'circuit', sets: 3, restSeconds: 100, rows: ['r_5', 'r_6', 'r_7'] },
+    ]);
+    assert.equal(result[0]?.transitionSeconds, 15);
+    assert.equal(result[0]?.rows[1], blocks[0]?.rows[0]);
+    const intoCircuit = move(blocks, 'b_3', { at: 'group', blockId: 'b_4', index: 0 });
+    assert.deepEqual(shape(intoCircuit), ['single:r_1', 'superset:r_2,r_3', 'circuit:r_4,r_5,r_6,r_7']);
+    assert.equal(intoCircuit[2]?.transitionSeconds, 20);
+
+    const complex = [block('b_k', 'complex', Array.from({ length: 6 }, (_, i) => row(`r_k${i}`, 'squat'))), block('b_s', 'single', [row('r_s', 'curl')])];
+    const seven = move(complex, 'r_s', { at: 'group', blockId: 'b_k', index: 6 });
+    assert.deepEqual({ kind: seven[0]?.kind, rows: seven[0]?.rows.length, transition: seven[0]?.transitionSeconds, blocks: seven.length }, {
+      kind: 'circuit',
+      rows: 7,
+      transition: 15,
+      blocks: 1,
+    });
+  });
+
+  test('üye başka gruba: ayrıldığı küçülür, katıldığı büyür; 8 hareketli gruba giremez', () => {
+    const blocks = list();
+    const result = move(blocks, 'r_2', { at: 'group', blockId: 'b_4', index: 3 });
+    assert.deepEqual(outline(result), [
+      { id: 'b_1', kind: 'single', sets: 3, restSeconds: 150, rows: ['r_1'] },
+      { id: 'b_2', kind: 'single', sets: 4, restSeconds: 120, rows: ['r_3'] },
+      { id: 'b_3', kind: 'single', sets: 3, restSeconds: 90, rows: ['r_4'] },
+      { id: 'b_4', kind: 'circuit', sets: 3, restSeconds: 100, rows: ['r_5', 'r_6', 'r_7', 'r_2'] },
+    ]);
+
+    const full = [...circuits(1, 8), ...list()];
+    assert.equal(moveCheck(full, 'r_1', { at: 'group', blockId: 'b_c0', index: 0 }), 'full');
+    assert.equal(moveCheck(full, 'r_5', { at: 'group', blockId: 'b_c0', index: 8 }), 'full');
+    assert.equal(move(full, 'r_5', { at: 'group', blockId: 'b_c0', index: 8 }), full);
+    // Dolu grubun içinde sıralama olur.
+    assert.equal(moveCheck(full, 'r_c0_0', { at: 'group', blockId: 'b_c0', index: 8 }), 'ok');
+  });
+
+  test('30 blokta gruptan çıkılamaz; gruba katılmak olur', () => {
+    const blocks = [...singles(29), block('b_s', 'superset', [row('r_a', 'squat'), row('r_b', 'curl')])];
+    assert.equal(moveCheck(blocks, 'r_a', { at: 'top', index: 0 }), 'limit');
+    assert.equal(move(blocks, 'r_a', { at: 'top', index: 0 }), blocks);
+    assert.equal(moveCheck(blocks, 'b_s', { at: 'top', index: 0 }), 'ok');
+    assert.equal(move(blocks, 'r_0', { at: 'group', blockId: 'b_s', index: 2 }).length, 29);
+  });
+
+  test('klavye: grup ve tek üst düzeyde, üye kendi grubunda kayar (moveKey ile aynı)', () => {
+    const blocks = list();
+    assert.deepEqual(stepDestination(blocks, 'b_2', 'up'), { at: 'top', index: 0 });
+    assert.deepEqual(stepDestination(blocks, 'b_2', 'down'), { at: 'top', index: 3 });
+    assert.deepEqual(stepDestination(blocks, 'r_1', 'end'), { at: 'top', index: 4 });
+    assert.deepEqual(stepDestination(blocks, 'r_6', 'up'), { at: 'group', blockId: 'b_4', index: 0 });
+    assert.deepEqual(stepDestination(blocks, 'r_5', 'end'), { at: 'group', blockId: 'b_4', index: 3 });
+    assert.equal(stepDestination(blocks, 'r_1', 'up'), null);
+    assert.equal(stepDestination(blocks, 'b_4', 'end'), null);
+    assert.equal(stepDestination(blocks, 'r_2', 'up'), null);
+    assert.equal(stepDestination(blocks, 'r_x', 'up'), null);
+
+    for (const target of ['up', 'down', 'top', 'end'] as const) {
+      for (const item of blocks) {
+        const destination = stepDestination(blocks, item.id, target);
+        const result = destination ? move(blocks, item.id, destination) : blocks;
+        assert.deepEqual(order(result), [...moveKey(order(blocks), item.id, target)], `${item.id} ${target}`);
+      }
+      const members = blocks[3]?.rows.map((r) => r.id) ?? [];
+      for (const id of members) {
+        const destination = stepDestination(blocks, id, target);
+        const result = destination ? move(blocks, id, destination) : blocks;
+        assert.deepEqual(rowIds(result)[3], [...moveKey(members, id, target)], `${id} ${target}`);
+      }
+    }
+  });
+});
+
+describe('üstüne bırakıp gruplama', () => {
+  const combine = (blocks: TemplateBlock[], sourceId: string, targetId: string) => combineInto(blocks, sourceId, targetId, LIBRARY);
+
+  test('tekin üstüne tek: süperset; hedef önde ve yerinde, kimliği hedefin, dinlenme 90', () => {
+    const blocks = [
+      block('b_1', 'single', [row('r_1', 'squat')], { sets: 4, restSeconds: 150 }),
+      block('b_2', 'single', [row('r_2', 'curl')]),
+      block('b_3', 'single', [row('r_3', 'plank')], { sets: 2 }),
+    ];
+    assert.equal(combineOutcome(blocks, 'b_3', 'b_1'), 'superset');
+    assert.deepEqual(combine(blocks, 'b_3', 'b_1'), [
+      { id: 'b_1', kind: 'superset', restSeconds: 90, rows: [row('r_1', 'squat', { count: 4 }), row('r_3', 'plank', { count: 2 })] },
+      blocks[1],
+    ]);
+    // Satır kimlikleriyle de; bırakılan öndeyse hedefin yerine geçer.
+    assert.deepEqual(shape(combine(blocks, 'r_1', 'r_2')), ['superset:r_2,r_1', 'single:r_3']);
+    assert.equal(combine(blocks, 'r_1', 'r_2')[0]?.id, 'b_2');
+  });
+
+  test('sonuç hapı: süperset, devre olur, gruba ekle, dolu, olmaz', () => {
+    const blocks = [
+      block('b_1', 'single', [row('r_1', 'squat')]),
+      block('b_2', 'superset', [row('r_2', 'curl'), row('r_3', 'plank')]),
+      block('b_3', 'circuit', [row('r_4', 'squat'), row('r_5', 'curl'), row('r_6', 'plank')], { transitionSeconds: 15 }),
+      block('b_4', 'complex', Array.from({ length: 6 }, (_, i) => row(`r_k${i}`, 'squat'))),
+      block('b_5', 'complex', Array.from({ length: 3 }, (_, i) => row(`r_m${i}`, 'squat'))),
+      ...circuits(1, 8),
+      block('b_6', 'single', [row('r_9', 'curl')]),
+    ];
+    const cases: [string, string, string][] = [
+      ['r_1', 'b_6', 'superset'],
+      ['r_1', 'r_9', 'superset'],
+      ['r_2', 'b_6', 'superset'],
+      ['r_1', 'b_2', 'becomes_circuit'],
+      ['r_1', 'r_3', 'becomes_circuit'],
+      ['r_1', 'b_3', 'join'],
+      ['r_2', 'r_5', 'join'],
+      ['r_1', 'b_4', 'becomes_circuit'],
+      ['r_1', 'b_5', 'join'],
+      ['r_1', 'b_c0', 'full'],
+      ['r_4', 'r_c0_3', 'full'],
+      ['b_2', 'b_6', 'not_allowed'],
+      ['b_2', 'b_3', 'not_allowed'],
+      ['b_3', 'r_1', 'not_allowed'],
+      ['r_1', 'r_1', 'not_allowed'],
+      ['r_1', 'b_1', 'not_allowed'],
+      ['r_2', 'b_2', 'not_allowed'],
+      ['r_2', 'r_3', 'not_allowed'],
+      ['r_x', 'b_1', 'not_allowed'],
+      ['r_1', 'b_x', 'not_allowed'],
+    ];
+    for (const [source, target, expected] of cases) {
+      assert.equal(combineOutcome(blocks, source, target), expected, `${source} → ${target}`);
+      const result = combine(blocks, source, target);
+      if (expected === 'full' || expected === 'not_allowed') assert.equal(result, blocks, `${source} → ${target}`);
+      else assert.deepEqual(duplicateIds(result), []);
+    }
+  });
+
+  test('süpersetin üstüne: devre olur, bırakılan sona, grubun ayarları; her hareket kendi setiyle', () => {
+    const blocks = [
+      block('b_1', 'superset', [row('r_1', 'squat'), row('r_2', 'curl')], { sets: 4, restSeconds: 75 }),
+      block('b_2', 'single', [row('r_3', 'plank')], { sets: 2, restSeconds: 30 }),
+    ];
+    const [result, ...others] = combine(blocks, 'b_2', 'b_1');
+    assert.deepEqual(others, []);
+    assert.deepEqual(
+      { id: result?.id, kind: result?.kind, rest: result?.restSeconds, transition: result?.transitionSeconds, sets: result?.rows.map((r) => r.sets.length) },
+      { id: 'b_1', kind: 'circuit', rest: 75, transition: 15, sets: [4, 4, 2] },
+    );
+    assert.deepEqual(rowIds([result as TemplateBlock]), [['r_1', 'r_2', 'r_3']]);
+  });
+
+  test('üyenin üstüne: o üyenin arkasına; grup yüzüne: sona; ayrılan grup küçülür', () => {
+    const blocks = [
+      block('b_1', 'superset', [row('r_1', 'squat'), row('r_2', 'curl')]),
+      block('b_2', 'circuit', [row('r_3', 'squat'), row('r_4', 'curl'), row('r_5', 'plank')], { transitionSeconds: 20 }),
+    ];
+    const onMember = combine(blocks, 'r_1', 'r_3');
+    assert.deepEqual(outline(onMember), [
+      { id: 'b_1', kind: 'single', sets: 3, restSeconds: 60, rows: ['r_2'] },
+      { id: 'b_2', kind: 'circuit', sets: 3, restSeconds: 90, rows: ['r_3', 'r_1', 'r_4', 'r_5'] },
+    ]);
+    assert.equal(onMember[1]?.transitionSeconds, 20);
+    assert.deepEqual(shape(combine(blocks, 'r_2', 'b_2')), ['single:r_1', 'circuit:r_3,r_4,r_5,r_2']);
+    assert.deepEqual(shape(combine(blocks, 'r_4', 'r_2')), ['circuit:r_1,r_2,r_4', 'superset:r_3,r_5']);
+  });
+
+  test('üye tekin üstüne: süperset; ayrıldığı devre süperset olur', () => {
+    const blocks = [
+      block('b_1', 'circuit', [row('r_1', 'squat'), row('r_2', 'curl'), row('r_3', 'plank')], { transitionSeconds: 15 }),
+      block('b_2', 'single', [row('r_4', 'halter-bench')]),
+    ];
+    const result = combine(blocks, 'r_2', 'b_2');
+    assert.deepEqual(shape(result), ['superset:r_1,r_3', 'superset:r_4,r_2']);
+    assert.equal('transitionSeconds' in (result[0] ?? {}), false);
+    assert.equal(result[1]?.restSeconds, 90);
+  });
+
+  test('6 hareketli komplekse 7. hareket: devre olur', () => {
+    const blocks = [block('b_1', 'single', [row('r_1', 'squat')]), block('b_4', 'complex', Array.from({ length: 6 }, (_, i) => row(`r_k${i}`, 'squat')))];
+    const [result] = combine(blocks, 'r_1', 'b_4');
+    assert.deepEqual({ kind: result?.kind, rows: result?.rows.length, transition: result?.transitionSeconds }, { kind: 'circuit', rows: 7, transition: 15 });
+  });
+});
+
+describe('grup kurma ve gruba ekleme', () => {
+  test('seçilen sayıya göre tür: 2 süperset, 3–8 devre', () => {
+    assert.deepEqual([0, 1, 2, 3, 8, 9].map(newGroupKind), [null, null, 'superset', 'circuit', 'circuit', null]);
+  });
+
+  test('2 hareket: sona süperset, seçim sırasıyla; setler türüne göre, dinlenme 90', () => {
+    const blocks = [block('b_1', 'single', [row('r_1', 'squat')])];
+    const result = appendGroup(blocks, [curl, squat], sequentialIds());
+    assert.equal(result[0], blocks[0]);
+    assert.deepEqual(result[1], {
+      id: 'b_new001',
+      kind: 'superset',
+      restSeconds: 90,
+      rows: [
+        { id: 'r_new002', exerciseId: 'curl', sets: uniformSets({ min: 10, max: 15 }, 3) },
+        { id: 'r_new003', exerciseId: 'squat', sets: uniformSets({ min: 6, max: 10 }, 3) },
+      ],
+    });
+  });
+
+  test('3–8 hareket: devre (120 sn, geçiş 15); kimlikler geçerli ve benzersiz', () => {
+    const blocks = [block('b_aaaaaa', 'single', [row('r_aaaaaa', 'squat')])];
+    const result = appendGroup(blocks, [plank, squat, curl], idSource(blocks));
+    const group = result[1] as TemplateBlock;
+    assert.deepEqual(
+      { kind: group.kind, rest: group.restSeconds, transition: group.transitionSeconds, rows: group.rows.map((r) => r.exerciseId) },
+      { kind: 'circuit', rest: 120, transition: 15, rows: ['plank', 'squat', 'curl'] },
+    );
+    assert.match(group.id, BLOCK_ID_PATTERN);
+    for (const item of group.rows) assert.match(item.id, ROW_ID_PATTERN);
+    assert.deepEqual(duplicateIds(result), []);
+    assert.equal(appendGroup(blocks, Array.from({ length: 8 }, () => squat), sequentialIds())[1]?.rows.length, 8);
+  });
+
+  test('1 ya da 9 hareket, 30 blok ya da 40 hareketi aşan grup kurulmaz (aynı dizi)', () => {
+    const blocks = [block('b_1', 'single', [row('r_1', 'squat')])];
+    assert.equal(appendGroup(blocks, [squat], sequentialIds()), blocks);
+    assert.equal(appendGroup(blocks, Array.from({ length: 9 }, () => squat), sequentialIds()), blocks);
+    assert.equal(newGroupCapacity(blocks), 8);
+
+    const thirty = singles(30);
+    assert.equal(newGroupCapacity(thirty), 0);
+    assert.equal(appendGroup(thirty, [squat, curl], sequentialIds()), thirty);
+
+    const rows39 = [...circuits(4, 8), block('b_7', 'circuit', Array.from({ length: 7 }, (_, i) => row(`r_7${i}`, 'squat')))];
+    assert.equal(newGroupCapacity(rows39), 1);
+    assert.equal(appendGroup(rows39, [squat, curl], sequentialIds()), rows39);
+    const rows37 = rows39.slice(0, -1).concat(block('b_5', 'circuit', Array.from({ length: 5 }, (_, i) => row(`r_5${i}`, 'squat'))));
+    assert.equal(newGroupCapacity(rows37), 3);
+    assert.equal(countRows(appendGroup(rows37, [squat, curl, plank], sequentialIds())), 40);
+  });
+
+  test('gruba ekleme: sona, setleri türüne göre; süperset devre olur', () => {
+    const blocks = [block('b_1', 'superset', [row('r_1', 'squat'), row('r_2', 'curl')], { restSeconds: 75 })];
+    assert.equal(addToGroupOutcome(blocks, 'b_1'), 'becomes_circuit');
+    const [result] = addToGroup(blocks, 'b_1', plank, sequentialIds());
+    assert.deepEqual(
+      { kind: result?.kind, rest: result?.restSeconds, transition: result?.transitionSeconds, rows: result?.rows.map((r) => r.id) },
+      { kind: 'circuit', rest: 75, transition: 15, rows: ['r_1', 'r_2', 'r_new001'] },
+    );
+    assert.deepEqual(result?.rows[2], { id: 'r_new001', exerciseId: 'plank', sets: uniformSets({ min: 30, max: 60 }, 3) });
+  });
+
+  test('gruba ekleme sonuçları: katılır, devre olur, dolu, sınır, olmaz', () => {
+    const blocks = [
+      block('b_1', 'single', [row('r_1', 'squat')]),
+      block('b_3', 'circuit', [row('r_4', 'squat'), row('r_5', 'curl'), row('r_6', 'plank')], { transitionSeconds: 15 }),
+      block('b_4', 'complex', Array.from({ length: 6 }, (_, i) => row(`r_k${i}`, 'squat'))),
+      block('b_5', 'complex', Array.from({ length: 3 }, (_, i) => row(`r_m${i}`, 'squat'))),
+      ...circuits(1, 8),
+    ];
+    assert.deepEqual(
+      ['b_3', 'b_4', 'b_5', 'b_c0', 'b_1', 'b_x'].map((id) => addToGroupOutcome(blocks, id)),
+      ['join', 'becomes_circuit', 'join', 'full', 'not_allowed', 'not_allowed'],
+    );
+    assert.equal(addToGroup(blocks, 'b_4', curl, sequentialIds())[2]?.kind, 'circuit');
+    assert.equal(addToGroup(blocks, 'b_5', curl, sequentialIds())[3]?.kind, 'complex');
+    for (const id of ['b_c0', 'b_1', 'b_x']) assert.equal(addToGroup(blocks, id, curl, sequentialIds()), blocks);
+
+    const forty = [...circuits(4, 8), block('b_7', 'circuit', Array.from({ length: 7 }, (_, i) => row(`r_7${i}`, 'squat'))), block('b_8', 'single', [row('r_8', 'curl')])];
+    assert.equal(countRows(forty), 40);
+    assert.equal(addToGroupOutcome(forty, 'b_7'), 'limit');
+    assert.equal(addToGroup(forty, 'b_7', curl, sequentialIds()), forty);
   });
 });
 
