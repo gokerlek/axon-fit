@@ -464,7 +464,7 @@ export function BlockEditor({
           {blocks.length > 0 ? (
             <>
               <EditorDnd listRef={listRef} preview={(itemId) => <ItemPreview itemId={itemId} />}>
-                {/* Üstte 16 px: ilk kartın tutamak alanı üstteki içeriğe binmez. */}
+                {/* İlk kartın üstünde 20 px (12 + 8): tutamağın 16 px taşan dokunma alanı üstteki içeriğe binmez. */}
                 <ol ref={listRef} aria-label={listLabel} className="flex flex-col gap-3 pt-2">
                   {blocks.map((block, blockIndex) => (
                     <BlockItem key={block.id} block={block} blockIndex={blockIndex} count={blocks.length} />

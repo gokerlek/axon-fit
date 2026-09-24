@@ -51,8 +51,11 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-/** Basılı tutunca tekrar: dokunuşta tek adım `click`te; basılı kalırsa 400 ms sonra 100 ms'de bir. */
-function useRepeat(step: () => boolean) {
+/**
+ * Basılı tutunca tekrar: dokunuşta tek adım `click`te; basılı kalırsa 400 ms sonra 100 ms'de
+ * bir. `press` basışın başında bir kez çağrılır.
+ */
+function useRepeat(step: () => boolean, press: () => void) {
   const latest = useRef(step);
   useEffect(() => {
     latest.current = step;
@@ -76,6 +79,7 @@ function useRepeat(step: () => boolean) {
       if (event.button !== 0) return;
       // Fareyle odak kutuda kalsın (düğme odak almaz); dokunmada sayfa kaydırması bozulmasın.
       if (event.pointerType === 'mouse') event.preventDefault();
+      press();
       stop();
       repeated.current = false;
       origin.current = { x: event.clientX, y: event.clientY };
@@ -115,14 +119,16 @@ function StepButton({
   size,
   disabled,
   onStep,
+  onPress,
 }: {
   direction: 1 | -1;
   label: string;
   size: Size;
   disabled: boolean;
   onStep: () => boolean;
+  onPress: () => void;
 }) {
-  const handlers = useRepeat(onStep);
+  const handlers = useRepeat(onStep, onPress);
   const Icon = direction === 1 ? Plus : Minus;
   return (
     <button
@@ -220,6 +226,17 @@ export function Stepper({
     return next !== (direction === 1 ? max : min);
   };
 
+  /**
+   * Fareyle basınca odak kutuda kalır; kutuda yazılmış ama odaktan çıkmamış metin varsa Base UI
+   * yeni değeri kutuya yazmaz. Kutu bir kez odaktan çıkıp geri alınır: metin işlenir, adım görünür.
+   */
+  const commitTyped = () => {
+    const input = local.current;
+    if (!input || document.activeElement !== input) return;
+    input.blur();
+    input.focus({ preventScroll: true });
+  };
+
   const atMin = value !== null && value <= min;
   const atMax = value !== null && value >= max;
 
@@ -244,7 +261,7 @@ export function Stepper({
           'inline-flex w-fit max-w-full items-stretch rounded-lg border border-input bg-transparent text-sm shadow-xs transition-colors has-[input:focus-visible]:border-ring has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/50 data-disabled:opacity-50 data-invalid:border-destructive data-invalid:ring-3 data-invalid:ring-destructive/20 dark:bg-input/30',
           HEIGHT[size],
         )}>
-        <StepButton direction={-1} label={decrementLabel} size={size} disabled={disabled || atMin} onStep={() => stepBy(-1)} />
+        <StepButton direction={-1} label={decrementLabel} size={size} disabled={disabled || atMin} onStep={() => stepBy(-1)} onPress={commitTyped} />
         <span className={cn('flex shrink-0 items-center justify-center gap-0.5 border-x border-input px-1', unit ? CENTER[size].unit : CENTER[size].plain)}>
           <NumberField.Input
             ref={setInput}
@@ -269,7 +286,7 @@ export function Stepper({
             </span>
           ) : null}
         </span>
-        <StepButton direction={1} label={incrementLabel} size={size} disabled={disabled || atMax} onStep={() => stepBy(1)} />
+        <StepButton direction={1} label={incrementLabel} size={size} disabled={disabled || atMax} onStep={() => stepBy(1)} onPress={commitTyped} />
       </NumberField.Group>
     </NumberField.Root>
   );
