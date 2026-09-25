@@ -235,7 +235,7 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
   };
 
   return (
-    <div id={`details-${row.id}`} className="grid grid-cols-1 gap-4 px-3 pb-3 sm:grid-cols-2">
+    <div id={`details-${row.id}`} className="grid grid-cols-1 gap-4 px-3 pt-3 pb-3 sm:grid-cols-2">
       <Field className="gap-1.5">
         <FieldLabel htmlFor={`scheme-${row.id}`}>İlerleme</FieldLabel>
         <div className="grid grid-cols-2 gap-2">
