@@ -533,7 +533,7 @@ export function SetsSection({ blockIndex, rowIndex, row, exercise, title, open, 
         />
       </button>
       {open ? (
-        <div id={contentId} className="flex flex-col gap-3 px-3 pt-1 pb-3">
+        <div id={contentId} className="flex flex-col gap-3 px-3 pt-3 pb-3">
           {weighted ? (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground" id={`layout-${row.id}`}>
