@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { Trash } from '@phosphor-icons/react';
+import { discardDraft } from '@/components/block-editor/editor-draft';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { fetchJson } from '@/lib/query/errors';
 import { useServiceMutation } from '@/lib/query/use-service';
+import { templateDraftKey } from '@/lib/unsaved-changes';
 
 /** Düzenleme sayfasının yıkıcı eylemi (detayda değil, SPEC §6): şablon dosyasını siler. */
 export function TemplateActions({ id, name }: { id: string; name: string }) {
@@ -27,6 +29,7 @@ export function TemplateActions({ id, name }: { id: string; name: string }) {
     invalidate: [['templates']],
     notify: { success: 'Şablon silindi.' },
     onSuccess: () => {
+      discardDraft(templateDraftKey(id));
       router.push('/dashboard/templates');
       router.refresh();
     },

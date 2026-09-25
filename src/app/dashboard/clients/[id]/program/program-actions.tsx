@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { Trash } from '@phosphor-icons/react';
+import { discardDraft } from '@/components/block-editor/editor-draft';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { fetchJson } from '@/lib/query/errors';
 import { useServiceMutation } from '@/lib/query/use-service';
+import { programDraftKey } from '@/lib/unsaved-changes';
 
 /** Düzenleme sayfasının yıkıcı eylemi (detayda değil, SPEC §6): danışanın programını siler. */
 export function ProgramActions({ clientId }: { clientId: string }) {
@@ -26,6 +28,8 @@ export function ProgramActions({ clientId }: { clientId: string }) {
     fn: () => fetchJson<{ ok: true }>(`/api/clients/${clientId}/program`, { method: 'DELETE' }),
     notify: { success: 'Program silindi.' },
     onSuccess: () => {
+      // Silinen programın taslağı "Program oluştur"da sunulmasın.
+      discardDraft(programDraftKey(clientId));
       router.push(`/dashboard/clients/${clientId}`);
       router.refresh();
     },

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Field as FormField, Form, getDeepError, setErrors, useForm } from '@formisch/react';
 import { ArrowClockwise, ArrowSquareOut, WarningCircle } from '@phosphor-icons/react';
 import { BlockEditor, useBlocks } from '@/components/block-editor/block-editor';
 import type { BlocksFormStore } from '@/components/block-editor/block-items';
+import { DraftAutosave, DraftNotice, useEditorDraft } from '@/components/block-editor/editor-draft';
 import { EditorSaveProvider } from '@/components/block-editor/editor-save';
 import { TemplateMuscleMap } from '@/components/muscle-map/template-muscle-map';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -15,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { UnsavedChangesGuard, type UnsavedChangesGuardHandle } from '@/components/unsaved-changes-guard';
 import { exerciseSetWeights } from '@/lib/muscles';
 import { fetchJson } from '@/lib/query/errors';
 import { applyFieldErrors } from '@/lib/query/field-errors';
@@ -22,6 +24,7 @@ import { useServiceMutation } from '@/lib/query/use-service';
 import { templateFormSchema, type Template, type TemplateFormValues, type TemplateInput } from '@/lib/schemas/template';
 import { idSource, prepareForEditing, type EditorDevice, type PickerExercise } from '@/lib/template-edit';
 import { templateMuscleLoad } from '@/lib/template-plan';
+import { TEMPLATE_DRAFT_BASE, templateDraftKey } from '@/lib/unsaved-changes';
 
 const BLANK: TemplateInput = { name: '', description: '', blocks: [] };
 
@@ -35,15 +38,18 @@ const LOAD_DESCRIPTION =
  * düzenleyicide (`BlockEditor`, program günleriyle aynı). Listelerin anahtarları blok ve
  * satır kimlikleridir; sürükle-bırak sıralar ve gruplar, ekleme kütüphaneden dokunarak
  * yapılır. Kaydet "Hareketler" başlığında, yalnız değişiklik varken (`EditorSaveProvider`).
+ * Kaydedilmemiş değişiklik yerel taslakta durur ve sayfadan çıkış sorulur (PT kararı 16).
  */
 export function TemplateForm({
   editing,
   exercises,
   devices,
+  timeZone,
 }: {
   editing: { template: Template; sha: string } | null;
   exercises: PickerExercise[];
   devices: EditorDevice[];
+  timeZone: string;
 }) {
   const router = useRouter();
   const exerciseById = useMemo(() => new Map(exercises.map((exercise) => [exercise.id, exercise])), [exercises]);
@@ -63,12 +69,20 @@ export function TemplateForm({
   const blocks = useBlocks(form as unknown as BlocksFormStore, ['blocks']);
   const load = useMemo(() => templateMuscleLoad({ blocks }, exerciseById, exerciseSetWeights).load, [blocks, exerciseById]);
   const [stale, setStale] = useState(false);
+  const guard = useRef<UnsavedChangesGuardHandle>(null);
+  const draft = useEditorDraft({
+    form,
+    schema: templateFormSchema,
+    storageKey: templateDraftKey(editing?.template.id ?? null),
+    base: editing?.sha ?? null,
+    baseSchema: TEMPLATE_DRAFT_BASE,
+  });
 
   const save = useServiceMutation({
     fn: (values: TemplateFormValues) =>
       fetchJson<{ id: string; sha: string }>('/api/templates', {
         method: 'POST',
-        body: JSON.stringify({ ...values, ...(editing ? { id: editing.template.id, baseSha: editing.sha } : {}) }),
+        body: JSON.stringify({ ...values, ...(editing ? { id: editing.template.id, baseSha: draft.saveBase ?? editing.sha } : {}) }),
       }),
     invalidate: [['templates']],
     notify: { success: editing ? 'Şablon güncellendi.' : 'Şablon eklendi.' },
@@ -77,21 +91,16 @@ export function TemplateForm({
       else applyFieldErrors(form as never, error);
     },
     onSuccess: ({ id }) => {
+      draft.discard();
       router.push(`/dashboard/templates/${id}`);
       router.refresh();
     },
   });
 
-  // Kaydedilmemiş değişiklik varken sekme kapanmasın; cihazı silinmiş satırların düzeltmesi de
-  // kaydedilmemiş iştir (çubuk "Kaydedildi" demesin).
+  // Kaydedilmemiş değişiklik varken sayfadan çıkış sorulur; cihazı silinmiş satırların düzeltmesi
+  // de kaydedilmemiş iştir (Kaydet görünür).
   const dirty = form.isDirty || start.dropped > 0;
   const guarded = dirty && !save.isPending && !save.isSuccess;
-  useEffect(() => {
-    if (!guarded) return;
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [guarded]);
 
   const submit = (values: TemplateFormValues) => {
     // Kütüphanede olmayan egzersiz kaydedilmez: satırın altında söylenir.
@@ -125,6 +134,8 @@ export function TemplateForm({
         submitLabel: editing ? 'Kaydet' : 'Şablonu oluştur',
       }}>
       <Form of={form} className="flex flex-col gap-6" onSubmit={submit}>
+        {draft.offer ? <DraftNotice offer={draft.offer} timeZone={timeZone} onRestore={draft.restore} onDismiss={draft.dismiss} /> : null}
+
         <Card>
           <CardHeader>
             <CardTitle>Şablon</CardTitle>
@@ -163,6 +174,7 @@ export function TemplateForm({
         </Card>
 
         <BlockEditor
+          key={draft.generation}
           form={form as unknown as BlocksFormStore}
           path={['blocks']}
           exercises={exercises}
@@ -200,6 +212,9 @@ export function TemplateForm({
                 variant="outline"
                 size="sm"
                 onClick={() => {
+                  // Değişiklikler gider (metin öyle söylüyor): taslak da atılır, tarayıcı ayrıca sormaz.
+                  draft.discard();
+                  guard.current?.release();
                   router.refresh();
                   window.location.reload();
                 }}>
@@ -233,6 +248,8 @@ export function TemplateForm({
           </CardContent>
         </Card>
       </Form>
+      <DraftAutosave form={form} onChange={draft.sync} />
+      <UnsavedChangesGuard ref={guard} active={guarded} description="Çıkarsan bu değişiklikler kaydedilmez." onLeave={draft.discard} />
     </EditorSaveProvider>
   );
 }

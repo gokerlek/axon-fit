@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Form, getDeepErrorEntry, getInput, setErrors, setInput, useField, useForm, type FormStore } from '@formisch/react';
 import { ArrowClockwise, ArrowSquareOut, WarningCircle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
+import { DraftAutosave, DraftNotice, useEditorDraft } from '@/components/block-editor/editor-draft';
 import { EditorSaveProvider, SaveButton } from '@/components/block-editor/editor-save';
 import { LabeledSelect } from '@/components/labeled-select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -13,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { showUndoToast } from '@/components/undo-toast';
+import { UnsavedChangesGuard, type UnsavedChangesGuardHandle } from '@/components/unsaved-changes-guard';
 import {
   addDay,
   dayFromTemplate,
@@ -38,6 +40,7 @@ import { useServiceMutation } from '@/lib/query/use-service';
 import { programFormSchema, type ProgramFormInput, type ProgramFormValues } from '@/lib/schemas/program';
 import type { EditorDevice, PickerExercise } from '@/lib/template-edit';
 import type { TemplateBlock } from '@/lib/template-plan';
+import { PROGRAM_DRAFT_BASE, programDraftKey } from '@/lib/unsaved-changes';
 import { AddDayDialog } from './add-day-dialog';
 import { DayEditor } from './day-editor';
 import { DaysCard } from './days-card';
@@ -93,6 +96,7 @@ function toInput(phases: readonly ProgramPhase[]): ProgramFormInput['phases'] {
  * şablonlarla ortak hareket düzenleyicide (`BlockEditor`). Kimlikler bütün programda
  * benzersiz üretilir. Kayıtta sunucu farkı çıkarır, program geçmişine yazar. "+ Hareket ekle"
  * (seçili güne); Kaydet günün "Hareketler" başlığında, yalnız değişiklik varken (`EditorSaveProvider`).
+ * Kaydedilmemiş değişiklik yerel taslakta durur ve sayfadan çıkış sorulur (PT kararı 16).
  */
 export function ProgramForm({
   clientId,
@@ -146,6 +150,15 @@ export function ProgramForm({
   const [addDayPhaseId, setAddDayPhaseId] = useState<string | null>(null);
   const [saveBlocks, setSaveBlocks] = useState<TemplateBlock[] | null>(null);
   const [dialogKey, setDialogKey] = useState(0);
+  const guard = useRef<UnsavedChangesGuardHandle>(null);
+  // Oluşturma ve düzenleme aynı taslağı paylaşır; sürüm düzenlemede revision, oluştururken null.
+  const draft = useEditorDraft({
+    form,
+    schema: programFormSchema,
+    storageKey: programDraftKey(clientId),
+    base: baseRevision,
+    baseSchema: PROGRAM_DRAFT_BASE,
+  });
 
   // İlk seçili gün: danışanın sıradaki günü, yoksa şu anki evrenin ilk günü.
   const [selectedDayId, setSelectedDayId] = useState(
@@ -334,7 +347,7 @@ export function ProgramForm({
     fn: (values: ProgramFormValues) =>
       fetchJson<{ revision: number; unchanged?: true }>(`/api/clients/${clientId}/program`, {
         method: 'PUT',
-        body: JSON.stringify({ ...values, baseRevision }),
+        body: JSON.stringify({ ...values, baseRevision: draft.saveBase }),
       }),
     notify: 'error',
     onError: (error) => {
@@ -346,6 +359,7 @@ export function ProgramForm({
       selectFromErrorKeys(Object.keys(error.fields));
     },
     onSuccess: (result) => {
+      draft.discard();
       toast.success(
         result.unchanged ? 'Değişiklik yoktu; program aynı kaldı.' : mode === 'create' ? 'Program oluşturuldu.' : 'Program kaydedildi.',
       );
@@ -354,16 +368,10 @@ export function ProgramForm({
     },
   });
 
-  // Kaydedilmemiş değişiklik varken sekme kapanmasın; cihazı silinmiş satırların düzeltmesi de
-  // kaydedilmemiş iştir (çubuk "Kaydedildi" demesin).
+  // Kaydedilmemiş değişiklik varken sayfadan çıkış sorulur; cihazı silinmiş satırların düzeltmesi
+  // de kaydedilmemiş iştir (Kaydet görünür).
   const dirty = form.isDirty || start.dropped > 0;
   const guarded = dirty && !save.isPending && !save.isSuccess;
-  useEffect(() => {
-    if (!guarded) return;
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [guarded]);
 
   const submit = (values: ProgramFormValues) => {
     // Kütüphanede olmayan egzersiz kaydedilmez: satırın altında söylenir, o gün açılır.
@@ -441,6 +449,9 @@ export function ProgramForm({
               variant="outline"
               size="sm"
               onClick={() => {
+                // Değişiklikler gider (metin öyle söylüyor): taslak da atılır, tarayıcı ayrıca sormaz.
+                draft.discard();
+                guard.current?.release();
                 router.refresh();
                 window.location.reload();
               }}>
@@ -484,6 +495,8 @@ export function ProgramForm({
         <p className="sr-only" aria-live="polite">
           {announcement}
         </p>
+
+        {draft.offer ? <DraftNotice offer={draft.offer} timeZone={timeZone} onRestore={draft.restore} onDismiss={draft.dismiss} /> : null}
 
         {start.dropped > 0 ? (
           <Alert>
@@ -548,7 +561,7 @@ export function ProgramForm({
 
         {located && selectedPhase && selectedDay ? (
           <DayEditor
-            key={selectedDay.id}
+            key={`${selectedDay.id}.${draft.generation}`}
             form={form}
             phases={phases}
             phased={phased}
@@ -596,6 +609,13 @@ export function ProgramForm({
         />
 
       </Form>
+      <DraftAutosave form={form} onChange={draft.sync} />
+      <UnsavedChangesGuard
+        ref={guard}
+        active={guarded}
+        description="Çıkarsan bu değişiklikler kaydedilmez; danışan göremez."
+        onLeave={draft.discard}
+      />
     </EditorSaveProvider>
   );
 }

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { GearSix, SignOut, User } from '@phosphor-icons/react';
+import { discardAllDrafts } from '@/components/block-editor/editor-draft';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -20,6 +21,8 @@ import {
 export function UserMenu({ login, appName }: { login: string; appName: string }) {
   async function signOut() {
     await fetch('/api/auth/logout', { method: 'POST' });
+    // Düzenleyici taslakları da gider: aynı tarayıcıyı başkası kullanabilir.
+    discardAllDrafts();
     // Tam yenileme: istemcideki önbellek ve oturumla ilgili her şey temizlensin.
     window.location.href = '/login';
   }

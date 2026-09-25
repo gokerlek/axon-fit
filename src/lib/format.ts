@@ -57,3 +57,22 @@ export function todayIn(timeZone: string, now: Date = new Date()): string {
   const part = (type: 'year' | 'month' | 'day') => parts.find((item) => item.type === type)?.value ?? '';
   return `${part('year')}-${part('month')}-${part('day')}`;
 }
+
+/**
+ * Yakın bir an (ör. taslağın kaydedildiği): "az önce", "5 dakika önce", "bugün 14:05",
+ * "dün 14:05", daha eskisi "23 Eylül 2026 14:05". Gün sınırı uygulamanın saat dilimine göre.
+ */
+export function formatRecent(iso: string, timeZone: string, now: Date = new Date()): string {
+  const at = new Date(iso);
+  const minutes = Math.floor((now.getTime() - at.getTime()) / 60_000);
+  if (minutes < 1) return 'az önce';
+  if (minutes < 60) return `${minutes} dakika önce`;
+  const day = todayIn(timeZone, at);
+  const today = todayIn(timeZone, now);
+  // Dün takvimden: 24 saat çıkarmak yaz saati geçişinde bir günü atlayabilirdi.
+  const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  const time = new Intl.DateTimeFormat('tr-TR', { timeStyle: 'short', timeZone }).format(at);
+  if (day === today) return `bugün ${time}`;
+  if (day === yesterday) return `dün ${time}`;
+  return formatDateTime(iso, timeZone);
+}

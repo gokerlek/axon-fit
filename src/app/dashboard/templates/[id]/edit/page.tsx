@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { PageHeader } from '@/components/page-header';
+import { readAppConfig } from '@/lib/config';
 import { listDevices } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
 import { requirePt } from '@/lib/guards';
@@ -13,7 +14,7 @@ export default async function EditTemplatePage({ params }: { params: Promise<{ i
   await requirePt();
   const { id } = await params;
   if (!TEMPLATE_ID_PATTERN.test(id)) notFound();
-  const [file, exercises, devices] = await Promise.all([readTemplateFile(id), listExercises(), listDevices()]);
+  const [file, exercises, devices, config] = await Promise.all([readTemplateFile(id), listExercises(), listDevices(), readAppConfig()]);
   if (!file) notFound();
   const name = file.template?.name ?? file.name ?? id;
 
@@ -33,6 +34,7 @@ export default async function EditTemplatePage({ params }: { params: Promise<{ i
           editing={{ template: file.template, sha: file.sha }}
           exercises={pickerExercises(exercises)}
           devices={pickerDevices(devices)}
+          timeZone={config.timeZone}
         />
       ) : (
         <InvalidTemplateAlert id={id} problem={file.problem} />

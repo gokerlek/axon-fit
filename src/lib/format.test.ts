@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatDay, formatDayShort, formatNumber, formatSignedWithUnit, formatWithUnit, todayIn } from './format.ts';
+import { formatDay, formatDayShort, formatNumber, formatRecent, formatSignedWithUnit, formatWithUnit, todayIn } from './format.ts';
 
 describe('takvim günü', () => {
   test('gün saat dilimine göre kaymaz', () => {
@@ -24,5 +24,30 @@ describe('takvim günü', () => {
     assert.equal(formatSignedWithUnit(-2.3, 'sn'), '−2,3 sn');
     assert.equal(formatSignedWithUnit(-12, '%'), '−%12');
     assert.equal(formatSignedWithUnit(0, 'kg'), '±0 kg');
+  });
+});
+
+describe('yakın an', () => {
+  // İstanbul'da 25 Eylül 2026 15:00 (UTC+3).
+  const now = new Date('2026-09-25T12:00:00Z');
+  const tz = 'Europe/Istanbul';
+
+  test('bir saatten yakını dakikayla', () => {
+    assert.equal(formatRecent('2026-09-25T11:59:40Z', tz, now), 'az önce');
+    assert.equal(formatRecent('2026-09-25T12:00:30Z', tz, now), 'az önce'); // saat kayması: ileride
+    assert.equal(formatRecent('2026-09-25T11:55:00Z', tz, now), '5 dakika önce');
+    assert.equal(formatRecent('2026-09-25T11:00:01Z', tz, now), '59 dakika önce');
+  });
+
+  test('bugün ve dün uygulamanın saat dilimine göre', () => {
+    assert.equal(formatRecent('2026-09-25T08:05:00Z', tz, now), 'bugün 11:05');
+    // UTC'de 24 Eylül 21:30, İstanbul'da 25 Eylül 00:30: bugün.
+    assert.equal(formatRecent('2026-09-24T21:30:00Z', tz, now), 'bugün 00:30');
+    assert.equal(formatRecent('2026-09-24T20:59:00Z', tz, now), 'dün 23:59');
+    assert.equal(formatRecent('2026-09-23T21:00:00Z', tz, now), 'dün 00:00');
+  });
+
+  test('daha eskisi tam tarih ve saat', () => {
+    assert.equal(formatRecent('2026-09-23T20:59:00Z', tz, now), '23 Eylül 2026 23:59');
   });
 });
