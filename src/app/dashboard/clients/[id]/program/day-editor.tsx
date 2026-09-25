@@ -45,7 +45,7 @@ const LOAD_DESCRIPTION =
 /**
  * Seçili gün: adı, geldiği şablon, gün menüsü (sıra, başka evreye taşı, kopyala, şablon
  * olarak kaydet, sil); hareketleri şablonlarla ortak hareket düzenleyicide, hemen altında formun
- * sonu (`footer`: [Vazgeç] [Kaydet]), en altta günün kas yükü. Evresiz programda evreden söz edilmez.
+ * uyarıları (`footer`), en altta günün kas yükü. Evresiz programda evreden söz edilmez.
  */
 export function DayEditor({
   form,
@@ -77,7 +77,7 @@ export function DayEditor({
   devices: EditorDevice[];
   timeZone: string;
   actions: PhaseActions;
-  /** Formun sonu (uyarılar, [Vazgeç] [Kaydet]): hareket listesinin hemen altında. */
+  /** Formun uyarıları: hareket listesinin hemen altında. */
   footer?: React.ReactNode;
 }) {
   const nameField = useField(form, { path: ['phases', phaseIndex, 'days', dayIndex, 'name'] });

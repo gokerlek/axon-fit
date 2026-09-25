@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Form, getDeepErrorEntry, getInput, setErrors, setInput, useField, useForm, type FormStore } from '@formisch/react';
 import { ArrowClockwise, ArrowSquareOut, WarningCircle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
-import { EditorBar, EditorBarProvider } from '@/components/block-editor/editor-bar';
+import { EditorSaveProvider, SaveButton } from '@/components/block-editor/editor-save';
 import { LabeledSelect } from '@/components/labeled-select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -92,7 +92,7 @@ function toInput(phases: readonly ProgramPhase[]): ProgramFormInput['phases'] {
  * (`program-plan.ts`) evre dizisine tek seferde yazılır; seçili günün hareketleri
  * şablonlarla ortak hareket düzenleyicide (`BlockEditor`). Kimlikler bütün programda
  * benzersiz üretilir. Kayıtta sunucu farkı çıkarır, program geçmişine yazar. "+ Hareket ekle"
- * (seçili güne) ve Kaydet formun sonundaki yapışkan alt çubukta (`EditorBar`).
+ * (seçili güne); Kaydet günün "Hareketler" başlığında, yalnız değişiklik varken (`EditorSaveProvider`).
  */
 export function ProgramForm({
   clientId,
@@ -420,7 +420,7 @@ export function ProgramForm({
     ...Object.fromEntries(templateList.map((template) => [template.id, template.name])),
   };
 
-  // Form sonu (uyarılar, [Vazgeç] [Kaydet]): günün hareket listesinin hemen altında, Kas yükü'nden önce.
+  // Formun uyarıları (başka yerde değişti, gizli hata): günün hareket listesinin hemen altında, Kas yükü'nden önce.
   const formEnd = (
     <>
       {stale ? (
@@ -469,19 +469,17 @@ export function ProgramForm({
           ) : null}
         </Alert>
       ) : null}
-
-      <EditorBar
-        cancelHref={mode === 'edit' ? programHref : detailHref}
-        creating={mode === 'create'}
-        submitLabel={mode === 'create' ? 'Programı oluştur' : 'Kaydet'}
-        dirty={dirty}
-        pending={save.isPending || save.isSuccess}
-      />
     </>
   );
 
   return (
-    <EditorBarProvider>
+    <EditorSaveProvider
+      value={{
+        dirty,
+        pending: save.isPending || save.isSuccess,
+        creating: mode === 'create',
+        submitLabel: mode === 'create' ? 'Programı oluştur' : 'Kaydet',
+      }}>
       <Form of={form} className="flex flex-col gap-6" onSubmit={submit}>
         <p className="sr-only" aria-live="polite">
           {announcement}
@@ -567,7 +565,13 @@ export function ProgramForm({
             footer={formEnd}
           />
         ) : (
-          formEnd
+          <>
+            {formEnd}
+            {/* Gün yoksa hareket düzenleyicisi de yok: Kaydet burada. */}
+            <div className="flex justify-end">
+              <SaveButton />
+            </div>
+          </>
         )}
 
         <AddDayDialog
@@ -592,6 +596,6 @@ export function ProgramForm({
         />
 
       </Form>
-    </EditorBarProvider>
+    </EditorSaveProvider>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { getInput, setInput, useField, useFieldArray } from '@formisch/react';
-import { CheckSquare, Plus } from '@phosphor-icons/react';
+import { CheckSquare, LinkSimple, Plus, Trash } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { SwipeGroup } from '@/components/swipe/swipe-row';
 import { Button } from '@/components/ui/button';
@@ -62,7 +62,7 @@ import {
   type Editor,
   type ItemActions,
 } from './editor-context';
-import { useEditorBar } from './editor-bar';
+import { SaveButton } from './editor-save';
 import { ExerciseSheet, type PickerState } from './exercise-sheet';
 
 /** Açıklama (SPEC §6, tasarım §2): dokunmatikte ve masaüstünde ayrı. */
@@ -78,7 +78,6 @@ const DEFAULT_DESCRIPTION = (
   </>
 );
 
-const SELECTING_DESCRIPTION = 'Gruplamak ya da silmek istediklerini seç.';
 const SHEET_FULL_MESSAGE = 'Şablon dolu: en fazla 40 hareket ve 30 blok olur.';
 
 /**
@@ -159,8 +158,9 @@ function neighbourAfterRemoval(blocks: readonly TemplateBlock[], removed: Readon
  * altında aynı anda tek kart). Kartın üstündeki çizgiden sürükleyerek sıralanır, bir
  * kartın ortasına bırakıp gruplanır; klavyede yüz odaktayken Alt + ok, Delete. Yüz sola
  * kaydırılınca silinir (parmak, kalem, fare); kopyalama yok. "Seç" ile seçim
- * moduna geçilir: seçili kartlar toplu gruplanır ya da silinir (seçim çubuğu `EditorBar`'da;
- * düzenleyici oraya kaydolur). "+ Hareket ekle" listenin altındadır.
+ * moduna geçilir: seçili kartlar toplu gruplanır ya da silinir. Bütün işlemler "Hareketler"
+ * başlığında: normalde [Seç] [Kaydet] (Kaydet yalnız değişiklik varken; `SaveButton`), seçim
+ * modunda [Tümünü seç] [Grupla] [Sil] [Vazgeç]. "+ Hareket ekle" listenin altındadır.
  *
  * Yaprak alanlar (dinlenme, setlerin hedefi, yüzdesi ve AMRAP'ı, kural, cihaz, not) alan
  * olarak bağlanır; yapısal işlemler (ekleme, taşıma, gruplama, set sayısı, tur, hazır
@@ -523,7 +523,7 @@ export function BlockEditor({
     });
   };
 
-  // Esc seçim modundan çıkar (odak çubukta da olabilir).
+  // Esc seçim modundan çıkar (odak başlıktaki düğmelerde de olabilir).
   useEffect(() => {
     if (!selectingNow) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -548,6 +548,7 @@ export function BlockEditor({
   };
 
   const status = selectionStatus(selected.size, check, coarse ? 'touch' : 'mouse');
+  const canGroup = check === 'superset' || check === 'circuit';
 
   // ─── Ekleme sheet'i: sona ya da grubun sonuna ────────────────────────────────────────
 
@@ -606,21 +607,7 @@ export function BlockEditor({
     if (pending) announce(pending);
   };
 
-  // ─── Alt çubuk ve kaydırma ipucu ─────────────────────────────────────────────────────
-
-  useEditorBar({
-    selection: selectingNow
-      ? {
-          count: selected.size,
-          status,
-          canGroup: check === 'superset' || check === 'circuit',
-          canRemove: selected.size > 0,
-          onGroup: groupSelected,
-          onRemove: removeSelected,
-          onCancel: () => leaveSelection({ announce: true, returnFocus: true }),
-        }
-      : null,
-  });
+  // ─── Kaydırma ipucu ──────────────────────────────────────────────────────────────────
 
   const hint = useSyncExternalStore(noSubscription, () => (blocks.length > 0 && picker === null ? readSwipeHint() : null), () => null);
   const firstBlock = blocks[0];
@@ -674,9 +661,10 @@ export function BlockEditor({
       <Card className="overflow-visible max-sm:rounded-none max-sm:bg-transparent max-sm:py-0 max-sm:ring-0">
         <CardHeader className="max-sm:px-0">
           <CardTitle>{title}</CardTitle>
-          {blocks.length >= 2 ? (
-            <CardAction className="row-span-1 self-center">
-              {selectingNow ? (
+          {selectingNow ? (
+            <>
+              {/* Seçim modu: işlemler başlıkta (altta çubuk yok); durum satırı pasif düğmenin nedenini yazar. */}
+              <div className="col-span-2 flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -685,15 +673,52 @@ export function BlockEditor({
                   onClick={() => (allSelected ? setSelection(new Set()) : selectAll())}>
                   {allSelected ? 'Seçimi kaldır' : 'Tümünü seç'}
                 </Button>
-              ) : (
-                <Button ref={selectButtonRef} type="button" variant="outline" size="sm" className="touch:h-11" onClick={enterSelection}>
-                  <CheckSquare data-icon="inline-start" />
-                  Seç
+                <Button
+                  type="button"
+                  size="sm"
+                  aria-disabled={!canGroup || undefined}
+                  className="touch:h-11 aria-disabled:cursor-default aria-disabled:opacity-50"
+                  onClick={() => (canGroup ? groupSelected() : undefined)}>
+                  <LinkSimple data-icon="inline-start" />
+                  Grupla ({selected.size})
                 </Button>
-              )}
-            </CardAction>
-          ) : null}
-          <CardDescription className="col-span-2">{selectingNow ? SELECTING_DESCRIPTION : description}</CardDescription>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  aria-disabled={selected.size === 0 || undefined}
+                  className="touch:h-11 aria-disabled:cursor-default aria-disabled:opacity-50"
+                  onClick={() => (selected.size > 0 ? removeSelected() : undefined)}>
+                  <Trash data-icon="inline-start" />
+                  Sil
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="touch:h-11"
+                  onClick={() => leaveSelection({ announce: true, returnFocus: true })}>
+                  Vazgeç
+                </Button>
+              </div>
+              <p role="status" aria-live="polite" className="col-span-2 text-sm text-muted-foreground">
+                {status}
+              </p>
+            </>
+          ) : (
+            <>
+              <CardAction className="row-span-1 flex items-center gap-2 self-center">
+                {blocks.length >= 2 ? (
+                  <Button ref={selectButtonRef} type="button" variant="outline" size="sm" className="touch:h-11" onClick={enterSelection}>
+                    <CheckSquare data-icon="inline-start" />
+                    Seç
+                  </Button>
+                ) : null}
+                <SaveButton />
+              </CardAction>
+              <CardDescription className="col-span-2">{description}</CardDescription>
+            </>
+          )}
           {hint === 'text' && !selectingNow ? (
             <p className="col-span-2 text-sm text-muted-foreground">İpucu: kartı sola kaydır → sil</p>
           ) : null}

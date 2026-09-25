@@ -145,22 +145,12 @@
 }
 
 /* Dock'un kapladığı alt pay (dock.tsx): büyümüş öğe 64 + iç boşluk 2×8 + kenar 2 = 82 px,
-   altındaki 0.75rem ve güvenli alan; üstüne 8 px. Düzenleyicinin seçim çubuğu bunun üstünde
-   durur. Kartlar ve sayfa, seçim çubuğunun altında kalmasın diye aynı payı bırakır. */
+   altındaki 0.75rem ve güvenli alan; üstüne 8 px. Görünüme kaydırılan kart dock'un altında kalmaz. */
 :root {
   --dock-clearance: calc(0.75rem + 82px + 8px + env(safe-area-inset-bottom));
-  --editor-bar-clearance: calc(var(--dock-clearance) + 7.5rem);
-}
-@media (width >= 48rem) {
-  :root {
-    --editor-bar-clearance: calc(var(--dock-clearance) + 4.5rem);
-  }
-}
-html:has([data-slot="editor-bar"]) {
-  scroll-padding-bottom: var(--editor-bar-clearance);
 }
 
-/* Sıralama sürerken sabit kenar öğeleri (dock, kullanıcı menüsü, düzenleyicinin alt çubuğu)
+/* Sıralama sürerken sabit kenar öğeleri (dock, kullanıcı menüsü)
    çekilir: kenardaki otomatik kaydırma bölgesi ve sürüklenen kart görünür kalır; metin seçilmez. */
 [data-reorder-hide] {
   transition: opacity 160ms cubic-bezier(0.215, 0.61, 0.355, 1);

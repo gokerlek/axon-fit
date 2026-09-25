@@ -28,8 +28,8 @@ export function ExerciseCard({
       data-highlighted={highlighted || undefined}
       data-selected={selected || undefined}
       className={cn(
-        // Vurgulanan ya da odaklanan kart alt çubuğun altında kalmaz (`--editor-bar-clearance`).
-        'relative flex min-w-0 scroll-mt-24 scroll-mb-(--editor-bar-clearance) flex-col rounded-lg border bg-card [--face-bg:var(--card)] text-sm motion-safe:transition-[box-shadow,background-color] motion-safe:duration-300',
+        // Vurgulanan ya da odaklanan kart dock'un altında kalmaz (`--dock-clearance`).
+        'relative flex min-w-0 scroll-mt-24 scroll-mb-(--dock-clearance) flex-col rounded-lg border bg-card [--face-bg:var(--card)] text-sm motion-safe:transition-[box-shadow,background-color] motion-safe:duration-300',
         // Grubun zemini opak kalır (sürüklenen overlay'in altında kart görünmesin). Karışım oklab: kartın
         // renksiz tonuyla oklch ton açısı karışıp pembeye kaymasın.
         tone === 'group' &&

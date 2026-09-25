@@ -530,7 +530,7 @@ function RowCard({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; b
             // Kaydırarak silinince üye 220 ms'de kapanır.
             data-swipe-collapse
             className={cn(
-              'relative flex min-w-0 scroll-mt-24 scroll-mb-(--editor-bar-clearance) flex-col border-t border-primary/25 text-sm motion-safe:transition-[box-shadow,background-color] motion-safe:duration-300',
+              'relative flex min-w-0 scroll-mt-24 scroll-mb-(--dock-clearance) flex-col border-t border-primary/25 text-sm motion-safe:transition-[box-shadow,background-color] motion-safe:duration-300',
               'data-armed:rounded-lg data-dragging:rounded-lg data-dragging:border data-highlighted:rounded-lg data-highlighted:ring-2 data-highlighted:ring-primary/60',
               PLACEHOLDER,
               ARMED,

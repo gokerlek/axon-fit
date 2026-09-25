@@ -7,7 +7,7 @@ import { Field as FormField, Form, getDeepError, setErrors, useForm } from '@for
 import { ArrowClockwise, ArrowSquareOut, WarningCircle } from '@phosphor-icons/react';
 import { BlockEditor, useBlocks } from '@/components/block-editor/block-editor';
 import type { BlocksFormStore } from '@/components/block-editor/block-items';
-import { EditorBar, EditorBarProvider } from '@/components/block-editor/editor-bar';
+import { EditorSaveProvider } from '@/components/block-editor/editor-save';
 import { TemplateMuscleMap } from '@/components/muscle-map/template-muscle-map';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -34,7 +34,7 @@ const LOAD_DESCRIPTION =
  * Tek Formisch formu: şablonun adı ve açıklaması burada, hareketler ortak hareket
  * düzenleyicide (`BlockEditor`, program günleriyle aynı). Listelerin anahtarları blok ve
  * satır kimlikleridir; sürükle-bırak sıralar ve gruplar, ekleme kütüphaneden dokunarak
- * yapılır. "+ Hareket ekle" ve Kaydet formun sonundaki yapışkan alt çubukta (`EditorBar`).
+ * yapılır. Kaydet "Hareketler" başlığında, yalnız değişiklik varken (`EditorSaveProvider`).
  */
 export function TemplateForm({
   editing,
@@ -117,7 +117,13 @@ export function TemplateForm({
   const detailHref = editing ? `/dashboard/templates/${editing.template.id}` : '/dashboard/templates';
 
   return (
-    <EditorBarProvider>
+    <EditorSaveProvider
+      value={{
+        dirty,
+        pending: save.isPending || save.isSuccess,
+        creating: !editing,
+        submitLabel: editing ? 'Kaydet' : 'Şablonu oluştur',
+      }}>
       <Form of={form} className="flex flex-col gap-6" onSubmit={submit}>
         <Card>
           <CardHeader>
@@ -212,13 +218,6 @@ export function TemplateForm({
           </Alert>
         ) : null}
 
-        <EditorBar
-          cancelHref={detailHref}
-          creating={!editing}
-          submitLabel={editing ? 'Kaydet' : 'Şablonu oluştur'}
-          dirty={dirty}
-          pending={save.isPending || save.isSuccess}
-        />
 
         <Card>
           <CardHeader>
@@ -234,6 +233,6 @@ export function TemplateForm({
           </CardContent>
         </Card>
       </Form>
-    </EditorBarProvider>
+    </EditorSaveProvider>
   );
 }
