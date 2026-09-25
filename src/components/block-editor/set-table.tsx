@@ -395,7 +395,7 @@ function SetNumberInput({
       disabled={disabled}
       aria-label={label}
       aria-invalid={Boolean(field.errors) || undefined}
-      className={cn('text-center tabular-nums', column === 'pct' ? 'touch:h-11' : 'h-10 w-13 touch:h-11')}
+      className={cn('text-center tabular-nums', column === 'pct' ? 'touch:h-11' : 'h-10 w-14 px-1.5 touch:h-11')}
       value={shown(field.input)}
       onChange={(event) => onValue(numberOf(event.currentTarget))}
       onKeyDown={(event) => {
@@ -533,7 +533,7 @@ export function SetsSection({ blockIndex, rowIndex, row, exercise, title, open, 
         />
       </button>
       {open ? (
-        <div id={contentId} className="flex flex-col gap-3 px-3 pb-3">
+        <div id={contentId} className="flex flex-col gap-3 px-3 pt-1 pb-3">
           {weighted ? (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground" id={`layout-${row.id}`}>

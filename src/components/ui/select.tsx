@@ -62,7 +62,8 @@ function SelectContent({
   sideOffset = 4,
   align = "center",
   alignOffset = 0,
-  alignItemWithTrigger = true,
+  // Aşağı doğru açılır (Base UI varsayılanı seçili öğeyi tetikleyicinin üstüne ortalar).
+  alignItemWithTrigger = false,
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<

@@ -129,6 +129,16 @@
   button:not(:disabled), [role="button"]:not(:disabled) {
     cursor: pointer;
     }
+  /* Sayı kutularında tarayıcının ok düğmeleri yok: dar kutuda yer kaplayıp rakamı kesiyordu
+     ("30" → "3C"). Artırıp azaltmak −/+ stepper'da ve klavyede ↑/↓ ile. */
+  input[type="number"] {
+    appearance: textfield;
+    }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+    }
   html {
     @apply font-sans;
     }
