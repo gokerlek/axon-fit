@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { getInput, setInput, useField, useFieldArray } from '@formisch/react';
 import { CheckSquare, LinkSimple, Plus, Trash } from '@phosphor-icons/react';
+import { AnimatePresence, motion, type Variants } from 'motion/react';
 import { toast } from 'sonner';
 import { SwipeGroup } from '@/components/swipe/swipe-row';
 import { Button } from '@/components/ui/button';
@@ -25,7 +26,7 @@ import {
   selectionStatus,
 } from '@/lib/edit-messages';
 import { formatNumber } from '@/lib/format';
-import { DRAG } from '@/lib/motion';
+import { DRAG, DURATION, EASE, tween } from '@/lib/motion';
 import type { TemplateInput } from '@/lib/schemas/template';
 import {
   addToGroup,
@@ -79,6 +80,26 @@ const DEFAULT_DESCRIPTION = (
 );
 
 const SHEET_FULL_MESSAGE = 'Şablon dolu: en fazla 40 hareket ve 30 blok olur.';
+
+/**
+ * Başlığın sağındaki düğmeler [Seç] ↔ [Tümünü seç][Grupla][Sil][Vazgeç] değişirken: eskisi hızla
+ * söner, yenisi sağdan kayarak sırayla (35 ms arayla) gelir. Reduced-motion'da yalnız solma
+ * (`MotionConfig reducedMotion="user"`).
+ */
+const HEADER_GROUP: Variants = {
+  hidden: { opacity: 0 },
+  shown: { opacity: 1, transition: { ...tween(DURATION.fast), staggerChildren: 0.035 } },
+  gone: { opacity: 0, transition: tween(DURATION.instant, EASE.exit) },
+};
+const HEADER_ITEM: Variants = {
+  hidden: { opacity: 0, x: 12, scale: 0.96 },
+  shown: { opacity: 1, x: 0, scale: 1, transition: tween(DURATION.fast) },
+};
+const HEADER_TEXT: Variants = {
+  hidden: { opacity: 0, y: -4 },
+  shown: { opacity: 1, y: 0, transition: tween(DURATION.fast) },
+  gone: { opacity: 0, transition: tween(DURATION.instant, EASE.exit) },
+};
 
 /**
  * Kaydırma ipucu (ilk kullanımda bir kez, dokunmatikte): ilk kart 40 px sola "göz kırpar";
@@ -224,6 +245,15 @@ export function BlockEditor({
   /** Seçim modunda Shift+tık aralığının başı (son dokunulan kart). */
   const anchor = useRef<string | null>(null);
   const selectButtonRef = useRef<HTMLButtonElement>(null);
+  /** Seçim modundan Vazgeç/Esc ile çıkınca odak, [Seç] geçiş animasyonundan sonra takılınca ona gider. */
+  const focusSelectOnMount = useRef(false);
+  const selectButton = useCallback((element: HTMLButtonElement | null) => {
+    selectButtonRef.current = element;
+    if (element && focusSelectOnMount.current) {
+      focusSelectOnMount.current = false;
+      element.focus();
+    }
+  }, []);
   /** Sheet açıkken eklenen son satır ve bekleyen duyuru: sheet kapanınca vurgulanır/duyurulur. */
   const lastAdded = useRef<string | null>(null);
   const pendingAnnouncement = useRef<string | null>(null);
@@ -468,7 +498,7 @@ export function BlockEditor({
       setSelection(new Set());
       anchor.current = null;
       if (options?.announce) announce('Seçim modundan çıkıldı');
-      if (options?.returnFocus) requestAnimationFrame(() => requestAnimationFrame(() => selectButtonRef.current?.focus()));
+      if (options?.returnFocus) focusSelectOnMount.current = true;
     },
     [announce],
   );
@@ -661,64 +691,105 @@ export function BlockEditor({
       <Card className="overflow-visible max-sm:rounded-none max-sm:bg-transparent max-sm:py-0 max-sm:ring-0">
         <CardHeader className="max-sm:px-0">
           <CardTitle>{title}</CardTitle>
-          {selectingNow ? (
-            <>
-              {/* Seçim modu: işlemler başlıkta (altta çubuk yok); durum satırı pasif düğmenin nedenini yazar. */}
-              <div className="col-span-2 flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="touch:h-11"
-                  onClick={() => (allSelected ? setSelection(new Set()) : selectAll())}>
-                  {allSelected ? 'Seçimi kaldır' : 'Tümünü seç'}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  aria-disabled={!canGroup || undefined}
-                  className="touch:h-11 aria-disabled:cursor-default aria-disabled:opacity-50"
-                  onClick={() => (canGroup ? groupSelected() : undefined)}>
-                  <LinkSimple data-icon="inline-start" />
-                  Grupla ({selected.size})
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  aria-disabled={selected.size === 0 || undefined}
-                  className="touch:h-11 aria-disabled:cursor-default aria-disabled:opacity-50"
-                  onClick={() => (selected.size > 0 ? removeSelected() : undefined)}>
-                  <Trash data-icon="inline-start" />
-                  Sil
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="touch:h-11"
-                  onClick={() => leaveSelection({ announce: true, returnFocus: true })}>
-                  Vazgeç
-                </Button>
-              </div>
-              <p role="status" aria-live="polite" className="col-span-2 text-sm text-muted-foreground">
-                {status}
-              </p>
-            </>
-          ) : (
-            <>
-              <CardAction className="row-span-1 flex items-center gap-2 self-center">
-                {blocks.length >= 2 ? (
-                  <Button ref={selectButtonRef} type="button" variant="outline" size="sm" className="touch:h-11" onClick={enterSelection}>
-                    <CheckSquare data-icon="inline-start" />
-                    Seç
-                  </Button>
-                ) : null}
-                <SaveButton />
-              </CardAction>
-              <CardDescription className="col-span-2">{description}</CardDescription>
-            </>
-          )}
+          {/* Başlığın sağı: normalde [Seç] [Kaydet], seçim modunda aynı yerde [Tümünü seç] [Grupla] [Sil]
+              [Vazgeç] (sığmazsa sağa yaslı alt satıra iner). Geçiş motion'la. */}
+          <CardAction className="row-span-1 self-center">
+            <AnimatePresence mode="wait" initial={false}>
+              {selectingNow ? (
+                <motion.div
+                  key="select"
+                  variants={HEADER_GROUP}
+                  initial="hidden"
+                  animate="shown"
+                  exit="gone"
+                  className="flex flex-wrap items-center justify-end gap-2">
+                  <motion.span variants={HEADER_ITEM} className="inline-flex">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="touch:h-11"
+                      onClick={() => (allSelected ? setSelection(new Set()) : selectAll())}>
+                      {allSelected ? 'Seçimi kaldır' : 'Tümünü seç'}
+                    </Button>
+                  </motion.span>
+                  <motion.span variants={HEADER_ITEM} className="inline-flex">
+                    <Button
+                      type="button"
+                      size="sm"
+                      aria-disabled={!canGroup || undefined}
+                      className="touch:h-11 aria-disabled:cursor-default aria-disabled:opacity-50"
+                      onClick={() => (canGroup ? groupSelected() : undefined)}>
+                      <LinkSimple data-icon="inline-start" />
+                      Grupla ({selected.size})
+                    </Button>
+                  </motion.span>
+                  <motion.span variants={HEADER_ITEM} className="inline-flex">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      aria-disabled={selected.size === 0 || undefined}
+                      className="touch:h-11 aria-disabled:cursor-default aria-disabled:opacity-50"
+                      onClick={() => (selected.size > 0 ? removeSelected() : undefined)}>
+                      <Trash data-icon="inline-start" />
+                      Sil
+                    </Button>
+                  </motion.span>
+                  <motion.span variants={HEADER_ITEM} className="inline-flex">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="touch:h-11"
+                      onClick={() => leaveSelection({ announce: true, returnFocus: true })}>
+                      Vazgeç
+                    </Button>
+                  </motion.span>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="normal"
+                  variants={HEADER_GROUP}
+                  initial="hidden"
+                  animate="shown"
+                  exit="gone"
+                  className="flex items-center justify-end gap-2">
+                  {blocks.length >= 2 ? (
+                    <motion.span variants={HEADER_ITEM} className="inline-flex">
+                      <Button ref={selectButton} type="button" variant="outline" size="sm" className="touch:h-11" onClick={enterSelection}>
+                        <CheckSquare data-icon="inline-start" />
+                        Seç
+                      </Button>
+                    </motion.span>
+                  ) : null}
+                  <SaveButton />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </CardAction>
+          {/* Açıklama ↔ seçim durumu (pasif düğmenin nedeni burada). */}
+          <div className="col-span-2">
+            <AnimatePresence mode="wait" initial={false}>
+              {selectingNow ? (
+                <motion.p
+                  key="status"
+                  role="status"
+                  aria-live="polite"
+                  variants={HEADER_TEXT}
+                  initial="hidden"
+                  animate="shown"
+                  exit="gone"
+                  className="text-sm text-muted-foreground">
+                  {status}
+                </motion.p>
+              ) : (
+                <motion.div key="description" variants={HEADER_TEXT} initial="hidden" animate="shown" exit="gone">
+                  <CardDescription>{description}</CardDescription>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
           {hint === 'text' && !selectingNow ? (
             <p className="col-span-2 text-sm text-muted-foreground">İpucu: kartı sola kaydır → sil</p>
           ) : null}

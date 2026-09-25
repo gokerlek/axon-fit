@@ -2,8 +2,10 @@
 
 import { createContext, useContext } from 'react';
 import { Check } from '@phosphor-icons/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { DURATION, EASE, tween } from '@/lib/motion';
 
 /**
  * Düzenleyicinin Kaydet'i (tasarım §6, PT kararı 15): sayfa formun kaydetme durumunu verir
@@ -45,15 +47,27 @@ function revealFirstError(form: HTMLFormElement | null) {
 
 /**
  * Formun submit düğmesi. Yalnız kaydedilecek değişiklik varken (oluşturma sayfasında hep)
- * görünür; kaydederken "Kaydediliyor…". Sayfa durum vermediyse hiç çizilmez.
+ * görünür: değişiklik olunca hafifçe büyüyerek belirir, kaydedince söner. Kaydederken
+ * "Kaydediliyor…". Sayfa durum vermediyse hiç çizilmez.
  */
 export function SaveButton() {
   const save = useContext(EditorSaveContext);
-  if (!save || !(save.creating || save.dirty || save.pending)) return null;
+  const visible = save !== null && (save.creating || save.dirty || save.pending);
   return (
-    <Button type="submit" size="sm" disabled={save.pending} className="touch:h-11" onClick={(event) => revealFirstError(event.currentTarget.form)}>
-      {save.pending ? <Spinner data-icon="inline-start" /> : <Check data-icon="inline-start" />}
-      {save.pending ? (save.creating ? 'Oluşturuluyor…' : 'Kaydediliyor…') : save.submitLabel}
-    </Button>
+    <AnimatePresence initial={false}>
+      {save && visible ? (
+        <motion.span
+          key="save"
+          className="inline-flex"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1, transition: tween(DURATION.fast) }}
+          exit={{ opacity: 0, scale: 0.9, transition: tween(DURATION.instant, EASE.exit) }}>
+          <Button type="submit" size="sm" disabled={save.pending} className="touch:h-11" onClick={(event) => revealFirstError(event.currentTarget.form)}>
+            {save.pending ? <Spinner data-icon="inline-start" /> : <Check data-icon="inline-start" />}
+            {save.pending ? (save.creating ? 'Oluşturuluyor…' : 'Kaydediliyor…') : save.submitLabel}
+          </Button>
+        </motion.span>
+      ) : null}
+    </AnimatePresence>
   );
 }
