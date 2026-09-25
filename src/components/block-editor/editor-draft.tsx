@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getInput, setInput, useField, type FormSchema, type FormStore } from '@formisch/react';
 import { ClockCounterClockwise } from '@phosphor-icons/react';
+import { toast } from 'sonner';
 import type * as v from 'valibot';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { showUndoToast } from '@/components/undo-toast';
 import { formatRecent } from '@/lib/format';
 import {
   DRAFT_PREFIX,
@@ -22,7 +24,8 @@ import {
  * Düzenleyicinin yerel taslağı (tasarım PT kararı 16). Kaydedilmemiş değişiklik varken formun
  * bütün girdisi bu tarayıcıya yazılır (localStorage, ~500 ms bekleyerek); sayfa yenilenir,
  * sekme kapanır ya da geri tuşuyla çıkılırsa iş kaybolmaz. Düzenleyici yeniden açılınca taslak
- * yüklenen hâlden farklıysa formun üstünde sunulur, kendiliğinden hiç uygulanmaz.
+ * yüklenen hâlden farklıysa formun üstünde sunulur, kendiliğinden hiç uygulanmaz; karar verilene
+ * kadar da üstüne yazılmaz.
  *
  * Depo her erişimde try/catch içinde: gizli pencere ya da dolu depo taslaksız çalışır. Taslak
  * danışana gitmez; yayın yine yalnız Kaydet'le (değişiklik kaydı ve danışanın ekranı).
@@ -87,10 +90,12 @@ export type EditorDraftController<TBase extends DraftBase> = {
   offer: DraftOffer | null;
   /** "Taslağa devam et": formun girdisi taslak olur, Kaydet belirir. */
   restore: () => void;
-  /** "At": sunulan taslak silinir. */
+  /** "At": sunulan taslak silinir; bu arada değişiklik yapıldıysa yerine o yazılır. */
   dismiss: () => void;
-  /** Kaydedildi ya da kaydetmeden çıkılıyor: taslak silinir, bu düzenleyici bir daha yazmaz. */
+  /** Kaydedildi ya da değişiklikler bilerek atıldı ("Sayfayı yenile"): taslak silinir, bu düzenleyici bir daha yazmaz. */
   discard: () => void;
+  /** "Kaydetmeden çık": bu oturumun işi atılır; karar bekleyen taslak yerinde kalır. */
+  leave: () => void;
   /**
    * Kayıtta gönderilecek sürüm. Çakışan taslağa devam edildiyse taslağınki: sunucu 412 döner,
    * formun "başka bir yerde değişti" uyarısı çıkar (başkasının kaydı sessizce ezilmez).
@@ -131,7 +136,8 @@ export function useEditorDraft<TSchema extends v.GenericSchema<Record<string, un
 
   const write = useCallback(() => {
     timer.current = null;
-    if (state.current.stopped || !form.isDirty) return;
+    // Sunulan taslak karar bekliyor: PT seçmeden üstüne yazılmaz (yenileme, geri tuşu onu silmesin).
+    if (state.current.stopped || state.current.offer || !form.isDirty) return;
     const savedAt = new Date().toISOString();
     writeRaw(storageKey, serializeDraft({ version: DRAFT_VERSION, base: state.current.writeBase, savedAt, input: getInput(form) }));
   }, [form, storageKey]);
@@ -201,21 +207,36 @@ export function useEditorDraft<TSchema extends v.GenericSchema<Record<string, un
   const restore = useCallback(() => {
     const draft = state.current.offer;
     if (!draft) return;
+    // Uyarı dururken yapılan değişiklikler taslağın altında kalır: "Geri al" onları geri getirir.
+    const edited = form.isDirty ? getInput(form) : null;
     const saveBase = draftConflict(draft.base, base) ? draft.base : base;
     state.current.writeBase = saveBase;
     setContinued({ base: saveBase });
     present(null);
     setInput(form, { input: draft.input as v.InferInput<TSchema> });
     setGeneration((value) => value + 1);
+    if (!edited) return;
+    const after = getInput(form);
+    showUndoToast('Taslağa devam edildi; az önceki değişikliklerin yerine geçti.', () => {
+      // Sonraki düzenlemeler silinmesin (program formundaki "Geri al" ile aynı denetim).
+      if (draftDiffers(getInput(form), after)) {
+        toast.error('Sonrasında başka değişiklik yapıldı; geri alınamadı.');
+        return;
+      }
+      state.current.writeBase = base;
+      setContinued(null);
+      setInput(form, { input: edited as v.InferInput<TSchema> });
+      setGeneration((value) => value + 1);
+    });
   }, [form, base, present]);
 
   const dismiss = useCallback(() => {
     present(null);
-    // Bu arada değişiklik yapıldıysa depodaki artık bugünkü iştir; yapılmadıysa sunulan taslak.
-    if (form.isDirty) return;
     cancel();
-    removeRaw(storageKey);
-  }, [form, storageKey, cancel, present]);
+    // Karar verilene kadar bugünkü iş yazılmadı: değişiklik varsa şimdi o yazılır, yoksa sunulan taslak silinir.
+    if (form.isDirty) write();
+    else removeRaw(storageKey);
+  }, [form, storageKey, cancel, write, present]);
 
   const discard = useCallback(() => {
     state.current.stopped = true;
@@ -224,11 +245,21 @@ export function useEditorDraft<TSchema extends v.GenericSchema<Record<string, un
     present(null);
   }, [storageKey, cancel, present]);
 
+  /** "Kaydetmeden çık": bu oturumun işi atılır; karar bekleyen taslak yerinde kalır. */
+  const leave = useCallback(() => {
+    const offered = state.current.offer;
+    state.current.stopped = true;
+    cancel();
+    if (offered) writeRaw(storageKey, serializeDraft(offered));
+    else removeRaw(storageKey);
+  }, [storageKey, cancel]);
+
   return {
     offer: offer ? { savedAt: offer.savedAt, conflict: draftConflict(offer.base, base) } : null,
     restore,
     dismiss,
     discard,
+    leave,
     saveBase: continued ? continued.base : base,
     generation,
     sync,

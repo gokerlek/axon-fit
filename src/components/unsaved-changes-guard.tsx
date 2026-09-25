@@ -19,6 +19,16 @@ export type UnsavedChangesGuardHandle = {
   release: () => void;
 };
 
+/** Etkin korumalar: bağlantı olmayan çıkışlar (Çıkış yap) da sorsun. */
+const askers = new Set<(proceed: () => void) => void>();
+
+/** Kaydedilmemiş değişiklik varsa önce sorar; yoksa hemen çalıştırır. */
+export function confirmLeave(proceed: () => void): void {
+  const ask = askers.values().next().value;
+  if (ask) ask(proceed);
+  else proceed();
+}
+
 /**
  * Kaydedilmemiş değişiklik varken sayfadan çıkışı tutar (tasarım PT kararı 16); şablon ve
  * program düzenleyicisi ortak.
@@ -28,6 +38,7 @@ export type UnsavedChangesGuardHandle = {
  *   çizilen düğmeler, kullanıcı menüsü): tıklamanın varsayılanı belgede, yakalama aşamasında
  *   (her şeyden önce) engellenir ve sorulur. Next `Link` `defaultPrevented` olan tıklamada
  *   gezinmez. Hangi tıklamanın sayfadan çıkardığına `leaveHref` karar verir.
+ * - Bağlantı olmayan çıkışlar (kullanıcı menüsündeki "Çıkış yap"): `confirmLeave` aynı pencereyi açar.
  * - Tarayıcının geri/ileri tuşu (popstate) güvenilir biçimde durdurulamaz: o zaman değişiklikler
  *   yerel taslakta kalır ve düzenleyiciye dönünce sunulur (`block-editor/editor-draft.tsx`).
  */
@@ -40,12 +51,13 @@ export function UnsavedChangesGuard({
   /** Kaydedilmemiş değişiklik var ve kaydedilmiyor. */
   active: boolean;
   description: string;
-  /** "Kaydetmeden çık": gitmeden hemen önce (taslağı atar). */
+  /** "Kaydetmeden çık": gitmeden hemen önce (bu oturumun taslağını atar). */
   onLeave: () => void;
   ref?: React.Ref<UnsavedChangesGuardHandle>;
 }) {
   const router = useRouter();
   const [href, setHref] = useState<string | null>(null);
+  const [action, setAction] = useState<(() => void) | null>(null);
   const released = useRef(false);
   const stay = useRef<HTMLButtonElement>(null);
 
@@ -81,27 +93,35 @@ export function UnsavedChangesGuard({
       event.preventDefault();
       setHref(next);
     };
+    const ask = (proceed: () => void) => setAction(() => proceed);
     window.addEventListener('beforeunload', warn);
     document.addEventListener('click', intercept, true);
+    askers.add(ask);
     return () => {
       window.removeEventListener('beforeunload', warn);
       document.removeEventListener('click', intercept, true);
+      askers.delete(ask);
     };
   }, [active]);
 
   const leave = () => {
-    if (href === null) return;
+    if (href === null && action === null) return;
     released.current = true;
     onLeave();
     setHref(null);
-    router.push(href);
+    setAction(null);
+    if (href !== null) router.push(href);
+    else action?.();
   };
 
   return (
     <AlertDialog
-      open={href !== null}
+      open={href !== null || action !== null}
       onOpenChange={(open) => {
-        if (!open) setHref(null);
+        if (!open) {
+          setHref(null);
+          setAction(null);
+        }
       }}>
       <AlertDialogContent initialFocus={stay}>
         <AlertDialogHeader>

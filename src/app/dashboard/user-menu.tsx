@@ -13,18 +13,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { confirmLeave } from '@/components/unsaved-changes-guard';
 
 /**
  * Sağ üstteki kullanıcı menüsü: ayarlar ve çıkış burada (üst çubuk yok, SPEC §6).
  * Avatar GitHub profil resmi; yüklenmezse kişi ikonu.
  */
 export function UserMenu({ login, appName }: { login: string; appName: string }) {
-  async function signOut() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    // Düzenleyici taslakları da gider: aynı tarayıcıyı başkası kullanabilir.
-    discardAllDrafts();
-    // Tam yenileme: istemcideki önbellek ve oturumla ilgili her şey temizlensin.
-    window.location.href = '/login';
+  function signOut() {
+    // Kaydedilmemiş değişiklik varsa önce düzenleyicinin uyarısı: "Kal" oturumu korur, Kaydet çalışır.
+    confirmLeave(async () => {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      // Düzenleyici taslakları sayfa gerçekten kapanınca gider (aynı tarayıcıyı başkası kullanabilir); tarayıcının
+      // "Ayrıl?" sorusunda kalınırsa taslak ve otomatik yazım sürer. Düzenleyicilerin pagehide yazımından sonra çalışır.
+      window.addEventListener('pagehide', () => discardAllDrafts(), { once: true });
+      // Tam yenileme: istemcideki önbellek ve oturumla ilgili her şey temizlensin.
+      window.location.href = '/login';
+    });
   }
 
   return (

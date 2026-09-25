@@ -249,7 +249,7 @@ export function TemplateForm({
         </Card>
       </Form>
       <DraftAutosave form={form} onChange={draft.sync} />
-      <UnsavedChangesGuard ref={guard} active={guarded} description="Çıkarsan bu değişiklikler kaydedilmez." onLeave={draft.discard} />
+      <UnsavedChangesGuard ref={guard} active={guarded} description="Çıkarsan bu değişiklikler kaydedilmez." onLeave={draft.leave} />
     </EditorSaveProvider>
   );
 }

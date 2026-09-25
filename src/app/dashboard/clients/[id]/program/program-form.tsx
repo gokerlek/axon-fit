@@ -614,7 +614,7 @@ export function ProgramForm({
         ref={guard}
         active={guarded}
         description="Çıkarsan bu değişiklikler kaydedilmez; danışan göremez."
-        onLeave={draft.discard}
+        onLeave={draft.leave}
       />
     </EditorSaveProvider>
   );
