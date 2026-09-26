@@ -90,6 +90,8 @@ export const clientSchema = v.object({
   note: v.optional(noteSchema),
   createdAt: timestamp,
   status: v.picklist(CLIENT_STATUSES),
+  /** Durumun son değiştiği an (ör. duraklatmadan dönüş): kaçan gün penceresi bundan önce sayılmaz (`attention.ts`). */
+  statusChangedAt: v.optional(timestamp),
   modules: v.object({
     health: v.object({
       enabled: v.boolean(),

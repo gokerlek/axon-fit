@@ -459,8 +459,9 @@ export function applyProgramEdit(
     }),
   }));
 
+  const at = now.toISOString();
   // Antrenman günleri: göndermeyen eski sekme kayıttakini değiştirmez; değişince danışanın katmanı silinir.
-  const schedule = ptScheduleEdit(stored, input.weekdays);
+  const schedule = ptScheduleEdit(stored, input.weekdays, at);
   const diff = [
     ...diffProgram(
       { phased: stored.phased, currentPhaseId: stored.current.phaseId, phases: stored.phases },
@@ -478,7 +479,6 @@ export function applyProgramEdit(
   });
   const changes = [...diff, ...targets.changes, ...note];
 
-  const at = now.toISOString();
   const revision = stored.revision + 1;
   const currentChanged = body.currentPhaseId !== stored.current.phaseId;
   const toggled = stored.phased !== body.phased;

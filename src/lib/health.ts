@@ -3,6 +3,7 @@ import * as v from 'valibot';
 import { readClient } from './clients';
 import { clientRepoName, GithubError } from './github/client';
 import { readJson, writeJson } from './github/files';
+import { dropNotices } from './notices-store';
 import {
   addMeasurements,
   MEASUREMENT_LOCK_INFO,
@@ -91,6 +92,8 @@ async function updateMeasurements(
     const next = change(current?.record ?? emptyHealthRecord());
     try {
       await writeJson(repo, HEALTH_PATH, next, { sha: current?.sha, message });
+      // Genel bakış'ın "Dikkat gerektirenler"i ölçüm eğiliminden: yeniden türetilsin.
+      dropNotices(clientId);
       return next;
     } catch (error) {
       if (attempt === 0 && error instanceof GithubError && error.status === 409) continue;

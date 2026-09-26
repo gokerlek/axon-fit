@@ -207,8 +207,8 @@ export const programSchema = v.pipe(
     current: v.object({ phaseId: phaseIdSchema, startedAt: timestamp }),
     /** Antrenman ekranı yazar (revision artmaz). */
     rotation: v.object({ lastDayId: v.optional(dayIdSchema), lastCompletedAt: v.optional(timestamp) }),
-    /** PT'nin antrenman günleri; yoksa seçilmemiş. */
-    schedule: v.optional(v.object({ weekdays: weekdaysSchema })),
+    /** PT'nin antrenman günleri; yoksa seçilmemiş. `at`: geçerli günlerin son değiştiği an (kaçan gün penceresi). */
+    schedule: v.optional(v.object({ weekdays: weekdaysSchema, at: v.optional(timestamp) })),
     /** Danışanın değiştirdiği günler: revision artmaz, PT günleri değiştirince silinir. Geçerli = bu ?? PT'ninki. */
     clientSchedule: v.optional(v.object({ weekdays: clientWeekdaysSchema, at: timestamp })),
     /** Danışanın satır hedefleri (bitişte "Evet, güncelle"): revision artmaz, PT satırı değiştirince düşer. */

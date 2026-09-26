@@ -195,6 +195,23 @@ describe('danışan listesi: durum kayıtla aynı kalır', () => {
     assert.equal(w.gh.count(`write ${APP_REPO}/${INDEX_PATH}`), 0);
   });
 
+  test('durumun anı yalnız durum değişince yazılır (duraklatmadan dönüşte kaçan gün penceresi)', async () => {
+    const w = world();
+    const client = seedClient(w.gh, w.clock);
+    await updateClient(w.store, client.id, form(client, { note: 'Hedef: 5 km' }));
+    assert.equal((await w.record(client.id)).statusChangedAt, undefined);
+    w.clock.advance(1);
+    await updateClient(w.store, client.id, form(client, { status: 'paused' }));
+    const paused = w.clock.now().toISOString();
+    assert.equal((await w.record(client.id)).statusChangedAt, paused);
+    w.clock.advance(1);
+    await updateClient(w.store, client.id, form(client, { status: 'paused', name: 'Ayşe Demir-Kaya' }));
+    assert.equal((await w.record(client.id)).statusChangedAt, paused);
+    w.clock.advance(1);
+    await updateClient(w.store, client.id, form(client, { status: 'active' }));
+    assert.equal((await w.record(client.id)).statusChangedAt, w.clock.now().toISOString());
+  });
+
   test('antrenman geçmişi kayda yazılır; formda gelmezse kayıttaki kalır (öneri tabanı, açık soru 4)', async () => {
     const w = world();
     const client = seedClient(w.gh, w.clock);

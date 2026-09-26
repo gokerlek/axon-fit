@@ -433,7 +433,7 @@ describe('kaydın uygulanması', () => {
     assert.equal(applyProgramEdit(withDays, { ...same, weekdays: [5, 1, 3] }, ctx, simdi), null);
     const changed = applyProgramEdit(withDays, { ...same, weekdays: [1, 4] }, ctx, simdi);
     assert.ok(changed);
-    assert.deepEqual(changed.program.schedule, { weekdays: [1, 4] });
+    assert.deepEqual(changed.program.schedule, { weekdays: [1, 4], at: simdi.toISOString() });
     assert.equal('clientSchedule' in changed.program, false);
     assert.equal(changed.program.revision, 6);
     assert.deepEqual(texts(changed.changes), ['Antrenman günleri: Pzt, Çar, Cum → Pzt, Per', 'Danışanın günleri kaldırıldı (Sal, Per, Cmt)']);

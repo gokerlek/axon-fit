@@ -4,6 +4,7 @@ import type { DeviceWithSource } from './devices';
 import type { ExerciseWithSource } from './exercises';
 import { clientRepoName, GithubError } from './github/client';
 import { deleteFile, getFileSha, readJson, writeJson } from './github/files';
+import { dropNotices } from './notices-store';
 import { applyProgramEdit, commitMessage, type DiffContext } from './program-diff';
 import {
   createProgramRecord,
@@ -75,7 +76,10 @@ export async function writeProgramFile(
     const issue = parsed.issues[0];
     throw new GithubError(`Program kaydı geçersiz: ${v.getDotPath(issue) ?? 'dosya'}: ${issue.message}`, 500);
   }
-  return writeJson(clientRepoName(clientId), PROGRAM_PATH, parsed.output, { sha: options.sha, message: options.message });
+  const written = await writeJson(clientRepoName(clientId), PROGRAM_PATH, parsed.output, { sha: options.sha, message: options.message });
+  // Genel bakış'ın özeti (antrenman günleri, evre, bildirimler) programdan: yeniden türetilsin.
+  dropNotices(clientId);
+  return written;
 }
 
 /** Farkın cümleleri için egzersiz adları ve kayıt türleri, cihaz adları. */
@@ -198,5 +202,6 @@ export async function deleteProgram(clientId: string): Promise<boolean> {
   const sha = await getFileSha(repo, PROGRAM_PATH);
   if (!sha) return false;
   await deleteFile(repo, PROGRAM_PATH, { sha, message: PROGRAM_DELETE_MESSAGE });
+  dropNotices(clientId);
   return true;
 }

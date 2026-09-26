@@ -315,3 +315,98 @@ export async function commitFiles(
     throw toGithubError(error, 'commit');
   }
 }
+
+/* --- koşullu okuma (ETag): PT'nin canlı görünümü --- */
+
+/**
+ * Sık tazelenen okumalar (canlı görünüm, tasarım §4.6) koşullu istekle gider: son yanıtın ETag'i
+ * `If-None-Match` olarak gönderilir, değişmediyse GitHub 304 döner ve bu, birincil saatlik kotadan düşmez.
+ * Yanıtlar süreç belleğinde (sunucusuzda örnek başına; en iyi çaba), anahtar başına tek kayıt.
+ */
+const conditionals = boundedCache<{ etag: string; value: unknown }>(300);
+
+function statusOf(error: unknown): number | undefined {
+  return typeof error === 'object' && error !== null && 'status' in error && typeof error.status === 'number' ? error.status : undefined;
+}
+
+async function conditionalGet<D, T>(
+  key: string,
+  run: (headers: Record<string, string>) => Promise<{ data: D; headers: { etag?: string | undefined } }>,
+  map: (data: D) => T,
+): Promise<T> {
+  const cached = conditionals.get(key);
+  try {
+    const response = await run(cached ? { 'if-none-match': cached.etag } : {});
+    const value = map(response.data);
+    if (response.headers.etag) conditionals.set(key, { etag: response.headers.etag, value });
+    return value;
+  } catch (error) {
+    if (cached && statusOf(error) === 304) return cached.value as T;
+    throw error;
+  }
+}
+
+export type CommitRef = { sha: string; date: string };
+
+/** Yola (dosya ya da klasör) dokunan son commit, koşullu; hiç yoksa (ya da repo boşsa) null. */
+export async function latestCommit(repo: string, path: string, api: Octokit = gh()): Promise<CommitRef | null> {
+  assertRepoAllowed(repo);
+  try {
+    return await conditionalGet(
+      `commits:${repo}:${path}`,
+      (headers) => api.rest.repos.listCommits({ owner: owner(), repo, path, per_page: 1, headers }),
+      (data): CommitRef | null => {
+        const [first] = data;
+        const date = first?.commit.committer?.date ?? first?.commit.author?.date;
+        return first && date ? { sha: first.sha, date } : null;
+      },
+    );
+  } catch (error) {
+    // Hiç commit'i olmayan repo 409 döner.
+    if (statusOf(error) === 409) return null;
+    throw toGithubError(error, repo);
+  }
+}
+
+export type ChangedFile = { filename: string; status: string; sha: string | null };
+
+const commitFileLists = boundedCache<ChangedFile[]>(200);
+
+/** Commit'in değiştirdiği dosyalar (commit kimliğiyle değişmez: süreç belleğinde). */
+export async function commitChangedFiles(repo: string, sha: string, api: Octokit = gh()): Promise<ChangedFile[]> {
+  assertRepoAllowed(repo);
+  const key = `${repo}@${sha}`;
+  const cached = commitFileLists.get(key);
+  if (cached) return cached;
+  try {
+    const { data } = await api.rest.repos.getCommit({ owner: owner(), repo, ref: sha });
+    const files = (data.files ?? []).map((file) => ({ filename: file.filename, status: file.status, sha: file.sha ?? null }));
+    commitFileLists.set(key, files);
+    return files;
+  } catch (error) {
+    throw toGithubError(error, sha);
+  }
+}
+
+/** `readJson`'un koşullu hâli: dosya değişmediyse (304) bellekteki içerik. Yoksa null; bozuk JSON 500. */
+export async function readJsonConditional<T>(repo: string, path: string, api: Octokit = gh()): Promise<StoredFile<T> | null> {
+  assertRepoAllowed(repo);
+  try {
+    return await conditionalGet(
+      `contents:${repo}:${path}`,
+      (headers) => api.rest.repos.getContent({ owner: owner(), repo, path, headers }),
+      (data): StoredFile<T> => {
+        if (Array.isArray(data) || data.type !== 'file' || !('content' in data)) throw new GithubError(`${path} bir dosya değil.`, 400);
+        try {
+          return { content: JSON.parse(decode(data.content)) as T, sha: data.sha };
+        } catch {
+          throw new BrokenJsonError(path, data.sha);
+        }
+      },
+    );
+  } catch (error) {
+    if (statusOf(error) === 404) return null;
+    if (error instanceof GithubError) throw error;
+    throw toGithubError(error, path);
+  }
+}

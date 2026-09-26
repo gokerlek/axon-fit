@@ -85,8 +85,8 @@ export function planPut(stored: SessionDoc | null, incoming: SessionDoc, ctx: Co
 
 /* --- bitiş --- */
 
-/** Programdaki gün (bütün evrelerde aranır); bulunamazsa null. */
-function dayOf(program: Program | null, dayId: string | undefined): TemplateBody | null {
+/** Programdaki gün (bütün evrelerde aranır); bulunamazsa null. PT'nin canlı görünümü de sayar (`live-session.ts`). */
+export function dayOf(program: Program | null, dayId: string | undefined): TemplateBody | null {
   if (!program || !dayId) return null;
   for (const phase of program.phases) {
     const day = phase.days.find((item) => item.id === dayId);
