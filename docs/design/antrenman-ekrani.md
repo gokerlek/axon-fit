@@ -33,6 +33,7 @@
 9. Danışan geçmişini görür ve istediği veriyi (antrenman, hareket, set) **silebilir**; her silmede "geri alınamaz" uyarısı. Git geçmişinde eski sürüm kalır: metin bunu dürüstçe söyler.
 10. Önceki kararlar: günler sırayla döner (A → B → C); danışan başka gün seçebilir, **PT'ye bildirim gider**; hazır oluşluk ve ağrı yoklaması sağlık modülünün isteğe bağlı parçasıdır (onaylıysa, §7.5); "bu hafta x/3".
 11. **Danışan uygulamasına alt dock** gelir (PT'ninki gibi, telefon öncelikli): Bugün · Geçmiş · İlerleme; Programlar sonraki fazda. Antrenman sırasında dock gizlenir.
+12. **Antrenman günleri (haftanın günleri, takvim değil).** Programı yapan PT, "Haftada kaç gün"ün yanında haftanın hangi günleri çalışılacağını işaretler (Pzt · Sal · Çar · Per · Cum · Cmt · Paz). **Danışan kendi günlerini güncelleyebilir**: doğrudan uygulanır, program geçmişine danışan değişikliği olarak yazılır, PT'ye bildirim gider; PT geçerli günleri görür ve değiştirebilir. Program günlere çakılmaz: A → B → C sırası seçilen günlere dağılır, kaçan gün içeriği atlatmaz (§2.11).
 
 ---
 
@@ -367,6 +368,16 @@ Hesaplar (`workout-summary.ts`, saf):
 
 ### 2.9 Yoklama sonrası: seans zorluğu
 SPEC §4'e göre seans RPE'si bitişten ~10 dk sonra sorulur. Bugün'de 10 dk – 24 saat arasında kart: "Antrenman ne kadar zordu?" (CR-10) ve süre önceden dolu. Zorunlu değil (v1'de kaydı kilitliyordu).
+
+### 2.11 Antrenman günleri (PT kararı 12)
+
+- **Veri.** PT'nin seçtiği günler programda: `schedule.weekdays` (ISO hafta günü, 1 = Pazartesi … 7 = Pazar; boş = seçilmemiş). Danışanın değişikliği PT'nin düzenleyicisini 412'ye düşürmesin diye `clientTargets` gibi ayrı bir katmanda durur (`clientSchedule: { weekdays, at }`); **geçerli günler = danışanınki ?? PT'ninki**. PT günleri değiştirirse danışanın katmanı temizlenir (son söz PT'nin). Seçilen gün sayısı haftalık sıklıktan farklıysa iki tarafta da küçük uyarı; engel değil.
+- **PT.** Program düzenleyicide "Haftada kaç gün" seçicisinin altında 7 günlük `ToggleGroup` (çoklu, 44 px). Danışan değiştirdiyse yanında "Danışan değiştirdi · Sal, Per, Cmt" rozeti ve [PT'nin günlerine dön].
+- **Danışan.** Bugün kartında haftanın 7 günü nokta şeridi (seçili günler halkalı, yapılanlar dolu, kaçanlar soluk) ve "Günlerini değiştir" (sheet: 7 gün çoklu seçim, sıklık uyarısı, Kaydet). Ayarlar'da da aynı satır. Kaydedince program geçmişine `client` türünde "Antrenman günleri: Pzt, Çar, Cum → Sal, Per, Cmt" yazılır, PT'ye bildirim gider.
+- **Sıra (rotasyon) değişmez.** Sıradaki antrenman gününün içeriği bugünkü gibi `nextDayId`'den gelir; günler yalnız **ne zaman** sorusunu cevaplar. Bugün seçili günse "Bugün antrenman günün · Gün B"; değilse "Dinlenme günü · sıradaki antrenman Çarşamba (Gün B)". Dinlenme gününde de başlatılabilir (sayılır). Kaçan gün içeriği atlatmaz: Gün A bir sonraki seçili güne kayar.
+- **Hafta sayımı.** "Bu hafta x/y": y = seçili gün sayısı (yoksa `daysPerWeek`); hafta Pazartesi başlar, danışanın saat dilimiyle (uygulama ayarı).
+- **PT tarafı.** Genel bakış'ta "Bugün antrenman günü olanlar" ve "Kaçırdı" (seçili gün geçti, o gün antrenman yok) — "Dikkat gerektirenler"e girer (faz 12).
+- **Sonra.** Telefona "bugün antrenman günün" hatırlatması web push ister; şimdilik yok.
 
 ### 2.10 Geçmiş (liste, detay, silme)
 ```
@@ -885,7 +896,7 @@ Her faz tek başına yayınlanır, 375 px'te doğrulanır, saf mantık `npm test
 | 3 | Hareket ekranı v0 | tek hareketli bloklar: önceden dolu set (geçen sefer / aralığın altı), "Set bitti" + ✓ + 400 ms kilit, dinlenme (zaman damgalı, 208 px, ±15, −10 sn bip, yinelenen alarm, kilit uyarısı, Wake Lock), Su içtim, `localStorage` outbox, devam etme, basit bitir; Bugün'de "Antrenmana başla" ve yarım kart; rotasyon |
 | 4 | Set türleri ve gruplar | süperset/devre/kompleks turları, AMRAP, süreli set, ısınma, ayar notu çipi, aşırı yük uyarısı, zorluk hareket başına + "Kolaydı" kısayolu |
 | 5 | Akış ve geçme | ☰ sheet, şimdi yap, tek dokunuş geç + toast, Geçilenler, Değiştir, hareket ekle |
-| 6 | Bitirme ve bildirim | "bitirelim mi?", erken bitir (hazır rotasyon satırı, kapalı neden), başka gün seçme, `notices`, sağlık ayrıntısının `health.json`'a ayrılması, PT Genel bakış'ta Bildirimler |
+| 6 | Bitirme ve bildirim | "bitirelim mi?", erken bitir (hazır rotasyon satırı, kapalı neden), başka gün seçme, `notices`, sağlık ayrıntısının `health.json`'a ayrılması, PT Genel bakış'ta Bildirimler, **antrenman günleri** (§2.11: PT'nin gün seçicisi, danışanın güncellemesi, Bugün'de gün şeridi ve "dinlenme günü" metni) |
 | 7 | Öneri katmanı | `exposure.ts` (yalnız deload sayımı, aşama sırası), `recommend.ts` (aşamalar, 2-for-2, mutlak `inc`, ayar seansı, `lighter`), kart gerekçeleri |
 | 8 | Program güncelleme | `program-feedback.ts`, tek soruluk bitiş sheet'i + "Tek tek seç", `client` log türü, `clientTargets` + `saveProgram` koruması + düzenleyici rozeti, `proposals.json`, PT'nin öneri kartı |
 | 9 | Özet karuseli + geçmiş | 4 kart, rekorlar, geçen seferle fark; `/me/gecmis` liste, detay, onaylı silme (üst üste düğmeler, iz dosyası, genel commit mesajı, önbellek etiketi) |
