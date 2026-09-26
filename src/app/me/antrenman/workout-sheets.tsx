@@ -16,15 +16,17 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Spinner } from '@/components/ui/spinner';
 import { Stepper } from '@/components/ui/stepper';
 import { formatKg, formatNumber } from '@/lib/format';
-import { gridOf, type LoadSpec, type TrackingType } from '@/lib/progression';
+import { EFFORT_LABELS, gridOf, type Effort, type LoadSpec, type TrackingType } from '@/lib/progression';
 import { SESSION_LIMITS } from '@/lib/schemas/session';
-import type { WorkoutSummary } from '@/lib/workout-session';
+import { EFFORT_CHOICES, type EffortChoice, type WorkoutSummary } from '@/lib/workout-session';
+import { AmrapReps, EffortPrompt, type EffortPromptView } from './rest-panel';
 
 const BOTTOM = 'gap-0 rounded-t-2xl pb-[env(safe-area-inset-bottom)]';
 
 /**
  * Basit bitiş (tasarım §2.7 a/b; tam sorular, rotasyon satırı ve neden Faz 6'da):
- * - hepsi bitti: "Antrenman tamamlandı, bitirelim mi?" ve özet satırı;
+ * - hepsi bitti: "Antrenman tamamlandı, bitirelim mi?" ve özet satırı; son hareketin dinlenmesi
+ *   olmadığı için onun "nasıldı?" sorusu (ve AMRAP'la bittiyse "Kaç tekrar yaptın?") burada;
  * - erken: "Antrenmanı bitir?", yapılan/planlanan set ve yapılmayanlar;
  * - hiç set yok: dosya ilk sette oluştuğu için silinecek bir şey de yok; "Antrenmanı iptal et".
  * Yıkıcı işlem yorgun başparmağın düştüğü yerde durmaz: silme bu sheet'te yok.
@@ -34,6 +36,10 @@ export function FinishSheet({
   onOpenChange,
   summary,
   busy,
+  effort,
+  amrap,
+  onEffort,
+  onAmrap,
   onFinish,
   onCancelWorkout,
 }: {
@@ -41,14 +47,22 @@ export function FinishSheet({
   onOpenChange: (open: boolean) => void;
   summary: WorkoutSummary;
   busy: boolean;
+  /** Son hareketin zorluğu (hepsi bittiyse). */
+  effort: EffortPromptView | null;
+  /** Son set AMRAP'sa yaptığı tekrar. */
+  amrap: { reps: number } | null;
+  onEffort: (entryId: string, effort: EffortChoice) => void;
+  onAmrap: (reps: number) => void;
   onFinish: () => void;
   onCancelWorkout: () => void;
 }) {
   const none = summary.sets === 0;
   const all = !none && summary.remaining.length === 0;
+  // Odak birincil eylemde (zorluk düğmeleri önce gelse de).
+  const primary = useRef<HTMLButtonElement>(null);
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" showCloseButton={false} className={BOTTOM}>
+      <SheetContent side="bottom" showCloseButton={false} className={BOTTOM} initialFocus={primary}>
         <SheetHeader className="gap-1.5 pt-5">
           {all ? <CheckCircle className="mb-1 size-10 text-primary" /> : null}
           <SheetTitle className="text-lg font-semibold">
@@ -74,10 +88,16 @@ export function FinishSheet({
             </ul>
           ) : null}
         </SheetHeader>
+        {all && (amrap || effort) ? (
+          <div className="flex flex-col gap-1 border-t px-4 pt-2">
+            {amrap ? <AmrapReps reps={amrap.reps} onChange={onAmrap} /> : null}
+            {effort ? <EffortPrompt view={effort} onAnswer={onEffort} /> : null}
+          </div>
+        ) : null}
         <SheetFooter className="pt-2">
           {none ? (
             <>
-              <Button size="lg" className="h-14 w-full text-base" onClick={() => onOpenChange(false)}>
+              <Button ref={primary} size="lg" className="h-14 w-full text-base" onClick={() => onOpenChange(false)}>
                 Kalanlara dön
               </Button>
               <Button variant="outline" className="h-11 w-full" disabled={busy} onClick={onCancelWorkout}>
@@ -86,7 +106,7 @@ export function FinishSheet({
             </>
           ) : (
             <>
-              <Button size="lg" className="h-14 w-full text-base" disabled={busy} onClick={onFinish}>
+              <Button ref={primary} size="lg" className="h-14 w-full text-base" disabled={busy} onClick={onFinish}>
                 {busy ? <Spinner data-icon="inline-start" /> : null}
                 Bitir
               </Button>
@@ -109,13 +129,18 @@ export type EditTarget = {
   spec: LoadSpec;
   kg: number | undefined;
   value: number;
+  /** Zorluk (AMRAP setinde sorulmaz: `null`). */
+  effort: Effort | undefined | null;
   /** Sunucuya ulaştı mı: silme metni buna göre ("deponun geçmişinde kalır"). */
   sent: boolean;
 };
 
+export type EditValues = { kg?: number | undefined; value: number; effort?: Effort | undefined };
+
 /**
  * "Seti düzelt" (tasarım §2.4): en üstte, stepper'lardan ve Kaydet'ten uzakta, metin olarak "Seti sil"
- * (yıkıcı renk, onaylı); altında ağırlık ve tekrar; en altta Kaydet. Zorluk Faz 4'te.
+ * (yıkıcı renk, onaylı); altında ağırlık, tekrar ve zorluk (set başına ayrım burada; AMRAP'ta yok); en
+ * altta Kaydet.
  */
 export function EditSetSheet({
   target,
@@ -125,7 +150,7 @@ export function EditSetSheet({
 }: {
   target: EditTarget | null;
   onClose: () => void;
-  onSave: (values: { kg?: number | undefined; value: number }) => void;
+  onSave: (values: EditValues) => void;
   onDelete: () => void;
 }) {
   // Odak Kaydet'te: ilk odaklanabilir öğe "Seti sil" olurdu (Enter yıkıcı işleme gitmesin).
@@ -147,11 +172,12 @@ function EditSetBody({
 }: {
   target: EditTarget;
   saveRef: React.RefObject<HTMLButtonElement | null>;
-  onSave: (values: { kg?: number | undefined; value: number }) => void;
+  onSave: (values: EditValues) => void;
   onDelete: () => void;
 }) {
   const [kg, setKg] = useState(target.kg);
   const [value, setValue] = useState(target.value);
+  const [effort, setEffort] = useState(target.effort ?? undefined);
   const weighted = target.trackingType === 'weight_reps' && target.kg !== undefined;
   const duration = target.trackingType === 'duration';
   const grid = weighted ? gridOf(target.spec) : null;
@@ -201,9 +227,32 @@ function EditSetBody({
           decrementLabel={duration ? 'Süreyi azalt' : 'Tekrarı azalt'}
           incrementLabel={duration ? 'Süreyi artır' : 'Tekrarı artır'}
         />
+        {target.effort !== null ? (
+          <div role="group" aria-labelledby="edit-effort" className="flex flex-col gap-1.5 pt-1">
+            <p id="edit-effort" className="text-sm font-medium">
+              Zorluk
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {EFFORT_CHOICES.map((choice) => (
+                <Button
+                  key={choice}
+                  variant={effort === choice ? 'default' : 'secondary'}
+                  aria-pressed={effort === choice}
+                  className="h-11"
+                  onClick={() => setEffort(effort === choice ? undefined : choice)}>
+                  {EFFORT_LABELS[choice]}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
       <SheetFooter className="pt-4">
-        <Button ref={saveRef} size="lg" className="h-14 w-full text-base" onClick={() => onSave({ ...(weighted ? { kg } : {}), value })}>
+        <Button
+          ref={saveRef}
+          size="lg"
+          className="h-14 w-full text-base"
+          onClick={() => onSave({ ...(weighted ? { kg } : {}), value, ...(target.effort !== null ? { effort } : {}) })}>
           Kaydet
         </Button>
       </SheetFooter>

@@ -4,6 +4,7 @@ import { canonicalJson, mergeAll } from './session-merge.ts';
 import type { WorkoutDay } from './workout-plan.ts';
 import type { RestTimer } from './workout-rest.ts';
 import type { SetDraft } from './workout-session.ts';
+import { parseSetTimer, type SetTimer } from './workout-timer.ts';
 
 /**
  * Telefondaki antrenman kaydı ve gönderim kuyruğu (tasarım §4.3, §4.4) — saf. Kaynak telefondur: etkin
@@ -59,10 +60,12 @@ export type LocalWorkout = {
   /** Bu antrenmandaki dinlenme sayısı: kilit uyarısı yalnız ilkinde. */
   restCount: number;
   draft: SetDraft | null;
+  /** Süreli setin sayacı ("Başlat ▶"); sayılmıyorsa null. */
+  timer: SetTimer | null;
 };
 
 export function createLocalWorkout(doc: SessionDoc, plan: WorkoutDay, acked: SessionDoc | null = null): LocalWorkout {
-  return { v: LOCAL_VERSION, doc, acked, plan, rev: 0, ackedRev: 0, dueRev: 0, lastSentAt: null, slow: false, rest: null, restCount: 0, draft: null };
+  return { v: LOCAL_VERSION, doc, acked, plan, rev: 0, ackedRev: 0, dueRev: 0, lastSentAt: null, slow: false, rest: null, restCount: 0, draft: null, timer: null };
 }
 
 /** Yerel değişiklik: `send` set değişikliğidir (gönderim ister). */
@@ -183,5 +186,6 @@ export function parseLocalWorkout(text: string | null): LocalWorkout | null {
     rest: restOf(raw.rest),
     restCount: count(raw.restCount),
     draft: isDraft(raw.draft) ? raw.draft : null,
+    timer: parseSetTimer(raw.timer),
   };
 }

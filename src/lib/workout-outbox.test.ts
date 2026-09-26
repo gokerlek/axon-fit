@@ -20,6 +20,7 @@ import {
   withChange,
 } from './workout-outbox.ts';
 import { startRest } from './workout-rest.ts';
+import { startSetTimer } from './workout-timer.ts';
 
 const set = (id: string, minute: number, extra = {}) => workingSet(id, minute, { setIndex: 0, ...extra });
 const docWith = (sets: ReturnType<typeof set>[], extra: Partial<SessionDoc> = {}) =>
@@ -92,12 +93,13 @@ describe('kuyruk: sunucunun yanıtı', () => {
 });
 
 describe('kuyruk: telefondaki kayıt', () => {
-  test('yazılıp okunur; dinlenme ve taslak korunur', () => {
+  test('yazılıp okunur; dinlenme, taslak ve süreli setin sayacı korunur', () => {
     const local = {
       ...withChange(createLocalWorkout(docWith([]), workoutDay()), docWith([set('st_aaaaaaaa', 1)]), { send: true }),
       rest: startRest('st_aaaaaaaa', 90, 1_000),
       restCount: 1,
       draft: { rowId: 'r_aaaaaa', setIndex: 1, kg: 25 },
+      timer: startSetTimer({ rowId: 'r_bbbbbb', setIndex: 0, target: { min: 30, max: 45 } }, 2_000),
       lastSentAt: 500,
     };
     const parsed = parseLocalWorkout(JSON.stringify(local));

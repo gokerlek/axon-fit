@@ -1,10 +1,10 @@
 import { loadSpecFor, type DeviceLoadSettings } from './device-loads.ts';
 import { currentPhaseOf, nextDayId, weekProgress } from './program-plan.ts';
-import { planSession, type LoadSpec, type ProgressionRule, type SessionPlan, type TrackingType } from './progression.ts';
+import { planSession, warmupSets, type LoadSpec, type ProgressionRule, type SessionPlan, type TrackingType } from './progression.ts';
 import type { Program } from './schemas/program.ts';
 import type { SessionDoc, SessionEntry, SessionIndex, SessionIndexRow } from './schemas/session.ts';
 import { exerciseHistory } from './session-results.ts';
-import { effectiveDeviceId, planInputFor, type PlanExercise, type TemplateBlock, type TemplateBody } from './template-plan.ts';
+import { effectiveDeviceId, firstForMuscleRowIds, planInputFor, type PlanExercise, type TemplateBlock, type TemplateBody } from './template-plan.ts';
 import type { PreviousSet } from './workout-cursor.ts';
 
 /**
@@ -18,7 +18,10 @@ import type { PreviousSet } from './workout-cursor.ts';
  *   cihazın ağırlık ızgarası (`loadSpecFor`), geçmiş yalnız aynı egzersiz ve aynı cihazla
  *   (`exerciseHistory`, SPEC §7.3). Geçmiş index'ten seçilen son bitmiş antrenmanlardır.
  * - "Önceki" sütunu ve önceden dolu tekrar için geçen seferki setler (`lastTime`): aynı satırın en
- *   yeni kaydı; satırın kaydı yoksa aynı egzersiz ve cihazınki.
+ *   yeni kaydı; satırın kaydı yoksa aynı egzersiz ve cihazınki. Danışanın ayar notu (sehpa, koltuk)
+ *   da aynı kayıttan gelir (`setupNote`); hareketin kaydı açılınca ona taşınır.
+ * - Isınma setleri saklanmaz, burada hesaplanır (`warmupSets`, v1 §7.8): halterle bileşik hareket, kas
+ *   grubunun gündeki ilk hareketi, en hafif çalışma seti 40 kg ve üstü (piramitte ilk basamak).
  * - Bugün'ün sayıları index'ten: "bu hafta x/3" (`weekProgress`), yarım antrenman, bitmiş
  *   antrenmanların bugünkü suyu.
  */
@@ -29,6 +32,9 @@ export const HISTORY_SESSIONS = 8;
 /** Plan için egzersiz alanları: kural, yük, kaslar, başlık. */
 export type WorkoutExercise = PlanExercise & { loadStepKg: number; minLoadKg: number };
 export type WorkoutDevice = DeviceLoadSettings & { id: string };
+
+/** Isınma seti: ağırlık ve tekrar (hacme ve rekora girmez). */
+export type WarmupSet = { kg: number; reps: number };
 
 export type WorkoutRow = {
   rowId: string;
@@ -46,6 +52,10 @@ export type WorkoutRow = {
   lastTime: PreviousSet[];
   /** PT'nin satır notu. */
   note?: string;
+  /** Isınma setleri; hesaplanmadıysa (ya da eski anlık görüntüde) yok. */
+  warmups?: WarmupSet[];
+  /** Danışanın geçen seferki ayar notu ("Sehpa 3. delik"). */
+  setupNote?: string;
 };
 
 export type WorkoutDay = {
@@ -111,6 +121,47 @@ export function lastTimeOf(
   );
 }
 
+/**
+ * Geçen seferki ayar notu: aynı satırın (yoksa aynı egzersiz ve cihazın) en yeni kaydındaki. Not o
+ * kayıtta silinmişse yok: danışanın sildiği not geri gelmez (kayıt açılırken not taşındığı için
+ * dokunulmayan not da her seferinde sürer).
+ */
+export function setupNoteOf(
+  history: readonly Pick<SessionDoc, 'status' | 'startedAt' | 'entries'>[],
+  select: { rowId: string; exerciseId: string; deviceId?: string | undefined },
+): string | undefined {
+  const finished = history.filter((doc) => doc.status === 'finished').sort((a, b) => time(b.startedAt) - time(a.startedAt));
+  const find = (test: (entry: SessionEntry) => boolean) => {
+    for (const doc of finished) {
+      const entry = doc.entries.find(test);
+      if (entry) return entry;
+    }
+    return undefined;
+  };
+  const entry =
+    find((item) => item.rowId === select.rowId && item.exerciseId === select.exerciseId) ??
+    find((item) => item.exerciseId === select.exerciseId && item.deviceId === select.deviceId);
+  return entry?.setupNote || undefined;
+}
+
+/** Isınma setleri: yalnız ağırlıklı harekette; en hafif çalışma setine göre (piramitte ilk basamak). */
+export function warmupsFor(
+  exercise: Pick<PlanExercise, 'trackingType' | 'equipment' | 'category'>,
+  spec: LoadSpec,
+  plan: SessionPlan,
+  isFirstForMuscle: boolean,
+): WarmupSet[] {
+  if (exercise.trackingType !== 'weight_reps' || plan.sets.length === 0) return [];
+  const lightest = Math.min(...plan.sets.map((set) => set.weightKg));
+  return warmupSets({
+    workWeightKg: lightest,
+    spec,
+    isBarbell: exercise.equipment === 'barbell',
+    isCompound: exercise.category === 'compound',
+    isFirstForMuscle,
+  }).map((set) => ({ kg: set.weightKg, reps: set.target }));
+}
+
 /** İstenen gün (programda yoksa) ya da rotasyonda sıradaki gün; program boşsa null. */
 export function resolveDay(program: Program, dayId?: string | null) {
   const planned = nextDayId(program);
@@ -141,19 +192,23 @@ export function buildWorkoutDay(input: {
   const deviceIds = new Set(input.devices.keys());
   const history = input.history.filter((doc) => doc.status === 'finished');
 
-  const rows: Record<string, WorkoutRow> = {};
-  const blocks: TemplateBlock[] = [];
-  for (const block of day.blocks) {
+  const blocks: TemplateBlock[] = day.blocks.flatMap((block) => {
     const kept = block.rows.filter((row) => input.exercises.has(row.exerciseId));
-    if (kept.length === 0) continue;
-    blocks.push({ ...block, rows: kept });
-    for (const row of kept) {
+    return kept.length > 0 ? [{ ...block, rows: kept }] : [];
+  });
+  const first = firstForMuscleRowIds({ blocks }, input.exercises);
+  const rows: Record<string, WorkoutRow> = {};
+  for (const block of blocks) {
+    for (const row of block.rows) {
       const exercise = input.exercises.get(row.exerciseId) as WorkoutExercise;
       const deviceId = effectiveDeviceId(row, exercise, deviceIds);
       const device = deviceId ? input.devices.get(deviceId) : undefined;
       const spec = loadSpecFor(exercise, device);
       const { rule, sets } = planInputFor(row, exercise);
       const results = exerciseHistory(history, { exerciseId: row.exerciseId, deviceId });
+      const plan = planSession({ spec, rule, sets, history: results, rowId: row.id });
+      const warmups = warmupsFor(exercise, spec, plan, first.has(row.id));
+      const setupNote = setupNoteOf(history, { rowId: row.id, exerciseId: row.exerciseId, deviceId });
       rows[row.id] = {
         rowId: row.id,
         blockId: block.id,
@@ -163,9 +218,11 @@ export function buildWorkoutDay(input: {
         ...(deviceId ? { deviceId } : {}),
         spec,
         rule,
-        plan: planSession({ spec, rule, sets, history: results, rowId: row.id }),
+        plan,
         lastTime: lastTimeOf(history, { rowId: row.id, exerciseId: row.exerciseId, deviceId }),
         ...(row.note ? { note: row.note } : {}),
+        ...(warmups.length > 0 ? { warmups } : {}),
+        ...(setupNote ? { setupNote } : {}),
       };
     }
   }

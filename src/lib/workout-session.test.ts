@@ -2,27 +2,38 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as v from 'valibot';
 import { sessionDocSchema, type SessionDoc } from './schemas/session.ts';
-import { waterOf } from './session-index.ts';
+import { volumeOf, waterOf } from './session-index.ts';
+import { toSetResults } from './session-results.ts';
 import { at, DAY_A, programFile, sessionDoc, sessionEntry, W1, workingSet } from './testing/session-fixtures.ts';
-import { workoutDay } from './testing/workout-fixtures.ts';
+import { dayWithBlocks, workoutDay } from './testing/workout-fixtures.ts';
 import {
   addWaterTap,
   afterLog,
   clockText,
   cursorOf,
   deleteSet,
+  easyShortcut,
   editSet,
+  effortQuestions,
   elapsedText,
   findSet,
   logSet,
+  logWarmup,
   newSessionDoc,
   nextSet,
   nextText,
+  overloadState,
   previousText,
+  setEntryEffort,
+  setSetEffort,
+  setSetupNote,
+  setupNoteOf,
   setValueText,
   setViews,
   targetCell,
   targetText,
+  unlogWarmup,
+  warmupViews,
   workoutSummary,
 } from './workout-session.ts';
 
@@ -273,10 +284,174 @@ describe('antrenman belgesi: set türleri', () => {
     doc = logNext(day, doc, 3, { value: 13 });
     const plank = nextSet(day, doc);
     assert.deepEqual({ row: plank?.rowId, kg: plank?.kg, value: plank?.value, rest: plank?.restAfterSeconds }, { row: 'r_bbbbbb', kg: undefined, value: 30, rest: 45 });
+    // Süreli harekette aşırı yük sorulmaz.
+    assert.equal(plank && overloadState(day, doc, plank, 50), 'none');
     doc = logNext(day, doc, 4, { value: 40 });
     const set = doc.entries.find((entry) => entry.rowId === 'r_bbbbbb')?.sets[0];
     assert.deepEqual(set && { seconds: set.seconds, kg: set.kg, reps: set.reps }, { seconds: 40, kg: undefined, reps: undefined });
     assert.equal(v.safeParse(sessionDocSchema, doc).success, true);
+  });
+});
+
+describe('antrenman belgesi: aşırı yük, ısınma, ayar notu', () => {
+  /** Bench 60 kg × 10 (geçen sefer): bugün 62,5 kg, ısınma 20 × 10 · 40 × 5. */
+  function heavyDay() {
+    const history = [
+      sessionDoc({
+        id: 's_aaaaaaaa',
+        status: 'finished',
+        startedAt: at(-1000),
+        finishedAt: at(-960),
+        entries: [
+          sessionEntry('e_aaaaaa', {
+            rowId: 'r_aaaaaa',
+            setupNote: 'Sehpa 3. delik',
+            sets: [0, 1, 2].map((index) => workingSet(`st_0000000${index}`, -999 + index, { setIndex: index, kg: 60, reps: 10, target: { min: 8, max: 10 } })),
+          }),
+        ],
+      }),
+    ];
+    return workoutDay({ history });
+  }
+
+  test('aşırı yük hareket başına bir kez sorulur; onaylanan set işaretlenir, PT\'ye bir bildirim', () => {
+    const day = heavyDay();
+    let doc = start(day);
+    const next = nextSet(day, doc);
+    if (!next) throw new Error('Set yok.');
+    assert.equal(next.plannedKg, 62.5);
+    // Sınır: plan + max(%20, 5 kg) = 75 kg.
+    assert.equal(overloadState(day, doc, next, 75), 'none');
+    assert.equal(overloadState(day, doc, next, 77.5), 'ask');
+    doc = logNext(day, doc, 1, { kg: 80 });
+    assert.equal(doc.entries[0]?.sets[0]?.overload, undefined);
+    doc = logSet(day, doc, { rowId: 'r_aaaaaa', setIndex: 1, kg: 80, value: 8, overload: true, stamp: stamp(2), random: sequence() }).doc;
+    const second = nextSet(day, doc);
+    assert.equal(second && overloadState(day, doc, second, 80), 'confirmed');
+    doc = logSet(day, doc, { rowId: 'r_aaaaaa', setIndex: 2, kg: 80, value: 8, overload: true, stamp: stamp(3), random: sequence() }).doc;
+    assert.deepEqual(doc.entries[0]?.sets.map((set) => set.overload ?? false), [false, true, true]);
+    assert.deepEqual(doc.notices, [{ kind: 'overload', at: at(2) }]);
+    // Başka hareket kendi onayını ister.
+    assert.equal(overloadState(day, doc, { rowId: 'r_bbbbbb', plannedKg: 62.5 }, 80), 'ask');
+    assert.equal(v.safeParse(sessionDocSchema, doc).success, true);
+  });
+
+  test('ısınma: satırdaki ✓ yazar ve geri alır; imleç, hacim ve motor etkilenmez', () => {
+    const day = heavyDay();
+    assert.deepEqual(day.rows.r_aaaaaa?.warmups, [
+      { kg: 20, reps: 10 },
+      { kg: 40, reps: 5 },
+    ]);
+    let doc = start(day);
+    doc = logWarmup(day, doc, { rowId: 'r_aaaaaa', index: 1, stamp: stamp(1), random: sequence() });
+    assert.equal(logWarmup(day, doc, { rowId: 'r_aaaaaa', index: 1, stamp: stamp(2), random: sequence() }), doc);
+    assert.deepEqual(warmupViews(day, doc, 'r_aaaaaa').map((view) => [view.index, view.kg, view.reps, view.logged?.type ?? null]), [
+      [0, 20, 10, null],
+      [1, 40, 5, 'warmup'],
+    ]);
+    // Kayıt ısınmayla açıldı; geçen seferki ayar notu taşındı; set sayılmaz.
+    assert.equal(doc.entries[0]?.status, 'pending');
+    assert.equal(doc.entries[0]?.setupNote, 'Sehpa 3. delik');
+    assert.equal(nextSet(day, doc)?.position, 0);
+    doc = logNext(day, doc, 3, { kg: 62.5, value: 10 });
+    assert.equal(volumeOf(doc), 625);
+    assert.equal(toSetResults(doc.entries[0]!).length, 1);
+    const warm = warmupViews(day, doc, 'r_aaaaaa')[1]?.logged?.id;
+    doc = unlogWarmup(day, doc, { rowId: 'r_aaaaaa', index: 1, stamp: stamp(4) });
+    assert.equal(warmupViews(day, doc, 'r_aaaaaa')[1]?.logged, undefined);
+    assert.ok(warm && doc.deletedSetIds.includes(warm));
+    assert.equal(v.safeParse(sessionDocSchema, doc).success, true);
+    // İkinci satır (aynı kas) ve ilk kez (20 kg) ısınmasız.
+    assert.equal(day.rows.r_bbbbbb?.warmups, undefined);
+    assert.equal(workoutDay().rows.r_aaaaaa?.warmups, undefined);
+  });
+
+  test('ayar notu: geçen seferki; değiştirilir, silinir, kayıt yoksa açılır', () => {
+    const day = heavyDay();
+    let doc = start(day);
+    assert.equal(setupNoteOf(day, doc, 'r_aaaaaa'), 'Sehpa 3. delik');
+    assert.equal(setSetupNote(day, doc, { rowId: 'r_aaaaaa', note: '  Sehpa 3. delik ', stamp: stamp(1) }), doc);
+    doc = setSetupNote(day, doc, { rowId: 'r_aaaaaa', note: 'Sehpa   4. delik', stamp: stamp(1), random: sequence() });
+    assert.equal(setupNoteOf(day, doc, 'r_aaaaaa'), 'Sehpa 4. delik');
+    assert.deepEqual(doc.entries[0] && { status: doc.entries[0].status, sets: doc.entries[0].sets.length, updatedAt: doc.entries[0].updatedAt }, {
+      status: 'pending',
+      sets: 0,
+      updatedAt: at(1),
+    });
+    doc = setSetupNote(day, doc, { rowId: 'r_aaaaaa', note: '', stamp: stamp(2) });
+    assert.equal(setupNoteOf(day, doc, 'r_aaaaaa'), undefined);
+    assert.equal(doc.entries[0]?.setupNote, undefined);
+    // Aynı egzersiz ve cihaz başka satırda: not ayara ait olduğu için onda da.
+    assert.equal(setupNoteOf(day, start(day), 'r_bbbbbb'), 'Sehpa 3. delik');
+    assert.equal(setupNoteOf(workoutDay(), start(), 'r_aaaaaa'), undefined);
+    assert.equal(v.safeParse(sessionDocSchema, doc).success, true);
+  });
+});
+
+describe('antrenman belgesi: zorluk ve "Kolaydı"', () => {
+  test('hareket bitince sorulur; cevap AMRAP olmayan bütün setlere', () => {
+    const day = workoutDay();
+    let doc = start(day);
+    doc = logNext(day, doc, 1);
+    const first = doc.entries[0]?.sets[0]?.id ?? '';
+    assert.deepEqual(effortQuestions(day, doc, first), []);
+    doc = logNext(day, doc, 2);
+    doc = logNext(day, doc, 3);
+    const last = doc.entries[0]?.sets.at(-1)?.id ?? '';
+    const questions = effortQuestions(day, doc, last);
+    assert.deepEqual(questions.map((item) => [item.rowId, item.title, item.answer]), [['r_aaaaaa', 'Bench Press', undefined]]);
+    doc = setEntryEffort(doc, questions[0]?.entryId ?? '', 'hard', stamp(4));
+    assert.deepEqual(doc.entries[0]?.sets.map((set) => [set.effort, set.editedAt]), [
+      ['hard', at(4)],
+      ['hard', at(4)],
+      ['hard', at(4)],
+    ]);
+    assert.equal(effortQuestions(day, doc, last)[0]?.answer, 'hard');
+  });
+
+  test('AMRAP\'ta zorluk sorulmaz: piramidin tek tam yük seti AMRAP', () => {
+    const day = dayWithBlocks([
+      {
+        id: 'b_aaaaaa',
+        kind: 'single',
+        restSeconds: 90,
+        rows: [{ id: 'r_aaaaaa', exerciseId: 'goblet-squat', sets: [{ min: 12, max: 12, loadPct: 80 }, { min: 10, max: 10, loadPct: 90 }, { min: 8, max: 8, amrap: true }] }],
+      },
+      { id: 'b_bbbbbb', kind: 'single', restSeconds: 90, rows: [{ id: 'r_bbbbbb', exerciseId: 'bench-press', sets: [{ min: 8, max: 10 }, { min: 8, max: 10, amrap: true }] }] },
+    ]);
+    let doc = start(day);
+    for (const minute of [1, 2, 3]) doc = logNext(day, doc, minute);
+    assert.deepEqual(effortQuestions(day, doc, doc.entries[0]?.sets.at(-1)?.id ?? ''), []);
+    // Düz setlerde son set AMRAP: ilk set sorulur, cevap AMRAP setine yazılmaz.
+    doc = logNext(day, doc, 4);
+    doc = logNext(day, doc, 5, { value: 13 });
+    const bench = doc.entries.find((entry) => entry.rowId === 'r_bbbbbb');
+    const questions = effortQuestions(day, doc, bench?.sets.at(-1)?.id ?? '');
+    assert.equal(questions.length, 1);
+    doc = setEntryEffort(doc, questions[0]?.entryId ?? '', 'easy', stamp(6));
+    assert.deepEqual(doc.entries.find((entry) => entry.rowId === 'r_bbbbbb')?.sets.map((set) => set.effort), ['easy', undefined]);
+  });
+
+  test('"Kolaydı · sonraki set": tepede ve sıradaki set aynı yükte; dokununca sonraki set bir adım', () => {
+    const day = workoutDay();
+    let doc = start(day);
+    doc = logNext(day, doc, 1, { kg: 60, value: 9 });
+    const below = doc.entries[0]?.sets[0]?.id ?? '';
+    assert.equal(easyShortcut(day, doc, below), null);
+    doc = logNext(day, doc, 2, { kg: 60, value: 10 });
+    const top = doc.entries[0]?.sets[1]?.id ?? '';
+    assert.deepEqual(easyShortcut(day, doc, top), { kg: 62.5, taken: false });
+    assert.equal(nextSet(day, doc)?.kg, 60);
+    doc = setSetEffort(doc, top, 'easy', stamp(3));
+    assert.equal(nextSet(day, doc)?.kg, 62.5);
+    assert.deepEqual(easyShortcut(day, doc, top), { kg: 62.5, taken: true });
+    // Geri alınınca sonraki set yine aynı ağırlık.
+    doc = setSetEffort(doc, top, undefined, stamp(4));
+    assert.equal(findSet(doc, top)?.set.effort, undefined);
+    assert.equal(nextSet(day, doc)?.kg, 60);
+    // Son set: sıradaki başka hareket.
+    doc = logNext(day, doc, 5, { kg: 60, value: 10 });
+    assert.equal(easyShortcut(day, doc, doc.entries[0]?.sets.at(-1)?.id ?? ''), null);
   });
 });
 

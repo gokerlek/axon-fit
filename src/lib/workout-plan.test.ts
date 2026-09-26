@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import type { SessionDoc, SessionIndex } from './schemas/session.ts';
 import { indexRowOf } from './session-index.ts';
 import { at, DAY_A, DAY_B, PHASE, programFile, sessionDoc, sessionEntry, singleBlock, workingSet } from './testing/session-fixtures.ts';
-import { parsedProgram, workoutDay } from './testing/workout-fixtures.ts';
-import { activeRow, dayExerciseIds, historyRows, lastTimeOf, sessionWaterOn, weekOf } from './workout-plan.ts';
+import { BENCH, GOBLET, parsedProgram, workoutDay } from './testing/workout-fixtures.ts';
+import { activeRow, dayExerciseIds, historyRows, lastTimeOf, sessionWaterOn, setupNoteOf, warmupsFor, weekOf } from './workout-plan.ts';
 
 let counter = 0;
 const setId = () => `st_${(++counter).toString(36).padStart(8, '0')}`;
@@ -98,6 +98,43 @@ describe('günün planı', () => {
     const previous = lastTimeOf([withExtra], { rowId: 'r_aaaaaa', exerciseId: 'bench-press' });
     assert.equal(previous.length, 3);
     assert.deepEqual(lastTimeOf([withExtra], { rowId: 'r_aaaaaa', exerciseId: 'bench-press', deviceId: 'smith-makinesi' }), []);
+  });
+});
+
+describe('günün planı: ısınma ve ayar notu', () => {
+  const barbell = { trackingType: 'weight_reps' as const, loadStepKg: 2.5, minLoadKg: 20 };
+  const plan = (weights: number[]) => ({
+    sets: weights.map((weightKg, setIndex) => ({ weightKg, target: 8, amrap: false, setIndex })),
+    topWeightKg: Math.max(...weights),
+    reason: 'hold' as const,
+  });
+
+  test('halterle bileşik, kasın ilk hareketi, en hafif set ≥ 40 kg; piramitte ilk basamağa göre', () => {
+    assert.deepEqual(warmupsFor(BENCH, barbell, plan([100, 100]), true), [
+      { kg: 20, reps: 10 },
+      { kg: 50, reps: 5 },
+      { kg: 75, reps: 3 },
+    ]);
+    // Piramit: 60 → 80 → 100 kg; ısınma 60 kg'a göre.
+    assert.deepEqual(warmupsFor(BENCH, barbell, plan([60, 80, 100]), true), [
+      { kg: 20, reps: 10 },
+      { kg: 37.5, reps: 5 },
+    ]);
+    assert.deepEqual(warmupsFor(BENCH, barbell, plan([100]), false), []);
+    assert.deepEqual(warmupsFor(BENCH, barbell, plan([35]), true), []);
+    assert.deepEqual(warmupsFor(GOBLET, { trackingType: 'weight_reps', loadStepKg: 2, minLoadKg: 0 }, plan([40]), true), []);
+  });
+
+  test('ayar notu: aynı satırın en yeni kaydından; orada silinmişse geri gelmez', () => {
+    const noted = (id: string, minute: number, setupNote?: string) => {
+      const doc = finished(id, minute, three(60, 10));
+      return { ...doc, entries: doc.entries.map((entry) => ({ ...entry, ...(setupNote ? { setupNote } : {}) })) };
+    };
+    const select = { rowId: 'r_aaaaaa', exerciseId: 'bench-press' };
+    assert.equal(setupNoteOf([noted('s_aaaaaaaa', -3000, 'Sehpa 3'), noted('s_bbbbbbbb', -1000, 'Sehpa 4')], select), 'Sehpa 4');
+    assert.equal(setupNoteOf([noted('s_aaaaaaaa', -3000, 'Sehpa 3'), noted('s_bbbbbbbb', -1000)], select), undefined);
+    assert.equal(setupNoteOf([noted('s_aaaaaaaa', -3000, 'Sehpa 3')], { ...select, rowId: 'r_baskaaa' }), 'Sehpa 3');
+    assert.equal(workoutDay({ history: [noted('s_aaaaaaaa', -1000, 'Sehpa 3')] }).rows.r_aaaaaa?.setupNote, 'Sehpa 3');
   });
 });
 

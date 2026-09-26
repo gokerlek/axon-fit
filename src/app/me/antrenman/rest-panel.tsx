@@ -1,13 +1,17 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { CaretDown, CaretRight, Check, Drop, LockSimple } from '@phosphor-icons/react';
+import { ArrowUp, CaretDown, CaretRight, Check, Drop, LockSimple } from '@phosphor-icons/react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { DURATION, tween, WORKOUT } from '@/lib/motion';
+import { Stepper } from '@/components/ui/stepper';
+import { formatKg } from '@/lib/format';
+import { DURATION, EASE, tween, WORKOUT } from '@/lib/motion';
+import { EFFORT_LABELS } from '@/lib/progression';
+import { SESSION_LIMITS } from '@/lib/schemas/session';
 import { cn } from '@/lib/utils';
-import { clockText } from '@/lib/workout-session';
+import { clockText, EFFORT_CHOICES, type EffortChoice, type EffortQuestion } from '@/lib/workout-session';
 
 /** Sayacın ekrandaki hâli (saniyede bir değişir). */
 export type RestView = {
@@ -83,10 +87,105 @@ function RestRing({ endsAt, total, view }: { endsAt: number; total: number; view
   );
 }
 
+/** "Bench Press nasıldı?" sorusu (hareket başına bir kez; grupta üyeler sırayla) ya da teşekkür. */
+export type EffortPromptView = {
+  /** Sıradaki cevapsız soru; hepsi cevaplandıysa null. */
+  question: EffortQuestion | null;
+  /** Soruların hepsi cevaplandı: "Kaydedildi" satırı. */
+  answered: boolean;
+};
+
+/**
+ * Zorluk: tek satır, üç düğme (56 px). Hareketin adı başlıkta: soru sıradaki hareketin kartının
+ * üstünde çıksa da neyi sorduğu bellidir. Seçilmezse alan boş kalır, motor "İyi" sayar.
+ */
+export function EffortPrompt({ view, onAnswer }: { view: EffortPromptView; onAnswer: (entryId: string, effort: EffortChoice) => void }) {
+  // Cevap bir an seçili görünür, sonra (grupta) sıradaki üyenin sorusu kayarak gelir.
+  const [pinned, setPinned] = useState<EffortQuestion | null>(null);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const question = pinned ?? view.question;
+  const answer = (entryId: string, effort: EffortChoice) => {
+    const current = question?.entryId === entryId ? question : null;
+    if (current) setPinned({ ...current, answer: effort });
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setPinned(null), WORKOUT.answerHoldMs);
+    onAnswer(entryId, effort);
+  };
+  return (
+    <div className="relative shrink-0">
+      <AnimatePresence mode="popLayout" initial={false}>
+        {question ? (
+          <motion.div
+            key={question.entryId}
+            role="group"
+            aria-labelledby={`effort-${question.entryId}`}
+            initial={{ opacity: 0, x: WORKOUT.groupSlidePx }}
+            animate={{ opacity: 1, x: 0, transition: tween(DURATION.base) }}
+            exit={{ opacity: 0, x: -WORKOUT.groupSlidePx, transition: tween(DURATION.fast, EASE.exit) }}
+            className="flex flex-col gap-2 py-1">
+            <p id={`effort-${question.entryId}`} className="truncate text-[0.9375rem] font-semibold">
+              {question.title} nasıldı?
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {EFFORT_CHOICES.map((effort) => (
+                <Button
+                  key={effort}
+                  variant={question.answer === effort ? 'default' : 'secondary'}
+                  aria-pressed={question.answer === effort}
+                  className="h-14 text-base font-semibold"
+                  onClick={() => answer(question.entryId, effort)}>
+                  {EFFORT_LABELS[effort]}
+                </Button>
+              ))}
+            </div>
+          </motion.div>
+        ) : view.answered ? (
+          <motion.p
+            key="thanks"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: tween(DURATION.fast) }}
+            className="flex min-h-11 items-center gap-1.5 text-sm font-medium text-primary">
+            <Check weight="bold" className="size-4" />
+            Kaydedildi; bir sonraki öneri buna göre.
+          </motion.p>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/** AMRAP setinden sonra: "Kaç tekrar yaptın?" (tekrar stepper'ı set bittikten sonra da açık). */
+export function AmrapReps({ reps, onChange }: { reps: number; onChange: (reps: number) => void }) {
+  return (
+    <div className="flex min-h-14 shrink-0 items-center gap-3">
+      <p className="min-w-0 flex-1 text-sm leading-snug">
+        <span className="font-semibold">Kaç tekrar yaptın?</span>
+        <span className="block text-[0.8125rem] text-muted-foreground">AMRAP: yapabildiğin kadar</span>
+      </p>
+      <Stepper
+        size="lg"
+        value={reps}
+        onValueChange={(changed) => {
+          if (changed !== null && Number.isFinite(changed)) onChange(Math.min(SESSION_LIMITS.reps, Math.max(0, Math.round(changed))));
+        }}
+        min={0}
+        max={SESSION_LIMITS.reps}
+        aria-label="Yaptığın tekrar"
+        decrementLabel="Tekrarı azalt"
+        incrementLabel="Tekrarı artır"
+      />
+    </div>
+  );
+}
+
 /**
  * Dinlenme paneli (tasarım §2.5): set tablosu dinlenmede görünmez; hareket kartı üstte tek satıra iner.
  * Yerleşim çift dokunuşa göre: "Set bitti"nin yerinde düğme olmayan "Sıradaki" satırı durur, "Atla"
  * sağ üstte. Dinlenme bitince "Sıradaki" satırı "Sonraki sete geç" düğmesine döner (kilitle).
+ *
+ * Kaydedilen setin altında: AMRAP'sa "Kaç tekrar yaptın?"; hareket (grupta bütün üyeler) bittiyse
+ * "<Hareket> nasıldı?"; ara sette tepedeyse isteğe bağlı "Kolaydı · sonraki set X kg" çipi.
  */
 export function RestPanel({
   endsAt,
@@ -95,12 +194,18 @@ export function RestPanel({
   summary,
   saved,
   lockWarning,
+  amrap,
+  effort,
+  easy,
   water,
   undoWater,
   next,
   onSkip,
   onMinimize,
   onAdjust,
+  onAmrap,
+  onEffort,
+  onEasy,
   onWater,
   onUndoWater,
   onEditSaved,
@@ -109,10 +214,15 @@ export function RestPanel({
   endsAt: number;
   total: number;
   view: RestView;
-  /** Kartın tek satırı: "Goblet Squat · 2/3 set" (hareket bittiyse ✓); setin hareketi bilinmiyorsa yok. */
+  /** Kartın tek satırı: "Goblet Squat · 2/3 set" (grupta "A + B · 4/6 set"; bittiyse ✓); setin hareketi bilinmiyorsa yok. */
   summary: { title: string; done: number; planned: number; finished: boolean } | null;
   saved: { text: string; setId: string } | null;
   lockWarning: boolean;
+  /** Kaydedilen set AMRAP: yaptığı tekrar. */
+  amrap: { reps: number } | null;
+  effort: EffortPromptView | null;
+  /** "Kolaydı · sonraki set X kg" (`taken`: dokunuldu). */
+  easy: { kg: number; taken: boolean } | null;
   water: number;
   /** "+1 · Geri al" hapı görünüyor. */
   undoWater: boolean;
@@ -120,6 +230,9 @@ export function RestPanel({
   onSkip: () => void;
   onMinimize: () => void;
   onAdjust: (seconds: number) => void;
+  onAmrap: (reps: number) => void;
+  onEffort: (entryId: string, effort: EffortChoice) => void;
+  onEasy: () => void;
   onWater: () => void;
   onUndoWater: () => void;
   onEditSaved: (setId: string) => void;
@@ -169,11 +282,26 @@ export function RestPanel({
         </div>
       ) : null}
 
+      {amrap ? <AmrapReps reps={amrap.reps} onChange={onAmrap} /> : null}
+
       {lockWarning ? (
         <Alert className="my-1 shrink-0">
           <LockSimple />
           <AlertDescription>Ekranı kilitleme; kilitlenirse dinlenme bitişi çalmayabilir.</AlertDescription>
         </Alert>
+      ) : null}
+
+      {effort ? <EffortPrompt view={effort} onAnswer={onEffort} /> : null}
+
+      {easy ? (
+        <Button
+          variant={easy.taken ? 'default' : 'outline'}
+          aria-pressed={easy.taken}
+          className="my-1 h-11 shrink-0 self-start rounded-full px-4"
+          onClick={onEasy}>
+          {easy.taken ? <Check data-icon="inline-start" weight="bold" /> : <ArrowUp data-icon="inline-start" weight="bold" />}
+          {easy.taken ? `Sonraki set ${formatKg(easy.kg)}` : `Kolaydı · sonraki set ${formatKg(easy.kg)}`}
+        </Button>
       ) : null}
 
       <div className="mt-2.5 mb-1.5 grid shrink-0 grid-cols-[1fr_auto_1fr] items-center justify-items-center">

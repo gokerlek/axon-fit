@@ -68,3 +68,11 @@ export function workoutDay(options: { raw?: Record<string, unknown>; dayId?: str
   if (!day) throw new Error('Gün kurulamadı.');
   return day;
 }
+
+/** Gün A'nın blokları verilenlerle değiştirilmiş gün planı (gruplar, piramit, süreli set). */
+export function dayWithBlocks(blocks: unknown[], history: SessionDoc[] = []): WorkoutDay {
+  const raw = programFile();
+  const days = (raw.phases as { days: { blocks: unknown[] }[] }[])[0]?.days;
+  if (days?.[0]) days[0].blocks = blocks;
+  return workoutDay({ raw, history });
+}

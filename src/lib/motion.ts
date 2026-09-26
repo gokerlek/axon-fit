@@ -64,6 +64,7 @@ export const WORKOUT = {
   alarmRepeatMs: 15_000, // ms: dinlenme bitişinin 3 bipi, dokunulana kadar bu aralıkla…
   alarmRepeats: 3, // …en çok bu kadar yinelenir
   restRingPx: 208, // px: dinlenme halkası
+  answerHoldMs: 260, // ms: "nasıldı?" cevabı bir an seçili kalır, sonra (grupta) sıradaki üyenin sorusu gelir
 } as const;
 
 /** motion/react geçişi: süre ms verilir. */

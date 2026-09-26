@@ -11,38 +11,54 @@ import { Button } from '@/components/ui/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import { formatKg } from '@/lib/format';
 import { DURATION, EASE, tween, WORKOUT } from '@/lib/motion';
+import { EFFORT_LABELS } from '@/lib/progression';
 import { ApiError, fetchJson } from '@/lib/query/errors';
 import type { SessionDoc } from '@/lib/schemas/session';
 import { waterOf } from '@/lib/session-index';
 import { cn } from '@/lib/utils';
+import { groupView, nextMemberLetter } from '@/lib/workout-groups';
 import { createLocalWorkout, setsMissingOn, unsentSets, withChange, type LocalWorkout } from '@/lib/workout-outbox';
-import { acknowledgeRest, adjustRest, alarmPending, startRest, tickRest, type RestEvent, type RestTimer } from '@/lib/workout-rest';
+import { acknowledgeRest, adjustRest, alarmPending, LATE_MS, startRest, tickRest, type RestEvent, type RestTimer } from '@/lib/workout-rest';
 import type { WorkoutResponse } from '@/lib/workout-routes';
 import {
   addWaterTap,
   afterLog,
   cursorOf,
   deleteSet,
+  easyShortcut,
   editSet,
+  effortQuestions,
   elapsedText,
   findSet,
   logSet,
+  logWarmup,
   newSessionDoc,
   nextSet,
   nextText,
+  overloadState,
+  setEntryEffort,
+  setSetEffort,
+  setSetupNote,
+  setupNoteOf,
   setValueText,
   setViews,
+  unlogWarmup,
+  warmupViews,
   workoutSummary,
+  type EffortChoice,
+  type EffortQuestion,
   type NextSet,
 } from '@/lib/workout-session';
+import { startSetTimer, stopSetTimer, tickSetTimer } from '@/lib/workout-timer';
 import { clearLocalWorkout, clearWorkoutCache, readLocalWorkout, readWorkoutCache, saveLocalWorkout, saveWorkoutCache, writerId } from '../workout-storage';
-import { EntryPanel } from './entry-panel';
+import { EntryPanel, type TimerView, type TransitionView } from './entry-panel';
 import { ExerciseCard } from './exercise-card';
-import { RestPanel, RestStrip, type RestView } from './rest-panel';
+import { RestPanel, RestStrip, type EffortPromptView, type RestView } from './rest-panel';
 import { useWorkoutOutbox } from './use-workout-outbox';
 import { beep, isIOS, unlockAudio, useWakeLock, vibrate } from './workout-feedback';
-import { DeleteSetDialog, EditSetSheet, FinishedElsewhereDialog, FinishSheet, type EditTarget } from './workout-sheets';
+import { DeleteSetDialog, EditSetSheet, FinishedElsewhereDialog, FinishSheet, type EditTarget, type EditValues } from './workout-sheets';
 
 /** Bugün'de çekilen plan bu kadar tazeyse başlangıç ağ beklemez. */
 const CACHE_FRESH_MS = 5 * 60_000;
@@ -68,6 +84,25 @@ function stampOf(local: LocalWorkout) {
   return { at: new Date().toISOString(), by: local.doc.writer };
 }
 
+/** Sorulardan panelin görünümü: ilk cevapsız soru; hepsi cevaplandıysa teşekkür. Soru yoksa null. */
+function promptOf(questions: readonly EffortQuestion[]): EffortPromptView | null {
+  if (questions.length === 0) return null;
+  const question = questions.find((item) => item.answer === undefined) ?? null;
+  return { question, answered: question === null };
+}
+
+/** Belgedeki en son kaydedilen çalışma seti (bitiş sorusunun konusu). */
+function lastWorkingSetId(doc: SessionDoc): string | null {
+  let best: { id: string; at: number } | null = null;
+  for (const entry of doc.entries) {
+    for (const set of entry.sets) {
+      const at = Date.parse(set.at);
+      if (set.type === 'working' && (!best || at >= best.at)) best = { id: set.id, at };
+    }
+  }
+  return best?.id ?? null;
+}
+
 /**
  * Etkin antrenman (tasarım §2.4, §2.5, §4.3, §4.4): tam ekran, dock yok. Kaynak telefondur: belge,
  * gönderim kuyruğu, dinlenme ve taslak `localStorage`'da (`workout-outbox.ts`); yenileme ya da çökme
@@ -81,6 +116,12 @@ function stampOf(local: LocalWorkout) {
  * Hareket bittiyse kart sola çıkar, sıradaki sağdan gelir, dinlenme onun üstünde açılır; son setten sonra
  * bitirme sorusu. Alt panel her durum değişiminden sonra 400 ms dokunuş almaz (`WORKOUT.tapGuardMs`):
  * emin olmak için ikinci kez basmak ikinci bir set yazmaz.
+ *
+ * Set türleri ve gruplar (§2.4, §2.5): grupta tur `setSlots` sırasıyla yürür; üyeler arasında dinlenme
+ * yok (kart 12 px kayar, düğme "Set bitti → B"), devrede istasyon geçişi panelde ince çubuk, tur sonunda
+ * blok dinlenmesi. Süreli sette "Başlat ▶ / Bitir ■" sayacı; ısınma satırdaki ✓; aşırı yük hareket
+ * başına bir kez onaylanır. Zorluk hareketin son setinden sonra bir kez; AMRAP'ta "Kaç tekrar yaptın?".
+ * Zorluk, ısınma, ayar notu ve AMRAP düzeltmesi kendi başına gönderilmez, sonraki set yazımına biner.
  */
 export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: string; dayParam: string | null; finishOnOpen: boolean }) {
   const router = useRouter();
@@ -92,9 +133,10 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
   const storageWarned = useRef(false);
 
   const [saving, setSaving] = useState<Saving | null>(null);
-  const [hold, setHold] = useState<string | null>(null);
   const [fresh, setFresh] = useState<string | null>(null);
   const [restView, setRestView] = useState<RestView | null>(null);
+  const [transition, setTransition] = useState<TransitionView | null>(null);
+  const [timerView, setTimerView] = useState<TimerView | null>(null);
   const [undoWater, setUndoWater] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
   const [finishing, setFinishing] = useState(false);
@@ -298,6 +340,47 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
     return () => window.cancelAnimationFrame(frame);
   }, [restKey, commit, handleRestEvents]);
 
+  /* --- süreli set sayacı ve devrenin istasyon geçişi: zaman damgasından --- */
+
+  const timerKey = local?.timer ? `${local.timer.rowId}#${local.timer.setIndex}@${local.timer.startedAt}` : null;
+  useEffect(() => {
+    if (!timerKey) {
+      setTimerView(null);
+      return;
+    }
+    let frame = 0;
+    let shown = '';
+    const loop = () => {
+      const current = localRef.current;
+      if (!current?.timer) return;
+      const tick = tickSetTimer(current.timer, Date.now());
+      if (tick.events.length > 0) {
+        beep(1, 990);
+        vibrate(20);
+        announce('Hedefe ulaştın');
+      }
+      if (tick.timer !== current.timer) commit({ ...current, timer: tick.timer });
+      const key = `${tick.seconds}:${tick.phase}`;
+      if (key !== shown) {
+        shown = key;
+        setTimerView({ seconds: tick.seconds, toMin: tick.toMin, fraction: tick.fraction, phase: tick.phase });
+      }
+      frame = window.requestAnimationFrame(loop);
+    };
+    loop();
+    return () => window.cancelAnimationFrame(frame);
+  }, [timerKey, commit, announce]);
+
+  // Geçiş bitince tek kısa bip (geç fark edildiyse sessiz); tam dinlenme değil, alarm yok.
+  useEffect(() => {
+    if (!transition) return;
+    const id = window.setTimeout(() => {
+      setTransition(null);
+      if (Date.now() - transition.endsAt <= LATE_MS) beep(1, 660);
+    }, Math.max(0, transition.endsAt - Date.now()));
+    return () => window.clearTimeout(id);
+  }, [transition]);
+
   const updateRest = useCallback(
     (change: (rest: RestTimer) => RestTimer | null) => {
       const current = localRef.current;
@@ -331,63 +414,196 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
     const { plan, doc } = local;
     const cursor = cursorOf(plan, doc);
     const next = nextSet(plan, doc, local.draft);
-    const unitKey = hold ?? next?.unitKey ?? null;
+    // Kaydedilirken kart ve panel az önce kaydedilen seti gösterir (✓ önce satırda), sonra sıradakine geçer.
+    const focus = saving?.next ?? next;
+    const unitKey = focus?.unitKey ?? null;
     const unit = unitKey ? cursor.units.find((item) => item.key === unitKey) : undefined;
-    const rowId = next && next.unitKey === unitKey ? next.rowId : (unit?.members.at(-1)?.rowId ?? null);
+    const rowId = focus?.rowId ?? unit?.members.at(-1)?.rowId ?? null;
     const row = rowId ? (plan.rows[rowId] ?? null) : null;
-    return { plan, doc, cursor, next, unitKey, row, sets: row ? setViews(plan, doc, row.rowId) : [] };
-  }, [local, hold]);
+    return {
+      plan,
+      doc,
+      cursor,
+      next,
+      unitKey,
+      row,
+      sets: row ? setViews(plan, doc, row.rowId) : [],
+      group: unitKey ? groupView(plan, doc, unitKey, focus) : null,
+      warmups: row ? warmupViews(plan, doc, row.rowId) : [],
+      setupNote: row ? setupNoteOf(plan, doc, row.rowId) : undefined,
+    };
+  }, [local, saving]);
 
   /* --- işler --- */
 
-  const onDone = useCallback(() => {
+  /** "Set bitti" (süreli sette "Bitir ■": geçen saniye). */
+  const onDone = useCallback(
+    (seconds?: number) => {
+      const current = localRef.current;
+      if (!current || saving) return;
+      const next = nextSet(current.plan, current.doc, current.draft);
+      if (!next) return;
+      unlockAudio();
+      const row = current.plan.rows[next.rowId];
+      const value = seconds ?? next.value;
+      // Aşırı yük: "Onayla · Set bitti" (ilk kez) ya da bu harekette zaten onaylanmış.
+      const overload = overloadState(current.plan, current.doc, next, next.kg) !== 'none';
+      const { doc, setId } = logSet(current.plan, current.doc, { rowId: next.rowId, setIndex: next.setIndex, kg: next.kg, value, overload, stamp: stampOf(current) });
+      const after = afterLog(current.plan, current.doc, doc);
+      commit(withChange({ ...current, draft: null, rest: null, timer: null }, doc, { send: true }));
+      outbox.schedule();
+      setTransition(null);
+      setFresh(setId);
+      setSaving({ next: { ...next, value } });
+      vibrate(10);
+      const logged = findSet(doc, setId)?.set;
+      announce(`Set ${next.position + 1} kaydedildi${logged ? `: ${setValueText(logged)}` : ''}`);
+
+      if (after.kind === 'member') {
+        // Grupta turun sıradaki üyesi: dinlenme yok; kart 12 px kayar, devrede istasyon geçişi sayar.
+        const following = nextSet(current.plan, doc);
+        guard(DURATION.base + WORKOUT.tapGuardMs);
+        later(DURATION.base, () => {
+          setSaving(null);
+          guard();
+          if (after.transitionSeconds > 0) setTransition({ endsAt: Date.now() + after.transitionSeconds * 1000, total: after.transitionSeconds });
+          const title = following ? current.plan.rows[following.rowId]?.title : undefined;
+          if (title) announce(`Sıradaki: ${title}`);
+        });
+      } else if (after.kind === 'same') {
+        guard(DURATION.base + WORKOUT.tapGuardMs);
+        later(DURATION.base, () => {
+          setSaving(null);
+          if (after.restSeconds > 0) openRest(setId, after.restSeconds);
+          else guard();
+        });
+      } else if (after.kind === 'next') {
+        const following = nextSet(current.plan, doc);
+        // Grupta bütün üyeler: "Romanian Deadlift ve Şınav tamamlandı."
+        const unit = cursorOf(current.plan, doc).units.find((item) => item.key === next.unitKey);
+        const names = unit?.members.flatMap((member) => (member.rowId && current.plan.rows[member.rowId] ? [current.plan.rows[member.rowId]?.title ?? ''] : [])) ?? [];
+        const done = names.length > 0 ? names.join(' ve ') : (row?.title ?? 'Hareket');
+        guard(NEXT_REST_MS + WORKOUT.tapGuardMs);
+        later(NEXT_SLIDE_MS, () => {
+          setSaving(null);
+          vibrate(20);
+          const title = following ? current.plan.rows[following.rowId]?.title : undefined;
+          announce(`${done} tamamlandı.${title ? ` Sıradaki: ${title}.` : ''}`);
+          if (after.restSeconds <= 0) focusLater('exercise-title', DURATION.base);
+        });
+        later(NEXT_REST_MS, () => {
+          if (after.restSeconds > 0) openRest(setId, after.restSeconds);
+          else guard();
+        });
+      } else {
+        guard(DURATION.slow + 50 + WORKOUT.tapGuardMs);
+        later(DURATION.slow + 50, () => {
+          setSaving(null);
+          setFinishOpen(true);
+        });
+      }
+    },
+    [saving, commit, outbox, announce, guard, later, openRest, focusLater],
+  );
+
+  const onStartTimer = useCallback(() => {
     const current = localRef.current;
     if (!current || saving) return;
     const next = nextSet(current.plan, current.doc, current.draft);
     if (!next) return;
     unlockAudio();
-    const row = current.plan.rows[next.rowId];
-    const { doc, setId } = logSet(current.plan, current.doc, { rowId: next.rowId, setIndex: next.setIndex, kg: next.kg, value: next.value, stamp: stampOf(current) });
-    const after = afterLog(current.plan, current.doc, doc);
-    commit(withChange({ ...current, draft: null, rest: null }, doc, { send: true }));
-    outbox.schedule();
-    setFresh(setId);
-    setSaving({ next });
-    vibrate(10);
-    const logged = findSet(doc, setId)?.set;
-    announce(`Set ${next.position + 1} kaydedildi${logged ? `: ${setValueText(logged)}` : ''}`);
+    // Sayaç başlarsa set başlamıştır: küçültülmüş dinlenme biter.
+    commit({ ...current, rest: null, timer: startSetTimer({ rowId: next.rowId, setIndex: next.setIndex, target: next.target }, Date.now()) });
+    guard();
+    announce('Sayaç başladı');
+  }, [saving, commit, guard, announce]);
 
-    if (after.kind === 'same') {
-      guard(DURATION.base + WORKOUT.tapGuardMs);
-      later(DURATION.base, () => {
-        setSaving(null);
-        if (after.restSeconds > 0) openRest(setId, after.restSeconds);
-        else guard();
-      });
-    } else if (after.kind === 'next') {
-      const following = nextSet(current.plan, doc);
-      setHold(next.unitKey);
-      guard(NEXT_REST_MS + WORKOUT.tapGuardMs);
-      later(NEXT_SLIDE_MS, () => {
-        setHold(null);
-        setSaving(null);
-        vibrate(20);
-        const title = following ? current.plan.rows[following.rowId]?.title : undefined;
-        announce(`${row?.title ?? 'Hareket'} tamamlandı.${title ? ` Sıradaki: ${title}.` : ''}`);
-        if (after.restSeconds <= 0) focusLater('exercise-title', DURATION.base);
-      });
-      later(NEXT_REST_MS, () => {
-        if (after.restSeconds > 0) openRest(setId, after.restSeconds);
-        else guard();
-      });
-    } else {
-      guard(DURATION.slow + 50 + WORKOUT.tapGuardMs);
-      later(DURATION.slow + 50, () => {
-        setSaving(null);
-        setFinishOpen(true);
-      });
-    }
-  }, [saving, commit, outbox, announce, guard, later, openRest, focusLater]);
+  const onStopTimer = useCallback(() => {
+    const timer = localRef.current?.timer;
+    if (timer) onDone(stopSetTimer(timer, Date.now()));
+  }, [onDone]);
+
+  const onCancelTimer = useCallback(() => {
+    const current = localRef.current;
+    if (!current?.timer) return;
+    commit({ ...current, timer: null });
+    guard();
+    announce('Sayaç durdu');
+  }, [commit, guard, announce]);
+
+  /** Aşırı yük uyarısında "Düzelt": ağırlık planınkine döner. */
+  const onResetKg = useCallback(() => {
+    const current = localRef.current;
+    if (!current) return;
+    const next = nextSet(current.plan, current.doc, current.draft);
+    if (!next) return;
+    commit({ ...current, draft: { rowId: next.rowId, setIndex: next.setIndex, kg: next.plannedKg, value: next.value } });
+    guard();
+    announce(`Ağırlık ${formatKg(next.plannedKg)}`);
+  }, [commit, guard, announce]);
+
+  const onToggleWarmup = useCallback(
+    (rowId: string, index: number, done: boolean) => {
+      const current = localRef.current;
+      if (!current) return;
+      const stamp = stampOf(current);
+      const doc = done ? logWarmup(current.plan, current.doc, { rowId, index, stamp }) : unlogWarmup(current.plan, current.doc, { rowId, index, stamp });
+      if (doc === current.doc) return;
+      commit(withChange(current, doc, { send: false }));
+      vibrate(10);
+      announce(done ? `Isınma ${index + 1} yapıldı` : `Isınma ${index + 1} geri alındı`);
+    },
+    [commit, announce],
+  );
+
+  const onSetupNote = useCallback(
+    (rowId: string, text: string) => {
+      const current = localRef.current;
+      if (!current) return;
+      const doc = setSetupNote(current.plan, current.doc, { rowId, note: text, stamp: stampOf(current) });
+      if (doc === current.doc) return;
+      commit(withChange(current, doc, { send: false }));
+      announce(text.trim() ? 'Ayar notu kaydedildi' : 'Ayar notu silindi');
+    },
+    [commit, announce],
+  );
+
+  /** "<Hareket> nasıldı?": cevap o hareketin (AMRAP olmayan) bütün çalışma setlerine. */
+  const onEffort = useCallback(
+    (entryId: string, effort: EffortChoice) => {
+      const current = localRef.current;
+      if (!current) return;
+      const doc = setEntryEffort(current.doc, entryId, effort, stampOf(current));
+      commit(withChange(current.rest ? { ...current, rest: acknowledgeRest(current.rest) } : current, doc, { send: false }));
+      const title = doc.entries.find((entry) => entry.id === entryId)?.title;
+      announce(`${title ?? 'Hareket'}: ${EFFORT_LABELS[effort]}`);
+    },
+    [commit, announce],
+  );
+
+  /** "Kolaydı · sonraki set X kg": o sete "Kolay", sonraki set bir adım (yeniden dokunmak geri alır). */
+  const onEasy = useCallback(() => {
+    const current = localRef.current;
+    if (!current?.rest) return;
+    const shortcut = easyShortcut(current.plan, current.doc, current.rest.setId);
+    if (!shortcut) return;
+    const doc = setSetEffort(current.doc, current.rest.setId, shortcut.taken ? undefined : 'easy', stampOf(current));
+    commit(withChange({ ...current, draft: null, rest: acknowledgeRest(current.rest) }, doc, { send: false }));
+    const kg = nextSet(current.plan, doc)?.kg;
+    announce(kg !== undefined ? `Sonraki set ${formatKg(kg)}` : 'Kaydedildi');
+  }, [commit, announce]);
+
+  /** AMRAP'ta set bittikten sonra "Kaç tekrar yaptın?". */
+  const onAmrapReps = useCallback(
+    (setId: string, reps: number) => {
+      const current = localRef.current;
+      const found = current ? findSet(current.doc, setId) : null;
+      if (!current || !found) return;
+      const doc = editSet(current.doc, setId, { kg: found.set.kg, value: reps }, stampOf(current));
+      commit(withChange(current.rest ? { ...current, rest: acknowledgeRest(current.rest) } : current, doc, { send: false }));
+    },
+    [commit],
+  );
 
   const onDraft = useCallback(
     (values: { kg?: number | undefined; value?: number | undefined }) => {
@@ -439,15 +655,19 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
       spec: row.spec,
       kg: found.set.kg,
       value: found.set.reps ?? found.set.seconds ?? 0,
+      effort: found.set.target?.amrap ? null : found.set.effort,
       sent,
     });
   }, []);
 
   const onSaveEdit = useCallback(
-    (values: { kg?: number | undefined; value: number }) => {
+    (values: EditValues) => {
       const current = localRef.current;
       if (!current || !editing) return;
-      commit(withChange(current, editSet(current.doc, editing.setId, values, stampOf(current)), { send: true }));
+      const stamp = stampOf(current);
+      let doc = editSet(current.doc, editing.setId, values, stamp);
+      if ('effort' in values) doc = setSetEffort(doc, editing.setId, values.effort, stamp);
+      commit(withChange(current, doc, { send: true }));
       outbox.schedule();
       setEditing(null);
       toast.success('Set düzeltildi');
@@ -568,7 +788,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
     );
   }
 
-  const { plan, doc, cursor, next, unitKey, row, sets } = view;
+  const { plan, doc, cursor, next, unitKey, row, sets, group, warmups, setupNote } = view;
   const rest = local.rest;
   // Tam dinlenme paneli açıkken altındaki kart ve giriş paneli erişilemez (ekran okuyucu, klavye).
   const covered = Boolean(rest && rest.mode === 'full' && restView);
@@ -578,11 +798,29 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
   const progress = cursor.progress;
   const unsent = unsentSets(local);
   const water = waterOf(doc);
-  const restRowId = rest ? findSet(doc, rest.setId)?.entry.rowId : undefined;
-  const restRow = restRowId ? plan.rows[restRowId] : undefined;
-  const restMember = restRowId ? cursor.units.flatMap((unit) => unit.members).find((member) => member.rowId === restRowId) : undefined;
-  const restSet = rest ? findSet(doc, rest.setId)?.set : undefined;
+  // Süreli setin sayacı yalnız sıradaki setinse çalışıyor sayılır (set silindiyse, düzeltildiyse değil).
+  const timerRunning = Boolean(local.timer && next && local.timer.rowId === next.rowId && local.timer.setIndex === next.setIndex);
+
+  const restFound = rest ? findSet(doc, rest.setId) : null;
+  const restRowId = restFound?.entry.rowId;
+  const restSet = restFound?.set;
+  const restUnit = restFound ? cursor.units.find((unit) => unit.members.some((member) => member.entryId === restFound.entry.id)) : undefined;
+  const restSummary = restUnit
+    ? {
+        title: restUnit.members.flatMap((member) => (member.rowId && plan.rows[member.rowId] ? [plan.rows[member.rowId]?.title ?? ''] : [])).join(' + '),
+        done: restUnit.members.reduce((sum, member) => sum + Math.min(member.done, member.planned), 0),
+        planned: restUnit.members.reduce((sum, member) => sum + (member.skipped ? Math.min(member.done, member.planned) : member.planned), 0),
+        finished: restUnit.members.every((member) => member.skipped || member.done >= member.planned),
+      }
+    : null;
   const restPosition = rest && restRowId ? setViews(plan, doc, restRowId).find((item) => item.logged?.id === rest.setId)?.position : undefined;
+  const restEffort = rest ? promptOf(effortQuestions(plan, doc, rest.setId)) : null;
+  const restEasy = rest && !restEffort ? easyShortcut(plan, doc, rest.setId) : null;
+
+  // Bitiş sorusu: son hareketin dinlenmesi yok; onun zorluğu ve (AMRAP'sa) tekrarı sheet'te.
+  const lastSetId = lastWorkingSetId(doc);
+  const lastSet = lastSetId ? findSet(doc, lastSetId)?.set : undefined;
+  const finishEffort = lastSetId ? promptOf(effortQuestions(plan, doc, lastSetId)) : null;
 
   const status =
     problem === 'session'
@@ -647,7 +885,10 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
                 exit={{ opacity: 0, x: -WORKOUT.slidePx, transition: tween(DURATION.fast, EASE.exit) }}>
                 <ExerciseCard
                   row={row}
+                  group={group}
                   sets={sets}
+                  warmups={warmups}
+                  setupNote={setupNote}
                   currentSetIndex={
                     // Kaydedilirken vurgu kaydedilen satırda kalır; panel değişince sonraki sete kayar.
                     saving ? (saving.next.rowId === row.rowId ? saving.next.setIndex : null) : next && next.rowId === row.rowId ? next.setIndex : null
@@ -655,6 +896,8 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
                   currentKg={next?.kg}
                   freshSetId={fresh}
                   onEditSet={openEdit}
+                  onToggleWarmup={(index, done) => onToggleWarmup(row.rowId, index, done)}
+                  onSetupNote={(text) => onSetupNote(row.rowId, text)}
                 />
               </motion.div>
             ) : (
@@ -686,8 +929,28 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
               />
             </div>
           ) : null}
-          <section aria-label="Set girişi" onPointerDownCapture={swallow} onClickCapture={swallow} className="border-t bg-card px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-            <EntryPanel row={shownRow} next={shown} frozen={saving !== null} onChange={onDraft} onDone={onDone} onFinish={() => setFinishOpen(true)} />
+          <section
+            aria-label="Set girişi"
+            onPointerDownCapture={swallow}
+            onClickCapture={swallow}
+            className="relative border-t bg-card px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+            <EntryPanel
+              row={shownRow}
+              next={shown}
+              frozen={saving !== null}
+              overload={next && !saving ? overloadState(plan, doc, next, next.kg) : 'none'}
+              nextLetter={saving ? null : nextMemberLetter(plan, doc)}
+              transition={transition}
+              timer={timerRunning ? timerView : null}
+              now={now}
+              onChange={onDraft}
+              onResetKg={onResetKg}
+              onDone={() => onDone()}
+              onStartTimer={onStartTimer}
+              onStopTimer={onStopTimer}
+              onCancelTimer={onCancelTimer}
+              onFinish={() => setFinishOpen(true)}
+            />
           </section>
         </div>
 
@@ -706,13 +969,15 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
                 endsAt={rest.endsAt}
                 total={rest.total}
                 view={restView}
-                summary={
-                  restRow && restMember
-                    ? { title: restRow.title, done: restMember.done, planned: restMember.planned, finished: restMember.done >= restMember.planned }
-                    : null
-                }
+                summary={restSummary}
                 saved={restSet ? { text: `Set ${(restPosition ?? 0) + 1} kaydedildi · ${setValueText(restSet)}`, setId: restSet.id } : null}
                 lockWarning={local.restCount === 1 && (isIOS() || !wakeHeld)}
+                amrap={restSet?.target?.amrap ? { reps: restSet.reps ?? 0 } : null}
+                effort={restEffort}
+                easy={restEasy}
+                onAmrap={(reps) => onAmrapReps(rest.setId, reps)}
+                onEffort={onEffort}
+                onEasy={onEasy}
                 water={water}
                 undoWater={undoWater}
                 next={next ? nextText(next, plan.rows[next.rowId] ?? { title: '', trackingType: 'weight_reps' }, next.rowId !== restRowId) : null}
@@ -735,7 +1000,18 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
         </AnimatePresence>
       </div>
 
-      <FinishSheet open={finishOpen} onOpenChange={setFinishOpen} summary={summary} busy={finishing} onFinish={onFinish} onCancelWorkout={onCancelWorkout} />
+      <FinishSheet
+        open={finishOpen}
+        onOpenChange={setFinishOpen}
+        summary={summary}
+        busy={finishing}
+        effort={finishEffort}
+        amrap={lastSet?.target?.amrap ? { reps: lastSet.reps ?? 0 } : null}
+        onEffort={onEffort}
+        onAmrap={(reps) => (lastSetId ? onAmrapReps(lastSetId, reps) : undefined)}
+        onFinish={onFinish}
+        onCancelWorkout={onCancelWorkout}
+      />
       <EditSetSheet target={editing} onClose={() => setEditing(null)} onSave={onSaveEdit} onDelete={onAskDelete} />
       <DeleteSetDialog target={deleting} onCancel={() => setDeleting(null)} onConfirm={onConfirmDelete} />
       <FinishedElsewhereDialog count={elsewhere?.count ?? null} busy={elsewhereBusy} onAdd={onAddElsewhere} onSkip={() => leave('Bu antrenman başka bir cihazda bitirildi.', 'info')} />

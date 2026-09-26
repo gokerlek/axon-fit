@@ -109,7 +109,7 @@ export const sessionSetSchema = v.pipe(
   v.object({
     id: setIdSchema,
     type: v.picklist(['warmup', 'working'] as const),
-    /** Satırın kaçıncı seti (0'dan; fazladan setlerde planın arkasından sürer). Isınmada yok. */
+    /** Satırın kaçıncı seti (0'dan; fazladan setlerde planın arkasından sürer). Isınmada ısınmanın sırası. */
     setIndex: v.optional(int(0, SESSION_LIMITS.setsPerEntry)),
     /** Vücut ağırlığında isteğe bağlı ek yük; süreli harekette aletin ağırlığı. */
     kg: v.optional(kg),
