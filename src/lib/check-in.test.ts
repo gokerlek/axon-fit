@@ -78,9 +78,42 @@ describe('öneriye uygulama', () => {
     assert.deepEqual(applyTolerance(azalis, { action: 'hold', reasons: [] }, { spec, last }), azalis);
   });
 
+  test('tut → son ağırlıktan ağır öneri gerekçesi ne olursa olsun geri çekilir; hafif çeviri dokunulmaz', () => {
+    const tut = { action: 'hold' as const, reasons: [] };
+    // Başka aralıktan ağır çeviri (80 × 12, 8–12 → 4–6: 85) artış gerekçesiyle gelir.
+    const ceviri: Suggestion = { weightKg: 85, target: 4, reason: 'range_increase' };
+    assert.deepEqual(applyTolerance(ceviri, tut, { spec, last: { weightKg: 80, target: 12 } }), { weightKg: 80, target: 12, reason: 'pain_hold' });
+    // Gerekçe artış değil ama öneri son plandan ağır: yine geri çekilir.
+    const agir: Suggestion = { weightKg: 62.5, target: 8, reason: 'first_time' };
+    assert.deepEqual(applyTolerance(agir, tut, { spec, last }), { ...last, reason: 'pain_hold' });
+    // Hafif çeviri (4–6 → 8–12) artış değildir.
+    const hafif: Suggestion = { weightKg: 55, target: 8, reason: 'first_time' };
+    assert.deepEqual(applyTolerance(hafif, tut, { spec, last }), hafif);
+    // Cihazın en ağır ayarında "tekrarları artır" da artıştır.
+    const tavan: Suggestion = { weightKg: 60, target: 9, reason: 'device_max' };
+    assert.deepEqual(applyTolerance(tavan, tut, { spec, last }), { ...last, reason: 'pain_hold' });
+  });
+
   test('azalt → son ağırlıktan %15 aşağı, adıma yuvarlı (artmış öneriden değil)', () => {
     const sonuc = applyTolerance(artis, { action: 'reduce', reasons: [] }, { spec, last });
     assert.deepEqual(sonuc, { weightKg: 50, target: 8, reason: 'pain_reduce' });
+  });
+
+  test('azalt → %15\'i tabanın altına düşerse tabana iner; inecek yer yoksa gerekçe bunu söyler', () => {
+    const azalt = { action: 'reduce' as const, reasons: [] };
+    assert.deepEqual(applyTolerance(artis, azalt, { spec, last: { weightKg: 22.5, target: 8 } }), {
+      weightKg: 20,
+      target: 8,
+      reason: 'pain_reduce',
+    });
+    assert.deepEqual(applyTolerance(artis, azalt, { spec, last: { weightKg: 20, target: 8 } }), {
+      weightKg: 20,
+      target: 8,
+      reason: 'pain_reduce_unavailable',
+    });
+    const vucut: LoadSpec = { trackingType: 'bodyweight_reps', loadStepKg: 0, minLoadKg: 0 };
+    const tekrar: Suggestion = { weightKg: 0, target: 11, reason: 'add_rep' };
+    assert.equal(applyTolerance(tekrar, azalt, { spec: vucut, last: { weightKg: 0, target: 10 } }).reason, 'pain_reduce_unavailable');
   });
 
   test('dur → yük verilmez, son plan "duraklatıldı" olarak döner', () => {
@@ -105,5 +138,30 @@ describe('iç yük (sRPE)', () => {
       { week: '2026-09-14', load: 500, changePercent: null },
       { week: '2026-09-21', load: 420, changePercent: -16 },
     ]);
+  });
+
+  test('seanssız hafta 0 yükle listede durur; değişim takvimdeki önceki haftaya göre', () => {
+    // 07 Eylül haftası 500, 14 Eylül haftası seans yok, 21 Eylül haftası 420: −%16 değil.
+    assert.deepEqual(
+      weeklyLoads([gun('2026-09-07', { sessionRpe: 5, durationMin: 100 }), gun('2026-09-23', { sessionRpe: 6, durationMin: 70 })]),
+      [
+        { week: '2026-09-07', load: 500, changePercent: null },
+        { week: '2026-09-14', load: 0, changePercent: -100 },
+        { week: '2026-09-21', load: 420, changePercent: null },
+      ],
+    );
+    // Üç haftalık aradan aynı yükle dönüş "%0" görünmez.
+    assert.deepEqual(
+      weeklyLoads([gun('2026-08-31', { sessionRpe: 7, durationMin: 100 }), gun('2026-09-21', { sessionRpe: 7, durationMin: 100 })]).map(
+        (item) => [item.week, item.load, item.changePercent],
+      ),
+      [
+        ['2026-08-31', 700, null],
+        ['2026-09-07', 0, -100],
+        ['2026-09-14', 0, null],
+        ['2026-09-21', 700, null],
+      ],
+    );
+    assert.deepEqual(weeklyLoads([gun('2026-09-23')]), []);
   });
 });

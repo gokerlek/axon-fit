@@ -1,9 +1,9 @@
-import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { ATTACHMENT_LIBRARY } from '@/data/attachment-library';
-import { getAttachment, readCustomAttachments, writeCustomAttachments } from '@/lib/attachments';
+import { appRepoFiles } from '@/lib/app-repo-files';
+import { getAttachment } from '@/lib/attachments';
+import { removeAttachmentImage, saveAttachmentImage } from '@/lib/catalog-actions';
 import { appRepo, GithubError } from '@/lib/github/client';
-import { deleteFile, getFileSha, readBinary, writeBinary } from '@/lib/github/files';
+import { readBinary } from '@/lib/github/files';
 import { IMAGE_CONTENT_TYPES, IMAGE_MAX_BYTES, IMAGE_TYPES, imageVersion, sniffImage, type ImageExtension } from '@/lib/image';
 import { readAnySession, readPtSession } from '@/lib/session';
 
@@ -22,7 +22,11 @@ function failed(error: unknown, fallback: string) {
 
 export async function GET(request: Request, { params }: Params) {
   // Danışan da antrenmanda görecek; oturum yeterli.
-  if (!(await readAnySession())) return new NextResponse(null, { status: 401 });
+  try {
+    if (!(await readAnySession())) return new NextResponse(null, { status: 401 });
+  } catch (error) {
+    return failed(error, 'Oturum doğrulanamadı.');
+  }
 
   const { id } = await params;
   const attachment = await getAttachment(id);
@@ -59,31 +63,9 @@ export async function POST(request: Request, { params }: Params) {
   const extension = sniffImage(bytes);
   if (!extension) return NextResponse.json({ error: 'Dosya bir görsel değil ya da bozuk.' }, { status: 400 });
 
-  try {
-    const { items, sha } = await readCustomAttachments();
-    // Hazır bir aparata fotoğraf eklemek, düzenlemede olduğu gibi PT'nin sürümünü oluşturur.
-    const entry = items.find((item) => item.id === id) ?? ATTACHMENT_LIBRARY.find((item) => item.id === id);
-    if (!entry) return NextResponse.json({ error: 'Aparat bulunamadı.' }, { status: 404 });
-
-    const repo = appRepo();
-    const digest = createHash('sha256').update(bytes).digest('hex').slice(0, 10);
-    const path = `media/attachments/${id}-${digest}.${extension}`;
-    const existing = await getFileSha(repo, path);
-    await writeBinary(repo, path, bytes, { sha: existing ?? undefined, message: `Aparat fotoğrafı: ${entry.name}` });
-
-    const updated = { ...entry, image: path };
-    const next = items.some((item) => item.id === id) ? items.map((item) => (item.id === id ? updated : item)) : [...items, updated];
-    await writeCustomAttachments(next, `Aparat fotoğrafı güncellendi: ${entry.name}`, sha);
-
-    // Eski fotoğraf artıkta kalmasın; silinemezse kayıt yine doğru.
-    if (entry.image && entry.image !== path) {
-      const oldSha = await getFileSha(repo, entry.image).catch(() => null);
-      if (oldSha) await deleteFile(repo, entry.image, { sha: oldSha, message: 'Eski aparat fotoğrafı kaldırıldı' }).catch(() => undefined);
-    }
-    return NextResponse.json({ image: path });
-  } catch (error) {
-    return failed(error, 'Aparat fotoğrafı yüklenemedi.');
-  }
+  // Yazma (hazır aparatta PT sürümü, eski fotoğrafın silinmesi) `saveAttachmentImage`'da (`src/lib/catalog-actions.ts`).
+  const { status, body } = await saveAttachmentImage(appRepoFiles(), id, bytes, extension);
+  return NextResponse.json(body, { status });
 }
 
 export async function DELETE(_request: Request, { params }: Params) {
@@ -91,22 +73,6 @@ export async function DELETE(_request: Request, { params }: Params) {
   if (session?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
 
   const { id } = await params;
-  try {
-    const { items, sha } = await readCustomAttachments();
-    const entry = items.find((item) => item.id === id);
-    if (!entry?.image) return NextResponse.json({ ok: true });
-
-    const { image, ...rest } = entry;
-    await writeCustomAttachments(
-      items.map((item) => (item.id === id ? rest : item)),
-      `Aparat fotoğrafı kaldırıldı: ${entry.name}`,
-      sha,
-    );
-    const repo = appRepo();
-    const fileSha = await getFileSha(repo, image).catch(() => null);
-    if (fileSha) await deleteFile(repo, image, { sha: fileSha, message: 'Aparat fotoğrafı silindi' }).catch(() => undefined);
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    return failed(error, 'Aparat fotoğrafı kaldırılamadı.');
-  }
+  const { status, body } = await removeAttachmentImage(appRepoFiles(), id);
+  return NextResponse.json(body, { status });
 }

@@ -177,17 +177,28 @@ export function describeDeviceLoads(device: DeviceLoadSettings): string {
 }
 
 /**
- * Öneri motoruna verilecek yük tanımı. Bar ve plaka yüklemelide düzenli adım (bar
- * ağırlığı + en küçük artış); blok, kablo ve setlerde ayarlanabilen ağırlıkların
- * listesi (ara ağırlıklar, üst sınır, setteki boşluklar). Cihaz yoksa egzersizin
- * kendi adımı ve taban ağırlığı.
+ * Öneri motoruna verilecek yük tanımı. Bar ve plaka yüklemelide düzenli adım: bar/kızak
+ * ağırlığından sayılan en küçük artışlar, üst sınır verilmişse orada biter (`deviceLoads` ile
+ * aynı ağırlıklar); blok, kablo ve setlerde ayarlanabilen ağırlıkların listesi (ara ağırlıklar,
+ * üst sınır, setteki boşluklar). Cihaz yoksa egzersizin kendi adımı ve taban ağırlığı.
  */
 export function loadSpecFor(
   exercise: { trackingType: 'weight_reps' | 'bodyweight_reps' | 'duration'; loadStepKg: number; minLoadKg: number },
   device?: DeviceLoadSettings | null,
-): { trackingType: 'weight_reps' | 'bodyweight_reps' | 'duration'; loadStepKg: number; minLoadKg: number; loadsKg?: number[] } {
+): {
+  trackingType: 'weight_reps' | 'bodyweight_reps' | 'duration';
+  loadStepKg: number;
+  minLoadKg: number;
+  maxLoadKg?: number;
+  loadsKg?: number[];
+} {
   if (device && (device.kind === 'barbell' || device.kind === 'plate_loaded') && device.stepKg && device.baseKg !== undefined) {
-    return { trackingType: exercise.trackingType, loadStepKg: device.stepKg, minLoadKg: device.baseKg };
+    return {
+      trackingType: exercise.trackingType,
+      loadStepKg: device.stepKg,
+      minLoadKg: device.baseKg,
+      ...(device.maxKg !== undefined ? { maxLoadKg: device.maxKg } : {}),
+    };
   }
   const loads = device ? deviceLoads(device) : null;
   if (!loads?.length) return { trackingType: exercise.trackingType, loadStepKg: exercise.loadStepKg, minLoadKg: exercise.minLoadKg };

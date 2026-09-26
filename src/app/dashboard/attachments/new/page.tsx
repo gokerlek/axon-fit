@@ -1,7 +1,10 @@
+import type { Metadata } from 'next';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { AttachmentForm } from '../attachment-form';
 import { requirePt } from '@/lib/guards';
+
+export const metadata: Metadata = { title: 'Yeni aparat' };
 
 export default async function NewAttachmentPage() {
   await requirePt();

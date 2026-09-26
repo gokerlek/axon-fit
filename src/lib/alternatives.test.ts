@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { alternativeForDevice, groupByEquipment, rankAlternatives, type AlternativeCandidate } from './alternatives.ts';
+import { alternativeForDevice, deviceSwapTarget, groupByEquipment, rankAlternatives, type AlternativeCandidate } from './alternatives.ts';
 
 const FAMILIES: Record<string, string> = {
   chest_upper: 'chest',
@@ -181,6 +181,35 @@ describe('cihaza göre muadil', () => {
   test('PT sabitlediyse o cihazdaki sabitlenen önce', () => {
     const pinned = { ...onBar, alternatives: ['fly'] };
     assert.equal(alternativeForDevice(pinned, 'dambil-seti', pool, familyOf)?.id, 'fly');
+  });
+
+  const dumbbells = { id: 'dambil-seti', kind: 'dumbbell' } as const;
+
+  test('cihaz değişimi: aynı kalıptaki muadil, başka kalıpta sabitlenenin önüne geçer; aynı kalıpta sabitlenen önce', () => {
+    // Sabitlenen fly başka kalıpta: en iyi muadil o (sıralamanın ilki), ama cihaz değişince aynı kalıptaki pres.
+    const pinnedFly = { ...onBar, alternatives: ['fly'] };
+    assert.equal(alternativeForDevice(pinnedFly, 'dambil-seti', pool, familyOf)?.id, 'fly');
+    assert.equal(deviceSwapTarget(pinnedFly, dumbbells, pool, familyOf)?.id, 'dambil-press');
+    // Aynı kalıpta sabitlenen, puanı daha yüksek olanın önüne geçer.
+    const incline = exercise('egimli-dambil', {
+      equipment: 'dumbbell',
+      deviceId: 'dambil-seti',
+      pattern: 'horizontal_push',
+      primaryMuscles: ['chest_upper', 'delt_front'],
+    });
+    const pinnedIncline = { ...onBar, alternatives: ['fly', 'egimli-dambil'] };
+    assert.equal(deviceSwapTarget(onBar, dumbbells, [...pool, incline], familyOf)?.id, 'dambil-press');
+    assert.equal(deviceSwapTarget(pinnedIncline, dumbbells, [...pool, incline], familyOf)?.id, 'egimli-dambil');
+  });
+
+  test('cihaz değişimi: aynı kalıpta aday yoksa ekipman aynıysa aynı hareket, değilse başka kalıptaki ilk muadil, o da yoksa null', () => {
+    assert.equal(deviceSwapTarget(onBar, { id: 'olimpik-bar', kind: 'barbell' }, pool, familyOf), onBar);
+    // İkinci barda aday yok, ekipman aynı: aynı hareket o barda.
+    assert.equal(deviceSwapTarget(onBar, { id: 'ikinci-bar', kind: 'barbell' }, pool, familyOf), onBar);
+    // Dambılda yalnız fly (başka kalıp), ekipman farklı: fly.
+    assert.equal(deviceSwapTarget(onBar, dumbbells, [onBar, flyOnDumbbells], familyOf)?.id, 'fly');
+    // Lat pulldown'da uygun hareket yok, ekipman farklı: bu cihazla yapılamaz.
+    assert.equal(deviceSwapTarget(onBar, { id: 'lat-pulldown', kind: 'selectorized' }, pool, familyOf), null);
   });
 });
 

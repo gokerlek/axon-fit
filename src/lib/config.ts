@@ -1,56 +1,56 @@
 import 'server-only';
 import { revalidateTag, unstable_cache } from 'next/cache';
-import * as v from 'valibot';
 import { appRepo } from './github/client';
+import { sleep } from './github/errors';
 import { readJson, writeJson } from './github/files';
+import { checkAppRepo, createAppRepo } from './github/repos';
+import { configAccess, type ConfigStore } from './config-update';
 import { appConfigSchema, CONFIG_PATH, defaultConfig, type AppConfig } from './schemas/config';
 
 export { appConfigSchema, CONFIG_PATH, defaultConfig, type AppConfig };
 
 /**
- * Beyaz etiket ayarı (SPEC §10) — uygulama repo'sundaki `pulsecoach.config.json`.
- *
- * Her istekte GitHub'a gitmemek için kısa ömürlü bellek önbelleği var. Yazma anında
- * önbellek düşürülür, böylece PT ayarı değiştirince sonucu hemen görür.
- */
-
-/**
- * Önbellek: Next'in veri önbelleği (sunucu örnekleri arasında paylaşılır).
- *
- * Bellek içi önbellek burada YANLIŞ olurdu: Next sayfaları ve API uçlarını ayrı
- * paketlerde çalıştırır, Vercel'de birden fazla örnek vardır; bir yerde düşürülen
- * önbellek diğerlerinde yaşamaya devam eder (ör. logo silinince kırık görsel).
+ * Beyaz etiket ayarı (SPEC §10) — uygulama repo'sundaki `pulsecoach.config.json`. Hangi okumanın
+ * önbellekli, hangisinin taze olduğu ve yazmanın sırası `config-update.ts`'te (orada test edilir);
+ * burası yalnız GitHub'ı ve Next'in veri önbelleğini bağlar. Her istekte GitHub'a gitmemek için
+ * önbellek var; yazma anında düşürülür, böylece PT ayarı değiştirince sonucu hemen görür.
  */
 export const CONFIG_TAG = 'app-config';
 
-/** Hata önbelleğe ALINMAZ: fırlatılır; `unstable_cache` fırlatılan sonucu saklamaz. */
-const readFromGithub = unstable_cache(
-  async (): Promise<{ config: AppConfig; sha: string | null }> => {
-    const stored = await readJson<unknown>(appRepo(), CONFIG_PATH);
-    if (!stored) return { config: defaultConfig, sha: null };
-    const parsed = v.safeParse(appConfigSchema, stored.content);
-    // Bozuk ayar uygulamayı düşürmez: varsayılana dönülür, kurulum sihirbazı devreye girer.
-    return { config: parsed.success ? parsed.output : defaultConfig, sha: stored.sha };
+const access = configAccess(
+  {
+    read: () => readJson<unknown>(appRepo(), CONFIG_PATH),
+    write: async (config, sha, message) => {
+      await writeJson(appRepo(), CONFIG_PATH, config, { sha: sha ?? undefined, message });
+    },
+    createRepo: createAppRepo,
+    checkRepo: checkAppRepo,
   },
-  ['app-config'],
-  { tags: [CONFIG_TAG], revalidate: 300 },
+  {
+    // Hata önbelleğe ALINMAZ: fırlatılır; `unstable_cache` fırlatılan sonucu saklamaz.
+    wrap: (read) => unstable_cache(read, ['app-config'], { tags: [CONFIG_TAG], revalidate: 300 }),
+    invalidate: () => revalidateTag(CONFIG_TAG, { expire: 0 }),
+  },
+  { log: (message) => console.error(message), wait: sleep },
 );
 
-/** Ayarı okur. GitHub'a ulaşılamazsa uygulama düşmez: varsayılanla açılır (ve bu önbelleğe girmez). */
-export async function readAppConfig(): Promise<AppConfig> {
-  try {
-    return (await readFromGithub()).config;
-  } catch {
-    return defaultConfig;
-  }
+/**
+ * Ayarı GÖRÜNTÜ için okur: GitHub'a ulaşılamazsa uygulama düşmez, varsayılanla açılır (ve bu
+ * önbelleğe girmez). Yazmanın tabanı ya da kurulum kapısı olamaz.
+ */
+export function readAppConfig(): Promise<AppConfig> {
+  return access.display();
 }
 
 /**
- * Ayarı yazar. `sha` önbellekten değil TAZE okunur: önbellekteki sha eskiyse
- * GitHub yazmayı çakışma olarak reddeder.
+ * Kurulum kapısı ve ayar formları için. Dosya yoksa varsayılan (kurulum yapılmamış);
+ * okunamazsa fırlatır: PT varsayılanlarla dolu sihirbaza yollanmaz.
  */
-export async function writeAppConfig(config: AppConfig, message: string): Promise<void> {
-  const current = await readJson<unknown>(appRepo(), CONFIG_PATH);
-  await writeJson(appRepo(), CONFIG_PATH, config, { sha: current?.sha, message });
-  revalidateTag(CONFIG_TAG, { expire: 0 });
+export function loadAppConfig(): Promise<AppConfig> {
+  return access.load();
+}
+
+/** Ayar yazan uçların işleri. Taban önbellekten değil TAZE okunur. */
+export function configStore(): ConfigStore {
+  return access.store;
 }

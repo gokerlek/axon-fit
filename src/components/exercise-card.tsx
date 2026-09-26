@@ -46,14 +46,14 @@ export function ExerciseCard({
 }
 
 /** Seçim modunda seçili kart: halka ve hafif ana renk zemini. */
-export const SELECTED = 'data-selected:ring-2 data-selected:ring-primary data-selected:bg-[color-mix(in_oklab,var(--primary)_6%,var(--card))]';
+export const SELECTED = 'data-selected:ring-2 data-selected:ring-primary-text data-selected:bg-[color-mix(in_oklab,var(--primary)_6%,var(--card))]';
 
 /** Sürüklenen öğenin yerinde kalan yer tutucu: kesik çizgi, içerik görünmez (yükseklik aynı). */
 export const PLACEHOLDER =
   'data-dragging:border-dashed data-dragging:border-muted-foreground/40 data-dragging:bg-transparent data-dragging:shadow-none data-dragging:ring-0 data-dragging:*:invisible';
 
 /** Üstüne bırakma devrede: hedefte halka ve hafif zemin. */
-export const ARMED = 'data-armed:ring-2 data-armed:ring-primary data-armed:bg-primary/8';
+export const ARMED = 'data-armed:ring-2 data-armed:ring-primary-text data-armed:bg-primary/8';
 
 /** Kartın tam genişlikteki bir bölümü (açık gövde: alanlar, setler, ayrıntılar, alt satır). */
 export function ExerciseCardSection({ className, ...props }: React.ComponentProps<'div'>) {
@@ -158,9 +158,9 @@ export function CardGrabber({ tone = 'default', dragging = false, inactive = fal
         className={cn(
           'absolute top-4.5 left-1/2 h-1 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full motion-safe:transition-colors motion-safe:duration-100',
           tone === 'group'
-            ? 'bg-primary/50 group-hover/grab:bg-primary/70 group-active/grab:bg-primary/80'
+            ? 'bg-primary-text/60 group-hover/grab:bg-primary-text/80 group-active/grab:bg-primary-text'
             : 'bg-muted-foreground/40 group-hover/grab:bg-muted-foreground/70 group-active/grab:bg-muted-foreground/80',
-          'group-data-dragging/grab:bg-primary group-data-inactive/grab:bg-muted-foreground/15',
+          'group-data-dragging/grab:bg-primary-text group-data-inactive/grab:bg-muted-foreground/15',
         )}
       />
     </div>
@@ -185,6 +185,12 @@ type FaceProps = {
   keyShortcuts?: string;
   /** Yüzün sağındaki kardeş düğme (kütüphanede olmayan harekette 🗑 Sil), 44×44. */
   action?: React.ReactNode;
+  /**
+   * Meta satırının sağ ucundaki kardeş düğme (cihaz: "Cihazı değiştir"). Meta satırı yüzün hep son
+   * satırıdır ve alttan 14 px içeridedir: düğme oraya `absolute` oturur, yerini meta satırının sonundaki
+   * görünmez kopyası tutar (çağıran verir; `action` ile birlikte kullanılmaz).
+   */
+  metaAction?: React.ReactNode;
   /** Yüzün sağındaki durum (sürüklerken sonuç hapı). */
   status?: React.ReactNode;
   /** Yüzün hemen arkasında (klavyeyle odaklanınca görünen sr-only şerit). */
@@ -223,6 +229,7 @@ export function CardFace({
   onKeyDown,
   keyShortcuts,
   action,
+  metaAction,
   status,
   after,
   static: isStatic = false,
@@ -294,6 +301,9 @@ export function CardFace({
       {grabber}
       {action && !selecting ? (
         <div className="absolute top-1/2 right-1 z-10 -translate-y-1/2 group-has-[[data-slot=drop-pill]]/card:invisible">{action}</div>
+      ) : null}
+      {metaAction && !selecting ? (
+        <div className="absolute right-3 bottom-3.5 z-10 flex group-has-[[data-slot=drop-pill]]/card:invisible">{metaAction}</div>
       ) : null}
       {status}
     </div>

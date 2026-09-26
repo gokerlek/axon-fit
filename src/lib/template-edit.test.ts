@@ -1,5 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { deviceSwapTarget } from './alternatives.ts';
 import type { DeviceKind } from './device-loads.ts';
 import { resizeSets, setShape, uniformSets } from './set-plan.ts';
 import { moveKey } from './reorder.ts';
@@ -14,6 +15,7 @@ import {
   combineInto,
   combineOutcome,
   deviceChoices,
+  deviceSwapChanges,
   dissolveGroup,
   duplicateBlock,
   duplicateBlocks,
@@ -23,12 +25,14 @@ import {
   idSource,
   moveCheck,
   moveItem,
+  moveRegroups,
   newGroupKind,
   prepareForEditing,
   removeBlock,
   removeBlocks,
   removeRow,
   replaceExercise,
+  ruleChange,
   setRounds,
   setRowSetCount,
   stepDestination,
@@ -44,6 +48,7 @@ import {
   countRows,
   duplicateIds,
   roundsOf,
+  rowRule,
   type BlockKind,
   type TemplateBlock,
   type TemplateRow,
@@ -613,6 +618,32 @@ describe('taşıma (sürükle-bırak ve klavye)', () => {
     assert.equal(move(blocks, 'r_0', { at: 'group', blockId: 'b_s', index: 2 }).length, 29);
   });
 
+  test('grup üyeliğini değiştiren taşıma ("Geri al"lı): üye dışarı ya da başka gruba, tek hareket gruba; sıralama değil', () => {
+    const blocks = list();
+    // Aynı düzeyde sıralama: üst düzeyde tek ve grup, grubunda üye.
+    assert.equal(moveRegroups(blocks, 'r_1', { at: 'top', index: 3 }), false);
+    assert.equal(moveRegroups(blocks, 'b_4', { at: 'top', index: 0 }), false);
+    assert.equal(moveRegroups(blocks, 'r_5', { at: 'group', blockId: 'b_4', index: 3 }), false);
+    // Üyelik değişir: üye üst düzeye ya da başka gruba, tek hareket (satırı ya da bloğuyla) gruba.
+    assert.equal(moveRegroups(blocks, 'r_3', { at: 'top', index: 0 }), true);
+    assert.equal(moveRegroups(blocks, 'r_2', { at: 'group', blockId: 'b_4', index: 3 }), true);
+    assert.equal(moveRegroups(blocks, 'r_1', { at: 'group', blockId: 'b_2', index: 1 }), true);
+    assert.equal(moveRegroups(blocks, 'b_3', { at: 'group', blockId: 'b_4', index: 0 }), true);
+    // Olmayan taşıma bir şey değiştirmez: yerinde kalma, grup gruba, 30 blokta gruptan çıkma.
+    assert.equal(moveRegroups(blocks, 'r_6', { at: 'group', blockId: 'b_4', index: 1 }), false);
+    assert.equal(moveRegroups(blocks, 'b_2', { at: 'group', blockId: 'b_4', index: 0 }), false);
+    const crowded = [...singles(29), block('b_s', 'superset', [row('r_a', 'squat'), row('r_b', 'curl')])];
+    assert.equal(moveRegroups(crowded, 'r_a', { at: 'top', index: 0 }), false);
+
+    // Devreden dışarı sürüklenen üye grubu süpersete çevirir (istasyon süresi gider); geri sürüklemek
+    // eski hâli getirmez, iki yön de "Geri al"lı.
+    const circuit = [block('b_g', 'circuit', [row('r_a', 'squat'), row('r_b', 'curl'), row('r_c', 'plank')], { restSeconds: 150, transitionSeconds: 30 })];
+    assert.equal(moveRegroups(circuit, 'r_c', { at: 'top', index: 1 }), true);
+    const out = move(circuit, 'r_c', { at: 'top', index: 1 });
+    assert.deepEqual(shape(out), ['superset:r_a,r_b', 'single:r_c']);
+    assert.equal(moveRegroups(out, 'r_c', { at: 'group', blockId: 'b_g', index: 2 }), true);
+  });
+
   test('klavye: grup ve tek üst düzeyde, üye kendi grubunda kayar (moveKey ile aynı)', () => {
     const blocks = list();
     assert.deepEqual(stepDestination(blocks, 'b_2', 'up'), { at: 'top', index: 0 });
@@ -957,6 +988,161 @@ describe('cihaz değiştirme', () => {
     assert.deepEqual(swapDevice(row('r_1', 'pushdown'), 'olimpik-bar', SWAP), { kind: 'unavailable' });
   });
 
+  /** Sonucun kısa adı: "swapped:<egzersiz>", "device", "unavailable"… */
+  const outcomeOf = (result: ReturnType<typeof swapDevice>) => (result.kind === 'swapped' ? `swapped:${result.to}` : result.kind);
+
+  test('sabitlenen muadil başka kalıptaysa cihazdaki aynı kalıptaki öne geçer (halter bench → kablo: Cable Chest Press)', () => {
+    const cableFly = exercise('cable-fly', {
+      title: 'Cable Fly',
+      category: 'isolation',
+      equipment: 'cable',
+      deviceId: 'kablo-a',
+      pattern: 'chest_fly',
+      primaryMuscles: ['chest_lower', 'chest_upper'],
+    });
+    const cablePress = exercise('cable-press', {
+      title: 'Cable Chest Press',
+      equipment: 'cable',
+      deviceId: 'kablo-a',
+      pattern: 'horizontal_push',
+      primaryMuscles: ['chest_lower'],
+      secondaryMuscles: ['chest_upper', 'triceps_long'],
+    });
+    const oneArmPress = exercise('tek-kol-press', {
+      title: 'Tek Kol Cable Press',
+      equipment: 'cable',
+      deviceId: 'kablo-a',
+      pattern: 'horizontal_push',
+      primaryMuscles: ['chest_lower', 'triceps_long'],
+    });
+    /** PT'nin sabitledikleriyle halter bench ve kablodaki adaylar. */
+    const library = (pins: string[], ...onCable: EditorExercise[]) => ({
+      ...SWAP,
+      exercises: [...ALL.map((item) => (item.id === 'halter-bench' ? { ...item, alternatives: pins } : item)), ...onCable],
+    });
+
+    assert.deepEqual(swapDevice(row('r_1', 'halter-bench', { note: 'Yavaş' }), 'kablo-a', library(['cable-fly'], cableFly, cablePress)), {
+      kind: 'swapped',
+      from: 'halter-bench',
+      to: 'cable-press',
+      row: row('r_1', 'cable-press', { note: 'Yavaş' }),
+    });
+    // Aynı kalıpta aday yoksa ve ekipman farklıysa listenin ilki: sabitlenen.
+    assert.equal(outcomeOf(swapDevice(row('r_1', 'halter-bench'), 'kablo-a', library(['cable-fly'], cableFly))), 'swapped:cable-fly');
+    // Aynı kalıpta sabitlenen varsa o, puanı daha yüksek sabitlenmemişin önüne geçer.
+    assert.equal(
+      outcomeOf(swapDevice(row('r_1', 'halter-bench'), 'kablo-a', library(['cable-fly', 'tek-kol-press'], cableFly, cablePress, oneArmPress))),
+      'swapped:tek-kol-press',
+    );
+    const choices = deviceChoices(row('r_1', 'halter-bench'), { ...library(['cable-fly'], cableFly, cablePress), deviceList: DEVICE_LIST });
+    assert.equal(choices.find((choice) => choice.deviceId === 'kablo-a')?.label, 'Kablo istasyonu → Cable Chest Press');
+  });
+
+  // Cable Row (kablo A), PT'nin sabitlediği Face Pull ikinci kabloda, başka kalıpta; Seated Row da orada, aynı kalıpta.
+  const cableRow = exercise('cable-row', {
+    title: 'Cable Row',
+    equipment: 'cable',
+    deviceId: 'kablo-a',
+    pattern: 'horizontal_pull',
+    primaryMuscles: ['lats_mid', 'traps_mid'],
+    alternatives: ['face-pull'],
+  });
+  const facePull = exercise('face-pull', {
+    title: 'Face Pull',
+    category: 'isolation',
+    equipment: 'cable',
+    deviceId: 'kablo-b',
+    pattern: 'rear_delt',
+    primaryMuscles: ['rear_delt', 'traps_mid'],
+  });
+  const seatedRow = exercise('seated-row', {
+    title: 'Seated Row',
+    equipment: 'cable',
+    deviceId: 'kablo-b',
+    pattern: 'horizontal_pull',
+    primaryMuscles: ['lats_mid', 'traps_mid'],
+  });
+  const secondCable = { id: 'kablo-b', name: 'Kablo B', kind: 'cable' as const };
+  const cables = (...onSecond: EditorExercise[]) => ({
+    ...SWAP,
+    devices: new Map<string, { kind: DeviceKind }>([...SWAP.devices, [secondCable.id, secondCable]]),
+    exercises: [...ALL, cableRow, ...onSecond],
+    deviceList: [...DEVICE_LIST, secondCable],
+  });
+
+  test('ekipman aynı, sabitlenen başka kalıpta: aynı kalıptaki muadile geçer; o da yoksa aynı hareket o cihazda (kablo → ikinci kablo)', () => {
+    assert.deepEqual(swapDevice(row('r_1', 'cable-row'), 'kablo-b', cables(facePull, seatedRow)), {
+      kind: 'swapped',
+      from: 'cable-row',
+      to: 'seated-row',
+      row: row('r_1', 'seated-row'),
+    });
+    assert.deepEqual(swapDevice(row('r_1', 'cable-row'), 'kablo-b', cables(facePull)), {
+      kind: 'device',
+      row: row('r_1', 'cable-row', { deviceId: 'kablo-b' }),
+    });
+  });
+
+  test('eski kurallarla kaydedilmiş satır: seçicide şu anki cihazı yalnız adıyla (mevcut durum), yeniden seçilince satır değişmez', () => {
+    // Eski kod Cable Row'u ikinci kabloya yazmıştı (sabitlenen Face Pull başka kalıpta); yeni kural Seated Row'a geçerdi.
+    const legacy = row('r_1', 'cable-row', { deviceId: 'kablo-b', note: 'Yavaş' });
+    const ctx = cables(facePull, seatedRow);
+    const choices = deviceChoices(legacy, ctx);
+    assert.deepEqual(
+      choices.find((choice) => choice.deviceId === 'kablo-b'),
+      { deviceId: 'kablo-b', label: 'Kablo B', result: { kind: 'device', row: legacy } },
+    );
+    assert.deepEqual(swapDevice(legacy, 'kablo-b', ctx), { kind: 'device', row: legacy });
+    // Kendi cihazına dönmek değişikliği kaldırır; oradan ikinci kablo yeni kuralla Seated Row'a geçer.
+    assert.equal(choices.find((choice) => choice.deviceId === 'kablo-a')?.label, 'Egzersizin cihazı: Kablo istasyonu');
+    const reset = swapDevice(legacy, 'kablo-a', ctx);
+    assert.deepEqual(reset, { kind: 'reset', row: row('r_1', 'cable-row', { note: 'Yavaş' }) });
+    assert.equal(
+      deviceChoices(reset.kind === 'reset' ? reset.row : legacy, ctx).find((choice) => choice.deviceId === 'kablo-b')?.label,
+      'Kablo B → Seated Row',
+    );
+    // Aynı hareketin yazıldığı cihaz da (yeni kuralla da aynı sonuç) yalnız adıyla.
+    const pulldownOnB = row('r_2', 'lat-pulldown', { deviceId: 'lat-b' });
+    assert.deepEqual(
+      deviceChoices(pulldownOnB, { ...SWAP, deviceList: DEVICE_LIST }).find((choice) => choice.deviceId === 'lat-b'),
+      { deviceId: 'lat-b', label: 'Lat pulldown B', result: { kind: 'device', row: pulldownOnB } },
+    );
+  });
+
+  test('egzersiz sayfasının "Cihaz değişirse"si düzenleyiciyle aynı kararı verir (deviceSwapTarget)', () => {
+    // Bench Press'e Cable Fly sabitli, kabloda Cable Chest Press de var: ikisi de Cable Chest Press der.
+    const cableFly = exercise('cable-fly', {
+      title: 'Cable Fly',
+      category: 'isolation',
+      equipment: 'cable',
+      deviceId: 'kablo-a',
+      pattern: 'chest_fly',
+      primaryMuscles: ['chest_lower', 'chest_upper'],
+    });
+    const cablePress = exercise('cable-press', {
+      title: 'Cable Chest Press',
+      equipment: 'cable',
+      deviceId: 'kablo-a',
+      pattern: 'horizontal_push',
+      primaryMuscles: ['chest_lower'],
+    });
+    const pinnedBench = { ...bench, alternatives: ['cable-fly'] };
+    const exercises = [...ALL.filter((item) => item.id !== 'halter-bench'), pinnedBench, cableFly, cablePress, cableRow, facePull, seatedRow];
+    const ctx = { ...cables(), exercises };
+    // Sayfa her cihaz için bunu gösterir; kendi cihazı listede yok (satırda o, değişikliği kaldırır).
+    const page = (source: EditorExercise, device: { id: string; kind: DeviceKind }) => {
+      const target = deviceSwapTarget(source, device, exercises, ctx.familyOf);
+      return target === null ? 'unavailable' : target.id === source.id ? 'device' : `swapped:${target.id}`;
+    };
+    assert.equal(page(pinnedBench, { id: 'kablo-a', kind: 'cable' }), 'swapped:cable-press');
+    for (const source of exercises) {
+      for (const device of ctx.deviceList) {
+        if (device.id === source.deviceId) continue;
+        assert.equal(outcomeOf(swapDevice(row('r_1', source.id), device.id, ctx)), page(source, device), `${source.id} → ${device.id}`);
+      }
+    }
+  });
+
   test('kendi cihazı ya da boş seçim: değişiklik kalkar', () => {
     const changed = row('r_1', 'lat-pulldown', { deviceId: 'lat-b' });
     assert.deepEqual(swapDevice(changed, 'lat-a', SWAP), { kind: 'reset', row: row('r_1', 'lat-pulldown') });
@@ -965,6 +1151,22 @@ describe('cihaz değiştirme', () => {
 
   test('kütüphanede olmayan egzersiz: seçilemez', () => {
     assert.deepEqual(swapDevice(row('r_1', 'silinmis'), 'lat-b', SWAP), { kind: 'unavailable' });
+  });
+
+  test('satırı değiştiren seçim yazılır ("Geri al"lı); aynı cihazı ya da egzersizinkini yeniden seçmek yazılmaz', () => {
+    const plain = row('r_1', 'lat-pulldown');
+    const onB = row('r_1', 'lat-pulldown', { deviceId: 'lat-b' });
+    const changes = (source: TemplateRow, deviceId: string | null) => deviceSwapChanges(source, swapDevice(source, deviceId, SWAP));
+    // Hareket değişti, cihaz yazıldı ya da değişiklik kalktı: değişir.
+    assert.equal(changes(row('r_1', 'halter-bench'), 'dambil-seti'), true);
+    assert.equal(changes(plain, 'lat-b'), true);
+    assert.equal(changes(onB, 'lat-a'), true);
+    assert.equal(changes(onB, null), true);
+    // Zaten yazılı cihaz, cihazsız satırda egzersizin kendi cihazı ya da boş seçim, seçilemeyen cihaz: değişmez.
+    assert.equal(changes(onB, 'lat-b'), false);
+    assert.equal(changes(plain, 'lat-a'), false);
+    assert.equal(changes(plain, null), false);
+    assert.equal(changes(row('r_1', 'pushdown'), 'olimpik-bar'), false);
   });
 
   test('kayıt türü değişirse hedef sıfırlanır, kural düşer', () => {
@@ -1000,6 +1202,28 @@ describe('cihaz değiştirme', () => {
     assert.deepEqual(droppedDeviceRowIds, ['r_2']);
     assert.equal(blocks[0]?.rows[0]?.deviceId, 'lat-b');
     assert.equal('deviceId' in (blocks[0]?.rows[1] ?? {}), false);
+  });
+});
+
+describe('satırın kuralı', () => {
+  test('seçici zaten etkin olan değeri yeniden seçerse yazılmaz: özel kural yoksa yok kalır, varsa dokunulmaz', () => {
+    const plain = row('r_1', 'halter-bench');
+    const { scheme, targetRir } = rowRule(plain, bench);
+    const otherScheme = scheme === 'linear' ? 'double' : 'linear';
+    const otherRir = targetRir === 1 ? 2 : 1;
+    // Özel kural yok: egzersizinkine eşit seçim hiçbir şey yazmaz; farklısı öbür alanı etkin kuraldan alır.
+    assert.equal(ruleChange(plain, bench, { scheme }), null);
+    assert.equal(ruleChange(plain, bench, { targetRir }), null);
+    assert.deepEqual(ruleChange(plain, bench, { scheme: otherScheme }), { scheme: otherScheme, targetRir });
+    assert.deepEqual(ruleChange(plain, bench, { targetRir: otherRir }), { scheme, targetRir: otherRir });
+
+    // Özel kural var: ona eşit seçim dokunmaz; farklısı öbür alanı özel kuraldan alır.
+    const custom = row('r_2', 'halter-bench', { rule: { scheme: otherScheme, targetRir: otherRir } });
+    assert.equal(ruleChange(custom, bench, { scheme: otherScheme }), null);
+    assert.equal(ruleChange(custom, bench, { targetRir: otherRir }), null);
+    assert.deepEqual(ruleChange(custom, bench, { scheme }), { scheme, targetRir: otherRir });
+    // Egzersizinkine eşit özel kural da aynı seçimde yerinde kalır.
+    assert.equal(ruleChange(row('r_3', 'halter-bench', { rule: { scheme, targetRir } }), bench, { targetRir }), null);
   });
 });
 

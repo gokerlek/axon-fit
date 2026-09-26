@@ -1,8 +1,8 @@
 'use client';
 
 import { X } from '@phosphor-icons/react';
-import { GroupedSelect } from '@/components/labeled-select';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   CONDITION_REGIONS,
   CONDITIONS,
@@ -65,6 +65,7 @@ export function formatConstraints(list: readonly ClientCondition[]): string {
   return list.map((item) => (item.qualifier ? `${item.id}:${item.qualifier}` : item.id)).join(',');
 }
 
+/** Kısıt seçenekleri: her kimlik + (varsa) şiddet/faz varyantı, bölgeye göre gruplu. */
 function groups() {
   return CONDITION_REGIONS.map((region) => ({
     label: REGION_LABELS[region],
@@ -81,6 +82,45 @@ function groups() {
         ];
       }),
   })).filter((group) => group.options.length > 0);
+}
+
+/**
+ * Kısıt ekleme seçicisi: her seçim bir kısıt ekler, seçici hep boş kalır. Yer tutucu seçenek
+ * değildir (listede işaretli "Kısıt ekle" satırı çıkmaz); görünür etiket yoksa `label` adı olur.
+ */
+export function ConditionSelect({
+  id,
+  placeholder,
+  label,
+  onSelect,
+}: {
+  id: string;
+  placeholder: string;
+  /** Görünür etiketi olmayan seçicinin erişilebilir adı. */
+  label?: string;
+  onSelect: (value: string) => void;
+}) {
+  const options = groups();
+  const items = options.flatMap((group) => group.options);
+  return (
+    <Select items={items} value={null} onValueChange={(next) => next && onSelect(next as string)}>
+      <SelectTrigger id={id} aria-label={label} className="w-full">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((group) => (
+          <SelectGroup key={group.label}>
+            <SelectLabel>{group.label}</SelectLabel>
+            {group.options.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }
 
 export function ConstraintPicker({
@@ -118,7 +158,7 @@ export function ConstraintPicker({
         </div>
       ) : null}
 
-      <GroupedSelect id="constraint" value="" groups={groups()} empty="Kısıt ekle" onChange={add} />
+      <ConditionSelect id="constraint" placeholder="Kısıt ekle" label="Kısıt ekle" onSelect={add} />
     </div>
   );
 }

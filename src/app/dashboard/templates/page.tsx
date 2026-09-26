@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ClipboardText, Plus } from '@phosphor-icons/react/dist/ssr';
 import { TemplateMuscleMap } from '@/components/muscle-map/template-muscle-map';
@@ -14,8 +15,10 @@ import { templateMuscleLoad, templateSummary } from '@/lib/template-plan';
 import { listTemplates } from '@/lib/templates';
 import { TrainingTabs } from '../training-tabs';
 
+export const metadata: Metadata = { title: 'Şablonlar' };
+
 /**
- * Şablonlar: danışanlara atanacak antrenmanlar. Kartta şablonun kas haritası, adı ve
+ * Şablonlar: danışana program kurarken başlangıç olan antrenmanlar (programa kopyalanır). Kartta şablonun kas haritası, adı ve
  * özeti; ayrıntı ve düzenleme kendi sayfalarında (SPEC §6).
  */
 export default async function TemplatesPage() {
@@ -49,7 +52,8 @@ export default async function TemplatesPage() {
             </EmptyMedia>
             <EmptyTitle>Henüz şablon yok</EmptyTitle>
             <EmptyDescription>
-              Şablon, danışana atayacağın antrenmanın sırasıdır: hareketler, setler, hedefler ve dinlenme.
+              Şablon bir antrenmanın sırasıdır: hareketler, setler, hedefler ve dinlenme. Danışana program kurarken
+              kopyalanır; şablonu sonradan değiştirmek programları değiştirmez.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
@@ -87,29 +91,32 @@ export default async function TemplatesPage() {
               .slice(0, 3);
             return (
               <li key={template.id}>
-                <Link
-                  href={`/dashboard/templates/${template.id}`}
-                  className="block h-full rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                  <Card size="sm" className="h-full transition-colors hover:bg-muted/40">
-                    <div className="mx-(--card-spacing) rounded-lg bg-muted/40 py-2">
-                      <TemplateMuscleMap variant="compact" bodyClassName="h-24" load={load} />
-                    </div>
-                    <CardHeader>
-                      <CardTitle>{template.name}</CardTitle>
-                      <CardDescription className="line-clamp-2">
-                        {template.description || summarizeMuscles(top).join(', ') || 'Sayılan kas yükü yok'}
-                      </CardDescription>
-                      {missingRowIds.length > 0 ? (
-                        <CardAction>
-                          <Badge variant="destructive">eksik hareket</Badge>
-                        </CardAction>
-                      ) : null}
-                    </CardHeader>
-                    <CardFooter className="mt-auto text-xs text-muted-foreground tabular-nums">
-                      {formatNumber(summary.rows)} hareket · {formatNumber(summary.workingSets)} set · ≈ {formatNumber(summary.minutes)} dk
-                    </CardFooter>
-                  </Card>
-                </Link>
+                {/* Uzatılmış bağlantı: başlıktaki bağlantı kartın tamamını kaplar (after:inset-0). */}
+                <Card size="sm" className="relative h-full transition-colors hover:bg-muted/40">
+                  <div className="mx-(--card-spacing) rounded-lg bg-muted/40 py-3">
+                    <TemplateMuscleMap variant="compact" bodyClassName="h-80" load={load} />
+                  </div>
+                  <CardHeader>
+                    <CardTitle>
+                      <Link
+                        href={`/dashboard/templates/${template.id}`}
+                        className="outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:after:ring-3 focus-visible:after:ring-ring/50">
+                        {template.name}
+                      </Link>
+                    </CardTitle>
+                    <CardDescription className="line-clamp-2">
+                      {template.description || summarizeMuscles(top).join(', ') || 'Sayılan kas yükü yok'}
+                    </CardDescription>
+                    {missingRowIds.length > 0 ? (
+                      <CardAction>
+                        <Badge variant="destructive">eksik hareket</Badge>
+                      </CardAction>
+                    ) : null}
+                  </CardHeader>
+                  <CardFooter className="mt-auto text-xs text-muted-foreground tabular-nums">
+                    {formatNumber(summary.rows)} hareket · {formatNumber(summary.workingSets)} set · ≈ {formatNumber(summary.minutes)} dk
+                  </CardFooter>
+                </Card>
               </li>
             );
           })}

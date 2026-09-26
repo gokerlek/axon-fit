@@ -1,9 +1,8 @@
 import 'server-only';
-import * as v from 'valibot';
 import { EXERCISE_LIBRARY } from '@/data/exercise-library';
-import { appRepo } from './github/client';
-import { readJson, writeJson } from './github/files';
-import { customExercisesSchema, type Exercise } from './schemas/exercise';
+import { appRepoFiles } from './app-repo-files';
+import { EXERCISES, readCatalog, type CatalogFile } from './catalog-store';
+import type { Exercise } from './schemas/exercise';
 
 /**
  * Egzersizler: hazır kütüphane (pakette) + PT'nin kendi egzersizleri (repo'da).
@@ -19,30 +18,25 @@ import { customExercisesSchema, type Exercise } from './schemas/exercise';
  * React Query önbelleği var.
  */
 
-export const CUSTOM_EXERCISES_PATH = 'data/exercises.json';
+export const CUSTOM_EXERCISES_PATH = EXERCISES.path;
 
 export type ExerciseWithSource = Exercise & { source: 'library' | 'custom' };
 
-/** Taze okuma (yazmadan önce `sha` için ve silme/güncelleme kararları için). */
-export async function readCustomExercises(): Promise<{ items: Exercise[]; sha: string | null }> {
-  const stored = await readJson<unknown>(appRepo(), CUSTOM_EXERCISES_PATH);
-  if (!stored) return { items: [], sha: null };
+/** PT'nin dosyası: okunabilen egzersizler, okunamayanlar (sayısı ve ham hâli) ve `sha`. */
+export type CustomExercises = CatalogFile<Exercise>;
 
-  const parsed = v.safeParse(customExercisesSchema, stored.content);
-  // Bozuk dosya uygulamayı düşürmez: hazır kütüphaneyle devam edilir.
-  return { items: parsed.success ? parsed.output : [], sha: stored.sha };
+/**
+ * Taze okuma. Öğe öğe doğrulanır (`src/lib/stored-list.ts`): şemaya uymayan kayıt (ya da aynı
+ * kimliğin ikinci kaydı) listede görünmez ama dosyadan da düşmez. Dosya liste değilse hata verir.
+ * Yazma uçların çekirdeğinde (`src/lib/catalog-actions.ts`).
+ */
+export async function readCustomExercises(): Promise<CustomExercises> {
+  return readCatalog(appRepoFiles(), EXERCISES);
 }
 
-export async function writeCustomExercises(
-  items: Exercise[],
-  message: string,
-  sha: string | null,
-): Promise<void> {
-  await writeJson(appRepo(), CUSTOM_EXERCISES_PATH, items, { sha: sha ?? undefined, message });
-}
-
-export async function listExercises(): Promise<ExerciseWithSource[]> {
-  const { items } = await readCustomExercises();
+/** Hazır kütüphane + PT'nin egzersizleri. Dosya zaten okunduysa (`custom`) yeniden okunmaz. */
+export async function listExercises(custom?: Pick<CustomExercises, 'items'>): Promise<ExerciseWithSource[]> {
+  const { items } = custom ?? (await readCustomExercises());
   const customIds = new Set(items.map((item) => item.id));
 
   return [
@@ -52,27 +46,6 @@ export async function listExercises(): Promise<ExerciseWithSource[]> {
       source: 'library' as const,
     })),
   ].sort((a, b) => a.title.localeCompare(b.title, 'tr'));
-}
-
-/** Başlıktan kimlik üretir; çakışırsa sonuna sayı ekler. */
-export function slugify(title: string, taken: Set<string>): string {
-  const harfler: Record<string, string> = { ı: 'i', ğ: 'g', ü: 'u', ş: 's', ö: 'o', ç: 'c', â: 'a' };
-  const base =
-    title
-      .toLowerCase()
-      .replace(/[ığüşöçâ]/g, (ch) => harfler[ch] ?? ch)
-      .normalize('NFKD')
-      .replace(/[̀-ͯ]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 50) || 'egzersiz';
-
-  if (!taken.has(base)) return base;
-  for (let i = 2; i < 100; i++) {
-    const candidate = `${base}-${i}`;
-    if (!taken.has(candidate)) return candidate;
-  }
-  return `${base}-${Date.now()}`;
 }
 
 export type ExerciseDetail = ExerciseWithSource & {

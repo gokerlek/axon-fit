@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { readPtSession } from '@/lib/session';
 import { appRepo, GithubError } from '@/lib/github/client';
 import { deleteFile, getFileSha, writeBinary } from '@/lib/github/files';
-import { readAppConfig, writeAppConfig } from '@/lib/config';
+import { configStore } from '@/lib/config';
+import { ConfigUnavailableError, removeLogo, replaceLogo, type LogoFiles } from '@/lib/config-update';
 
 /**
  * Logo yükleme (SPEC §10).
@@ -18,6 +19,21 @@ const ALLOWED = new Map<string, string>([
 ]);
 
 const MAX_BYTES = 512 * 1024;
+
+/**
+ * Logo dosyasının GitHub işleri. Akış (önce repo denetimi, taban taze okuma, eski dosyanın ancak
+ * ayar yazıldıktan sonra silinmesi) `config-update.ts`'te, orada test edilir.
+ */
+function logoFiles(): LogoFiles {
+  const repo = appRepo();
+  return {
+    sha: (path) => getFileSha(repo, path),
+    write: async (path, bytes, sha) => {
+      await writeBinary(repo, path, bytes, { sha: sha ?? undefined, message: 'Logo güncellendi' });
+    },
+    remove: (path, sha, message) => deleteFile(repo, path, { sha, message }),
+  };
+}
 
 export async function POST(request: Request) {
   const session = await readPtSession();
@@ -45,27 +61,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const repo = appRepo();
   const path = `media/brand/logo.${extension}`;
 
   try {
-    const existingSha = await getFileSha(repo, path);
-    await writeBinary(repo, path, new Uint8Array(await file.arrayBuffer()), {
-      sha: existingSha ?? undefined,
-      message: 'Logo güncellendi',
-    });
-
-    const config = await readAppConfig();
-    // Uzantı değiştiyse eski dosya artıkta kalmasın.
-    if (config.logo && config.logo !== path) {
-      const oldSha = await getFileSha(repo, config.logo);
-      if (oldSha) await deleteFile(repo, config.logo, { sha: oldSha, message: 'Eski logo kaldırıldı' });
-    }
-    await writeAppConfig({ ...config, logo: path }, 'Logo ayarı güncellendi');
-
+    await replaceLogo(configStore(), logoFiles(), path, new Uint8Array(await file.arrayBuffer()));
     return NextResponse.json({ logo: path });
   } catch (error) {
-    const failure = error instanceof GithubError ? error : null;
+    const failure = error instanceof GithubError || error instanceof ConfigUnavailableError ? error : null;
     return NextResponse.json({ error: failure?.message ?? 'Logo yüklenemedi.' }, { status: failure?.status ?? 502 });
   }
 }
@@ -77,15 +79,10 @@ export async function DELETE() {
   }
 
   try {
-    const config = await readAppConfig();
-    if (config.logo) {
-      const sha = await getFileSha(appRepo(), config.logo);
-      if (sha) await deleteFile(appRepo(), config.logo, { sha, message: 'Logo kaldırıldı' });
-      await writeAppConfig({ ...config, logo: null }, 'Logo ayarı temizlendi');
-    }
+    await removeLogo(configStore(), logoFiles());
     return NextResponse.json({ ok: true });
   } catch (error) {
-    const failure = error instanceof GithubError ? error : null;
+    const failure = error instanceof GithubError || error instanceof ConfigUnavailableError ? error : null;
     return NextResponse.json({ error: failure?.message ?? 'Logo kaldırılamadı.' }, { status: failure?.status ?? 502 });
   }
 }

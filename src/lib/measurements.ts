@@ -131,11 +131,22 @@ export function realChange(
   return (better === 'higher') === up ? 'improved' : 'declined';
 }
 
-/** Sağ-sol yan köprü farkı ölçüm hatası bandını (%25) aşıyor mu. */
+/**
+ * Sağ-sol yan köprü farkı ölçüm hatası bandını (%25) aşıyor mu. Karşılaştırma yuvarlanmamış
+ * oranla (%25,4 bandı aşar). `differencePercent` gösterim içindir ve kararla çelişmez: bandın
+ * yakınında (%24,5–25,5) bir ondalıkla (%25,4 "aşıyor", %25 "bandında"), uzağında tam sayıyla;
+ * bandı aşan fark hiçbir zaman "%25" diye yazılmaz (%25,025 → %25,03).
+ */
 export function sideBridgeAsymmetry(leftS: number, rightS: number): { differencePercent: number; flagged: boolean } {
   const larger = Math.max(leftS, rightS);
-  const differencePercent = larger === 0 ? 0 : Math.round((Math.abs(leftS - rightS) / larger) * 100);
-  return { differencePercent, flagged: differencePercent > ENDURANCE_NOISE * 100 };
+  const ratio = larger === 0 ? 0 : Math.abs(leftS - rightS) / larger;
+  // Ondalık çıkarma kayar (33,2 − 24,9 = 8,3000…04 → %25,000…01): tam sınırdaki fark bandı aşmış sayılmasın.
+  const flagged = Math.round(ratio * 1e9) / 1e9 > ENDURANCE_NOISE;
+  const percent = ratio * 100;
+  const band = ENDURANCE_NOISE * 100;
+  const scale = Math.abs(percent - band) <= 0.5 ? 10 : 1;
+  const shown = Math.round(percent * scale) / scale;
+  return { differencePercent: flagged && shown <= band ? Math.ceil(percent * 100) / 100 : shown, flagged };
 }
 
 /**

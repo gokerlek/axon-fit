@@ -1,9 +1,8 @@
 import 'server-only';
-import * as v from 'valibot';
 import { ATTACHMENT_LIBRARY } from '@/data/attachment-library';
-import { appRepo } from './github/client';
-import { readJson, writeJson } from './github/files';
-import { customAttachmentsSchema, type Attachment } from './schemas/attachment';
+import { appRepoFiles } from './app-repo-files';
+import { ATTACHMENTS, readCatalog, type CatalogFile } from './catalog-store';
+import type { Attachment } from './schemas/attachment';
 
 /**
  * Aparat havuzu: hazır liste (pakette) + PT'nin eklediği ya da değiştirdiği aparatlar
@@ -11,25 +10,26 @@ import { customAttachmentsSchema, type Attachment } from './schemas/attachment';
  * sunucuda önbellek yok: kaydın ardından açılan sayfa yeni kaydı görür.
  */
 
-export const CUSTOM_ATTACHMENTS_PATH = 'data/attachments.json';
+export const CUSTOM_ATTACHMENTS_PATH = ATTACHMENTS.path;
 
 export type AttachmentWithSource = Attachment & { source: 'library' | 'custom' };
 export type AttachmentDetail = AttachmentWithSource & { overridesLibrary: boolean };
 
-export async function readCustomAttachments(): Promise<{ items: Attachment[]; sha: string | null }> {
-  const stored = await readJson<unknown>(appRepo(), CUSTOM_ATTACHMENTS_PATH);
-  if (!stored) return { items: [], sha: null };
-  const parsed = v.safeParse(customAttachmentsSchema, stored.content);
-  // Bozuk dosya uygulamayı düşürmez: hazır havuzla devam edilir.
-  return { items: parsed.success ? parsed.output : [], sha: stored.sha };
+/** PT'nin dosyası: okunabilen aparatlar, okunamayanlar (sayısı ve ham hâli) ve `sha`. */
+export type CustomAttachments = CatalogFile<Attachment>;
+
+/**
+ * Taze okuma. Öğe öğe doğrulanır (`src/lib/stored-list.ts`): şemaya uymayan kayıt (ya da aynı
+ * kimliğin ikinci kaydı) listede görünmez ama dosyadan da düşmez. Dosya liste değilse hata verir.
+ * Yazma uçların çekirdeğinde (`src/lib/catalog-actions.ts`).
+ */
+export async function readCustomAttachments(): Promise<CustomAttachments> {
+  return readCatalog(appRepoFiles(), ATTACHMENTS);
 }
 
-export async function writeCustomAttachments(items: Attachment[], message: string, sha: string | null): Promise<void> {
-  await writeJson(appRepo(), CUSTOM_ATTACHMENTS_PATH, items, { sha: sha ?? undefined, message });
-}
-
-export async function listAttachments(): Promise<AttachmentWithSource[]> {
-  const { items } = await readCustomAttachments();
+/** Hazır havuz + PT'nin aparatları. Dosya zaten okunduysa (`custom`) yeniden okunmaz. */
+export async function listAttachments(custom?: Pick<CustomAttachments, 'items'>): Promise<AttachmentWithSource[]> {
+  const { items } = custom ?? (await readCustomAttachments());
   const customIds = new Set(items.map((item) => item.id));
   return [
     ...items.map((item) => ({ ...item, source: 'custom' as const })),

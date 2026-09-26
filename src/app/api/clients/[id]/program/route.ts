@@ -4,7 +4,6 @@ import { readClient } from '@/lib/clients';
 import { listDevices } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
 import { GithubError } from '@/lib/github/client';
-import { normalizeProgram } from '@/lib/program-plan';
 import { deleteProgram, programDiffContext, saveProgram } from '@/lib/programs';
 import { clientIdSchema } from '@/lib/schemas/client';
 import { programSaveSchema } from '@/lib/schemas/program';
@@ -25,9 +24,12 @@ function failed(error: unknown, fallback: string) {
 
 /**
  * Programı oluşturur (`baseRevision: null`) ya da kaydeder. Egzersiz ve cihaz kimlikleri
- * kütüphaneye göre denetlenir; eski biçimle açık kalmış sekmenin gövdesi şemada çevrilir. Düzenleyici yüklediği revision'ı gönderir: program o arada
- * başka yerde kaydedildiyse 412 döner ve kayıt yapılmaz. Değişiklik yoksa hiçbir şey
- * yazılmaz; varsa geçmişe ve commit mesajına otomatik özet girer.
+ * kütüphaneye göre, kayıttaki programla birlikte denetlenir (`saveProgram`); eski biçimle açık
+ * kalmış sekmenin gövdesi şemada çevrilir. Düzenleyici yüklediği revision'ı ve programın oluşturulma
+ * anını gönderir: program o arada başka yerde kaydedildiyse (ya da silinip yeniden oluşturulduysa)
+ * 412 döner ve kayıt yapılmaz. Değişiklik yoksa hiçbir şey yazılmaz; varsa geçmişe ve commit
+ * mesajına otomatik özet girer. Cihazı o arada silinmiş satırlar egzersizin cihazına döner; sayısı
+ * yanıtta (`droppedDevices`), düzenleyici PT'ye söyler.
  */
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   if ((await readPtSession())?.role !== 'pt') return forbidden();
@@ -44,31 +46,26 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'Bilgileri kontrol et.', fields }, { status: 400 });
   }
 
-  const { baseRevision, phased, currentPhaseId, phases } = parsed.output;
+  const { baseRevision, baseCreatedAt, phased, currentPhaseId, phases } = parsed.output;
   try {
     if (!(await readClient(id))) return clientMissing();
     const [exercises, devices] = await Promise.all([listExercises(), listDevices()]);
-    const normalized = normalizeProgram(
-      { phased, phases },
-      { exercises: new Map(exercises.map((exercise) => [exercise.id, exercise])), deviceIds: new Set(devices.map((device) => device.id)) },
-    );
-    if (Object.keys(normalized.errors).length > 0) {
-      return NextResponse.json({ error: 'Bilgileri kontrol et.', fields: normalized.errors }, { status: 400 });
-    }
-
     const result = await saveProgram(
       id,
-      { phased, currentPhaseId, phases: normalized.phases },
-      baseRevision,
+      { phased, currentPhaseId, phases },
+      baseRevision === null ? null : { revision: baseRevision, createdAt: baseCreatedAt },
+      { exercises: new Map(exercises.map((exercise) => [exercise.id, exercise])), deviceIds: new Set(devices.map((device) => device.id)) },
       programDiffContext(exercises, devices),
     );
     switch (result.status) {
+      case 'invalid':
+        return NextResponse.json({ error: 'Bilgileri kontrol et.', fields: result.errors }, { status: 400 });
       case 'created':
-        return NextResponse.json({ revision: result.revision }, { status: 201 });
+        return NextResponse.json({ revision: result.revision, droppedDevices: result.droppedDevices }, { status: 201 });
       case 'saved':
-        return NextResponse.json({ revision: result.revision });
+        return NextResponse.json({ revision: result.revision, droppedDevices: result.droppedDevices });
       case 'unchanged':
-        return NextResponse.json({ revision: result.revision, unchanged: true });
+        return NextResponse.json({ revision: result.revision, unchanged: true, droppedDevices: result.droppedDevices });
       case 'missing':
         return NextResponse.json({ error: 'Program bulunamadı; silinmiş olabilir.' }, { status: 404 });
       case 'stale':

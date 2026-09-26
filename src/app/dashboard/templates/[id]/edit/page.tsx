@@ -1,5 +1,8 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { EditorBackLink } from '@/components/block-editor/editor-back-link';
 import { PageHeader } from '@/components/page-header';
+import { USER_MENU_GUTTER } from '@/components/user-menu-spot';
 import { readAppConfig } from '@/lib/config';
 import { listDevices } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
@@ -10,6 +13,12 @@ import { InvalidTemplateAlert } from '../../invalid-template-alert';
 import { TemplateForm } from '../../template-form';
 import { TemplateActions } from '../template-actions';
 
+export const metadata: Metadata = { title: 'Şablonu düzenle' };
+
+/**
+ * Şablon düzenleme. Program düzenleyicisiyle aynı desen: başlığın üstünde "‹" dönüş (şablonun
+ * detayına), Kaydet "Hareketler" başlığında, yıkıcı eylem ("Sil") başlıkta ikincil görünümde.
+ */
 export default async function EditTemplatePage({ params }: { params: Promise<{ id: string }> }) {
   await requirePt();
   const { id } = await params;
@@ -20,15 +29,10 @@ export default async function EditTemplatePage({ params }: { params: Promise<{ i
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        crumbs={[
-          { label: 'Şablonlar', href: '/dashboard/templates' },
-          { label: name, href: `/dashboard/templates/${id}` },
-          { label: 'Düzenle' },
-        ]}
-        title="Şablonu düzenle"
-        actions={<TemplateActions id={id} name={name} />}
-      />
+      <div className="flex flex-col gap-2">
+        <EditorBackLink href={`/dashboard/templates/${id}`} label={name} className={USER_MENU_GUTTER} />
+        <PageHeader title="Şablonu düzenle" actions={<TemplateActions id={id} name={name} />} />
+      </div>
       {file.template ? (
         <TemplateForm
           editing={{ template: file.template, sha: file.sha }}

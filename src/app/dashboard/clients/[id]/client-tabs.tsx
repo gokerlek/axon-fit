@@ -2,14 +2,18 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TabsNav, TabsNavLink } from '@/components/ui/tabs';
 
 type Tab = { key: string; label: string; href: string; active: (pathname: string) => boolean; ready: boolean };
 
 /**
  * Danışanın sekmeleri: Genel · Program · Ölçümler · Antrenmanlar · Davet. Her sekme kendi
- * sayfasıdır (adres değişir, geri tuşu çalışır); alt sayfalar (programı düzenle, ölçüm gir)
- * kendi sekmesinde açık görünür. Antrenmanlar antrenman ekranı gelene kadar pasif.
+ * sayfasıdır (adres değişir, geri tuşu çalışır): gezinme, `tablist` değil (`TabsNav`). Alt sayfalar
+ * (programı düzenle, ölçüm gir) kendi sekmesinde açık görünür. Antrenmanlar antrenman ekranı gelene
+ * kadar pasif ve "yakında" yazar.
+ *
+ * Telefonda (375 px) beş sekme sığmaz: şerit yatay kayar, taşan kenar solar. Pasif sekme telefonda
+ * görsel olarak sona alınır ki "Davet" ekran dışında kalmasın; okuma sırası (DOM) SPEC'teki gibi.
  */
 export function ClientTabs({ clientId }: { clientId: string }) {
   const pathname = usePathname();
@@ -25,25 +29,18 @@ export function ClientTabs({ clientId }: { clientId: string }) {
   const current = tabs.find((tab) => tab.active(pathname))?.key ?? 'genel';
 
   return (
-    // Telefonda sekmeler sığmazsa yatay kayar; sayfa taşmaz.
-    <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-      <Tabs value={current}>
-        <TabsList aria-label="Danışan bölümleri">
-          {tabs.map((tab) =>
-            tab.ready ? (
-              <TabsTrigger key={tab.key} value={tab.key} nativeButton={false} render={<Link href={tab.href} />} className="px-3">
-                {tab.label}
-              </TabsTrigger>
-            ) : (
-              // `title` erişilebilir adı ezerdi ("Antrenmanlar" yerine ipucu okunurdu): ipucu ayrı metin.
-              <TabsTrigger key={tab.key} value={tab.key} disabled className="px-3">
-                {tab.label}
-                <span className="sr-only"> (antrenman ekranıyla gelecek)</span>
-              </TabsTrigger>
-            ),
-          )}
-        </TabsList>
-      </Tabs>
-    </div>
+    <TabsNav aria-label="Danışan bölümleri">
+      {tabs.map((tab) =>
+        tab.ready ? (
+          <TabsNavLink key={tab.key} active={tab.key === current} render={<Link href={tab.href} />}>
+            {tab.label}
+          </TabsNavLink>
+        ) : (
+          <TabsNavLink key={tab.key} disabled note="yakında" className="max-sm:order-last">
+            {tab.label}
+          </TabsNavLink>
+        ),
+      )}
+    </TabsNav>
   );
 }

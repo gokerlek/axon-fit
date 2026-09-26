@@ -25,25 +25,22 @@ import {
   FieldDescription,
   FieldError,
   FieldLabel,
-  FieldLegend,
   FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { GroupedSelect, LabeledSelect } from "@/components/labeled-select";
 import { Textarea } from "@/components/ui/textarea";
 import { Toggle } from "@/components/ui/toggle";
+import { UnsavedChangesGuard } from "@/components/unsaved-changes-guard";
 import { VideoEmbed } from "@/components/video-embed";
 import { MuscleMap } from "@/components/muscle-map/muscle-map";
 import { MedicalFields } from "./medical-fields";
+import { LibraryImpactNote, LoadFields } from "./load-fields";
+import { sameDevice, sameRule, toExercisePayload } from "./exercise-form-logic";
+import { TOUCH_TARGETS } from "./touch-targets";
 import { PATTERN_LABELS } from "@/lib/alternatives";
-import {
-  DEVICE_KIND_LABELS,
-  DEVICE_KINDS,
-  describeDeviceLoads,
-  deviceLoads,
-  KIND_EQUIPMENT,
-  loadSpecFor,
-} from "@/lib/device-loads";
+import { attachmentChoices } from "@/lib/catalog-refs";
+import { DEVICE_KIND_LABELS, DEVICE_KINDS, KIND_EQUIPMENT } from "@/lib/device-loads";
 import { GRIP_LABELS, GRIP_WIDTH_LABELS } from "@/lib/grips";
 import type { Attachment } from "@/lib/schemas/attachment";
 import type { Device } from "@/lib/schemas/device";
@@ -56,36 +53,34 @@ import {
 } from "@/lib/muscles";
 import {
   defaultRule,
-  describeRule,
   EQUIPMENT_LOAD_DEFAULTS,
   progressionOf,
-  PROGRESSION_LABELS,
-  RIR_LABELS,
   type ProgressionRule,
 } from "@/lib/progression";
 import { ApiError, fetchJson } from "@/lib/query/errors";
 import { applyFieldErrors } from "@/lib/query/field-errors";
 import { useServiceMutation } from "@/lib/query/use-service";
 import {
-  CATEGORIES,
   CATEGORY_LABELS,
-  EQUIPMENT,
   EQUIPMENT_LABELS,
   MUSCLES,
   MUSCLE_LABELS,
-  TRACKING_TYPES,
   exerciseFormSchema,
   type Exercise,
   type ExerciseInput,
   type Muscle,
 } from "@/lib/schemas/exercise";
-import { parseVideoUrl, videoUrl } from "@/lib/video";
+import { parseVideoUrl, UNRECOGNIZED_VIDEO_URL, videoUrl } from "@/lib/video";
 
-const TRACKING_LABELS: Record<(typeof TRACKING_TYPES)[number], string> = {
-  weight_reps: "Ağırlık + tekrar",
-  bodyweight_reps: "Vücut ağırlığı (tekrar)",
-  duration: "Süre",
-};
+/** Zorunlu alan işareti: görünen yıldız, ekran okuyucuya "zorunlu". */
+function RequiredMark() {
+  return (
+    <>
+      <span aria-hidden className="-ml-1 text-destructive">*</span>
+      <span className="sr-only">(zorunlu)</span>
+    </>
+  );
+}
 
 /** Formun başlangıcı: yeni egzersizde hareket kalıbı boş gelir, seçilmeden kaydedilmez. */
 type FormStart = Omit<ExerciseInput, "pattern"> & {
@@ -138,14 +133,14 @@ function AlternativesField({
                   type="button"
                   variant={isOn ? "secondary" : "outline"}
                   aria-pressed={isOn}
-                  className={`h-auto w-full justify-start gap-3 p-2 text-left ${isOn ? "ring-1 ring-primary/50" : ""}`}
+                  className={`h-auto w-full justify-start gap-3 p-2 text-left ${isOn ? "ring-2 ring-primary-text" : ""}`}
                   onClick={() => onToggle(option.id)}
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-normal">{option.title}</span>
                     <span className="block truncate text-xs font-normal text-muted-foreground">{option.detail}</span>
                   </span>
-                  {isOn ? <PushPin weight="fill" className="text-primary" /> : <Plus className="text-muted-foreground" />}
+                  {isOn ? <PushPin weight="fill" className="text-primary-text" /> : <Plus className="text-muted-foreground" />}
                 </Button>
               </li>
             );
@@ -173,22 +168,6 @@ function toInput({
   };
 }
 
-const RIR_ITEMS: Record<string, string> = Object.fromEntries(
-  Object.entries(RIR_LABELS).map(([rir, label]) => [
-    rir,
-    rir === "2" ? `${label} (önerilen)` : label,
-  ]),
-);
-
-function sameRule(a: ProgressionRule | undefined, b: ProgressionRule): boolean {
-  return (
-    a?.scheme === b.scheme &&
-    a.targetMin === b.targetMin &&
-    a.targetMax === b.targetMax &&
-    a.targetRir === b.targetRir
-  );
-}
-
 /**
  * Egzersiz ekleme/düzenleme formu — kendi sayfasında (modal değil, SPEC §6).
  * İpuçları `FieldArray` ile satır satır. Kaydedince PT'nin repo'sundaki
@@ -210,6 +189,9 @@ export function ExerciseForm({
 }) {
   const deviceById = new Map(devices.map((device) => [device.id, device]));
   const attachmentById = new Map(attachments.map((attachment) => [attachment.id, attachment]));
+  // Seçilebilir aparatlar: cihaza takılı olup havuzda duranlar (cihazsızda hiçbiri).
+  const choicesFor = (deviceId: string | undefined) =>
+    attachmentChoices(deviceId ? deviceById.get(deviceId) : undefined, attachmentById);
   const deviceGroups = DEVICE_KINDS.map((kind) => ({
     label: DEVICE_KIND_LABELS[kind],
     options: devices
@@ -217,29 +199,29 @@ export function ExerciseForm({
       .map((device) => ({ value: device.id, label: device.name })),
   })).filter((group) => group.options.length > 0);
   const router = useRouter();
-  const form = useForm({
-    schema: exerciseFormSchema,
-    initialInput: editing ? toInput(editing) : BLANK,
-  });
+  // Açılıştaki hâl: düzenlemede cihaz ya da kural değişirse şablon ve programlara etkisi söylenir.
+  const [start] = useState(() => (editing ? toInput(editing) : BLANK));
+  const form = useForm({ schema: exerciseFormSchema, initialInput: start });
   // Muadiller şemada yok; kendi ucundan yazılır (sıra korunur).
   const [pinned, setPinned] = useState<string[]>(editing?.alternatives ?? []);
   const togglePinned = (id: string) =>
     setPinned((current) =>
       current.includes(id) ? current.filter((item) => item !== id) : current.length >= 12 ? current : [...current, id],
     );
+  const pinsChanged = pinned.join() !== (editing?.alternatives ?? []).join();
 
   const save = useServiceMutation({
     fn: async (values: ExerciseInput) => {
-      const { videoUrl: link, ...rest } = values;
-      const video = link ? (parseVideoUrl(link) ?? undefined) : undefined;
+      const body = toExercisePayload(values, {
+        editingId: editing?.id,
+        attachmentIds: choicesFor(values.deviceId).map((item) => item.id),
+      });
       const { id } = await fetchJson<{ id: string }>("/api/exercises", {
         method: "POST",
-        // Yeni egzersizde kimlik sunucuda başlıktan üretilir; düzenlemede mevcut kimlik gider.
-        body: JSON.stringify({ ...rest, video, ...(editing ? { id: editing.id } : {}) }),
+        body: JSON.stringify(body),
       });
       // Muadiller ayrı uçtan yazılır. Egzersiz kaydedildiyse buradaki hata kaydı geri almaz.
-      const changed = pinned.join() !== (editing?.alternatives ?? []).join();
-      if (!changed) return { id, pinsFailed: null };
+      if (!pinsChanged) return { id, pinsFailed: null };
       try {
         await fetchJson(`/api/exercises/${id}/alternatives`, {
           method: "PUT",
@@ -270,15 +252,22 @@ export function ExerciseForm({
   // Ekranda karşılığı olmayan bir doğrulama hatası kalırsa form sessizce gönderilmez;
   // bu özet o durumu görünür kılar.
   const hiddenError = getDeepError(form);
+  // Kaydedilmemiş değişiklik varken sayfadan çıkış sorulur (şablon düzenleyiciyle aynı bileşen;
+  // yerel taslak yok). Sabitlenen muadiller de kaydedilmemiş iştir.
+  const guarded = (form.isDirty || pinsChanged) && !save.isPending && !save.isSuccess;
 
   return (
+    <>
     <Form
       of={form}
-      className="flex flex-col gap-6"
+      className={`flex flex-col gap-6 ${TOUCH_TARGETS}`}
       onSubmit={(values) =>
         save.mutateAsync(values as ExerciseInput).catch(() => undefined)
       }
     >
+      <p className="text-sm text-muted-foreground">
+        <span aria-hidden className="text-destructive">*</span> ile işaretli alanlar zorunlu.
+      </p>
 
       <Card>
         <CardHeader>
@@ -290,11 +279,15 @@ export function ExerciseForm({
           <FormField of={form} path={["title"]}>
             {(field) => (
               <Field data-invalid={Boolean(field.errors) || undefined}>
-                <FieldLabel htmlFor="title">Egzersiz adı</FieldLabel>
+                <FieldLabel htmlFor="title">
+                  Egzersiz adı
+                  <RequiredMark />
+                </FieldLabel>
                 <Input
                   {...field.props}
                   id="title"
                   value={field.input ?? ""}
+                  aria-required
                   aria-invalid={Boolean(field.errors) || undefined}
                 />
                 <FieldError>{field.errors?.[0]}</FieldError>
@@ -342,6 +335,7 @@ export function ExerciseForm({
                         type="button"
                         variant="ghost"
                         size="icon"
+                        className="touch:size-11"
                         aria-label={`${index + 1}. ipucunu sil`}
                         onClick={() =>
                           remove(form, { path: ["cues"], at: index })
@@ -372,9 +366,12 @@ export function ExerciseForm({
 
           <FormField of={form} path={["videoUrl"]}>
             {(field) => {
-              const video = field.input ? parseVideoUrl(field.input) : null;
+              const link = field.input?.trim() ?? "";
+              const video = link ? parseVideoUrl(link) : null;
+              // Tanınmayan bağlantı yazarken de hata olarak görünür; gönderimde şema aynı cümleyi söyler.
+              const error = field.errors?.[0] ?? (link && !video ? UNRECOGNIZED_VIDEO_URL : null);
               return (
-                <Field data-invalid={Boolean(field.errors) || undefined}>
+                <Field data-invalid={Boolean(error) || undefined}>
                   <FieldLabel htmlFor="videoUrl">Video bağlantısı</FieldLabel>
                   <Input
                     {...field.props}
@@ -383,14 +380,19 @@ export function ExerciseForm({
                     autoComplete="off"
                     value={field.input ?? ""}
                     placeholder="https://www.youtube.com/watch?v=…"
-                    aria-invalid={Boolean(field.errors) || undefined}
+                    aria-invalid={Boolean(error) || undefined}
+                    aria-describedby={error ? "videoUrl-error" : "videoUrl-hint"}
                   />
-                  <FieldDescription>
-                    {field.input && !video && !field.errors
-                      ? "Bağlantı tanınmadı: YouTube ya da Vimeo video bağlantısı olmalı."
-                      : "YouTube ya da Vimeo. Kendi videonu YouTube'a “liste dışı” yükleyip bağlantısını yapıştırabilirsin."}
-                  </FieldDescription>
-                  <FieldError>{field.errors?.[0]}</FieldError>
+                  {error ? (
+                    <FieldError id="videoUrl-error" className="flex items-start gap-1.5">
+                      <WarningCircle aria-hidden className="mt-0.5 size-4 shrink-0" />
+                      {error}
+                    </FieldError>
+                  ) : (
+                    <FieldDescription id="videoUrl-hint">
+                      YouTube ya da Vimeo. Kendi videonu YouTube&apos;a “liste dışı” yükleyip bağlantısını yapıştırabilirsin.
+                    </FieldDescription>
+                  )}
                   {video ? (
                     <VideoEmbed
                       provider={video.provider}
@@ -416,7 +418,10 @@ export function ExerciseForm({
             <FormField of={form} path={["pattern"]}>
               {(field) => (
                 <Field data-invalid={Boolean(field.errors) || undefined}>
-                  <FieldLabel htmlFor="pattern">Hareket kalıbı</FieldLabel>
+                  <FieldLabel htmlFor="pattern">
+                    Hareket kalıbı
+                    <RequiredMark />
+                  </FieldLabel>
                   <LabeledSelect
                     id="pattern"
                     value={field.input}
@@ -433,7 +438,7 @@ export function ExerciseForm({
             </FormField>
             <FormField of={form} path={["deviceId"]}>
               {(field) => (
-                <Field>
+                <Field data-invalid={Boolean(field.errors) || undefined}>
                   <FieldLabel htmlFor="deviceId">Cihaz</FieldLabel>
                   <GroupedSelect
                     id="deviceId"
@@ -445,24 +450,29 @@ export function ExerciseForm({
                       // Ekipman cihazın türünden gelir.
                       const device = deviceById.get(value);
                       if (device) setInput(form, { path: ["equipment"], input: KIND_EQUIPMENT[device.kind] });
+                      // Aparat yeni cihazda yoksa seçim düşer (seçici gizlenince değer formda kalmasın).
+                      const attachmentId = getInput(form, { path: ["attachmentId"] });
+                      if (attachmentId && !choicesFor(value || undefined).some((item) => item.id === attachmentId)) {
+                        setInput(form, { path: ["attachmentId"], input: undefined });
+                      }
                     }}
                   />
                   <FieldDescription>Ağırlık önerileri cihazın ayarlanabilen ağırlıklarından seçilir.</FieldDescription>
+                  {/* Sunucunun alan hatası: cihaz silinmiş ya da dosyada okunamıyor. */}
+                  <FieldError>{field.errors?.[0]}</FieldError>
+                  {editing && !sameDevice(field.input, start.deviceId) ? <LibraryImpactNote /> : null}
                 </Field>
               )}
             </FormField>
             {/* Aparat yalnız cihazına aparat takılıysa görünür; adlar havuzdan gelir. */}
             <FormField of={form} path={["deviceId"]}>
               {(deviceField) => {
-                const options = (deviceField.input ? (deviceById.get(deviceField.input)?.attachments ?? []) : []).flatMap((id) => {
-                  const found = attachmentById.get(id);
-                  return found ? [{ value: found.id, label: found.name }] : [];
-                });
+                const options = choicesFor(deviceField.input).map((found) => ({ value: found.id, label: found.name }));
                 if (options.length === 0) return <></>;
                 return (
                   <FormField of={form} path={["attachmentId"]}>
                     {(field) => (
-                      <Field>
+                      <Field data-invalid={Boolean(field.errors) || undefined}>
                         <FieldLabel htmlFor="attachmentId">Aparat</FieldLabel>
                         <GroupedSelect
                           id="attachmentId"
@@ -479,6 +489,7 @@ export function ExerciseForm({
                         <FieldDescription>
                           Cihaza takılı aparatlar. Listede yoksa cihazı düzenleyip havuzdan ekle.
                         </FieldDescription>
+                        <FieldError>{field.errors?.[0]}</FieldError>
                       </Field>
                     )}
                   </FormField>
@@ -576,35 +587,18 @@ export function ExerciseForm({
                 </Field>
               )}
             </FormField>
-            <FormField of={form} path={["trackingType"]}>
-              {(field) => (
-                <Field>
-                  <FieldLabel htmlFor="trackingType">Kayıt türü</FieldLabel>
-                  <LabeledSelect
-                    id="trackingType"
-                    value={field.input}
-                    labels={TRACKING_LABELS}
-                    onChange={(value) => {
-                      setInput(form, { path: ["trackingType"], input: value });
-                      // Birim değişir (tekrar ↔ saniye): aralık yeni türün varsayılanına döner.
-                      const category = getInput(form, { path: ["category"] }) ?? "compound";
-                      setInput(form, {
-                        path: ["progression"],
-                        input: defaultRule(category, value),
-                      });
-                    }}
-                  />
-                </Field>
-              )}
-            </FormField>
           </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Çalışan kaslar</CardTitle>
-          <CardDescription>Hedef, yardımcı ve dengeleyici kaslar — haftalık yük haritası bunları sayar.</CardDescription>
+          <CardTitle>
+            Çalışan kaslar <RequiredMark />
+          </CardTitle>
+          <CardDescription>
+            En az bir hedef kas seç. Hedef, yardımcı ve dengeleyici kaslar — haftalık yük haritası bunları sayar.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <FormField of={form} path={["primaryMuscles"]}>
@@ -687,8 +681,8 @@ export function ExerciseForm({
                       return (
                         <Field data-invalid={Boolean(errors) || undefined}>
                           <FieldDescription>
-                            Kasa dokun: hedef (tam renk) → yardımcı (orta) → dengeleyici
-                            (açık) → kaldır. Birden çok kas aynı anda hedef olabilir.
+                            Kasa dokun: hedef (dolu) → yardımcı (çizgili) → dengeleyici
+                            (noktalı) → kaldır. Birden çok kas aynı anda hedef olabilir.
                           </FieldDescription>
                           <MuscleMap
                             layout="split"
@@ -764,27 +758,7 @@ export function ExerciseForm({
           <CardDescription>Kayıt türü, ağırlık adımı ve bir sonraki sette ne önerileceği.</CardDescription>
         </CardHeader>
         <CardContent>
-            <FormField of={form} path={["trackingType"]}>
-              {(field) => (
-                <Field>
-                  <FieldLabel htmlFor="trackingType">Kayıt türü</FieldLabel>
-                  <LabeledSelect
-                    id="trackingType"
-                    value={field.input}
-                    labels={TRACKING_LABELS}
-                    onChange={(value) => {
-                      setInput(form, { path: ["trackingType"], input: value });
-                      // Birim değişir (tekrar ↔ saniye): aralık yeni türün varsayılanına döner.
-                      const category = getInput(form, { path: ["category"] }) ?? "compound";
-                      setInput(form, {
-                        path: ["progression"],
-                        input: defaultRule(category, value),
-                      });
-                    }}
-                  />
-                </Field>
-              )}
-            </FormField>
+          <LoadFields form={form} deviceById={deviceById} startRule={editing ? start.progression : undefined} />
         </CardContent>
       </Card>
 
@@ -848,5 +822,11 @@ export function ExerciseForm({
         </Button>
       </div>
     </Form>
+    <UnsavedChangesGuard
+      active={guarded}
+      description="Çıkarsan bu değişiklikler kaydedilmez."
+      onLeave={() => undefined}
+    />
+    </>
   );
 }

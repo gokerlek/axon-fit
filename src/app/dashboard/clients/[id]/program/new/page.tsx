@@ -1,4 +1,6 @@
+import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
+import { EditorBackLink } from '@/components/block-editor/editor-back-link';
 import { SectionHeader } from '@/components/section-header';
 import { loadClient } from '@/lib/clients';
 import { readAppConfig } from '@/lib/config';
@@ -10,6 +12,8 @@ import { readProgramFile } from '@/lib/programs';
 import { CLIENT_ID_PATTERN } from '@/lib/schemas/client';
 import { listTemplates, pickerDevices, pickerExercises } from '@/lib/templates';
 import { ProgramForm } from '../program-form';
+
+export const metadata: Metadata = { title: 'Program oluştur' };
 
 /** Program oluşturma: düzenleyici boş iskeletle açılır; ilk "Programı oluştur" dosyayı yazar. */
 export default async function NewProgramPage({ params }: { params: Promise<{ id: string }> }) {
@@ -34,17 +38,19 @@ export default async function NewProgramPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeader
-        back={{ href: `/dashboard/clients/${id}/program`, label: 'Program' }}
-        title="Program oluştur"
-        description="Program yalnız bu danışanın repo'sunda durur. Şablondan başlarsan şablonda sonradan yapılan değişiklikler buraya yansımaz."
-      />
+      <div className="flex flex-col gap-2">
+        <EditorBackLink href={`/dashboard/clients/${id}/program`} label="Program" />
+        <SectionHeader
+          title="Program oluştur"
+          description="Program yalnız bu danışanın repo'sunda durur. Şablondan başlarsan şablonda sonradan yapılan değişiklikler buraya yansımaz."
+        />
+      </div>
       <ProgramForm
         clientId={id}
         mode="create"
         // Kimlikler sunucuda üretilir: sunucu ve tarayıcı çizimi aynı olsun.
         initial={blankProgramBody(programIdSource([]))}
-        baseRevision={null}
+        base={null}
         stored={null}
         templates={templates}
         exercises={pickerExercises(exercises)}

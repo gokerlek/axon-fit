@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { SectionHeader } from '@/components/section-header';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,6 +7,8 @@ import { requirePt } from '@/lib/guards';
 import { CLIENT_ID_PATTERN } from '@/lib/schemas/client';
 import { ClientForm } from '../../client-form';
 import { ClientActions } from './client-actions';
+
+export const metadata: Metadata = { title: 'Danışanı düzenle' };
 
 export default async function EditClientPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePt();

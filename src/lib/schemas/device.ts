@@ -1,7 +1,7 @@
 import * as v from 'valibot';
-import { DEVICE_KINDS, PULLEY_RATIOS, type DeviceKind } from '@/lib/device-loads';
-import { IMAGE_MAX_BYTES, IMAGE_TYPES } from '@/lib/image';
-import { attachmentIdSchema, attachmentRefOf, ATTACHMENTS_MAX } from '@/lib/schemas/attachment';
+import { DEVICE_KINDS, PULLEY_RATIOS, type DeviceKind } from '../device-loads.ts';
+import { IMAGE_MAX_BYTES, IMAGE_TYPES } from '../image.ts';
+import { attachmentIdSchema, attachmentRefOf, ATTACHMENTS_MAX } from './attachment.ts';
 
 /**
  * Cihaz şeması — sunucu ve istemci ortak.
@@ -9,7 +9,8 @@ import { attachmentIdSchema, attachmentRefOf, ATTACHMENTS_MAX } from '@/lib/sche
  * Hazır katalog pakette (`src/data/device-library.ts`), PT'nin eklediği ya da
  * değiştirdiği cihazlar uygulama repo'sunda (`data/devices.json`); aynı kimlikte PT'ninki
  * kazanır. Egzersiz `deviceId` ile bağlanır; ağırlık önerileri cihazın ağırlıklarından
- * seçilir (`src/lib/device-loads.ts`).
+ * seçilir (`src/lib/device-loads.ts`). Yol takma adıyla çalışma zamanı içe aktarması yok
+ * (testler Node'un test aracıyla çalışır).
  */
 
 /** Ağırlık bloğu ya da kablo: ilk blok, adım, en çok (+ ara ağırlıklar). */
@@ -73,9 +74,12 @@ const MESSAGES = {
   weightsKg: 'En az bir ağırlık gir.',
 } as const;
 
+/** Cihaz kimliği (slug); yeni kayıtta addan üretilir (`src/lib/slug.ts`). */
+export const deviceIdSchema = v.pipe(v.string(), v.regex(/^[a-z0-9-]{2,60}$/, 'Kimlik yalnız küçük harf, rakam ve tire içerebilir.'));
+
 export const deviceSchema = v.pipe(
   v.object({
-    id: v.pipe(v.string(), v.regex(/^[a-z0-9-]{2,60}$/, 'Kimlik yalnız küçük harf, rakam ve tire içerebilir.')),
+    id: deviceIdSchema,
     ...deviceFields,
   }),
   v.forward(v.partialCheck([['kind'], ['baseKg']], check('baseKg'), MESSAGES.baseKg), ['baseKg']),

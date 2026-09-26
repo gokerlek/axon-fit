@@ -1,5 +1,4 @@
 import { Barbell, Play } from '@phosphor-icons/react/dist/ssr';
-import { DayPlan } from '@/components/program/day-plan';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
@@ -8,6 +7,7 @@ import { listExercises } from '@/lib/exercises';
 import { currentPhaseOf, frequencyLabel, nextDayId, phaseStatus } from '@/lib/program-plan';
 import { readProgramFile } from '@/lib/programs';
 import { templateSummary } from '@/lib/template-plan';
+import { ClientDayPlan } from './client-day-plan';
 
 function Unavailable() {
   return (
@@ -22,11 +22,11 @@ function Unavailable() {
 
 /**
  * Danışanın sıradaki antrenmanı: kendi programında (evreliyse şu anki evrenin) sıradaki
- * günü, yapılış sırasıyla; altında diğer günler dönüş sırasıyla. Evresiz programda evreden
- * söz edilmez; haftada kaç gün belirtildiyse yazılır ("bu hafta x/3" antrenman ekranıyla
- * gelecek: `weekProgress`). Yalnız gösterim:
- * antrenman ekranı (set kaydı, başka gün seçme) sonraki adımda. `clientId` oturumdan
- * doğrulanmış kayıttan gelir (`currentClient`).
+ * günü, yapılış sırasıyla ve setler danışanın dilinde (`ClientDayPlan`); altında diğer günler
+ * dönüş sırasıyla. Evresiz programda evreden söz edilmez; haftada kaç gün belirtildiyse yazılır
+ * ("bu hafta x/3" antrenman ekranıyla gelecek: `weekProgress`). Yalnız gösterim: antrenman
+ * ekranı (set kaydı, başka gün seçme) sonraki adımda. `clientId` oturumdan doğrulanmış kayıttan
+ * gelir (`currentClient`).
  */
 export async function ProgramCard({ clientId }: { clientId: string }) {
   const [file, exercises] = await Promise.all([readProgramFile(clientId).catch(() => undefined), listExercises()]);
@@ -91,7 +91,7 @@ export async function ProgramCard({ clientId }: { clientId: string }) {
         </CardHeader>
         <CardContent>
           {summary.rows > 0 ? (
-            <DayPlan blocks={day.blocks} exercises={byId} missing="hide" audience="client" />
+            <ClientDayPlan blocks={day.blocks} exercises={byId} />
           ) : (
             <p className="text-sm text-muted-foreground">Bu günün hareketleri şu an açılamıyor. Antrenörüne haber ver.</p>
           )}

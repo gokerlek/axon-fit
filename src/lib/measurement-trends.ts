@@ -12,7 +12,7 @@ import {
   type Sex,
 } from './measurements.ts';
 import type { MeasurementEntry } from './schemas/health.ts';
-import { forecast, trendStatus, type Forecast, type TrendStatus } from './trend.ts';
+import { forecast, rangeStart, trendStatus, type Forecast, type TrendStatus } from './trend.ts';
 
 /**
  * Ölçümlerin zaman içindeki seyri — grafik serileri, son iki ölçüm arasındaki değişim ve
@@ -104,8 +104,13 @@ export type LineChange = {
 export type MeasurementLine = {
   /** Tek değerli ölçümde `value`, iki taraflıda `left` ve `right`. */
   key: LineKey;
-  /** Tarihe göre artan; aynı gün iki kayıt varsa sonuncusu. */
+  /** Tarihe göre artan; aynı gün iki kayıt varsa sonuncusu. Tarih aralığı verildiyse aralıktakiler (grafik). */
   points: Point[];
+  /**
+   * Aralığın sonuna (`to`) kadarki bütün noktalar, aralık başından öncekiler dahil: eğilim penceresi
+   * başındaki çapayı aralık dışında da bulsun ("Son 4 hafta" ile danışan kartı aynı kararı versin).
+   */
+  history: Point[];
   /** İkinci ölçüm yoksa null. */
   change: LineChange | null;
 };
@@ -131,21 +136,31 @@ function lineChange(points: readonly Point[], rule: NoiseRule | null): LineChang
   };
 }
 
-/** Ölçülmüş her ölçüm için seriler ve son değişim, katalog sırasıyla. */
-export function measurementTrends(entries: readonly MeasurementEntry[]): MeasurementTrend[] {
+/**
+ * Ölçülmüş her ölçüm için seriler ve son değişim, katalog sırasıyla. Tarih aralığı verilirse
+ * (uçlar dahil) seriler aralıktaki ölçümlerdir; değişim yine aralığın son ölçümüyle ondan hemen
+ * önceki arasındadır — önceki, aralığın başından eski olabilir. Eğilim için `history` aralığın
+ * sonuna kadarki bütün noktaları taşır.
+ */
+export function measurementTrends(
+  entries: readonly MeasurementEntry[],
+  { from, to }: { from?: string | undefined; to?: string | undefined } = {},
+): MeasurementTrend[] {
   const trends: MeasurementTrend[] = [];
   for (const id of MEASUREMENT_IDS) {
-    const own = entries.filter((entry) => entry.id === id);
-    if (own.length === 0) continue;
+    const own = entries.filter((entry) => entry.id === id && (!to || entry.date <= to));
+    const shown = own.filter((entry) => !from || entry.date >= from);
+    if (shown.length === 0) continue;
     const rule = NOISE_RULES[id] ?? null;
     const lines = LINE_ORDER.flatMap((key): MeasurementLine[] => {
       const values = new Map<string, number>();
       for (const entry of own) if ((entry.side ?? 'value') === key) values.set(entry.date, entry.value);
-      if (values.size === 0) return [];
-      const points = [...values].map(([date, value]) => ({ date, value })).sort(byDate);
-      return [{ key, points, change: lineChange(points, rule) }];
+      const all = [...values].map(([date, value]) => ({ date, value })).sort(byDate);
+      const points = all.filter((point) => !from || point.date >= from);
+      if (points.length === 0) return [];
+      return [{ key, points, history: all, change: lineChange(all, rule) }];
     });
-    const lastDate = own.reduce((last, entry) => (entry.date > last ? entry.date : last), '');
+    const lastDate = shown.reduce((last, entry) => (entry.date > last ? entry.date : last), '');
     trends.push({ id, lines, rule, lastDate });
   }
   return trends;
@@ -155,26 +170,93 @@ export function measurementTrends(entries: readonly MeasurementEntry[]): Measure
 
 export type LineOutlook = {
   /**
-   * Son 4 haftanın eğilimi, çizginin değişimi ölçüm hatası payıyla karşılaştırılarak.
-   * Eşiği olmayan ölçümde null: plato ya da gerileme denmez.
+   * Son ölçüme kadarki 4 haftanın eğilimi, çizginin değişimi ölçüm hatası payıyla karşılaştırılarak.
+   * `used`: karara giren noktalar (pencere ve varsa başındaki çapa). Eşiği olmayan ölçümde null:
+   * plato ya da gerileme denmez.
    */
-  status: { kind: TrendStatus; change: number | null } | null;
+  status: { kind: TrendStatus; change: number | null; used: Point[] } | null;
   /** Tahmin eşik gerektirmez; az veride `ok: false` ve nedeni. */
   forecast: Forecast;
 };
 
 /**
  * Tek iki ölçüm arasındaki fark gürültüde kalabilir (haftada 0,7 cm) ama birkaç haftanın
- * eğilimi gerçektir (5 haftada 4 cm): kart ikisini ayrı gösterir.
+ * eğilimi gerçektir (5 haftada 4 cm): kart ikisini ayrı gösterir. `bounds`: ölçümün geçerli
+ * aralığı; tahmin ve bandı ona kırpılır. Tahmin grafikteki noktalardan (`points`), eğilim
+ * `history`'den: aralık başından önceki çapa da görülür (`MeasurementLine.history`).
  */
-export function lineOutlook(points: readonly Point[], rule: NoiseRule | null): LineOutlook {
+export function lineOutlook(
+  points: readonly Point[],
+  rule: NoiseRule | null,
+  bounds: { min: number; max: number } = { min: -Infinity, max: Infinity },
+  history: readonly Point[] = points,
+): LineOutlook {
   const status = rule
     ? (() => {
-        const result = trendStatus(points, { threshold: rule.threshold, relative: rule.relative, better: rule.better ?? 'higher' });
-        return { kind: result.status, change: result.change };
+        const result = trendStatus(history, { threshold: rule.threshold, relative: rule.relative, better: rule.better ?? 'higher' });
+        return { kind: result.status, change: result.change, used: result.used };
       })()
     : null;
-  return { status, forecast: forecast(points) };
+  return { status, forecast: forecast(points, bounds) };
+}
+
+/* --- kartın iki ayrı hükmü: son iki ölçüm ve 4 haftalık eğilim --- */
+
+/** Son iki ölçüm arasındaki fark ve ölçüm hatasına göre hükmü. */
+export type LatestChangeVerdict = LineChange & {
+  /** Önceki ölçüm seçili tarih aralığının başından önce (grafikte çizilmiyor). */
+  previousBeforeRange: boolean;
+};
+
+/**
+ * Son ölçüme kadarki 4 haftanın eğilimi. Yönü tanımsız ölçümde (kalça) gelişme/gerileme yerine
+ * artış/azalma; eşiğin altında her zaman `plateau` ("durağan"): gürültüye "gelişme" denmez.
+ */
+export type TrendVerdict = {
+  kind: 'improving' | 'declining' | 'plateau' | 'increased' | 'decreased';
+  /** Çizginin pencere boyunca değişimi, ölçümün biriminde. */
+  change: number;
+  /** Karara giren ilk ve son ölçüm günü. */
+  from: string;
+  to: string;
+  /** Karara giren ölçüm sayısı. */
+  points: number;
+  /** Bunlardan seçili tarih aralığının başından önce kalanlar (grafikte çizilmeyenler). */
+  beforeRange: number;
+};
+
+/**
+ * Bir çizginin kartta yan yana duran iki hükmü, birbirinden ayrı ve adlı (SPEC §7.5): son iki ölçüm
+ * arasındaki fark tek başına gürültüde kalabilir (haftada 0,7 cm), birkaç haftanın eğilimi gerçek
+ * olabilir (4 haftada 2,8 cm). Eğilim `history`den hesaplanır: seçili aralığın başından önceki
+ * noktaları kullanıyorsa kaç tanesinin öyle olduğu da döner, kart bunu yazar. `rangeFrom`: seçili
+ * aralığın başı (yoksa "tümü").
+ */
+export function lineVerdicts(
+  line: Pick<MeasurementLine, 'history' | 'change'>,
+  rule: NoiseRule | null,
+  rangeFrom?: string,
+): { latest: LatestChangeVerdict | null; trend: TrendVerdict | null } {
+  const before = (date: string) => Boolean(rangeFrom && date < rangeFrom);
+  const latest = line.change ? { ...line.change, previousBeforeRange: before(line.change.previous.date) } : null;
+  if (!rule) return { latest, trend: null };
+  const result = trendStatus(line.history, { threshold: rule.threshold, relative: rule.relative, better: rule.better ?? 'higher' });
+  const first = result.used[0];
+  const last = result.used.at(-1);
+  if (result.status === 'insufficient' || result.change === null || !first || !last) return { latest, trend: null };
+  const kind =
+    result.status !== 'plateau' && !rule.better ? (result.change > 0 ? 'increased' : 'decreased') : result.status;
+  return {
+    latest,
+    trend: {
+      kind,
+      change: result.change,
+      from: first.date,
+      to: last.date,
+      points: result.used.length,
+      beforeRange: result.used.filter((point) => before(point.date)).length,
+    },
+  };
 }
 
 export type MeasurementAlert = {
@@ -189,13 +271,19 @@ const ALERT_ORDER: Record<MeasurementAlert['kind'], number> = { declining: 0, pl
 
 /**
  * Danışan sayfası ve genel bakış için: son 4 haftada kararı verilebilen ölçümler. Yalnız
- * eşiği ve iyi yönü kaynaklı olanlar (kalçada yön tanımsız: uyarı üretmez).
+ * eşiği ve iyi yönü kaynaklı olanlar (kalçada yön tanımsız: uyarı üretmez). Eğilim son ölçüme
+ * bağlıdır; son ölçümü bugünden 4 haftadan eski çizgi uyarı üretmez (Mart'ta ölçülen danışanın
+ * kartında Eylül'de "son 4 hafta" diye Mart'ın eğilimi çıkmasın). `today`: uygulamanın saat
+ * dilimindeki gün (`todayIn`).
  */
-export function measurementAlerts(entries: readonly MeasurementEntry[]): MeasurementAlert[] {
+export function measurementAlerts(entries: readonly MeasurementEntry[], today: string): MeasurementAlert[] {
+  const since = rangeStart('4h', today);
   const alerts: MeasurementAlert[] = [];
   for (const trend of measurementTrends(entries)) {
     if (!trend.rule?.better) continue;
     for (const line of trend.lines) {
+      const last = line.points.at(-1);
+      if (!last || (since && last.date < since)) continue;
       const status = lineOutlook(line.points, trend.rule).status;
       if (!status || status.kind === 'insufficient' || status.change === null) continue;
       alerts.push({ id: trend.id, key: line.key, kind: status.kind, change: status.change });
@@ -261,4 +349,40 @@ export function latestSideBridgeAsymmetry(entries: readonly MeasurementEntry[]):
   const left = lefts.get(date) ?? 0;
   const right = rights.get(date) ?? 0;
   return { date, left, right, ...sideBridgeAsymmetry(left, right) };
+}
+
+/* --- tarih süzgeçli genel bakış --- */
+
+export type MeasurementIndicators = {
+  waistHip: WaistHipIndicator | null;
+  sitToStand: SitToStandIndicator | null;
+  sideBridge: SideBridgeIndicator | null;
+};
+
+/**
+ * Genel bakışın tarih süzgeci (uçlar dahil) tek yerde: kart kendi içinde tutarlı kalsın.
+ * - Seriler ve tahmin aralıktaki ölçümlerden; grafikte yalnız aralık çizilir.
+ * - Eğilim aralığın sonuna kadarki bütün ölçümlerden (`history`): pencere başındaki çapa aralığın
+ *   dışında kalabilir, "Son 4 hafta" görünümü danışan kartıyla aynı kararı verir.
+ * - Değişim aralığın son ölçümüyle ondan önceki arasında; önceki aralıktan eski olabilir (üç ayda
+ *   bir ölçülen otur-kalk "Son 3 ay"da "İlk ölçüm" görünmesin).
+ * - Göstergeler de aralıktaki kayıtlardan: geçmiş bir aralıkta "Son değer 14 sn" ile Eylül'ün notu
+ *   yan yana çıkmasın.
+ */
+export function measurementsInRange(
+  entries: readonly MeasurementEntry[],
+  sex: Sex | undefined,
+  from?: string,
+  to?: string,
+): { entries: MeasurementEntry[]; trends: MeasurementTrend[]; indicators: MeasurementIndicators } {
+  const inRange = entriesInRange(entries, from, to);
+  return {
+    entries: inRange,
+    trends: measurementTrends(entries, { from, to }),
+    indicators: {
+      waistHip: latestWaistHip(inRange, sex),
+      sitToStand: latestSitToStand(inRange),
+      sideBridge: latestSideBridgeAsymmetry(inRange),
+    },
+  };
 }

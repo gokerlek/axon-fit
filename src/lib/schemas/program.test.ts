@@ -4,7 +4,7 @@ import * as v from 'valibot';
 import type { ProgramDay, ProgramLogEntry, ProgramPhase, ProgramState } from '../program-plan.ts';
 import { uniformSets } from '../set-plan.ts';
 import type { TemplateBlock } from '../template-plan.ts';
-import { programFormSchema, programSaveSchema, programSchema } from './program.ts';
+import { programFormSchema, programPhaseSwitchSchema, programSaveSchema, programSchema } from './program.ts';
 
 const at = '2026-09-24T09:00:00.000Z';
 
@@ -146,6 +146,20 @@ describe('program şeması', () => {
     assert.equal(v.safeParse(programSaveSchema, { ...body, baseRevision: null }).success, true);
     assert.equal(v.safeParse(programSaveSchema, { ...body, baseRevision: 7 }).success, true);
     assert.equal(v.safeParse(programSaveSchema, { ...body, baseRevision: 0 }).success, false);
+  });
+
+  test('kayıt ucu ve evre geçişi: oluşturulma anı (baseCreatedAt) isteğe bağlı, varsa geçerli bir an', () => {
+    const body = { phased: true, currentPhaseId: 'p_uyum01', phases: program().phases, baseRevision: 7 };
+    const withAt = v.safeParse(programSaveSchema, { ...body, baseCreatedAt: '2026-09-24T09:00:00.000Z' });
+    assert.ok(withAt.success);
+    assert.equal(withAt.output.baseCreatedAt, '2026-09-24T09:00:00.000Z');
+    // Eski sekme göndermez: yalnız revision denetlenir.
+    assert.equal(v.safeParse(programSaveSchema, body).success, true);
+    assert.equal(v.safeParse(programSaveSchema, { ...body, baseCreatedAt: 'dün' }).success, false);
+    const phase = { phaseId: 'p_guc001', baseRevision: 7 };
+    assert.equal(v.safeParse(programPhaseSwitchSchema, phase).success, true);
+    assert.equal(v.safeParse(programPhaseSwitchSchema, { ...phase, baseCreatedAt: '2026-09-24T09:00:00.000Z' }).success, true);
+    assert.equal(v.safeParse(programPhaseSwitchSchema, { ...phase, baseCreatedAt: 42 }).success, false);
   });
 });
 

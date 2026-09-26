@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Info, WarningCircle } from '@phosphor-icons/react/dist/ssr';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { loadClient } from '@/lib/clients';
 import { MEASUREMENT_LOCK_INFO, type MeasurementLock } from '@/lib/measurement-log';
 import type { Client } from '@/lib/schemas/client';
@@ -29,11 +30,14 @@ export function MeasurementLockAlert({ lock, clientId }: { lock: MeasurementLock
       <AlertTitle>{info.title}</AlertTitle>
       <AlertDescription>
         <p>{info.description}</p>
-        <p>
-          <Link href={byPt ? `/dashboard/clients/${clientId}/edit` : `/dashboard/clients/${clientId}`}>
-            {byPt ? 'Danışanın düzenleme sayfasına git' : 'Danışanın sayfasına dön'}
-          </Link>
-        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-1"
+          nativeButton={false}
+          render={<Link href={byPt ? `/dashboard/clients/${clientId}/edit` : `/dashboard/clients/${clientId}`} />}>
+          {byPt ? 'Danışanın düzenleme sayfasına git' : 'Danışanın sayfasına dön'}
+        </Button>
       </AlertDescription>
     </Alert>
   );

@@ -8,7 +8,8 @@ import { ArrowClockwise, ArrowSquareOut, WarningCircle } from '@phosphor-icons/r
 import { BlockEditor, useBlocks } from '@/components/block-editor/block-editor';
 import type { BlocksFormStore } from '@/components/block-editor/block-items';
 import { DraftAutosave, DraftNotice, useEditorDraft } from '@/components/block-editor/editor-draft';
-import { EditorSaveProvider } from '@/components/block-editor/editor-save';
+import { keepLineEnter } from '@/components/block-editor/enter-key';
+import { EditorSaveProvider, FloatingSaveButton } from '@/components/block-editor/editor-save';
 import { TemplateMuscleMap } from '@/components/muscle-map/template-muscle-map';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -37,8 +38,9 @@ const LOAD_DESCRIPTION =
  * Tek Formisch formu: şablonun adı ve açıklaması burada, hareketler ortak hareket
  * düzenleyicide (`BlockEditor`, program günleriyle aynı). Listelerin anahtarları blok ve
  * satır kimlikleridir; sürükle-bırak sıralar ve gruplar, ekleme kütüphaneden dokunarak
- * yapılır. Kaydet "Hareketler" başlığında, yalnız değişiklik varken (`EditorSaveProvider`).
- * Kaydedilmemiş değişiklik yerel taslakta durur ve sayfadan çıkış sorulur (PT kararı 16).
+ * yapılır. Kaydet "Hareketler" başlığında, yalnız değişiklik varken (`EditorSaveProvider`); telefonda
+ * başlık ekran dışındayken dock'un üstünde yüzen kopyası (PT kararı 17). Kaydedilmemiş değişiklik
+ * yerel taslakta durur ve sayfadan çıkış sorulur (PT kararı 16).
  */
 export function TemplateForm({
   editing,
@@ -131,7 +133,7 @@ export function TemplateForm({
         dirty,
         pending: save.isPending || save.isSuccess,
         creating: !editing,
-        submitLabel: editing ? 'Kaydet' : 'Şablonu oluştur',
+        submitLabel: editing ? 'Şablonu kaydet' : 'Şablonu oluştur',
       }}>
       <Form of={form} className="flex flex-col gap-6" onSubmit={submit}>
         {draft.offer ? <DraftNotice offer={draft.offer} timeZone={timeZone} onRestore={draft.restore} onDismiss={draft.dismiss} /> : null}
@@ -153,6 +155,7 @@ export function TemplateForm({
                     value={field.input ?? ''}
                     placeholder="Ör. Alt vücut A"
                     aria-invalid={Boolean(field.errors) || undefined}
+                    onKeyDown={keepLineEnter}
                   />
                   <FieldError>{field.errors?.[0]}</FieldError>
                 </Field>
@@ -247,6 +250,8 @@ export function TemplateForm({
             )}
           </CardContent>
         </Card>
+
+        <FloatingSaveButton />
       </Form>
       <DraftAutosave form={form} onChange={draft.sync} />
       <UnsavedChangesGuard ref={guard} active={guarded} description="Çıkarsan bu değişiklikler kaydedilmez." onLeave={draft.leave} />

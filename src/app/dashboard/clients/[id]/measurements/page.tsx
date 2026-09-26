@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Plus } from '@phosphor-icons/react/dist/ssr';
 import { SectionHeader } from '@/components/section-header';
@@ -9,6 +10,8 @@ import { todayIn } from '@/lib/format';
 import { MeasurementOverview } from './measurement-overview';
 import { parseRange, RangeFilter } from './range-filter';
 import { MeasurementLockAlert, MeasurementProblemAlert, measurementClient } from './measurement-page';
+
+export const metadata: Metadata = { title: 'Ölçümler' };
 
 /**
  * Danışanın ölçümleri — yalnız gösterir; tek eylem "Ölçüm gir" (SPEC §6, §7.5). Her ölçülen
@@ -38,7 +41,8 @@ export default async function MeasurementsPage({
 
   const { client } = loaded;
   const [view, config] = await Promise.all([loadMeasurements(client), readAppConfig()]);
-  const range = parseRange(await searchParams, todayIn(config.timeZone));
+  const today = todayIn(config.timeZone);
+  const range = parseRange(await searchParams, today);
 
   return (
     <div className="flex flex-col gap-6">
@@ -59,11 +63,11 @@ export default async function MeasurementsPage({
       {view.state === 'broken' ? (
         <MeasurementProblemAlert
           title="Sağlık kaydı okunamadı"
-          problem={`${view.problem} Danışanın repo'sundaki dosya elle değiştirilmiş olabilir; düzeltilene kadar ölçüm yazılmaz.`}
+          problem={`${view.problem} Kayıt uygulama dışında değiştirilmiş olabilir; düzeltilene kadar ölçüm yazılmaz.`}
         />
       ) : null}
       {view.state === 'ok' && view.record.measurements.length > 0 ? <RangeFilter base={base} range={range} /> : null}
-      {view.state === 'ok' ? <MeasurementOverview record={view.record} base={base} from={range.from} to={range.to} /> : null}
+      {view.state === 'ok' ? <MeasurementOverview record={view.record} base={base} from={range.from} to={range.to} today={today} /> : null}
     </div>
   );
 }

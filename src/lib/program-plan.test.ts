@@ -17,11 +17,14 @@ import {
   createProgramRecord,
   cycleFactor,
   dayFromTemplate,
+  dayFromTemplateForEditing,
   dayToTemplate,
   derivePhased,
+  droppedDeviceNotice,
   duplicateNames,
   duplicateProgramIds,
   frequencyLabel,
+  keepHiddenPhase,
   mergePhases,
   mergePhasesCheck,
   missingExerciseDays,
@@ -33,6 +36,7 @@ import {
   nextPhaseName,
   normalizeProgram,
   phaseMuscleLoad,
+  phaseProgress,
   phaseStatus,
   phaseStatusLabel,
   prepareProgramForEditing,
@@ -41,6 +45,9 @@ import {
   reIdBlocks,
   removeDay,
   removePhase,
+  sameProgramBase,
+  savedTemplateOption,
+  sourceNames,
   startPhase,
   upgradeProgram,
   weekProgress,
@@ -236,6 +243,51 @@ describe('şablondan program', () => {
     assert.deepEqual(bos.log[0]?.changes, [{ text: 'Program oluşturuldu' }]);
   });
 
+  test('çok ve uzun adlı şablonla oluşturma cümlesi 300 karaktere sığar ("… ve n şablon daha"); program şemadan geçer', () => {
+    // Her gün ayrı şablondan; adlar şablon adının sınırında (60 karakter): evreli 12, evresiz 7 şablon.
+    const days = (count: number, from: number) =>
+      Array.from({ length: count }, (_, i): ProgramDay => {
+        const n = String(from + i).padStart(2, '0');
+        const templateName = `Alt vücut hipertrofi başlangıç seviyesi uzun şablon adı ${n}`.padEnd(60, '.');
+        return gun(`d_gun0${n}`, `Gün ${'ABCDEFG'[i]}`, { source: { templateId: `t_sablon${n}`, templateName, at: simdi.toISOString() } });
+      });
+    const evreli = createProgramRecord(
+      { phased: true, currentPhaseId: 'p_uyum01', phases: [{ ...uyum, days: days(6, 1) }, { ...guc, days: days(6, 7) }] },
+      simdi,
+    );
+    const text = evreli.log[0]?.changes[0]?.text ?? '';
+    assert.ok(text.length <= 300, `${text.length} karakter`);
+    assert.match(text, /^Program oluşturuldu: '.+' şablonlarından … ve \d+ şablon daha$/);
+    // Adlar gün sırasıyla; yazılmayanlar sayıyla.
+    const shown = text.match(/'[^']+'/g) ?? [];
+    assert.deepEqual(shown, sourceNames(evreli.phases).slice(0, shown.length).map((name) => `'${name}'`));
+    assert.equal(shown.length + Number(text.match(/ve (\d+) şablon daha$/)?.[1]), 12);
+    const parsed = v.safeParse(programSchema, evreli);
+    assert.equal(parsed.success, true, parsed.issues?.[0]?.message ?? '');
+
+    const evresiz = createProgramRecord({ phased: false, currentPhaseId: 'p_evre01', phases: [{ id: 'p_evre01', name: 'Evre 1', days: days(7, 1) }] }, simdi);
+    const unphasedParsed = v.safeParse(programSchema, evresiz);
+    assert.equal(unphasedParsed.success, true, unphasedParsed.issues?.[0]?.message ?? '');
+  });
+
+  test('program silinip yeniden oluşturulunca revision yine 1: oluşturulma anı farklı, kayıt çakışma sayılır (ABA, 412)', () => {
+    const body = (phaseId: string, dayId: string) => ({
+      phased: false,
+      currentPhaseId: phaseId,
+      phases: [{ id: phaseId, name: 'Evre 1', days: [gun(dayId, 'Gün A')] }],
+    });
+    const eski = createProgramRecord(body('p_old001', 'd_old001'), new Date('2026-09-24T08:00:00.000Z'));
+    const yeni = createProgramRecord(body('p_new001', 'd_new001'), new Date('2026-09-25T08:00:00.000Z'));
+    // Düzenleyici ve taslak eski programın sürümünü taşır (revision + oluşturulma anı).
+    const base = { revision: eski.revision, createdAt: eski.createdAt };
+    assert.equal(yeni.revision, base.revision);
+    assert.equal(sameProgramBase(yeni, base), false); // saveProgram / switchPhase: stale → 412
+    assert.equal(sameProgramBase(eski, base), true);
+    assert.equal(sameProgramBase({ ...eski, revision: 2 }, base), false);
+    // Oluşturulma anını göndermeyen eski sekme: geriye uyumlu, yalnız revision'la denetlenir.
+    assert.equal(sameProgramBase(yeni, { revision: 1 }), true);
+  });
+
   test('şablondan gün sıradaki harfi alır ve kaynağın tarihini yazar', () => {
     const day = dayFromTemplate(uyum, sablon, ids(), simdi);
     assert.equal(day.name, 'Gün D');
@@ -352,6 +404,22 @@ describe('evre durumu', () => {
     assert.equal(phaseStatus(program({ current: { phaseId: 'p_uyum01', startedAt: start } }), at(-3 * DAY)).week, 1);
   });
 
+  test('evre çubuğu geçen süre ÷ evrenin süresi: 0. saat, yarı, son gün, süresi dolmuş', () => {
+    const HOUR = 60 * 60 * 1000;
+    const birHafta = program({ phases: [{ ...uyum, weeks: 1 }, guc], current: { phaseId: 'p_uyum01', startedAt: start } });
+    assert.equal(phaseProgress(birHafta, at(0)), 0);
+    assert.equal(phaseProgress(birHafta, at(HOUR)), 1 / 168); // ilk saat: %100 değil
+    const ikiHafta = program({ current: { phaseId: 'p_uyum01', startedAt: start } });
+    assert.equal(phaseProgress(ikiHafta, at(7 * DAY)), 0.5);
+    assert.equal(phaseProgress(ikiHafta, at(8 * DAY)), 8 / 14); // 8. gün: %100 değil
+    assert.equal(phaseProgress(ikiHafta, at(13 * DAY)), 13 / 14); // son gün
+    assert.equal(phaseProgress(ikiHafta, at(14 * DAY)), 1);
+    assert.equal(phaseProgress(ikiHafta, at(30 * DAY)), 1); // süresi dolmuş
+    assert.equal(phaseProgress(ikiHafta, at(-3 * DAY)), 0); // başlangıçtan önce
+    const open = program({ phases: [{ ...uyum, weeks: undefined }, guc], current: { phaseId: 'p_uyum01', startedAt: start } });
+    assert.equal(phaseProgress(open, at(10 * DAY)), null);
+  });
+
   test('etiketler', () => {
     assert.equal(phaseStatusLabel({ kind: 'open', week: 3 }), '3. hafta · süresiz');
     assert.equal(phaseStatusLabel({ kind: 'running', week: 3, weeks: 6, endsAt: start }), '3. hafta / 6');
@@ -390,6 +458,16 @@ describe('evre geçişi', () => {
     assert.equal(next.length, 200);
     assert.equal(next[0]?.revision, 201);
     assert.equal(next.at(-1)?.revision, 2);
+  });
+
+  test('geçmişe giden her cümle dosyanın sınırında kesilir: kapsam 90, metin 300 karakter', () => {
+    const next = appendLog([kayit], { ...kayit, revision: 4, changes: [{ scope: 'S'.repeat(120), text: 'x'.repeat(400) }, { text: 'kısa' }] });
+    const [long, short] = next[0]?.changes ?? [];
+    assert.equal(long?.scope?.length, 90);
+    assert.equal(long?.text.length, 300);
+    assert.ok(long?.text.endsWith('…'));
+    assert.deepEqual(short, { text: 'kısa' });
+    assert.equal(next[1], kayit);
   });
 });
 
@@ -478,7 +556,7 @@ describe('düzenleyici işlemleri', () => {
     ...fields,
   });
 
-  test('sunucu denetimi: hata anahtarı evre ve gün yolunu taşır; varsayılan kural düşer, not kırpılır', () => {
+  test('sunucu denetimi: hata anahtarı evre ve gün yolunu taşır; egzersizinkine eşit kural yalnız kayıttaki satırda varsa kalır, not kırpılır', () => {
     const body = {
       phased: true,
       phases: [
@@ -496,17 +574,37 @@ describe('düzenleyici işlemleri', () => {
         { ...guc, days: [gun('d_dddddd', 'Gün A', { blocks: [single('b_dddddd', 'r_dddddd', 'silinmis')] })] },
       ],
     };
-    const { phases, errors } = normalizeProgram(body, {
-      exercises: new Map([['goblet-squat', exercise('goblet-squat')]]),
-      deviceIds: new Set(),
-    });
+    const library = { exercises: new Map([['goblet-squat', exercise('goblet-squat')]]), deviceIds: new Set<string>() };
+    // Kayıtta aynı satır aynı kuralla duruyor (egzersiz sonradan ona eşitlendi): danışana özel seçim kalır.
+    const stored = { phases: [{ ...uyum, days: [{ ...A, blocks: [single('b_aaaaaa', 'r_aaaaaa', 'goblet-squat', { rule: { scheme: 'double', targetRir: 2 } })] }] }] };
+    const { phases, errors } = normalizeProgram(body, library, stored);
     assert.deepEqual(Object.keys(errors), ['phases.1.days.0.blocks.0.rows.0.exerciseId']);
     assert.equal(phases[0]?.name, 'Uyum');
     assert.equal(phases[0]?.weeks, 2);
     assert.equal(phases[0]?.daysPerWeek, 3);
     const row = phases[0]?.days[0]?.blocks[0]?.rows[0];
     assert.equal(row?.note, 'Derin çök');
-    assert.equal(row?.rule, undefined);
+    assert.deepEqual(row?.rule, { scheme: 'double', targetRir: 2 });
+    // Oluştururken (kayıt yok) eşit kural şablondaki gibi düşer.
+    assert.equal(normalizeProgram(body, library, null).phases[0]?.days[0]?.blocks[0]?.rows[0]?.rule, undefined);
+  });
+
+  test('günü şablon olarak kaydet: yerel kopya sunucunun yazdığı gibi; programda kalan eşit kural ve cihaz şablona geçmez', () => {
+    const library = { exercises: new Map([['goblet-squat', exercise('goblet-squat', { deviceId: 'smith' })]]), deviceIds: new Set(['smith']) };
+    // Satırda egzersizinkine eşit kural ve cihaz (kayıtta danışana özel seçim olarak kalmış), bir de gerçek değişiklik.
+    const day: Pick<ProgramDay, 'blocks'> = {
+      blocks: [
+        single('b_aaaaa1', 'r_aaaaa1', 'goblet-squat', { rule: { scheme: 'double', targetRir: 2 }, deviceId: 'smith', note: 'Derin çök' }),
+        single('b_aaaaa2', 'r_aaaaa2', 'goblet-squat', { rule: { scheme: 'linear', targetRir: 1 } }),
+      ],
+    };
+    // Dialog: notlar atılır (`dayToTemplate`); program-form: kopya sadeleşir.
+    const copy = savedTemplateOption({ id: 't_aaaaaaaa', name: 'Alt vücut', blocks: dayToTemplate(day, 'Alt vücut').template.blocks }, library);
+    const [equal, custom] = copy.blocks.flatMap((block) => block.rows);
+    assert.deepEqual(equal && Object.keys(equal).sort(), ['exerciseId', 'id', 'sets']);
+    assert.deepEqual(custom?.rule, { scheme: 'linear', targetRir: 1 });
+    assert.equal(copy.id, 't_aaaaaaaa');
+    assert.equal(copy.name, 'Alt vücut');
   });
 
   test('silinmiş cihaz satırları bütün günlerde sayılır', () => {
@@ -517,6 +615,75 @@ describe('düzenleyici işlemleri', () => {
     const prepared = prepareProgramForEditing(phases, new Set(['smith']));
     assert.deepEqual(prepared.droppedDeviceRowIds, ['r_aaaaaa', 'r_dddddd']);
     assert.equal(prepared.phases[0]?.days[0]?.blocks[0]?.rows[0]?.deviceId, undefined);
+  });
+
+  test('şablondan gelen günde silinmiş cihaz egzersizin cihazına döner; kayıt reddedilmez', () => {
+    const squat = exercise('squat', { deviceId: 'rack' });
+    const deviceIds = new Set(['rack', 'smith']); // 'eski-cihaz' silinmiş; şablon dosyası değişmedi
+    const template: TemplateOption = {
+      id: 't_aaaaaaaa',
+      name: 'Alt vücut',
+      blocks: [single('b_tmpl01', 'r_tmpl01', 'squat', { deviceId: 'eski-cihaz' }), single('b_tmpl02', 'r_tmpl02', 'squat', { deviceId: 'smith' })],
+    };
+    const phase: ProgramPhase = { id: 'p_evre01', name: 'Evre 1', days: [gun('d_aaaaaa', 'Gün A')] };
+
+    // Düzenleyici ("Gün ekle → Şablondan", başlangıç şablonu `program-form.tsx`): açılıştaki hazırlıkla aynı adım.
+    const prepared = dayFromTemplateForEditing(phase, template, programIdSource([phase]), simdi, deviceIds);
+    assert.equal(prepared.day.name, 'Gün B');
+    assert.deepEqual(prepared.day.source, { templateId: 't_aaaaaaaa', templateName: 'Alt vücut', at: simdi.toISOString() });
+    const [gone, kept] = prepared.day.blocks.flatMap((block) => block.rows);
+    assert.notEqual(gone?.id, 'r_tmpl01'); // yeni kimlik
+    assert.deepEqual(prepared.droppedDeviceRowIds, [gone?.id]);
+    assert.equal(gone && 'deviceId' in gone, false);
+    assert.equal(kept?.deviceId, 'smith');
+    // Şablonun kendisi değişmez.
+    assert.equal(template.blocks[0]?.rows[0]?.deviceId, 'eski-cihaz');
+
+    // Sunucu: hazırlanmamış gövde de (eski sekme, geri yüklenen taslak) reddedilmez.
+    const copied = dayFromTemplate(phase, template, programIdSource([phase]), simdi);
+    const { phases, errors } = normalizeProgram(
+      { phased: false, phases: addDay([phase], 'p_evre01', copied) },
+      { exercises: new Map([['squat', squat], ['goblet-squat', exercise('goblet-squat')]]), deviceIds },
+      { phases: [phase] },
+    );
+    assert.deepEqual(errors, {});
+    const rows = phases[0]?.days[1]?.blocks.flatMap((block) => block.rows) ?? [];
+    assert.equal('deviceId' in (rows[0] ?? {}), false);
+    assert.equal(rows[1]?.deviceId, 'smith');
+  });
+
+  test('sunucu, cihazı artık olmayan satırları bildirir (eski sekmede seçilip o arada silinen, uydurma); satır egzersizin cihazına döner', () => {
+    const library = { exercises: new Map([['squat', exercise('squat', { deviceId: 'rack' })]]), deviceIds: new Set(['rack', 'smith']) };
+    const withDevice = (deviceId?: string): ProgramPhase[] => [
+      { id: 'p_evre01', name: 'Evre 1', days: [gun('d_aaaaaa', 'Gün A', { blocks: [single('b_aaaaaa', 'r_aaaaaa', 'squat', deviceId ? { deviceId } : {})] })] },
+    ];
+    // Kayıtta satırın cihazı yok; eski sekmede PT, o arada silinen 'eski'yi seçmişti.
+    const stored = { phases: withDevice() };
+    const eski = normalizeProgram({ phased: false, phases: withDevice('eski') }, library, stored);
+    assert.deepEqual(eski.errors, {});
+    assert.deepEqual(eski.droppedDeviceRowIds, ['r_aaaaaa']);
+    assert.equal('deviceId' in (eski.phases[0]?.days[0]?.blocks[0]?.rows[0] ?? {}), false);
+    assert.deepEqual(normalizeProgram({ phased: false, phases: withDevice('uydurma-cihaz') }, library, stored).droppedDeviceRowIds, ['r_aaaaaa']);
+    // Var olan cihaz ve cihazsız satır düşmez.
+    assert.deepEqual(normalizeProgram({ phased: false, phases: withDevice('smith') }, library, stored).droppedDeviceRowIds, []);
+    assert.deepEqual(normalizeProgram({ phased: false, phases: withDevice() }, library, stored).droppedDeviceRowIds, []);
+  });
+
+  test('silinmiş cihaz uyarısı bugünkü hâle bakar; kaydedilecek iş yoksa "Kaydedince kalıcı olur" denmez', () => {
+    // Açılışta, şablondan gelen günde ya da geri yüklenen taslakta cihazı düşen satırlar not edilir.
+    const noted = new Set(['r_aaaaaa', 'r_bbbbbb']);
+    const phases: ProgramPhase[] = [{ ...uyum, days: [A, B, C] }];
+    assert.equal(droppedDeviceNotice(phases, noted, true), '2 satırın cihazı silinmiş; egzersizin kendi cihazına döndü. Kaydedince kalıcı olur.');
+    // PT satıra Smith'i seçti (satır kimliği aynı): artık egzersizin cihazında değil, sayılmaz.
+    const smith = gun('d_aaaaaa', 'Gün A', { blocks: [single('b_aaaaaa', 'r_aaaaaa', 'goblet-squat', { deviceId: 'smith' })] });
+    assert.equal(
+      droppedDeviceNotice([{ ...uyum, days: [smith, B, C] }], noted, true),
+      '1 satırın cihazı silinmiş; egzersizin kendi cihazına döndü. Kaydedince kalıcı olur.',
+    );
+    // Satırlar kaldırıldı (günler silindi): uyarı yok.
+    assert.equal(droppedDeviceNotice([{ ...uyum, days: [C] }], noted, true), null);
+    // Form yüklenen hâlde (ör. taslağın tek farkı silinmiş cihazdı; Kaydet yok): "kalıcı olur" denmez.
+    assert.equal(droppedDeviceNotice(phases, noted, false), '2 satırın cihazı silinmiş; egzersizin kendi cihazına döndü.');
   });
 
   test('kütüphanede olmayan egzersizler gün gün', () => {
@@ -630,6 +797,23 @@ describe('evresiz program ve evreleri kaldırma', () => {
     const merged = mergePhases([uyum2, guc3], 'p_guc001').phases;
     const rotation = { lastDayId: 'd_dddddd' };
     assert.equal(reconcileRotation([uyum2, guc3], merged, rotation), rotation);
+  });
+
+  test('evresiz ↔ evresiz: gizli evre kayıttakinin kimliği ve adıyla; taraflardan biri evreliyse gövde aynen', () => {
+    const gizli: ProgramPhase = { id: 'p_evre01', name: 'Evre 1', daysPerWeek: 3, days: [A, B, C] };
+    const stored = { phased: false, phases: [gizli] };
+    const yeni: ProgramPhase = { id: 'p_yeni01', name: 'Evre 2', daysPerWeek: 2, days: [A, B] };
+    assert.deepEqual(keepHiddenPhase(stored, { phased: false, currentPhaseId: 'p_yeni01', phases: [yeni] }), {
+      phased: false,
+      currentPhaseId: 'p_evre01',
+      phases: [{ ...yeni, id: 'p_evre01', name: 'Evre 1' }],
+    });
+    const same = { phased: false, currentPhaseId: 'p_evre01', phases: [{ ...gizli, days: [A] }] };
+    assert.equal(keepHiddenPhase(stored, same), same);
+    const split = { phased: true, currentPhaseId: 'p_yeni01', phases: [yeni] };
+    assert.equal(keepHiddenPhase(stored, split), split);
+    const unsplit = { phased: false, currentPhaseId: 'p_yeni01', phases: [yeni] };
+    assert.equal(keepHiddenPhase({ phased: true, phases: [gizli] }, unsplit), unsplit);
   });
 });
 

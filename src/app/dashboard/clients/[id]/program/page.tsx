@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ListChecks, Plus, WarningCircle } from '@phosphor-icons/react/dist/ssr';
@@ -27,6 +28,7 @@ import {
   missingExerciseDays,
   nextDayId,
   phaseMuscleLoad,
+  phaseProgress,
   phaseStatus,
   phaseStatusLabel,
   sourceNames,
@@ -39,6 +41,8 @@ import { templateChoices } from '@/lib/templates';
 import { cn } from '@/lib/utils';
 import { InvalidProgramAlert } from './invalid-program-alert';
 import { PhaseTransition } from './phase-transition';
+
+export const metadata: Metadata = { title: 'Program' };
 
 /**
  * Danışanın programı — yalnız gösterim; tek eylem "Düzenle" (SPEC §6). İstisna: şu anki
@@ -107,7 +111,9 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
   const byId = new Map(exercises.map((exercise) => [exercise.id, exercise]));
   const templateIds = new Set(templates.map((template) => template.id));
   const current = currentPhaseOf(program);
-  const status = phaseStatus(program, new Date());
+  const now = new Date();
+  const status = phaseStatus(program, now);
+  const progress = phaseProgress(program, now);
   const nextId = nextDayId(program);
   const nextDay = current?.phase.days.find((day) => day.id === nextId);
   const missingRows = missingExerciseDays(program.phases, new Set(byId.keys())).reduce((sum, item) => sum + item.rowIds.length, 0);
@@ -132,6 +138,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
         label={phased ? 'Şu anki evrenin kas yükü' : 'Programın kas yükü'}
       />
     ) : null;
+  const nextSummary = nextDay ? templateSummary({ blocks: nextDay.blocks }, byId) : null;
 
   const dayCards = (phase: ProgramPhase) => (
     <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -140,7 +147,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
         const isNext = phase.id === current?.phase.id && day.id === nextId;
         const source = day.source;
         return (
-          <li key={day.id} className={cn('flex flex-col gap-3 rounded-lg border p-3', isNext && 'bg-primary/5 ring-2 ring-primary/50')}>
+          <li key={day.id} className={cn('flex flex-col gap-3 rounded-lg border p-3', isNext && 'bg-primary/5 ring-2 ring-primary-text')}>
             <div className="flex flex-col gap-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium">{day.name}</span>
@@ -152,7 +159,9 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
               {source ? (
                 <span className="text-xs text-muted-foreground">
                   {templateIds.has(source.templateId) ? (
-                    <Link href={`/dashboard/templates/${source.templateId}`} className="underline underline-offset-4">
+                    <Link
+                      href={`/dashboard/templates/${source.templateId}`}
+                      className="underline underline-offset-4 touch:inline-flex touch:min-h-11 touch:items-center">
                       &apos;{source.templateName}&apos; şablonundan
                     </Link>
                   ) : (
@@ -168,6 +177,11 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
     </ul>
   );
 
+  /*
+   * Sıra telefonda işe göre (DOM sırası): sıradaki gün ve hareketleri → bütün günler → evre ya da
+   * döngü özeti → evreler → kas yükü → geçmiş. Masaüstünde iki sütun: sıradaki gün evre özetinin
+   * yanında, günler tam genişlikte, kas yükü evrelerin yanında (`lg:order-*`).
+   */
   return (
     <div className="flex flex-col gap-6">
       <SectionHeader title="Program" description={description} actions={<EditButton href={editHref} />} />
@@ -179,6 +193,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
           description={`${status.weeks} hafta planlanmıştı; ${formatDate(program.current.startedAt, timeZone)} tarihinde başladı. Sıradaki evre: '${nextPhase.name}'.`}
           next={{ id: nextPhase.id, name: nextPhase.name }}
           revision={program.revision}
+          createdAt={program.createdAt}
         />
       ) : null}
 
@@ -202,16 +217,66 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
         </Alert>
       ) : null}
 
-      {phased ? (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+        {nextDay && nextSummary ? (
+          <Card className="lg:order-1">
+            <CardHeader>
+              <CardTitle>Sıradaki gün: {nextDay.name}</CardTitle>
+              <CardDescription className="tabular-nums">
+                {[
+                  phased ? current?.phase.name : null,
+                  `${formatNumber(nextSummary.rows)} hareket · ${formatNumber(nextSummary.workingSets)} set · ≈ ${formatNumber(nextSummary.minutes)} dk`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <DayPlan blocks={nextDay.blocks} exercises={byId} missing="show" />
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <Card className="lg:order-3 lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Günler</CardTitle>
+            <CardDescription>
+              {phased
+                ? 'Şu anki evrenin günleri sırayla döner (A → B → C); sıradaki gün işaretli.'
+                : 'Günler sırayla döner (A → B → C); sıradaki gün işaretli.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {phased ? (
+              <Tabs defaultValue={program.current.phaseId}>
+                <TabsList variant="line" className="w-full justify-start overflow-x-auto">
+                  {program.phases.map((phase, index) => (
+                    <TabsTrigger key={phase.id} value={phase.id} className="flex-none">
+                      {index + 1}. {phase.name}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+                {program.phases.map((phase) => (
+                  <TabsContent key={phase.id} value={phase.id} className="pt-3">
+                    {dayCards(phase)}
+                  </TabsContent>
+                ))}
+              </Tabs>
+            ) : current ? (
+              dayCards(current.phase)
+            ) : null}
+          </CardContent>
+        </Card>
+
+        {phased ? (
+          <Card className="lg:order-2">
             <CardHeader>
               <CardTitle>Şu anki evre: {current?.phase.name}</CardTitle>
               <CardDescription>{phaseStatusLabel(status)}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              {status.kind !== 'open' ? (
-                <Progress value={Math.min(status.week / status.weeks, 1) * 100}>
+              {status.kind !== 'open' && progress !== null ? (
+                <Progress value={progress * 100}>
                   <ProgressLabel>
                     Hafta {Math.min(status.week, status.weeks)} / {status.weeks}
                   </ProgressLabel>
@@ -237,11 +302,46 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
                   </TableRow>
                 </TableBody>
               </Table>
-              {phaseLoad}
             </CardContent>
           </Card>
+        ) : (
+          <Card className="lg:order-2">
+            <CardHeader>
+              <CardTitle>Döngü</CardTitle>
+              <CardDescription>Günler sırayla döner; danışan sıradaki günü görür.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <Table>
+                <TableBody>
+                  <TableRow>
+                    <TableCell className="w-36 text-muted-foreground">Sıradaki gün</TableCell>
+                    <TableCell>{nextDay?.name ?? '—'}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="text-muted-foreground">Sıklık</TableCell>
+                    <TableCell>{frequency ?? 'Belirtilmedi'}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="text-muted-foreground">Son antrenman</TableCell>
+                    <TableCell>
+                      {program.rotation.lastCompletedAt ? formatDate(program.rotation.lastCompletedAt, timeZone) : 'Henüz yok'}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="text-muted-foreground">Başladı</TableCell>
+                    <TableCell>{formatDate(program.current.startedAt, timeZone)}</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+              {sources.length > 0 ? (
+                <p className="text-sm text-muted-foreground">Kaynak şablonlar: {sources.join(', ')}</p>
+              ) : null}
+            </CardContent>
+          </Card>
+        )}
 
-          <Card>
+        {phased ? (
+          <Card className="lg:order-4">
             <CardHeader>
               <CardTitle>Evreler</CardTitle>
               <CardDescription>Evre geçişini sen onaylarsın; süre dolunca burada önerilir.</CardDescription>
@@ -276,86 +376,28 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
               ) : null}
             </CardContent>
           </Card>
-        </div>
-      ) : (
-        <Card>
+        ) : null}
+
+        {phaseLoad ? (
+          <Card className={cn('lg:order-5', !phased && 'lg:col-span-2')}>
+            <CardHeader>
+              <CardTitle>Kas yükü</CardTitle>
+              <CardDescription>{phased ? 'Şu anki evrenin planlanan kas yükü.' : 'Programın planlanan kas yükü.'}</CardDescription>
+            </CardHeader>
+            <CardContent>{phaseLoad}</CardContent>
+          </Card>
+        ) : null}
+
+        <Card id="gecmis" className="scroll-mt-4 lg:order-6 lg:col-span-2">
           <CardHeader>
-            <CardTitle>Döngü</CardTitle>
-            <CardDescription>Günler sırayla döner; danışan sıradaki günü görür.</CardDescription>
+            <CardTitle>Program geçmişi</CardTitle>
+            <CardDescription>Her kaydettiğinde ne değiştiği buraya yazılır.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-6 lg:grid-cols-2 lg:items-start">
-            <div className="flex flex-col gap-4">
-              <Table>
-                <TableBody>
-                  <TableRow>
-                    <TableCell className="w-36 text-muted-foreground">Sıradaki gün</TableCell>
-                    <TableCell>{nextDay?.name ?? '—'}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="text-muted-foreground">Sıklık</TableCell>
-                    <TableCell>{frequency ?? 'Belirtilmedi'}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="text-muted-foreground">Son antrenman</TableCell>
-                    <TableCell>
-                      {program.rotation.lastCompletedAt ? formatDate(program.rotation.lastCompletedAt, timeZone) : 'Henüz yok'}
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="text-muted-foreground">Başladı</TableCell>
-                    <TableCell>{formatDate(program.current.startedAt, timeZone)}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-              {sources.length > 0 ? (
-                <p className="text-sm text-muted-foreground">Kaynak şablonlar: {sources.join(', ')}</p>
-              ) : null}
-            </div>
-            {phaseLoad}
+          <CardContent>
+            <ChangeLog entries={program.log} timeZone={timeZone} initial={20} />
           </CardContent>
         </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Günler</CardTitle>
-          <CardDescription>
-            {phased
-              ? 'Şu anki evrenin günleri sırayla döner (A → B → C); sıradaki gün işaretli.'
-              : 'Günler sırayla döner (A → B → C); sıradaki gün işaretli.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {phased ? (
-            <Tabs defaultValue={program.current.phaseId}>
-              <TabsList variant="line" className="w-full justify-start overflow-x-auto">
-                {program.phases.map((phase, index) => (
-                  <TabsTrigger key={phase.id} value={phase.id} className="flex-none">
-                    {index + 1}. {phase.name}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-              {program.phases.map((phase) => (
-                <TabsContent key={phase.id} value={phase.id} className="pt-3">
-                  {dayCards(phase)}
-                </TabsContent>
-              ))}
-            </Tabs>
-          ) : current ? (
-            dayCards(current.phase)
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <Card id="gecmis" className="scroll-mt-4">
-        <CardHeader>
-          <CardTitle>Program geçmişi</CardTitle>
-          <CardDescription>Her kayıtta otomatik yazılır; tamamı danışanın repo&apos;sunun git geçmişinde.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ChangeLog entries={program.log} timeZone={timeZone} initial={20} />
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }

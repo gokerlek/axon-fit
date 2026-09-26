@@ -1,8 +1,9 @@
 import 'server-only';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { readClient } from './clients';
+import { loginPath, PATH_HEADER } from './navigation';
 import type { Client } from './schemas/client';
-import { readClientSession, readPtSession, type ClientSession, type PtSession } from './session';
+import { readClientSession, readPtSession, sessionClient, type ClientSession, type PtSession } from './session';
 
 /**
  * Rol ayrımı (SPEC §5).
@@ -17,30 +18,24 @@ import { readClientSession, readPtSession, type ClientSession, type PtSession } 
  * doğrulama rehberi, "Layouts and auth checks").
  */
 
+/** PT oturumu; yoksa girişe, istenen sayfa dönüş yolu olarak (`/login?next=…`, yalnız `/dashboard` altı). */
 export async function requirePt(): Promise<PtSession> {
   const session = await readPtSession();
-  if (!session) redirect('/login');
+  if (!session) redirect(loginPath((await headers()).get(PATH_HEADER)));
   return session;
 }
 
 export async function requireClient(): Promise<ClientSession> {
   const session = await readClientSession();
-  if (!session) redirect('/join');
+  if (!session) redirect('/giris');
   return session;
 }
 
 /**
- * Oturumun hâlâ geçerli olduğu danışan kaydı ya da null. Çerez imzalı olsa da tek başına
- * yetmez: PT erişimi kapattıysa (kuşak arttı), danışanı arşivlediyse ya da sildiyse
- * oturum düşer. GitHub'a ulaşılamazsa hata fırlar — "erişimin kapandı" denmez.
+ * Kayıtla doğrulanan danışan oturumu `session.ts`'te, çünkü iki role açık okuma uçları da
+ * (`readAnySession`) aynı kontrolden geçer; danışan uçları buradan da alabilir.
  */
-export async function sessionClient(session: ClientSession): Promise<Client | null> {
-  const stored = await readClient(session.clientId);
-  if (!stored) return null;
-  const { client } = stored;
-  if (client.status === 'archived' || client.access.version !== session.accessVersion) return null;
-  return client;
-}
+export { sessionClient };
 
 /** Danışan sayfalarının kapısı: geçerli kayıt yoksa girişe, nedeniyle birlikte. */
 export async function currentClient(): Promise<Client> {

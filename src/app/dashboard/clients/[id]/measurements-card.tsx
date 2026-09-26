@@ -17,11 +17,21 @@ const ALERT_TEXT: Record<MeasurementAlert['kind'], string> = {
 };
 
 /**
- * Danışan sayfasında ölçümlerin özeti: son ölçüm, gün sayısı ve son 4 haftanın kararı
- * verilebilen eğilimleri (gerileme ve durağan önde). Ölçüm girişi ve grafikler kendi sayfasında.
- * `undefined`: GitHub'dan okunamadı.
+ * Danışan sayfasında ölçümlerin özeti: son ölçüm, gün sayısı ve son ölçüme kadarki 4 haftanın kararı
+ * verilebilen eğilimleri (gerileme ve durağan önde; ölçümler sayfasındaki "4 haftalık eğilim" ile aynı
+ * hesap). Ölçüm girişi ve grafikler kendi sayfasında.
+ * `undefined`: GitHub'dan okunamadı. `today`: uygulamanın saat dilimindeki gün; son ölçümü
+ * 4 haftadan eski eğilim gösterilmez.
  */
-export function MeasurementsCard({ clientId, view }: { clientId: string; view: MeasurementsView | undefined }) {
+export function MeasurementsCard({
+  clientId,
+  view,
+  today,
+}: {
+  clientId: string;
+  view: MeasurementsView | undefined;
+  today: string;
+}) {
   const href = `/dashboard/clients/${clientId}/measurements`;
 
   if (!view || view.state !== 'ok') {
@@ -50,7 +60,7 @@ export function MeasurementsCard({ clientId, view }: { clientId: string; view: M
 
   const days = measurementDays(view.record.measurements);
   const last = days[0];
-  const alerts = measurementAlerts(view.record.measurements).slice(0, 4);
+  const alerts = measurementAlerts(view.record.measurements, today).slice(0, 4);
 
   return (
     <Card>
@@ -61,8 +71,9 @@ export function MeasurementsCard({ clientId, view }: { clientId: string; view: M
         </CardDescription>
       </CardHeader>
       {alerts.length > 0 ? (
-        <CardContent>
-          <ul className="flex flex-col gap-2 text-sm" aria-label="Son 4 haftanın eğilimleri">
+        <CardContent className="flex flex-col gap-2">
+          <p className="text-xs text-muted-foreground">4 haftalık eğilim, son ölçüme kadar; ölçüm hatası payının altındaki değişim durağan sayılır.</p>
+          <ul className="flex flex-col gap-2 text-sm" aria-label="4 haftalık eğilimler">
             {alerts.map((alert) => {
               const def = MEASUREMENTS[alert.id];
               const side = alert.key === 'value' ? '' : ` (${SIDE_LABELS[alert.key].toLocaleLowerCase('tr')})`;

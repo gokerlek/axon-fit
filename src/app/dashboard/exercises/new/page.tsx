@@ -1,8 +1,11 @@
+import type { Metadata } from 'next';
 import { PageHeader } from '@/components/page-header';
 import { listAttachments } from '@/lib/attachments';
 import { listDevices } from '@/lib/devices';
 import { ExerciseForm } from '../exercise-form';
 import { requirePt } from '@/lib/guards';
+
+export const metadata: Metadata = { title: 'Yeni egzersiz' };
 
 export default async function NewExercisePage() {
   await requirePt();

@@ -19,7 +19,12 @@ export type SetupForm = v.InferOutput<typeof setupFormSchema>;
 
 /**
  * Hazır palet. İlk seçenek (`null`) temanın kendi rengidir; diğerleri onu ezer.
- * Üstündeki yazı rengi her seçimde kontrasta göre hesaplanır (src/lib/color.ts).
+ * Üstündeki yazı rengi ve yüzey üstü tonları her seçimde kontrasta göre hesaplanır (src/lib/color.ts).
+ *
+ * Grafit, eski "Kireç"in (#E5E5E5) yerine: açık temada `bg-primary` düğmesi beyazdan 1,26:1'le
+ * seçilmiyordu. #71717A iki temada da bütün yüzeylerden ≥3:1 ayrılır, üstündeki yazı ≥4,5:1.
+ * Kireç'i kaydetmiş kurulum bozulmaz: `accent` listeye değil #RRGGBB biçimine bağlıdır, renk
+ * aynen uygulanır ve türevleri yine okunur; ayarlarda hiçbir kutu seçili görünmez, PT yenisini seçer.
  */
 export const ACCENT_PRESETS: readonly { value: string | null; label: string }[] = [
   { value: null, label: 'Tema' },
@@ -29,5 +34,5 @@ export const ACCENT_PRESETS: readonly { value: string | null; label: string }[] 
   { value: '#FB7185', label: 'Gül' },
   { value: '#FBBF24', label: 'Kehribar' },
   { value: '#F97316', label: 'Turuncu' },
-  { value: '#E5E5E5', label: 'Kireç' },
+  { value: '#71717A', label: 'Grafit' },
 ];

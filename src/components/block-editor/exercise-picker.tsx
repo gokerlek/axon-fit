@@ -52,7 +52,7 @@ export function ExercisePicker({
   mode: 'add' | 'replace';
   /** Değiştirme kipinde yerine seçilen egzersiz: muadilleri önce önerilir. */
   suggestFor: string | null;
-  /** Liste dolu (40 hareket ya da 30 blok): ekleme kapalı, değiştirme açık. */
+  /** Eklenemiyor (şablon ya da grup dolu, grup yok; nedeni sheet'in durum satırında): ekleme kapalı, değiştirme açık. */
   disabled: boolean;
   /** Az önce eklenen egzersiz: kısa süre "Eklendi" görünür. */
   justAdded: string | null;
@@ -100,9 +100,9 @@ export function ExercisePicker({
         <ItemActions>
           {count > 0 ? <Badge variant="secondary">şablonda ×{count}</Badge> : null}
           {replacing ? (
-            <span className="text-xs font-medium text-primary">Seç</span>
+            <span className="text-xs font-medium text-primary-text">Seç</span>
           ) : justAdded === exercise.id ? (
-            <span className="flex items-center gap-1 text-xs font-medium text-primary animate-in duration-160 fade-in-0" aria-hidden>
+            <span className="flex items-center gap-1 text-xs font-medium text-primary-text animate-in duration-160 fade-in-0" aria-hidden>
               <Check className="size-3.5" />
               Eklendi
             </span>
@@ -147,15 +147,13 @@ export function ExercisePicker({
               key={item.id}
               variant="outline"
               size="sm"
-              className="shrink-0 touch:h-11"
+              className="shrink-0 touch:h-11 touch:min-w-11"
               pressed={group === item.id}
               onPressedChange={(pressed) => setGroup(pressed ? item.id : null)}>
               {item.label}
             </Toggle>
           ))}
         </div>
-
-        {locked ? <p className="text-sm text-muted-foreground">Şablon dolu: en fazla 40 hareket ve 30 blok olur.</p> : null}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 py-3">

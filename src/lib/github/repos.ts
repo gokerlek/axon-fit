@@ -11,32 +11,40 @@ import { CLIENT_REPO_PREFIX } from '../env';
  */
 
 /**
- * Uygulama repo'sunu oluşturur (kurulumun ilk adımı).
- *
- * PT'nin GitHub arayüzüyle uğraşmasına gerek kalmasın diye uygulama kendi deposunu
- * kendisi açar. Zaten varsa dokunmaz. Özel (private) olmak zorunda: içinde marka
- * ayarı ve danışan kimlikleri var.
+ * Uygulama (veri) repo'sunun denetimi, OLUŞTURMADAN: yalnız `repos.get`. Repo yoksa `exists: false`.
+ * Özel değilse ya da fork ise 409 fırlatır: kod fork'la dağıtılır ve açık bir repo'nun fork'u gizli
+ * yapılamaz; veri repo'su kodun fork'u (APP_REPO fork'un adıyla aynı) ya da açık bir repo olursa marka
+ * ayarı, danışan kimlikleri ve giriş denemeleri herkese açık olur (SPEC §9.8). Kurulumdan sonra da
+ * çalışır: repo sonradan açığa çevrilmiş ya da eski bir sürümle açık bir repo'ya kurulmuş olabilir.
  */
-export async function createAppRepo(): Promise<{ created: boolean }> {
+export async function checkAppRepo(): Promise<{ exists: boolean }> {
   const repo = appRepo();
   try {
     const { data } = await gh().rest.repos.get({ owner: owner(), repo });
-    // Kod fork'la dağıtılır ve açık bir repo'nun fork'u gizli yapılamaz. Veri repo'su
-    // kodun fork'u ya da açık bir repo olursa marka ayarı ve danışan kimlikleri herkese
-    // açık olur: kurulum burada durur.
     if (data.fork || !data.private) {
       throw new GithubError(
         `"${repo}" ${data.fork ? 'bir fork' : 'herkese açık'}. Veri repo'su kodun fork'undan ayrı ve özel olmalı: APP_REPO'ya yeni bir ad ver (ör. pulsecoach-data).`,
         409,
       );
     }
-    return { created: false };
+    return { exists: true };
   } catch (error) {
     if (error instanceof GithubError) throw error;
-    if (typeof error !== 'object' || !error || !('status' in error) || error.status !== 404) {
-      throw toGithubError(error, repo);
-    }
+    if (typeof error === 'object' && error && 'status' in error && error.status === 404) return { exists: false };
+    throw toGithubError(error, repo);
   }
+}
+
+/**
+ * Uygulama repo'sunu oluşturur (kurulumun ilk adımı).
+ *
+ * PT'nin GitHub arayüzüyle uğraşmasına gerek kalmasın diye uygulama kendi deposunu
+ * kendisi açar. Zaten varsa dokunmaz; açık ya da fork ise durur (`checkAppRepo`). Özel
+ * (private) olmak zorunda: içinde marka ayarı ve danışan kimlikleri var.
+ */
+export async function createAppRepo(): Promise<{ created: boolean }> {
+  const repo = appRepo();
+  if ((await checkAppRepo()).exists) return { created: false };
 
   try {
     await gh().rest.repos.createForAuthenticatedUser({

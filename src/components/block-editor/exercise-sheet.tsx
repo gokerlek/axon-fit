@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import { sheetStatus } from '@/lib/edit-messages';
 import { DRAG } from '@/lib/motion';
 import type { EditorDevice, PickerExercise } from '@/lib/template-edit';
 import { ExercisePicker } from './exercise-picker';
@@ -116,7 +117,7 @@ function SheetBody({
       />
       <SheetFooter className="flex-row items-center gap-3 border-t pb-[max(1rem,env(safe-area-inset-bottom))]">
         <p role="status" aria-live="polite" className="min-w-0 flex-1 text-sm text-muted-foreground">
-          {blocked ? (status ? `${status} · ${blocked}` : blocked) : status || hint}
+          {sheetStatus(blocked, status, hint)}
         </p>
         <SheetClose render={<Button type="button" className="touch:h-11" />}>Bitti</SheetClose>
       </SheetFooter>

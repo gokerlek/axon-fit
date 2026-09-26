@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { setInput, useField, useFieldArray } from '@formisch/react';
 import { ArrowDown, ArrowRight, ArrowUp, Copy, DotsThreeVertical, Info, Plus, PushPin, Rows, Trash } from '@phosphor-icons/react';
+import { keepLineEnter } from '@/components/block-editor/enter-key';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -67,7 +68,7 @@ function PhaseMenu({ phase, index, shared }: { phase: ProgramPhase; index: numbe
       <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon" aria-label={`Evre işlemleri: ${phase.name}`} />}>
         <DotsThreeVertical weight="bold" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-48">
+      <DropdownMenuContent align="end" className="min-w-48 touch:**:data-[slot=dropdown-menu-item]:min-h-11 touch:**:data-[slot=dropdown-menu-sub-trigger]:min-h-11">
         <DropdownMenuItem disabled={index === 0} onClick={() => actions.update((all) => movePhase(all, phase.id, -1))}>
           <ArrowUp />
           Yukarı taşı
@@ -112,7 +113,7 @@ function PhaseRow({ phase, index, shared }: { phase: ProgramPhase; index: number
   const weeks = typeof weeksField.input === 'number' && !Number.isNaN(weeksField.input) ? weeksField.input : '';
 
   return (
-    <li className={cn('flex flex-col gap-3 rounded-lg border p-3', isCurrent && 'border-primary/40 bg-primary/5')}>
+    <li className={cn('flex flex-col gap-3 rounded-lg border p-3', isCurrent && 'border-primary-text bg-primary/5')}>
       <div className="flex flex-wrap items-end gap-3">
         <Field data-invalid={Boolean(nameField.errors) || undefined} className="basis-full gap-1.5 sm:max-w-sm sm:flex-1 sm:basis-auto">
           <FieldLabel htmlFor={`phase-name-${phase.id}`} className="text-xs text-muted-foreground">
@@ -126,6 +127,7 @@ function PhaseRow({ phase, index, shared }: { phase: ProgramPhase; index: number
               value={nameField.input ?? ''}
               maxLength={PROGRAM_LIMITS.phaseName}
               aria-invalid={Boolean(nameField.errors) || undefined}
+              onKeyDown={keepLineEnter}
             />
           </div>
         </Field>
@@ -145,6 +147,7 @@ function PhaseRow({ phase, index, shared }: { phase: ProgramPhase; index: number
               className="tabular-nums"
               aria-invalid={Boolean(weeksField.errors) || undefined}
               value={weeks}
+              onKeyDown={keepLineEnter}
               onChange={(event) =>
                 setInput(form, {
                   path: ['phases', index, 'weeks'],
@@ -289,7 +292,7 @@ export function PhasesCard({ now, timeZone, ...shared }: Shared & { now: string;
             <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon" aria-label="Evre seçenekleri" />}>
               <DotsThreeVertical weight="bold" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-48">
+            <DropdownMenuContent align="end" className="min-w-48 touch:**:data-[slot=dropdown-menu-item]:min-h-11 touch:**:data-[slot=dropdown-menu-sub-trigger]:min-h-11">
               <DropdownMenuItem onClick={unphase}>
                 <Rows />
                 Evreleri kaldır…

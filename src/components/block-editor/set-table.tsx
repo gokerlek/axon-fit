@@ -19,6 +19,7 @@ import { applySetPreset, setRounds, setRowSetCount, updateRowSets, type PickerEx
 import { TEMPLATE_LIMITS, type TemplateBlock, type TemplateRow } from '@/lib/template-plan';
 import { cn } from '@/lib/utils';
 import { blockField, setInputId, useEditor, type SetColumn } from './editor-context';
+import { enterAction, keepLineEnter } from './enter-key';
 
 /**
  * Satırın setleri (SPEC §7.4): set sayısı ve dinlenme stepper'ı, düz setlerde tek "Hedef"
@@ -121,6 +122,7 @@ export function SetCountField({ row, exercise }: Pick<RowProps, 'row' | 'exercis
         incrementLabel="Son seti kopyala"
         onFocus={count.onFocus}
         onBlur={count.onBlur}
+        onKeyDown={keepLineEnter}
         onValueChange={count.change}
       />
       {count.invalid ? <FieldError>{COUNT_ERROR}</FieldError> : null}
@@ -161,6 +163,7 @@ export function RoundsField({ block, rounds }: { block: TemplateBlock; rounds: n
         incrementLabel="Bir tur ekle"
         onFocus={count.onFocus}
         onBlur={count.onBlur}
+        onKeyDown={keepLineEnter}
         onValueChange={count.change}
       />
       {count.invalid ? <FieldError>{COUNT_ERROR}</FieldError> : null}
@@ -210,6 +213,7 @@ export function BlockSecondsField({
         inputRef={field.props.ref}
         onFocus={field.props.onFocus}
         onBlur={field.props.onBlur}
+        onKeyDown={keepLineEnter}
         onValueChange={(next) => setInput(form, { path: blockField(path, blockIndex, name), input: (next ?? undefined) as number })}
       />
       <FieldError>{field.errors?.[0]}</FieldError>
@@ -262,6 +266,7 @@ export function TargetField({ blockIndex, rowIndex, row, exercise }: RowProps) {
           className="h-8 w-14 text-center tabular-nums touch:h-11"
           value={shown(minField.input)}
           onChange={(event) => writeAll({ min: numberOf(event.currentTarget) as number })}
+          onKeyDown={keepLineEnter}
         />
         <span className="text-muted-foreground" aria-hidden>
           –
@@ -280,6 +285,7 @@ export function TargetField({ blockIndex, rowIndex, row, exercise }: RowProps) {
           className="h-8 w-14 text-center tabular-nums touch:h-11"
           value={shown(maxField.input)}
           onChange={(event) => writeAll({ max: numberOf(event.currentTarget) as number })}
+          onKeyDown={keepLineEnter}
         />
         <span className="text-sm text-muted-foreground">{unit}</span>
         {amrapBadge ? <Badge variant="secondary">{amrapBadge}</Badge> : null}
@@ -301,7 +307,7 @@ export function TargetField({ blockIndex, rowIndex, row, exercise }: RowProps) {
                 pressed={pressed}
                 onPressedChange={() => writeAll({ min, max })}
                 aria-label={`${label} ${unit}`}
-                className="h-8 min-w-11 shrink-0 rounded-full px-3 tabular-nums touch:h-10 aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-foreground">
+                className="h-8 min-w-11 shrink-0 rounded-full px-3 tabular-nums touch:h-11">
                 {isDuration ? `${label} sn` : label}
               </Toggle>
             );
@@ -399,11 +405,12 @@ function SetNumberInput({
       value={shown(field.input)}
       onChange={(event) => onValue(numberOf(event.currentTarget))}
       onKeyDown={(event) => {
-        if (event.key !== 'Enter') return;
+        const action = enterAction('set', event.nativeEvent);
+        if (action === 'pass') return;
         // Enter formu göndermesin: aynı sütunda sonraki (Shift ile önceki) sete geç.
         event.preventDefault();
-        const target = event.shiftKey ? index - 1 : index + 1;
-        if (target < 0 || target >= count) return;
+        const target = action === 'previous' ? index - 1 : index + 1;
+        if (action === 'block' || target < 0 || target >= count) return;
         document.getElementById(setInputId(rowId, target, column))?.focus();
       }}
     />
@@ -481,7 +488,7 @@ function SetRow({ blockIndex, rowIndex, row, exercise, index }: RowProps & { ind
           ) : null}
           <Toggle
             variant="outline"
-            className="h-10 w-18 aria-pressed:border-primary aria-pressed:bg-primary/10 touch:h-11"
+            className="h-10 w-18 touch:h-11"
             disabled={disabled}
             pressed={Boolean(set?.amrap)}
             onPressedChange={(pressed) => setInput(form, { path: at('amrap'), input: pressed ? true : undefined })}

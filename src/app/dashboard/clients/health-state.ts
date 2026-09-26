@@ -14,5 +14,6 @@ export const HEALTH_STATE_DETAILS: Record<HealthConsentState, string> = {
   pending: 'Danışan ilk girişinde neyin tutulacağını görüp onaylayacak. O zamana kadar kayıt tutulmaz.',
   granted: 'Danışan onay verdi; seçili parçalar kaydedilebilir. İstediği an geri çekebilir.',
   declined: 'Danışan onay vermedi; sağlık kaydı tutulmaz. Kendi ekranından sonra açabilir.',
-  outdated: 'Onay yeni parçaları ya da güncel metni kapsamıyor; bir sonraki girişinde yeniden sorulacak.',
+  outdated:
+    'Onay güncel kapsamı ya da metni karşılamıyor (modül yeniden açıldı ya da parça eklendi); bir sonraki girişinde yeniden sorulacak.',
 };

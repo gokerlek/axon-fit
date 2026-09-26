@@ -1,5 +1,6 @@
 import 'server-only';
 import { assertRepoAllowed, gh, GithubError, owner, toGithubError } from './client';
+import { BrokenJsonError } from './errors';
 
 /**
  * Repo içindeki dosya işlemleri (JSON ve ikili dosyalar).
@@ -19,18 +20,24 @@ function encode(text: string): string {
   return Buffer.from(text, 'utf8').toString('base64');
 }
 
+/**
+ * Dosya yoksa null. İçerik JSON değilse `BrokenJsonError` (500): üzerine boş kayıt yazılıp veri
+ * kaybolmasın; hata aynı okumanın `sha`'sını taşır, onarmak isteyen (ayar sihirbazı) onunla yazar.
+ */
 export async function readJson<T>(repo: string, path: string): Promise<StoredFile<T> | null> {
   assertRepoAllowed(repo);
+  let sha = '';
   try {
     const response = await gh().rest.repos.getContent({ owner: owner(), repo, path });
     const data = response.data;
     if (Array.isArray(data) || data.type !== 'file' || !('content' in data)) {
       throw new GithubError(`${path} bir dosya değil.`, 400);
     }
+    sha = data.sha;
     return { content: JSON.parse(decode(data.content)) as T, sha: data.sha };
   } catch (error) {
     if (typeof error === 'object' && error && 'status' in error && error.status === 404) return null;
-    if (error instanceof SyntaxError) throw new GithubError(`${path} bozuk JSON içeriyor.`, 500);
+    if (error instanceof SyntaxError) throw new BrokenJsonError(path, sha);
     throw toGithubError(error, path);
   }
 }

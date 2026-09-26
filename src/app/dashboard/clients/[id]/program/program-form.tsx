@@ -7,7 +7,7 @@ import { Form, getDeepErrorEntry, getInput, setErrors, setInput, useField, useFo
 import { ArrowClockwise, ArrowSquareOut, WarningCircle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { DraftAutosave, DraftNotice, useEditorDraft } from '@/components/block-editor/editor-draft';
-import { EditorSaveProvider, SaveButton } from '@/components/block-editor/editor-save';
+import { EditorSaveProvider, FloatingSaveButton, SaveButton } from '@/components/block-editor/editor-save';
 import { LabeledSelect } from '@/components/labeled-select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,9 @@ import { showUndoToast } from '@/components/undo-toast';
 import { UnsavedChangesGuard, type UnsavedChangesGuardHandle } from '@/components/unsaved-changes-guard';
 import {
   addDay,
-  dayFromTemplate,
+  dayFromTemplateForEditing,
+  droppedDeviceNotice,
+  keepHiddenPhase,
   locateDay,
   mergePhases,
   mergePhasesCheck,
@@ -27,8 +29,9 @@ import {
   prepareProgramForEditing,
   programIdSource,
   reconcileRotation,
-  reIdBlocks,
   replaceDayBlocks,
+  savedTemplateOption,
+  type ProgramBase,
   type ProgramBody,
   type ProgramPhase,
   type ProgramRotation,
@@ -95,14 +98,16 @@ function toInput(phases: readonly ProgramPhase[]): ProgramFormInput['phases'] {
  * (`program-plan.ts`) evre dizisine tek seferde yazılır; seçili günün hareketleri
  * şablonlarla ortak hareket düzenleyicide (`BlockEditor`). Kimlikler bütün programda
  * benzersiz üretilir. Kayıtta sunucu farkı çıkarır, program geçmişine yazar. "+ Hareket ekle"
- * (seçili güne); Kaydet günün "Hareketler" başlığında, yalnız değişiklik varken (`EditorSaveProvider`).
- * Kaydedilmemiş değişiklik yerel taslakta durur ve sayfadan çıkış sorulur (PT kararı 16).
+ * (seçili güne); Kaydet ("Programı kaydet": evreleri ve günleri de kaydeder) günün "Hareketler"
+ * başlığında, yalnız değişiklik varken (`EditorSaveProvider`); telefonda başlık ekran dışındayken
+ * dock'un üstünde yüzen kopyası (PT kararı 17). Kaydedilmemiş değişiklik yerel taslakta durur ve
+ * sayfadan çıkış sorulur (PT kararı 16).
  */
 export function ProgramForm({
   clientId,
   mode,
   initial,
-  baseRevision,
+  base,
   stored,
   templates,
   exercises,
@@ -113,7 +118,8 @@ export function ProgramForm({
   clientId: string;
   mode: 'create' | 'edit';
   initial: ProgramBody;
-  baseRevision: number | null;
+  /** Yüklenen programın sürümü (revision ve oluşturulma anı; kayıtta gönderilir); oluştururken null. */
+  base: ProgramBase | null;
   stored: StoredState | null;
   templates: TemplateOption[];
   exercises: PickerExercise[];
@@ -124,14 +130,15 @@ export function ProgramForm({
 }) {
   const router = useRouter();
   const exerciseById = useMemo(() => new Map(exercises.map((exercise) => [exercise.id, exercise])), [exercises]);
+  const deviceIds = useMemo(() => new Set(devices.map((device) => device.id)), [devices]);
 
   // Düzenlemede artık olmayan cihaza yazılmış satırlar egzersizin cihazına döner (kaydedince kalıcı).
   const [start] = useState(() => {
-    const prepared = prepareProgramForEditing(initial.phases, new Set(devices.map((device) => device.id)));
+    const prepared = prepareProgramForEditing(initial.phases, deviceIds);
     const input: ProgramFormInput = { phased: initial.phased, currentPhaseId: initial.currentPhaseId, phases: toInput(prepared.phases) };
     return {
       input,
-      dropped: prepared.droppedDeviceRowIds.length,
+      dropped: prepared.droppedDeviceRowIds,
       skeletonDayId: initial.phases[0]?.days[0]?.id ?? '',
     };
   });
@@ -142,6 +149,12 @@ export function ProgramForm({
   const exerciseIds = useMemo(() => new Set(exercises.map((exercise) => exercise.id)), [exercises]);
   // Canlı evrelerden: değiştirilen/kaldırılan satır ya da silinen gün uyarıdan hemen düşer.
   const missing = useMemo(() => missingExerciseDays(phases, exerciseIds), [phases, exerciseIds]);
+  // Cihazı silinmiş satırlar (açılışta, şablondan gelen günde, geri yüklenen taslakta) egzersizin cihazına
+  // döner. Uyarı bugünkü hâle bakar (`droppedDeviceNotice`): kaldırılan satır ya da PT'nin cihaz seçtiği satır düşer.
+  const [droppedRowIds, setDroppedRowIds] = useState<ReadonlySet<string>>(() => new Set(start.dropped));
+  const noteDropped = useCallback((rowIds: readonly string[]) => {
+    if (rowIds.length > 0) setDroppedRowIds((previous) => new Set([...previous, ...rowIds]));
+  }, []);
 
   const [templateList, setTemplateList] = useState(templates);
   const [startChoice, setStartChoice] = useState(NO_TEMPLATE);
@@ -151,14 +164,31 @@ export function ProgramForm({
   const [saveBlocks, setSaveBlocks] = useState<TemplateBlock[] | null>(null);
   const [dialogKey, setDialogKey] = useState(0);
   const guard = useRef<UnsavedChangesGuardHandle>(null);
-  // Oluşturma ve düzenleme aynı taslağı paylaşır; sürüm düzenlemede revision, oluştururken null.
+  // Taslak da açılıştaki adımdan geçer (saf): taslaktan sonra silinen cihaz egzersizinkine döner. Açılışta
+  // taslağın farkı bu hâliyle ölçülür (tek farkı silinmiş cihaz olan taslak sunulmaz), devam edilince forma bu yazılır.
+  const prepareDraft = useCallback(
+    (input: ProgramFormInput): ProgramFormInput => ({
+      ...input,
+      phases: toInput(prepareProgramForEditing(input.phases as unknown as ProgramPhase[], deviceIds).phases),
+    }),
+    [deviceIds],
+  );
+  // Oluşturma ve düzenleme aynı taslağı paylaşır; sürüm düzenlemede revision ve oluşturulma anı, oluştururken null.
   const draft = useEditorDraft({
     form,
     schema: programFormSchema,
     storageKey: programDraftKey(clientId),
-    base: baseRevision,
+    base,
     baseSchema: PROGRAM_DRAFT_BASE,
+    prepare: prepareDraft,
   });
+  // Devam edilen taslakta cihazı düşen satırlar da uyarıda sayılır ("Geri al" ile vazgeçilince düşer).
+  const noted = useMemo(() => {
+    const restored = draft.restored
+      ? prepareProgramForEditing(draft.restored.phases as unknown as ProgramPhase[], deviceIds).droppedDeviceRowIds
+      : [];
+    return restored.length > 0 ? new Set([...droppedRowIds, ...restored]) : droppedRowIds;
+  }, [draft.restored, droppedRowIds, deviceIds]);
 
   // İlk seçili gün: danışanın sıradaki günü, yoksa şu anki evrenin ilk günü.
   const [selectedDayId, setSelectedDayId] = useState(
@@ -178,8 +208,11 @@ export function ProgramForm({
   const selectedDay = located ? selectedPhase?.days[located.dayIndex] : undefined;
 
   // Sıradaki gün: şu anki evre kayıttakiyse rotasyon (silinen son gün uzlaştırılarak), değiştiyse yeni evrenin ilk günü.
-  const rotation = stored && currentPhaseId === stored.current.phaseId ? reconcileRotation(initial.phases, phases, stored.rotation) : {};
-  const next = nextDayId({ phases, current: { phaseId: currentPhaseId, startedAt: '' }, rotation });
+  // Evresiz program evresiz kalırsa gizli evre kayıttakidir (sunucu da öyle kaydeder): evreler açılıp kapansa da rotasyon sürer.
+  const kept = keepHiddenPhase(initial, { phased, currentPhaseId, phases });
+  const rotation =
+    stored && kept.currentPhaseId === stored.current.phaseId ? reconcileRotation(initial.phases, kept.phases, stored.rotation) : {};
+  const next = nextDayId({ phases: kept.phases, current: { phaseId: kept.currentPhaseId, startedAt: '' }, rotation });
   const missingDayIds = useMemo(() => new Set(missing.map((item) => item.dayId)), [missing]);
   const templateIds = useMemo(() => new Set(templateList.map((template) => template.id)), [templateList]);
 
@@ -218,12 +251,12 @@ export function ProgramForm({
 
   /**
    * "Geri al" bildirimi (hareket düzenleyicisiyle ortak, aynı anda tek): yalnız bu işlemden
-   * sonra başka değişiklik yoksa geçerli; yoksa sonraki düzenlemeler silinirdi.
+   * sonra başka değişiklik yoksa geçerli; yoksa sonraki düzenlemeler silinirdi. Cümleyi toast'un
+   * canlı bölgesi okur; formun `aria-live` paragrafı yazmaz (tek canlı bölge).
    */
   const offerUndo = useCallback(
     (before: Snapshot, message: string) => {
       const after = JSON.stringify(snapshot());
-      setAnnouncement(message);
       showUndoToast(message, () => {
         if (JSON.stringify(snapshot()) !== after) {
           toast.error('Sonrasında başka değişiklik yapıldı; geri alınamadı.');
@@ -306,10 +339,11 @@ export function ProgramForm({
     if (!dayId || !day) return;
     const template = templateList.find((item) => item.id === value);
     if (template) {
-      const ids = programIdSource(before);
-      const source = { templateId: template.id, templateName: template.name, at: new Date().toISOString() };
+      // Şablondan gün (silinmiş cihaz egzersizinkine döner, düşen satır uyarıda sayılır): bloklar ve kaynak bu güne.
+      const filled = dayFromTemplateForEditing({ days: [] }, template, programIdSource(before), new Date(), deviceIds);
+      noteDropped(filled.droppedDeviceRowIds);
       updateWithUndo(
-        (phasesNow) => replaceDayBlocks(phasesNow, dayId, reIdBlocks(template.blocks, ids), source),
+        (phasesNow) => replaceDayBlocks(phasesNow, dayId, filled.day.blocks, filled.day.source),
         `${day.name} şablonla dolduruldu`,
         { select: dayId },
       );
@@ -323,7 +357,9 @@ export function ProgramForm({
     const before = current();
     const phase = before.find((item) => item.id === addDayPhaseId);
     if (!phase) return;
-    const day = dayFromTemplate(phase, template, programIdSource(before), new Date());
+    // Şablonun silinmiş cihaza yazılmış satırları açılıştaki gibi egzersizin cihazına döner (uyarıda sayılır).
+    const { day, droppedDeviceRowIds } = dayFromTemplateForEditing(phase, template, programIdSource(before), new Date(), deviceIds);
+    noteDropped(droppedDeviceRowIds);
     update((phasesNow) => addDay(phasesNow, phase.id, day), {
       select: day.id,
       announce: `${day.name} eklendi ('${template.name}' şablonundan)`,
@@ -345,9 +381,14 @@ export function ProgramForm({
 
   const save = useServiceMutation({
     fn: (values: ProgramFormValues) =>
-      fetchJson<{ revision: number; unchanged?: true }>(`/api/clients/${clientId}/program`, {
+      fetchJson<{ revision: number; unchanged?: true; droppedDevices?: number }>(`/api/clients/${clientId}/program`, {
         method: 'PUT',
-        body: JSON.stringify({ ...values, baseRevision: draft.saveBase }),
+        // Sürüm çift olarak gider: silinip yeniden oluşturulan program (revision yine 1) da 412 verir.
+        body: JSON.stringify({
+          ...values,
+          baseRevision: draft.saveBase?.revision ?? null,
+          baseCreatedAt: draft.saveBase?.createdAt,
+        }),
       }),
     notify: 'error',
     onError: (error) => {
@@ -362,6 +403,10 @@ export function ProgramForm({
       draft.discard();
       toast.success(
         result.unchanged ? 'Değişiklik yoktu; program aynı kaldı.' : mode === 'create' ? 'Program oluşturuldu.' : 'Program kaydedildi.',
+        // Eski sekmede seçilip o arada silinen cihaz sunucuda egzersizin cihazına döner: sessiz kalmasın.
+        result.droppedDevices
+          ? { description: `${result.droppedDevices} satırın cihazı artık yok; egzersizin kendi cihazı kullanıldı.` }
+          : undefined,
       );
       router.push(`/dashboard/clients/${clientId}/program`);
       router.refresh();
@@ -370,8 +415,10 @@ export function ProgramForm({
 
   // Kaydedilmemiş değişiklik varken sayfadan çıkış sorulur; cihazı silinmiş satırların düzeltmesi
   // de kaydedilmemiş iştir (Kaydet görünür).
-  const dirty = form.isDirty || start.dropped > 0;
+  const dirty = form.isDirty || start.dropped.length > 0;
   const guarded = dirty && !save.isPending && !save.isSuccess;
+  // "Kaydedince kalıcı olur" yalnız Kaydet görünürken (taslak yüklenen hâle döndüyse söylenmez).
+  const droppedNotice = droppedDeviceNotice(phases, noted, dirty);
 
   const submit = (values: ProgramFormValues) => {
     // Kütüphanede olmayan egzersiz kaydedilmez: satırın altında söylenir, o gün açılır.
@@ -489,7 +536,7 @@ export function ProgramForm({
         dirty,
         pending: save.isPending || save.isSuccess,
         creating: mode === 'create',
-        submitLabel: mode === 'create' ? 'Programı oluştur' : 'Kaydet',
+        submitLabel: mode === 'create' ? 'Programı oluştur' : 'Programı kaydet',
       }}>
       <Form of={form} className="flex flex-col gap-6" onSubmit={submit}>
         <p className="sr-only" aria-live="polite">
@@ -498,12 +545,10 @@ export function ProgramForm({
 
         {draft.offer ? <DraftNotice offer={draft.offer} timeZone={timeZone} onRestore={draft.restore} onDismiss={draft.dismiss} /> : null}
 
-        {start.dropped > 0 ? (
+        {droppedNotice ? (
           <Alert>
             <WarningCircle />
-            <AlertDescription>
-              {start.dropped} satırın cihazı silinmiş; egzersizin kendi cihazına döndü. Kaydedince kalıcı olur.
-            </AlertDescription>
+            <AlertDescription>{droppedNotice}</AlertDescription>
           </Alert>
         ) : null}
         {missingRows > 0 ? (
@@ -605,9 +650,13 @@ export function ProgramForm({
             if (!open) setSaveBlocks(null);
           }}
           blocks={saveBlocks ?? []}
-          onCreated={(template) => setTemplateList((list) => [...list, template])}
+          // Sunucu şablonu şablon kurallarıyla yazar (egzersizinkine eşit kural ve cihaz düşer): yerel kopya da öyle.
+          onCreated={(template) =>
+            setTemplateList((list) => [...list, savedTemplateOption(template, { exercises: exerciseById, deviceIds })])
+          }
         />
 
+        <FloatingSaveButton />
       </Form>
       <DraftAutosave form={form} onChange={draft.sync} />
       <UnsavedChangesGuard

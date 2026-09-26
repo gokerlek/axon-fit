@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { motion } from 'motion/react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { MUSCLE_LABELS } from '@/lib/schemas/exercise';
-import type { BodyMuscle, MuscleIntensity } from '@/lib/muscles';
+import { ROLE_INTENSITY, type BodyMuscle, type MuscleIntensity, type MuscleRole } from '@/lib/muscles';
 import { cn } from '@/lib/utils';
 import { BACK_PATHS, FRONT_PATHS, VIEWBOX, type MusclePath } from './paths';
 import { muscleOfPath } from './regions';
@@ -35,15 +35,99 @@ function shape(paths: readonly MusclePath[]): SideShape {
 // Parçalar modül yüklenirken bir kez gruplanır.
 const SHAPES: Record<MuscleSide, SideShape> = { front: shape(FRONT_PATHS), back: shape(BACK_PATHS) };
 
-/** Yoğunluk 0–1 → dolgu saydamlığı. En düşük yoğunluk da boş kastan ayırt edilsin diye 0.3'ten başlar. */
-function fillOpacity(level: number) {
-  return 0.3 + 0.7 * Math.min(1, level);
+/**
+ * Renk kodu (SPEC §6: hedef / yardımcı / dengeleyici). Renkler `globals.css`'teki `--muscle-*`
+ * token'larından; hedef `--primary-strong` olduğu için PT'nin rengini izler ve boş kastan ≥3:1'dir.
+ * Parlaklık sırası iki temada da boş < dengeleyici < yardımcı < hedef. Renk körlüğü için seviye
+ * ayrıca desenle çizilir: hedef dolu, yardımcı çizgili, dengeleyici noktalı.
+ *
+ * `tone="role"`: yoğunluk seviyeye çevrilir (egzersiz detayı, form, süzgeç). Eşikler
+ * `ROLE_INTENSITY` değerlerinin ortası: 1 → hedef, 0,45 → yardımcı, 0,1 → dengeleyici.
+ * `tone="load"`: sürekli ton (şablon ve program yükü); boş kastan hedef rengine açıklık rampası.
+ */
+const TIER_PRIMARY = (ROLE_INTENSITY.primary + ROLE_INTENSITY.secondary) / 2;
+const TIER_SECONDARY = (ROLE_INTENSITY.secondary + ROLE_INTENSITY.stabilizer) / 2;
+
+export function tierOf(level: number): MuscleRole | null {
+  if (level <= 0) return null;
+  if (level >= TIER_PRIMARY) return 'primary';
+  if (level >= TIER_SECONDARY) return 'secondary';
+  return 'stabilizer';
+}
+
+export type MuscleTone = 'role' | 'load';
+
+/** Desen kimliği `url(#…)` içinde güvenle kullanılabilsin. */
+function usePatternId() {
+  return `mm${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+}
+
+function roleFill(role: MuscleRole, patternId: string) {
+  return role === 'primary' ? 'var(--muscle-target)' : `url(#${patternId}-${role})`;
+}
+
+/** Yardımcı: hedef renginde çapraz çizgiler; dengeleyici: hedef renginde noktalar (SVG kullanıcı birimi). */
+const TILE = 1.5;
+
+function MusclePatterns({ id }: { id: string }) {
+  const none = { stroke: 'none' } as const;
+  return (
+    <defs>
+      <pattern id={`${id}-secondary`} patternUnits="userSpaceOnUse" width={TILE} height={TILE} patternTransform="rotate(45)">
+        <rect width={TILE} height={TILE} style={{ ...none, fill: 'var(--muscle-secondary)' }} />
+        <rect width={TILE * 0.45} height={TILE} style={{ ...none, fill: 'var(--muscle-target)' }} />
+      </pattern>
+      <pattern id={`${id}-stabilizer`} patternUnits="userSpaceOnUse" width={TILE} height={TILE}>
+        <rect width={TILE} height={TILE} style={{ ...none, fill: 'var(--muscle-stabilizer)' }} />
+        <circle cx={TILE / 2} cy={TILE / 2} r={TILE * 0.26} style={{ ...none, fill: 'var(--muscle-target)' }} />
+      </pattern>
+    </defs>
+  );
+}
+
+/** Açıklama kutusundaki örnek: haritadaki dolgunun ve desenin aynısı. */
+export function MuscleSwatch({ role, className }: { role: MuscleRole; className?: string }) {
+  const id = usePatternId();
+  return (
+    <svg viewBox="0 0 3 3" className={cn('size-3.5 shrink-0 rounded-[3px]', className)} aria-hidden>
+      <MusclePatterns id={id} />
+      <rect width={3} height={3} style={{ fill: roleFill(role, id) }} />
+    </svg>
+  );
+}
+
+/** Bir kasın dolgusu. */
+function muscleFill({
+  level,
+  tone,
+  patternId,
+  disabled,
+  highlighted,
+}: {
+  level: number;
+  tone: MuscleTone;
+  patternId: string;
+  disabled: boolean;
+  highlighted: boolean;
+}): string {
+  if (level > 0) {
+    if (tone === 'load') {
+      const share = Math.round(25 + 75 * Math.min(1, level));
+      return `color-mix(in oklab, var(--muscle-target) ${share}%, var(--muscle-empty))`;
+    }
+    return roleFill(tierOf(level) ?? 'stabilizer', patternId);
+  }
+  if (disabled) return 'var(--muscle-neutral)';
+  if (highlighted) return 'color-mix(in oklab, var(--foreground) 22%, var(--card))';
+  return 'var(--muscle-empty)';
 }
 
 type MuscleMapProps = {
-  /** Kasın ne kadar çalıştığı (0–1). Ör. hedef 1, yardımcı 0.3, ya da haftalık set yükü. Rengi bu belirler. */
+  /** Kasın ne kadar çalıştığı (0–1). Ör. hedef 1, yardımcı 0,45, ya da haftalık set yükü. Rengi bu belirler. */
   intensity?: MuscleIntensity;
-  /** Seçili kaslar (süzgeç, form). `intensity`'de tonu yoksa tam renkle çizilir. */
+  /** `role` (varsayılan): yoğunluk hedef/yardımcı/dengeleyici seviyesine çevrilir (dolu/çizgili/noktalı). `load`: sürekli ton. */
+  tone?: MuscleTone;
+  /** Seçili kaslar (süzgeç, form). `intensity`'de tonu yoksa hedef gibi (dolu) çizilir. */
   selected?: readonly BodyMuscle[];
   /** Tıklanamayan kaslar (ör. formda hedef kas); rengi yine `intensity`'den gelir. */
   disabled?: readonly BodyMuscle[];
@@ -78,6 +162,7 @@ type MuscleMapProps = {
  */
 export function MuscleMap({
   intensity,
+  tone = 'role',
   selected = [],
   disabled,
   onToggle,
@@ -110,6 +195,7 @@ export function MuscleMap({
       side={face}
       label={layout === 'flip' ? label : `${label} — ${SIDE_LABELS[face]}`}
       intensity={intensity}
+      tone={tone}
       selected={selected}
       disabled={disabled}
       counts={counts}
@@ -171,7 +257,7 @@ export function MuscleMap({
               {SIDE_LABELS[face]}
               {face !== side && selectedOn(face) ? (
                 <>
-                  <span className="size-1.5 rounded-full bg-primary" aria-hidden />
+                  <span className="size-1.5 rounded-full bg-primary-text" aria-hidden />
                   <span className="sr-only">(seçili kas var)</span>
                 </>
               ) : null}
@@ -187,6 +273,7 @@ type BodyProps = {
   side: MuscleSide;
   label: string;
   intensity?: MuscleIntensity;
+  tone: MuscleTone;
   selected: readonly BodyMuscle[];
   disabled?: readonly BodyMuscle[];
   counts?: Partial<Record<BodyMuscle, number>>;
@@ -221,9 +308,10 @@ function nearestMuscle(x: number, y: number, svg: SVGSVGElement): BodyMuscle | n
 }
 
 /** Tek yüzün SVG'si. Her kas bir `g`; sol ve sağ birlikte yanar. */
-function Body({ side, label, intensity, selected, disabled: locked, counts, onToggle, highlighted, onHighlight }: BodyProps) {
+function Body({ side, label, intensity, tone, selected, disabled: locked, counts, onToggle, highlighted, onHighlight }: BodyProps) {
   const { neutral, groups } = SHAPES[side];
   const interactive = Boolean(onToggle);
+  const patternId = usePatternId();
 
   return (
     <svg
@@ -246,7 +334,8 @@ function Body({ side, label, intensity, selected, disabled: locked, counts, onTo
             }
           : undefined
       }>
-      <g className="fill-foreground/10" aria-hidden>
+      <MusclePatterns id={patternId} />
+      <g style={{ fill: 'var(--muscle-neutral)' }} aria-hidden>
         {neutral.map((path) => (
           <path key={path.id} d={path.d} />
         ))}
@@ -270,14 +359,13 @@ function Body({ side, label, intensity, selected, disabled: locked, counts, onTo
             aria-pressed={interactive ? isSelected : undefined}
             aria-disabled={disabled || undefined}
             aria-label={interactive ? `${MUSCLE_LABELS[muscle]}${count === undefined ? '' : `, ${count} egzersiz`}` : undefined}
+            data-tier={tone === 'role' ? (tierOf(level) ?? 'empty') : undefined}
             className={cn(
-              'outline-none transition-[fill,fill-opacity,stroke,stroke-width] duration-200',
-              level > 0 ? 'fill-primary' : disabled ? 'fill-foreground/10' : 'fill-foreground/20',
-              isHighlighted && level === 0 && !disabled && 'fill-foreground/35',
+              'outline-none transition-[fill,stroke,stroke-width] duration-160',
               isHighlighted && 'stroke-foreground [stroke-width:0.3]',
               clickable && 'cursor-pointer',
             )}
-            style={level > 0 ? { fillOpacity: fillOpacity(level) } : undefined}
+            style={{ fill: muscleFill({ level, tone, patternId, disabled, highlighted: isHighlighted }) }}
             onPointerEnter={() => onHighlight(muscle)}
             onPointerLeave={(event) => {
               // Dokunmatikte parmak kalkınca da "leave" gelir; son dokunulan kas alt satırda kalsın.

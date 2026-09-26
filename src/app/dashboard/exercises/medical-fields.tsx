@@ -7,16 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldError, FieldLabel, FieldSet } from '@/components/ui/field';
 import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import {
-  CONDITION_QUALIFIERS,
-  CONDITION_REGIONS,
-  CONDITIONS,
-  conditionInfo,
-  conditionLabel,
-  parseCondition,
-  type ConditionId,
-  type ConditionRegion,
-} from '@/lib/conditions';
+import { conditionLabel, parseCondition } from '@/lib/conditions';
 import {
   DEEP_MUSCLE_LABELS,
   DEEP_MUSCLE_NOTES,
@@ -45,55 +36,16 @@ import {
   type JointWindow,
 } from '@/lib/exercise-filter';
 import type { exerciseFormSchema } from '@/lib/schemas/exercise';
+import { ConditionSelect } from './constraint-picker';
 
 /**
  * Medikal etiketler: sakatlık süzgeci bunlara bakar (`src/lib/exercise-filter.ts`).
  *
- * Hiçbiri zorunlu değil — etiketlenmemiş hareket süzgeçten sessizce geçer ve ekran
- * bunu "değerlendirilemedi" diye söyler. Yanlış etiket, etiketsizden kötüdür.
+ * Hiçbiri zorunlu değil — etiketlenmemiş hareket süzgeçte "kontrol edilmedi" diye görünür,
+ * "uygun" sayılmaz. Yanlış etiket, etiketsizden kötüdür.
  */
 
 type Form = ReturnType<typeof useForm<typeof exerciseFormSchema>>;
-
-const REGION_LABELS: Record<ConditionRegion, string> = {
-  spine: 'Omurga',
-  neck: 'Boyun',
-  shoulder: 'Omuz',
-  elbow: 'Dirsek',
-  wrist: 'El bileği',
-  hip: 'Kalça',
-  knee: 'Diz',
-  ankle: 'Ayak bileği',
-  systemic: 'Genel',
-};
-
-const QUALIFIER_LABELS: Record<(typeof CONDITION_QUALIFIERS)[number], string> = {
-  acute: 'akut',
-  reactive: 'reaktif',
-  severe: 'şiddetli',
-  stable: 'sakin dönem',
-  controlled: 'kontrollü',
-  uncontrolled: 'kontrolsüz',
-  postop: 'ameliyat sonrası',
-};
-
-/** Kısıt seçenekleri: her kimlik + (varsa) şiddet/faz varyantı, bölgeye göre gruplu. */
-function conditionGroups() {
-  return CONDITION_REGIONS.map((region) => ({
-    label: REGION_LABELS[region],
-    options: (Object.keys(CONDITIONS) as ConditionId[])
-      .filter((id) => conditionInfo(id).region === region)
-      .flatMap((id) => {
-        const info = conditionInfo(id);
-        const base = { value: id, label: info.label };
-        const variants = (info.qualifiers ?? []).map((qualifier) => ({
-          value: `${id}:${qualifier}`,
-          label: `${info.label} (${QUALIFIER_LABELS[qualifier]})`,
-        }));
-        return [base, ...variants];
-      }),
-  })).filter((group) => group.options.length > 0);
-}
 
 /** Tek seçimli etiket alanı; "Belirtilmemiş" seçeneği alanı boşaltır. */
 function TagSelect<Value extends string>({
@@ -143,8 +95,6 @@ function ConditionField({
   label: string;
   description: string;
 }) {
-  const groups = conditionGroups();
-
   return (
     <FormField of={form} path={[path]}>
       {(field) => {
@@ -161,22 +111,23 @@ function ConditionField({
               <div className="flex flex-wrap gap-1.5">
                 {current.map((value) => {
                   const parsed = parseCondition(value);
+                  const name = parsed ? conditionLabel(parsed) : value;
                   return (
                     <Button
                       key={value}
                       type="button"
                       variant="secondary"
                       size="xs"
-                      aria-label={`${value} kaydını kaldır`}
+                      aria-label={`${name} kısıtını kaldır`}
                       onClick={() => setInput(form, { path: [path], input: current.filter((item) => item !== value) })}>
-                      {parsed ? conditionLabel(parsed) : value}
+                      {name}
                       <X data-icon="inline-end" />
                     </Button>
                   );
                 })}
               </div>
             ) : null}
-            <GroupedSelect id={path} value="" groups={groups} empty="Kısıt seç" onChange={add} />
+            <ConditionSelect id={path} placeholder="Kısıt seç" onSelect={add} />
             <FieldDescription>{description}</FieldDescription>
             <FieldError>{field.errors?.[0]}</FieldError>
           </Field>
@@ -190,8 +141,8 @@ export function MedicalFields({ form }: { form: Form }) {
   return (
     <FieldSet>
       <FieldDescription>
-        Sakatlık süzgeci bunlara bakar. Hiçbiri zorunlu değil; boş bırakılan hareket süzgeçten sessizce
-        geçer ve uygulama bunu “değerlendirilemedi” diye söyler. Emin olmadığın alanı boş bırak.
+        Sakatlık süzgeci bunlara bakar. Hiçbiri zorunlu değil; hiç etiketi olmayan hareket süzgeçte “kontrol
+        edilmedi”, bir kuralın ihtiyacı eksik kalan “eksik bilgi” diye görünür. Emin olmadığın alanı boş bırak.
       </FieldDescription>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -237,9 +188,12 @@ export function MedicalFields({ form }: { form: Form }) {
       <FormField of={form} path={['internalRotationUnderLoad']}>
         {(field) => (
           <Field>
-            <FieldLabel>Yük altında iç rotasyon</FieldLabel>
+            {/* Etiket düğmeye bağlı: ad "Yük altında iç rotasyon", durum basılı/değil (Var/Yok). */}
+            <FieldLabel htmlFor="internalRotationUnderLoad">Yük altında iç rotasyon</FieldLabel>
             <div>
               <Toggle
+                id="internalRotationUnderLoad"
+                variant="outline"
                 pressed={field.input === true}
                 onPressedChange={(pressed) => setInput(form, { path: ['internalRotationUnderLoad'], input: pressed })}>
                 {field.input === true ? 'Var' : 'Yok'}

@@ -8,12 +8,16 @@
  * Uyarlamalar (gezinme için):
  * - Öğeler `div role="button"` yerine gerçek bağlantı (Next `Link`): Cmd+tık, sağ tık, ön yükleme çalışır.
  * - Aktif sayfa `aria-current="page"` + altta nokta.
- * - Renkler tasarım tokenlarından; PT'nin vurgu rengi dock'a da yansır.
+ * - Renkler tasarım tokenlarından; PT'nin vurgu rengi dock'a da yansır. Etkin sayfanın ikonu, kenarı
+ *   ve noktası vurgunun yüzey üstünde okunan tonunda (`*-primary-text`, .omc/research/ui-fix/TOKENS.md).
  * - Hareket azaltma tercihinde büyüme kapalı.
  * - Hatalı `aria-haspopup` kaldırıldı; etiket klavye odağında da görünür.
+ * - Telefonda (`touch:`) ikonun altında kısa etiket durur (üstüne gelme yok); ipucu ve nokta orada gizli.
+ * - Dokunulan öğe, sayfa gelene kadar bekleme halkası taşır (`useLinkStatus`); üstteki ilerleme
+ *   çubuğuyla birlikte dokunuşa anında tepki.
  */
 
-import Link from 'next/link';
+import Link, { useLinkStatus } from 'next/link';
 import { Fragment, useRef, useState } from 'react';
 import {
   AnimatePresence,
@@ -29,7 +33,10 @@ import { cn } from '@/lib/utils';
 
 export type DockEntry = {
   href: string;
+  /** Erişilebilir ad ve masaüstündeki ipucu. */
   label: string;
+  /** Telefonda ikonun altındaki görünür etiket (erişilebilir adın içinde geçmeli); yoksa `label`. */
+  shortLabel?: string;
   icon: React.ReactNode;
   active?: boolean;
   /** Henüz yapılmamış bölüm: görünür ama tıklanamaz. */
@@ -49,6 +56,20 @@ type DockProps = {
 
 const LinkMotion = motion.create(Link);
 
+/** Bu öğenin açtığı sayfa yüklenirken ikon kutusunda yanıp sönen halka (yalnız `Link`'in içinde). */
+function PendingRing() {
+  const { pending } = useLinkStatus();
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'pointer-events-none absolute -inset-px rounded-lg ring-2 ring-primary-text opacity-0 transition-opacity duration-160',
+        pending && 'animate-pulse opacity-100 delay-100',
+      )}
+    />
+  );
+}
+
 function DockItem({
   item,
   mouseX,
@@ -66,7 +87,7 @@ function DockItem({
   spring: SpringOptions;
   reduced: boolean;
 }) {
-  const ref = useRef<HTMLAnchorElement | HTMLSpanElement>(null);
+  const ref = useRef<HTMLSpanElement>(null);
   const [showLabel, setShowLabel] = useState(false);
 
   const offset = useTransform(mouseX, (x) => {
@@ -81,13 +102,31 @@ function DockItem({
 
   const content = (
     <>
-      <span className="flex size-[46%] items-center justify-center [&_svg]:size-full" aria-hidden>
-        {item.icon}
+      {/* Büyüyen kare: masaüstünde öğenin kendisi, telefonda etiketin üstündeki ikon kutusu. */}
+      <motion.span
+        ref={ref}
+        style={{ width: size, height: size }}
+        className={cn(
+          'relative flex shrink-0 items-center justify-center rounded-lg border bg-muted text-muted-foreground transition-colors',
+          'group-hover/dock-item:text-foreground',
+          // Aktif sayfa: ana renk tonu + altta nokta (macOS dock'taki gibi). Telefonda nokta yerine etiket.
+          'group-aria-[current=page]/dock-item:border-primary-text group-aria-[current=page]/dock-item:bg-primary/15 group-aria-[current=page]/dock-item:text-primary-text',
+          'group-aria-[current=page]/dock-item:after:absolute group-aria-[current=page]/dock-item:after:-bottom-[7px] group-aria-[current=page]/dock-item:after:left-1/2 group-aria-[current=page]/dock-item:after:size-1 group-aria-[current=page]/dock-item:after:-translate-x-1/2 group-aria-[current=page]/dock-item:after:rounded-full group-aria-[current=page]/dock-item:after:bg-primary-text touch:after:hidden',
+        )}>
+        <span className="flex size-[46%] items-center justify-center [&_svg]:size-full" aria-hidden>
+          {item.icon}
+        </span>
+        {item.disabled ? null : <PendingRing />}
+      </motion.span>
+      <span
+        aria-hidden
+        className="hidden text-[0.6875rem] leading-none font-medium whitespace-nowrap text-muted-foreground touch:block group-aria-[current=page]/dock-item:font-semibold group-aria-[current=page]/dock-item:text-foreground">
+        {item.shortLabel ?? item.label}
       </span>
       <AnimatePresence>
         {showLabel ? (
           <motion.span
-            className="pointer-events-none absolute bottom-[calc(100%+10px)] left-1/2 rounded-md border bg-popover px-2.5 py-1 text-xs font-medium whitespace-nowrap text-popover-foreground shadow-md"
+            className="pointer-events-none absolute bottom-[calc(100%+10px)] left-1/2 rounded-md border bg-popover px-2.5 py-1 text-xs font-medium whitespace-nowrap text-popover-foreground shadow-md touch:hidden"
             role="tooltip"
             initial={{ opacity: 0, y: 4, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
@@ -102,14 +141,12 @@ function DockItem({
 
   const shared = {
     className: cn(
-      'relative inline-flex shrink-0 items-center justify-center rounded-lg border bg-muted text-muted-foreground outline-none transition-colors',
-      'hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50',
-      // Aktif sayfa: ana renk tonu + altta nokta (macOS dock'taki gibi).
-      'aria-[current=page]:border-primary/40 aria-[current=page]:bg-primary/15 aria-[current=page]:text-primary',
-      'aria-[current=page]:after:absolute aria-[current=page]:after:-bottom-[7px] aria-[current=page]:after:left-1/2 aria-[current=page]:after:size-1 aria-[current=page]:after:-translate-x-1/2 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-primary',
+      'group/dock-item relative inline-flex shrink-0 flex-col items-center justify-end gap-1 rounded-lg outline-none',
+      'focus-visible:ring-3 focus-visible:ring-ring/50',
+      // Telefonda sütun: ikon kutusu + etiket; dokunma alanı 64 px genişlik.
+      'touch:w-16',
       'aria-disabled:cursor-default aria-disabled:opacity-40',
     ),
-    style: { width: size, height: size },
     onHoverStart: () => setShowLabel(true),
     onHoverEnd: () => setShowLabel(false),
     onFocus: () => setShowLabel(true),
@@ -119,7 +156,7 @@ function DockItem({
 
   if (item.disabled) {
     return (
-      <motion.span ref={ref as React.Ref<HTMLSpanElement>} {...shared} aria-disabled="true" tabIndex={0}>
+      <motion.span {...shared} aria-disabled="true" tabIndex={0}>
         {content}
       </motion.span>
     );
@@ -127,7 +164,6 @@ function DockItem({
 
   return (
     <LinkMotion
-      ref={ref as React.Ref<HTMLAnchorElement>}
       href={item.href}
       {...shared}
       aria-current={item.active ? 'page' : undefined}>
@@ -154,8 +190,9 @@ export function Dock({
       <motion.nav
         className="pointer-events-auto flex items-end gap-2 rounded-2xl border bg-background/95 p-2 shadow-xl backdrop-blur-xl supports-backdrop-filter:bg-background/85"
         aria-label={ariaLabel}
-        onMouseMove={({ pageX }) => mouseX.set(pageX)}
-        onMouseLeave={() => mouseX.set(Infinity)}>
+        // Büyüme yalnız farede: dokunuşun ardından gelen uyumluluk olayları öğeyi büyük bırakmasın.
+        onPointerMove={({ pageX, pointerType }) => mouseX.set(pointerType === 'mouse' ? pageX : Infinity)}
+        onPointerLeave={() => mouseX.set(Infinity)}>
         {items.map((item) => (
           <Fragment key={item.href}>
             {item.separatorBefore ? <span className="mx-0.5 my-1 w-px self-stretch bg-border" aria-hidden /> : null}

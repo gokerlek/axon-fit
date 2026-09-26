@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { GithubLogo, WarningCircle } from '@phosphor-icons/react/dist/ssr';
 import { PulseLine } from '@/components/pulse-line';
@@ -6,7 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { readAppConfig } from '@/lib/config';
+import { emailLoginEnabled } from '@/lib/env';
 import { githubLoginEnabled } from '@/lib/github-oauth';
+import { RETURN_PARAM, safeReturnPath } from '@/lib/navigation';
 import { readPtSession } from '@/lib/session';
 import { LoginForm } from './login-form';
 
@@ -19,20 +22,31 @@ const errors: Record<string, string> = {
   kod_yok: 'GitHub yetki kodu gelmedi. Tekrar dene.',
 };
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export const metadata: Metadata = { title: 'Giriş' };
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string | string[]; next?: string | string[] }>;
+}) {
+  const { error: code, next: rawNext } = await searchParams;
+  // Oturumsuz açılan PT sayfası (`requirePt`): girişten sonra oraya dönülür. Yalnız aynı kökende
+  // `/dashboard` altı; başka her şey yok sayılır.
+  const next = safeReturnPath(typeof rawNext === 'string' ? rawNext : null);
+
   // PT girişi. Aynı tarayıcıda açık bir danışan oturumu buraya engel değil: iki rolün
   // oturumu ayrı çerezde, PT girince danışanınki olduğu gibi kalır.
-  if (await readPtSession()) redirect('/dashboard');
+  if (await readPtSession()) redirect(next ?? '/dashboard');
 
   const config = await readAppConfig();
-  const { error: code } = await searchParams;
-  const error = code ? (errors[code] ?? 'Giriş yapılamadı.') : null;
+  const error = typeof code === 'string' ? (errors[code] ?? 'Giriş yapılamadı.') : null;
+  const githubHref = next ? `/api/auth/github?${RETURN_PARAM}=${encodeURIComponent(next)}` : '/api/auth/github';
   const github = githubLoginEnabled();
-  // Yedek yol yalnız PT açıkça istediyse görünür (SPEC §5).
-  const emailFallback = Boolean(process.env.RESEND_API_KEY) || process.env.NODE_ENV !== 'production';
+  // Yedek yol yalnız PT açıkça istediyse (RESEND_API_KEY) görünür; uçlar da aynı koşula bakar (SPEC §5).
+  const emailFallback = emailLoginEnabled();
 
   return (
-    <main className="grid min-h-dvh grid-rows-[1fr_auto] px-4 py-8">
+    <main className="grid min-h-dvh grid-rows-[1fr_auto] px-4 pt-[max(2rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]">
       <div className="mx-auto flex w-full max-w-sm flex-col justify-center gap-8">
         <div className="flex flex-col items-center gap-2 text-center">
           <h1 className="font-heading text-3xl font-semibold tracking-tight">{config.appName}</h1>
@@ -51,7 +65,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
             {github ? (
               <div className="flex flex-col gap-2">
-                <Button size="lg" className="h-11 w-full" nativeButton={false} render={<a href="/api/auth/github" />}>
+                <Button size="lg" className="h-11 w-full" nativeButton={false} render={<a href={githubHref} />}>
                   <GithubLogo data-icon="inline-start" weight="fill" />
                   GitHub ile devam et
                 </Button>
@@ -72,7 +86,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
                   yedek yol
                   <Separator className="flex-1" />
                 </div>
-                <LoginForm />
+                <LoginForm next={next} />
               </>
             ) : null}
           </CardContent>

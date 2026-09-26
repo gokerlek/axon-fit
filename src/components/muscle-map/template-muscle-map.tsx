@@ -11,7 +11,8 @@ const LEGEND_LIMIT = 12;
 
 /**
  * Şablon kas haritası: kas başına kesirli set toplamı (hedef 1, yardımcı 0,5,
- * dengeleyici 0,25). Ton şablonun en çok çalışan kasına göredir. `full` altında
+ * dengeleyici 0,25). Ton şablonun en çok çalışan kasına göredir (boş kastan hedef rengine sürekli
+ * açıklık rampası; en çok çalışan kas boş kastan ≥3:1). `full` altında
  * kas ve set listesi verir; `compact` (liste kartı) yalnız haritadır.
  */
 export function TemplateMuscleMap({
@@ -33,18 +34,21 @@ export function TemplateMuscleMap({
     label ??
     (worked.length > 0 ? `Şablonun kas yükü: ${summarizeMuscles(worked.slice(0, 6)).join(', ')}` : 'Şablonda sayılan kas yükü yok');
 
+  // Ön ve arka yan yana. `full`: solda gövdeler, sağda liste; telefonda alt alta.
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className={variant === 'full' ? 'flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-8' : 'flex flex-col items-center'}>
       <MuscleMap
         layout="split"
+        tone="load"
         intensity={intensity}
         describe={(muscle: BodyMuscle) => `${MUSCLE_LABELS[muscle]} · ${formatNumber(load[muscle] ?? 0)} set`}
         bodyClassName={bodyClassName}
         label={mapLabel}
+        className="shrink-0"
       />
       {variant === 'full' && (shown.length > 0 || cardio > 0) ? (
-        <div className="flex w-full flex-col gap-2 text-sm">
-          <dl className="grid w-full grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3">
+        <div className="flex w-full min-w-0 flex-col gap-2 text-sm">
+          <dl className="grid w-full grid-cols-2 gap-x-6 gap-y-1 md:grid-cols-2 lg:grid-cols-3">
             {shown.map((muscle) => (
               <div key={muscle} className="flex items-baseline justify-between gap-2">
                 <dt className="truncate text-muted-foreground">{MUSCLE_LABELS[muscle]}</dt>

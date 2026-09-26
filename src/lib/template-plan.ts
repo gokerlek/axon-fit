@@ -511,11 +511,16 @@ const REPS_TRACKING = new Set<TrackingType>(['weight_reps', 'bodyweight_reps']);
  * - Kütüphanede olmayan egzersiz ya da cihaz reddedilir; tekrarda her setin hedefi en fazla 100.
  * - Yük yüzdesi yalnız ağırlıklı harekette ve %100'ün altındaysa yazılır; AMRAP yalnız açıksa.
  * - Egzersizin kuralıyla aynı olan kural değişikliği ve egzersizin kendi cihazı yazılmaz.
+ *   Programda (`storedRows`: kayıttaki satırlar) kayıttaki aynı satırda (aynı kimlik) aynen
+ *   duruyorsa kalır: danışana özel seçim, egzersiz sonradan ona eşitlense de kaybolmaz (yoksa
+ *   PT'nin yapmadığı "…döndü" yazılırdı). Yeni gelen eşit değer (seçicide gösterilen varsayılanı
+ *   yeniden seçmek, şablondan gün) şablondaki gibi düşer, değişiklik üretmez.
  * - Not kırpılır, boşsa yazılmaz; istasyon geçişi yalnız devrede durur (yoksa 15 sn).
  */
 export function normalizeTemplate(
   body: TemplateBody,
   ctx: { exercises: ReadonlyMap<string, PlanExercise>; deviceIds: ReadonlySet<string> },
+  options: { storedRows?: ReadonlyMap<string, Pick<TemplateRow, 'rule' | 'deviceId'>> } = {},
 ): { blocks: TemplateBlock[]; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
   const blocks = body.blocks.map((block, i): TemplateBlock => {
@@ -536,12 +541,14 @@ export function normalizeTemplate(
           ...(set.amrap === true ? { amrap: true } : {}),
         };
       });
+      const stored = options.storedRows?.get(row.id);
       let deviceId = row.deviceId;
       if (deviceId !== undefined && !ctx.deviceIds.has(deviceId)) errors[`${at}.deviceId`] = 'Bu cihaz artık yok.';
-      if (exercise && deviceId === exercise.deviceId) deviceId = undefined;
+      if (exercise && deviceId === exercise.deviceId && deviceId !== stored?.deviceId) deviceId = undefined;
 
       let rule = row.rule;
-      if (rule && exercise) {
+      const kept = stored?.rule?.scheme === rule?.scheme && stored?.rule?.targetRir === rule?.targetRir;
+      if (rule && exercise && !kept) {
         const base = progressionOf(exercise);
         if (rule.scheme === base.scheme && rule.targetRir === base.targetRir) rule = undefined;
       }

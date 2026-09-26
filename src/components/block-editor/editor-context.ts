@@ -34,6 +34,24 @@ export function faceId(itemId: string): string {
   return `face-${itemId}`;
 }
 
+/** "Hareketler" başlığının DOM kimliği (odaklanabilir): taslak uyarısı kalkınca, kart yoksa odak buraya. */
+export const EDITOR_HEADING_ID = 'editor-heading';
+
+/**
+ * Düzenleyicinin başına odaklanır (çizimden sonra): ilk kartın yüzü, kart yoksa "Hareketler" başlığı.
+ * Taslak uyarısındaki [Taslağa devam et] / [At] sonrası odak `<body>`'ye düşmesin.
+ */
+export function focusEditorStart(): void {
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      const target =
+        document.querySelector<HTMLElement>('[data-editor-list] button[id^="face-"]') ?? document.getElementById(EDITOR_HEADING_ID);
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ block: 'nearest' });
+    }),
+  );
+}
+
 /** Kartın açık gövdesinin DOM kimliği (`aria-controls`). */
 export function bodyId(itemId: string): string {
   return `body-${itemId}`;
@@ -78,7 +96,7 @@ export type Editor = {
   current: () => TemplateBlock[];
   /** Blokları günceller ve forma tek seferde yazar; satır vurgusu ve ekran okuyucu duyurusu isteğe bağlı. */
   update: (change: (blocks: TemplateBlock[]) => TemplateBlock[], options?: { highlight?: string; announce?: string }) => void;
-  /** Geri alınabilir güncelleme: önceki hâl saklanır, bildirimde "Geri al" çıkar (8 sn); aynı cümle duyurulur. */
+  /** Geri alınabilir güncelleme: önceki hâl saklanır, bildirimde "Geri al" çıkar (8 sn); cümleyi toast'un canlı bölgesi okur (tek canlı bölge). */
   updateWithUndo: (change: (blocks: TemplateBlock[]) => TemplateBlock[], message: string, options?: UndoOptions) => void;
   /** Ekran okuyucuya kibarca duyurur (sheet açıksa kapanınca). */
   announce: (text: string) => void;
@@ -97,9 +115,17 @@ export type Editor = {
   /** "Setleri ayrı düzenle": kullanıcının açıp kapattıkları (yoksa setlerin düzenine göre). */
   setsOpen: ReadonlyMap<string, boolean>;
   setSetsOpen: (rowId: string, open: boolean) => void;
-  /** "Ayrıntılar · kural · not" açık satırlar. */
+  /** "Ayrıntılar · (cihaz ·) kural · not" açık satırlar. */
   detailsOpen: ReadonlySet<string>;
   toggleDetails: (rowId: string) => void;
+  /**
+   * Kart yüzündeki "Cihazı değiştir" (meta satırındaki cihaz): kartı ve Ayrıntılar'ı açar, cihaz
+   * seçicisi görünür yere kaydırılıp açılır (salonda cihaz doluyken iki dokunuş: cihaz, yenisi).
+   */
+  openDevice: (rowId: string) => void;
+  /** Açılmayı bekleyen cihaz seçicisi (satır kimliği; her istekte yeni `nonce`); seçici açınca `settleDevice`. */
+  deviceRequest: { rowId: string; nonce: number } | null;
+  settleDevice: () => void;
   /** Set satırlarındaki bir kutuya odaklanır (çizimden sonra). */
   focusSet: (rowId: string, index: number, column: SetColumn) => void;
   highlight: string | null;

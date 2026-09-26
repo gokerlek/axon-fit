@@ -16,13 +16,12 @@ import {
   type DroppableContainer,
 } from '@dnd-kit/core';
 import { dropAction, hitTest, isJoining, resolveHit, type DropBlock, type DropHit, type DropLayout, type DropResolution } from '@/lib/drop-target';
-import { combineMessage, moveMessage } from '@/lib/edit-messages';
 import { DRAG } from '@/lib/motion';
-import { combineInto, moveItem } from '@/lib/template-edit';
 import type { TemplateBlock } from '@/lib/template-plan';
 import { useEditor } from '../editor-context';
 import type { DropData } from './drag-node';
 import { DragStoreContext, IDLE, createDragStore } from './drag-store';
+import { commitDrop } from './drop-commit';
 
 /**
  * Düzenleyicinin sürükle-bırak motoru (@dnd-kit/core; sortable yok).
@@ -33,9 +32,10 @@ import { DragStoreContext, IDLE, createDragStore } from './drag-store';
  * - Kardeşler kaymaz. Çarpışma algılaması kartları üç banda ayırır (`drop-target.ts`):
  *   üst/alt %25 ekleme çizgisi, orta %50 "üstüne bırak". Ortada 250 ms beklenince hedef
  *   devreye girer (halka, titreşim, sonuç hapı); o zamana kadar en yakın çizgi görünür.
- * - Bırakınca forma tek yazım: `moveItem` (geri al yok; geri sürüklemek yeter) ya da
- *   `combineInto` ("Geri al"). Kart kapalı oturur ve 1,2 sn vurgulanır. Esc, pointercancel
- *   ya da listenin dışına bırakmak iptal eder.
+ * - Bırakınca forma tek yazım (`commitDrop`): `moveItem` ya da `combineInto`. Gruplamayı
+ *   değiştiren bırakma "Geri al"lıdır (üstüne bırakma; gruptan çıkaran ya da gruba katan çizgi,
+ *   `moveRegroups`); yalnız sıralamada geri al yok (geri sürüklemek yeter). Kart kapalı oturur ve
+ *   1,2 sn vurgulanır. Esc, pointercancel ya da listenin dışına bırakmak iptal eder.
  * - Ekranın üst ve alt 80 px'i otomatik kaydırır. Sürerken `html[data-reordering]` dock'u,
  *   kullanıcı menüsünü ve düzenleyicinin alt çubuğunu çeker; kaydırma panelleri kapanır.
  */
@@ -235,20 +235,7 @@ export function EditorDnd({
     const action = current ? dropAction(current.resolution, current.armedId) : null;
     finish();
     if (!current || !action) return;
-    const { activeId: itemId } = current;
-    const ed = latest.current;
-    const titleOf = (exerciseId: string) => ed.exercises.get(exerciseId)?.title ?? 'Silinmiş egzersiz';
-    const before = ed.current();
-    if (action.type === 'move') {
-      const next = moveItem(before, itemId, action.destination, ed.exercises, ed.newIds(before));
-      if (next === before) return;
-      ed.update(() => next, { highlight: itemId, announce: moveMessage(before, next, itemId, titleOf) });
-    } else {
-      const next = combineInto(before, itemId, action.targetId, ed.exercises);
-      if (next === before) return;
-      ed.updateWithUndo(() => next, combineMessage(before, itemId, action.targetId, action.outcome, titleOf), { highlight: itemId });
-    }
-    ed.close(itemId);
+    commitDrop(latest.current, current.activeId, action);
   };
 
   return (

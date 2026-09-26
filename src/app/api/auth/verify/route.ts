@@ -1,30 +1,36 @@
 import { NextResponse } from 'next/server';
 import * as v from 'valibot';
-import { serverEnv } from '@/lib/env';
-import { consumeOtp, createSession } from '@/lib/session';
+import { emailLoginEnabled, serverEnv } from '@/lib/env';
+import { consumeOtp, createSession, type OtpResult } from '@/lib/session';
 import { verifyBodySchema } from '@/lib/schemas/auth';
 
-const messages = {
-  expired: 'Kodun süresi doldu. Yeni kod iste.',
-  invalid: 'Kod hatalı.',
-  too_many: 'Çok fazla deneme yapıldı. Yeni kod iste.',
-} as const;
+/**
+ * Kod hatalı, süresi dolmuş ya da kilitli: dışarıya hep aynı mesaj. Nedeni ayrı söylemek yönetici
+ * adresini ele verirdi — öteki adresler hiç kod almadığı için hep "hatalı" alır, yöneticininki
+ * üçüncü denemede "çok fazla deneme", kod yokken "süresi doldu" alırdı.
+ */
+const CODE_FAILED = 'Kod hatalı ya da süresi doldu. Gerekirse yeni kod iste.';
 
+/** Kodu doğrular ve PT oturumu açar (yedek yol; `RESEND_API_KEY` yoksa bu uç yoktur, SPEC §2). */
 export async function POST(request: Request) {
+  if (!emailLoginEnabled()) return new NextResponse(null, { status: 404 });
+
   const parsed = v.safeParse(verifyBodySchema, await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: messages.invalid }, { status: 400 });
+    return NextResponse.json({ error: CODE_FAILED }, { status: 400 });
   }
 
   const { email, code } = parsed.output;
-  const result = await consumeOtp(code, email);
-  if (!result.ok) {
-    return NextResponse.json({ error: messages[result.reason] }, { status: 400 });
+  let result: OtpResult;
+  try {
+    result = await consumeOtp(code, email);
+  } catch {
+    // GitHub'a ulaşılamadı ya da aynı anda başka bir deneme sayacı yazdı: "kod hatalı" denmez.
+    return NextResponse.json({ error: 'Şu an giriş yapılamıyor. Biraz sonra tekrar dene.' }, { status: 502 });
   }
-
   // Kod doğru olsa bile yönetici adresi değilse oturum açılmaz.
-  if (email !== serverEnv().ptEmail) {
-    return NextResponse.json({ error: messages.invalid }, { status: 400 });
+  if (!result.ok || email !== serverEnv().ptEmail) {
+    return NextResponse.json({ error: CODE_FAILED }, { status: 400 });
   }
 
   await createSession({ role: 'pt', via: 'email', subject: email });

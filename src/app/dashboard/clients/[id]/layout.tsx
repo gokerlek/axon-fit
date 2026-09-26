@@ -1,3 +1,4 @@
+import type { Metadata, ResolvingMetadata } from 'next';
 import { notFound } from 'next/navigation';
 import { PageHeader } from '@/components/page-header';
 import { loadClient } from '@/lib/clients';
@@ -5,6 +6,24 @@ import { requirePt } from '@/lib/guards';
 import { CLIENT_ID_PATTERN } from '@/lib/schemas/client';
 import { StatusDot } from '../status-dot';
 import { ClientTabs } from './client-tabs';
+import { clientTitle } from './client-title';
+
+/**
+ * Sekmenin başlığı: Genel'de danışanın adı, alt sayfalarda "Ölçümler · Ayşe · Uygulama" (`clientTitle`):
+ * iki danışanın sekmeleri ayırt edilir.
+ */
+export async function generateMetadata(
+  { params }: { params: Promise<{ id: string }> },
+  parent: ResolvingMetadata,
+): Promise<Metadata> {
+  // Ad yalnız PT'ye: oturumsuz istekte başlık da kayıt okumadan önce girişe yönlenir.
+  await requirePt();
+  const { id } = await params;
+  if (!CLIENT_ID_PATTERN.test(id)) return {};
+  // `loadClient` istek başına önbellekli: sayfa aynı kaydı yeniden okumaz.
+  const [loaded, resolved] = await Promise.all([loadClient(id).catch(() => null), parent]);
+  return { title: clientTitle(loaded?.ok ? loaded.client.name : 'Danışan', resolved.title?.template) };
+}
 
 /**
  * Danışanın sayfaları tek bir çatı altında: üstte adı ve durumu, altında sekmeler (SPEC §6).

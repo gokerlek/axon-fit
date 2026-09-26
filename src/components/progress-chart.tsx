@@ -3,7 +3,7 @@
 import { Area, CartesianGrid, ComposedChart, Line, XAxis, YAxis, type DotItemDotProps } from 'recharts';
 import { ChartContainer, ChartTooltip, type ChartConfig } from '@/components/ui/chart';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { niceScale } from '@/lib/chart-scale';
+import { dateTicks, niceScale } from '@/lib/chart-scale';
 import { formatDay, formatDayShort, formatNumber, formatWithUnit } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -39,7 +39,6 @@ const SLOT_COLORS = [
 const SLOT_TEXT = ['text-chart-3 dark:text-chart-2', 'text-chart-5 dark:text-chart-4'] as const;
 
 const DAY_MS = 86_400_000;
-const MAX_TICKS = 6;
 
 const toTime = (date: string) => Date.parse(`${date}T00:00:00Z`);
 const toDay = (time: number) => new Date(time).toISOString().slice(0, 10);
@@ -68,13 +67,6 @@ function mergeRows(series: readonly ProgressSeries[], forecast?: readonly Foreca
 }
 
 const FORECAST_KEY = 'forecast';
-
-/** Eksen etiketleri ölçüm günlerine oturur; çoksa eşit aralıkla seyreltilir (ilk ve son kalır). */
-function pickTicks(times: readonly number[]): number[] {
-  if (times.length <= MAX_TICKS) return [...times];
-  const step = (times.length - 1) / (MAX_TICKS - 1);
-  return Array.from({ length: MAX_TICKS }, (_, index) => times[Math.round(index * step)] ?? 0);
-}
 
 /** İkinci serinin işareti kare: renk ayrımı görülmese de seriler ayırt edilir. */
 function square(size: number) {
@@ -156,12 +148,17 @@ export function ProgressChart({
   // Tek gün ya da çok kısa aralıkta eksen çökmesin; kenardaki noktalar da kırpılmasın.
   const pad = Math.max((last - first) * 0.04, DAY_MS);
   const withYear = new Date(first).getUTCFullYear() !== new Date(last).getUTCFullYear();
-  const values = [
-    ...series.flatMap((item) => item.points.map((point) => point.value)),
-    ...(projected ?? []).flatMap((point) => [point.low, point.high]),
-  ];
-  const scale = niceScale(Math.min(...values), Math.max(...values), { minSpan });
+  const measured = series.flatMap((item) => item.points.map((point) => point.value));
+  const values = [...measured, ...(projected ?? []).flatMap((point) => [point.low, point.high])];
+  // Sıfır koruması veriye bakar, banda değil: negatif olmayan ölçümün ekseni tahmin yüzünden eksiye inmez.
+  const scale = niceScale(Math.min(...values), Math.max(...values), { minSpan, nonNegative: Math.min(...measured) >= 0 });
   const format = (value: number) => formatWithUnit(value, unit);
+  // Olası aralık birimiyle ("82,1–86,3 cm", "%8–%12"); ekranda tek sayıya çökmüşse ("0–0") yazılmaz.
+  const band = (low: number, high: number) => {
+    const [from, to] = [formatNumber(low), formatNumber(high)];
+    if (from === to) return '';
+    return unit === '%' ? ` (%${from}–%${to})` : ` (${from}–${to} ${unit})`;
+  };
   const labelOf = (key: string) => series.find((item) => item.key === key)?.label ?? key;
 
   const latest = series.map((item) => ({ item, point: item.points.at(-1) }));
@@ -172,7 +169,7 @@ export function ProgressChart({
     .filter(Boolean)
     .join('; ')}.${
     projected
-      ? ` Tahmin ${formatDay(projected.at(-1)!.date)}: ${format(projected.at(-1)!.value)} (${format(projected.at(-1)!.low)}–${format(projected.at(-1)!.high)}).`
+      ? ` Tahmin ${formatDay(projected.at(-1)!.date)}: ${format(projected.at(-1)!.value)}${band(projected.at(-1)!.low, projected.at(-1)!.high)}.`
       : ''
   }`;
 
@@ -207,12 +204,15 @@ export function ProgressChart({
             type="number"
             scale="time"
             domain={[first - pad, last + pad]}
-            ticks={pickTicks(projected ? [...actualTimes, times.at(-1) ?? last] : times)}
+            // Etiketler ölçüm günlerinde; tahmin varsa son tahmin günü de (`dateTicks`).
+            ticks={dateTicks(actualTimes, { extra: projected ? last : undefined })}
             tickFormatter={(time: number) => formatDayShort(toDay(time), withYear)}
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            minTickGap={16}
+            // Haftalık ölçümde telefonda da her gün yazılsın ("4 Ağu" ≈ 40 px, hafta ≈ 50 px); gerçekten
+            // üst üste binen etiketi kütüphane gizler.
+            minTickGap={4}
           />
           <YAxis
             domain={scale.domain}
@@ -235,7 +235,7 @@ export function ProgressChart({
                     const key = String(item.dataKey);
                     if (key === 'band') return null;
                     if (key === FORECAST_KEY) {
-                      const band = (item.payload as Row | undefined)?.band;
+                      const range = (item.payload as Row | undefined)?.band;
                       return typeof item.value === 'number' ? (
                         <div key={key} className="flex items-center justify-between gap-3">
                           <span className="flex items-center gap-1.5 text-muted-foreground">
@@ -244,7 +244,7 @@ export function ProgressChart({
                           </span>
                           <span className="font-medium text-foreground tabular-nums">
                             {format(item.value)}
-                            {band ? <span className="font-normal text-muted-foreground"> ({formatNumber(band[0])}–{formatNumber(band[1])})</span> : null}
+                            {range ? <span className="font-normal text-muted-foreground">{band(range[0], range[1])}</span> : null}
                           </span>
                         </div>
                       ) : null;
@@ -311,7 +311,7 @@ export function ProgressChart({
       </ChartContainer>
 
       <details className="group text-sm">
-        <summary className="w-fit cursor-pointer text-xs text-muted-foreground underline-offset-4 hover:underline">
+        <summary className="w-fit cursor-pointer text-xs text-muted-foreground underline-offset-4 hover:underline touch:py-3.5">
           Değerleri tablo olarak göster
         </summary>
         <Table className="mt-2">
@@ -332,7 +332,8 @@ export function ProgressChart({
                   <TableRow key={`tahmin-${point.date}`} className="text-muted-foreground">
                     <TableCell>{formatDay(point.date)} (tahmin)</TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {format(point.value)} ({formatNumber(point.low)}–{formatNumber(point.high)})
+                      {format(point.value)}
+                      {band(point.low, point.high)}
                     </TableCell>
                   </TableRow>
                 ))

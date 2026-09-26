@@ -5,15 +5,26 @@ import { checkInvite, hashInviteCode, newClientId, newInvite } from './client-ac
 import {
   accessState,
   canRecordHealth,
+  clientSessionValid,
   hasNewDeviceCode,
   formatInviteCode,
   healthConsentState,
+  healthScopeGrows,
+  indexWithStatus,
   INVITE_MAX_ATTEMPTS,
   INVITE_TTL_DAYS,
   inviteStatus,
+  nextHealthModule,
   normalizeInviteCode,
+  revokedInvite,
 } from './client-status.ts';
-import { CLIENT_ID_PATTERN, clientFormSchema, HEALTH_CONSENT_VERSION, type Client } from './schemas/client.ts';
+import {
+  CLIENT_ID_PATTERN,
+  clientFormSchema,
+  HEALTH_CONSENT_VERSION,
+  type Client,
+  type ClientIndexEntry,
+} from './schemas/client.ts';
 
 const SIR = 'test-sirri';
 const simdi = new Date('2026-09-23T10:00:00.000Z');
@@ -116,6 +127,70 @@ describe('giriş durumu', () => {
     assert.equal(accessState({}, davet(saat('10')), an), 'pending');
     assert.equal(accessState({}, davet(saat('10'), { used: true }), an), 'used');
   });
+
+  test('kapatmadan önce (ya da aynı anda) üretilmiş davet geçersiz; sonra üretilen geçerli', () => {
+    const access = { revokedAt: saat('09') };
+    assert.equal(revokedInvite(access, davet(saat('08'))), true);
+    assert.equal(revokedInvite(access, davet(saat('09'))), true);
+    assert.equal(revokedInvite(access, davet(saat('10'))), false);
+    assert.equal(revokedInvite({}, davet(saat('08'))), false);
+  });
+
+  test('PT rozeti "kapalı" diyorsa sunucu da o daveti reddeder (silinememiş olsa da)', () => {
+    // Kapatma: kuşak arttı, davet dosyası silinemedi ve "bekliyor" görünüyor.
+    for (const access of [{ revokedAt: saat('09') }, { joinedAt: saat('08'), lastJoinAt: saat('08'), revokedAt: saat('09') }]) {
+      for (const createdAt of [saat('07'), saat('09'), saat('10')]) {
+        const invite = davet(createdAt);
+        assert.equal(inviteStatus(invite, an), 'pending');
+        assert.equal(accessState(access, invite, an) === 'revoked', revokedInvite(access, invite), createdAt);
+      }
+    }
+  });
+});
+
+describe('danışan oturumu', () => {
+  const kayit = (extra: Partial<Pick<Client, 'status' | 'access'>> = {}) => ({
+    status: 'active' as const,
+    access: { version: 2 },
+    ...extra,
+  });
+
+  test('erişimi kapatılmış, arşivlenmiş ya da silinmiş danışanın oturumu geçersiz; duraklatılmış girer', () => {
+    assert.equal(clientSessionValid(kayit(), 2), true);
+    assert.equal(clientSessionValid(kayit({ status: 'paused' }), 2), true);
+    // "Erişimi kapat": kuşak arttı, eski çerezdeki kuşak tutmaz.
+    assert.equal(clientSessionValid(kayit(), 1), false);
+    assert.equal(clientSessionValid(kayit({ status: 'archived' }), 2), false);
+    // Silindi: kayıt yok.
+    assert.equal(clientSessionValid(null, 2), false);
+  });
+});
+
+describe('danışan listesi', () => {
+  const liste: ClientIndexEntry[] = [
+    { id: 'c_aaaaaaaa', status: 'active' },
+    { id: 'c_bbbbbbbb', status: 'paused' },
+  ];
+
+  test('satırın durumu farklıysa yalnız o satır güncellenir', () => {
+    assert.deepEqual(indexWithStatus(liste, 'c_bbbbbbbb', 'active'), [
+      { id: 'c_aaaaaaaa', status: 'active' },
+      { id: 'c_bbbbbbbb', status: 'active' },
+    ]);
+  });
+
+  test('kayıt önceki denemede yazılıp liste yazılamadıysa, aynı formu yeniden kaydetmek listeyi düzeltir', () => {
+    // Kayıt zaten "arşivde" (eski ve yeni durumu aynı), liste hâlâ "aktif": karar listedeki satıra göre.
+    assert.deepEqual(indexWithStatus(liste, 'c_aaaaaaaa', 'archived'), [
+      { id: 'c_aaaaaaaa', status: 'archived' },
+      { id: 'c_bbbbbbbb', status: 'paused' },
+    ]);
+  });
+
+  test('satır zaten o durumdaysa ya da listede yoksa yazılmaz', () => {
+    assert.equal(indexWithStatus(liste, 'c_aaaaaaaa', 'active'), null);
+    assert.equal(indexWithStatus(liste, 'c_zzzzzzzz', 'archived'), null);
+  });
 });
 
 describe('sağlık onayı', () => {
@@ -159,6 +234,45 @@ describe('sağlık onayı', () => {
   test('onay metni değişince eski onay güncel değil', () => {
     const eski = danisan({ enabled: true, fields: ['check_in'] }, onay(['check_in'], { version: '2025-01' }));
     assert.equal(healthConsentState(eski), 'outdated');
+  });
+
+  const an = (dakika: number) => new Date(simdi.getTime() + dakika * 60_000).toISOString();
+
+  test('modül son açılışından (enabledAt) önce verilmiş onay güncel değil; sonra verilen geçerli', () => {
+    const modul = { enabled: true, fields: ['check_in' as const], enabledAt: an(10) };
+    assert.equal(healthConsentState(danisan(modul, onay(['check_in'], { at: an(5) }))), 'outdated');
+    assert.equal(canRecordHealth(danisan(modul, onay(['check_in'], { at: an(5) })), 'check_in'), false);
+    assert.equal(healthConsentState(danisan(modul, onay(['check_in'], { at: an(10) }))), 'granted');
+    assert.equal(healthConsentState(danisan(modul, onay(['check_in'], { at: an(15) }))), 'granted');
+    // Eski kayıt: açılış anı yok, eski kural.
+    assert.equal(healthConsentState(danisan({ enabled: true, fields: ['check_in'] }, onay(['check_in']))), 'granted');
+  });
+
+  test('kapat → aç: taban anı yenilenir, eski onay yeniden sorulur; kapalıyken onay silinmez', () => {
+    const acik = nextHealthModule(null, { enabled: true, fields: ['conditions', 'check_in'] }, an(0));
+    const kapali = nextHealthModule(acik, { enabled: false, fields: [] }, an(20));
+    assert.deepEqual(kapali, { enabled: false, fields: [] });
+    const yeniden = nextHealthModule(kapali, { enabled: true, fields: ['conditions', 'check_in'] }, an(30));
+    assert.equal(yeniden.enabledAt, an(30));
+    const onayli = onay(['conditions', 'check_in'], { at: an(10) });
+    assert.equal(healthConsentState(danisan(kapali, onayli)), 'off');
+    assert.equal(healthConsentState(danisan(yeniden, onayli)), 'outdated');
+    assert.equal(healthConsentState(danisan(yeniden, onay(['conditions', 'check_in'], { at: an(31) }))), 'granted');
+  });
+
+  test('kapsam: parça çıkarmak daraltır (taban korunur), çıkarılan parçayı geri eklemek genişletir', () => {
+    const acik = nextHealthModule(null, { enabled: true, fields: ['conditions', 'check_in'] }, an(0));
+    const dar = nextHealthModule(acik, { enabled: true, fields: ['conditions'] }, an(20));
+    assert.equal(dar.enabledAt, an(0));
+    assert.equal(healthScopeGrows(dar, ['conditions', 'check_in']), true);
+    const genis = nextHealthModule(dar, { enabled: true, fields: ['conditions', 'check_in'] }, an(30));
+    assert.equal(genis.enabledAt, an(30));
+    // Aynı kapsamla kayıt tabanı değiştirmez; eski kayıtta hiç yoksa uydurulmaz.
+    assert.equal(nextHealthModule(genis, { enabled: true, fields: ['check_in', 'conditions'] }, an(40)).enabledAt, an(30));
+    assert.deepEqual(nextHealthModule({ enabled: true, fields: ['conditions'] }, { enabled: true, fields: ['conditions'] }, an(40)), {
+      enabled: true,
+      fields: ['conditions'],
+    });
   });
 });
 

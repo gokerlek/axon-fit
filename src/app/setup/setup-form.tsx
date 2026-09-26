@@ -8,7 +8,8 @@ import {
   setInput,
   useForm,
 } from "@formisch/react";
-import { Check } from "@phosphor-icons/react";
+import { Check, WarningCircle } from "@phosphor-icons/react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Item, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { readableOn } from "@/lib/color";
+import { brandStyle, readableOn } from "@/lib/color";
 import { cn } from "@/lib/utils";
 import { fetchJson } from "@/lib/query/errors";
 import { applyFieldErrors } from "@/lib/query/field-errors";
@@ -41,13 +42,6 @@ import {
   type SetupForm as SetupValues,
 } from "@/lib/schemas/setup";
 import { LogoPicker } from "./logo-picker";
-
-/**
- * Temanın kendi ana rengini (globals.css) geri getirir: sayfada PT'nin önceki seçimi
- * `--primary`'yi ezmiş olabilir. Değerler src/app/globals.css :root ve .dark ile aynı.
- */
-const THEME_PRIMARY =
-  "[--primary:oklch(0.841_0.238_128.85)] [--primary-foreground:oklch(0.405_0.101_131.063)] dark:[--primary:oklch(0.768_0.233_130.85)]";
 
 /**
  * "Tema" seçeneğinin düğme değeri. Formda `null`dır; düğmede boş olmayan bir değer
@@ -89,8 +83,11 @@ export function SetupForm({
         method: "POST",
         body: JSON.stringify(values),
       }),
+    // Hata balonda değil formda kalır: veri repo'su açık ya da fork gibi Vercel'de
+    // düzeltilecek bir sebep, kaybolan bir balonda okunamaz.
     notify: {
       success: firstRun ? "Kurulum tamamlandı." : "Görünüm güncellendi.",
+      error: false,
     },
     onError: (error) => applyFieldErrors(form as never, error),
     onSuccess: () => {
@@ -106,10 +103,10 @@ export function SetupForm({
   const radius =
     RADIUS_OPTIONS[(current.radius ?? initial.radius) as RadiusKey].value;
 
+  // Önizleme kutusu vurguyu kendisi ezer (`data-brand`): PT'nin önceki seçimi <html>'de dursa da
+  // kutu seçilen rengi, "Tema"da temanın kendi rengini ve ondan türeyen tonları gösterir.
   const previewStyle = {
-    ...(accent
-      ? { "--primary": accent, "--primary-foreground": readableOn(accent) }
-      : {}),
+    ...brandStyle(accent),
     "--radius": radius,
   } as React.CSSProperties;
 
@@ -118,10 +115,8 @@ export function SetupForm({
       {/* Canlı önizleme: telefonda üstte, masaüstünde sağda ve kaydırınca yerinde kalır.
           Seçilen renk ve köşe yalnız bu kutuya uygulanır; kaydedince bütün uygulamaya geçer. */}
       <Card
-        className={cn(
-          "order-first lg:sticky lg:top-6 lg:order-last",
-          accent === null && THEME_PRIMARY,
-        )}
+        className="order-first lg:sticky lg:top-6 lg:order-last"
+        data-brand
         style={previewStyle}
       >
         <CardHeader>
@@ -191,11 +186,12 @@ export function SetupForm({
             <FormField of={form} path={["accent"]}>
               {(field) => (
                 <Field>
-                  <FieldLabel>Ana renk</FieldLabel>
+                  <FieldLabel id="setup-accent-label">Ana renk</FieldLabel>
                   <ToggleGroup
-                    aria-label="Ana renk"
+                    aria-labelledby="setup-accent-label"
                     spacing={2}
-                    className="grid w-full grid-cols-8"
+                    // Telefonda dört sütun: sekiz kutu 44 px'e sığmaz (SPEC §6 dokunma hedefi).
+                    className="grid w-full grid-cols-4 sm:grid-cols-8"
                     // "Tema" seçeneği formda null; düğmede THEME_ACCENT ile temsil edilir.
                     value={[field.input ?? THEME_ACCENT]}
                     onValueChange={(value) => {
@@ -215,18 +211,20 @@ export function SetupForm({
                           aria-label={preset.label}
                           title={preset.label}
                           className={cn(
-                            "aspect-square h-auto w-full border-2 border-transparent p-0 data-pressed:border-foreground",
+                            "h-11 w-full border-2 border-transparent p-0 data-pressed:border-foreground sm:aspect-square sm:h-auto",
                             preset.value === null &&
-                              // Basılı düğmenin `bg-muted`'u temanın rengini ezmesin.
-                              `${THEME_PRIMARY} bg-primary text-primary-foreground hover:bg-primary aria-pressed:bg-primary`,
+                              // Basılı düğmenin seçili zemini (`bg-primary-strong`) temanın rengini ezmesin.
+                              "bg-primary text-primary-foreground hover:bg-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground",
                           )}
+                          // "Tema" kutusu temanın kendi rengini gösterir (PT'nin kayıtlı seçimi ezilir).
+                          data-brand={preset.value === null || undefined}
                           style={
                             preset.value
                               ? {
                                   background: preset.value,
                                   color: readableOn(preset.value),
                                 }
-                              : undefined
+                              : (brandStyle(null) as React.CSSProperties)
                           }
                         >
                           {selected ? (
@@ -247,8 +245,9 @@ export function SetupForm({
             <FormField of={form} path={["radius"]}>
               {(field) => (
                 <Field>
-                  <FieldLabel>Köşeler</FieldLabel>
+                  <FieldLabel id="setup-radius-label">Köşeler</FieldLabel>
                   <ToggleGroup
+                    aria-labelledby="setup-radius-label"
                     variant="outline"
                     value={[field.input ?? "subtle"]}
                     onValueChange={(value) => {
@@ -259,7 +258,7 @@ export function SetupForm({
                     className="w-full"
                   >
                     {(Object.keys(RADIUS_OPTIONS) as RadiusKey[]).map((key) => (
-                      <ToggleGroupItem key={key} value={key} className="flex-1">
+                      <ToggleGroupItem key={key} value={key} className="flex-1 touch:h-11">
                         {RADIUS_OPTIONS[key].label}
                       </ToggleGroupItem>
                     ))}
@@ -271,8 +270,9 @@ export function SetupForm({
             <FormField of={form} path={["theme"]}>
               {(field) => (
                 <Field>
-                  <FieldLabel>Varsayılan tema</FieldLabel>
+                  <FieldLabel id="setup-theme-label">Varsayılan tema</FieldLabel>
                   <ToggleGroup
+                    aria-labelledby="setup-theme-label"
                     variant="outline"
                     value={[field.input ?? "dark"]}
                     onValueChange={(value) => {
@@ -286,7 +286,7 @@ export function SetupForm({
                       <ToggleGroupItem
                         key={theme.value}
                         value={theme.value}
-                        className="flex-1"
+                        className="flex-1 touch:h-11"
                       >
                         {theme.label}
                       </ToggleGroupItem>
@@ -298,6 +298,13 @@ export function SetupForm({
                 </Field>
               )}
             </FormField>
+
+            {save.error ? (
+              <Alert variant="destructive">
+                <WarningCircle weight="fill" />
+                <AlertDescription>{save.error.message}</AlertDescription>
+              </Alert>
+            ) : null}
 
             <Button
               type="submit"
@@ -313,8 +320,7 @@ export function SetupForm({
                   : "Kaydet"}
             </Button>
             <p className="text-center text-xs text-muted-foreground">
-              Ayarlar senin GitHub repo&apos;na kaydedilir, istediğin zaman
-              değiştirebilirsin.
+              Ayarlar kaydedilir; istediğin zaman değiştirebilirsin.
             </p>
           </Form>
         </CardContent>

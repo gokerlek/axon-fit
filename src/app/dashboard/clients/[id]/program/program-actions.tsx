@@ -37,7 +37,9 @@ export function ProgramActions({ clientId }: { clientId: string }) {
 
   return (
     <AlertDialog>
-      <AlertDialogTrigger render={<Button variant="destructive" />}>
+      {/* Başlıktaki tek renkli düğme yıkıcı olmasın: ikincil görünüm, yalnız metni kırmızı. */}
+      <AlertDialogTrigger
+        render={<Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive" />}>
         <Trash data-icon="inline-start" />
         Programı sil
       </AlertDialogTrigger>

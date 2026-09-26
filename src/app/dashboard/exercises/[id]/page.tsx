@@ -1,3 +1,5 @@
+import type { Metadata } from 'next';
+import { cache } from 'react';
 import { notFound } from 'next/navigation';
 import { ExerciseMuscleMap } from '@/components/muscle-map/exercise-muscle-map';
 import { PageHeader } from '@/components/page-header';
@@ -10,7 +12,7 @@ import { listAttachments } from '@/lib/attachments';
 import { listDevices } from '@/lib/devices';
 import { DEVICE_KIND_LABELS, DEVICE_KINDS, loadSpecFor } from '@/lib/device-loads';
 import { describeGrip } from '@/lib/grips';
-import { alternativeForDevice } from '@/lib/alternatives';
+import { deviceSwapTarget } from '@/lib/alternatives';
 import Link from 'next/link';
 import { PATTERN_LABELS } from '@/lib/alternatives';
 import { formatKg } from '@/lib/format';
@@ -19,6 +21,7 @@ import { describeRule, progressionOf, PROGRESSION_LABELS } from '@/lib/progressi
 import { CATEGORY_LABELS, EQUIPMENT_LABELS } from '@/lib/schemas/exercise';
 import { AlternativesCard, type AlternativeRow, type DeviceSwap } from './alternatives-card';
 import { MedicalCard } from './medical-card';
+import { TOUCH_TARGETS } from '../touch-targets';
 import { EditButton } from '@/components/edit-button';
 import { requirePt } from '@/lib/guards';
 
@@ -28,12 +31,23 @@ const TRACKING_LABELS = {
   duration: 'Süre',
 } as const;
 
+
+// Başlık (`generateMetadata`) ve sayfa aynı isteği paylaşır: liste bir kez okunur.
+const loadAll = cache(() => listExercises());
+const loadExercise = cache(async (id: string) => getExercise(id, await loadAll()));
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  await requirePt();
+  const exercise = await loadExercise((await params).id);
+  return { title: exercise?.title ?? 'Egzersiz bulunamadı' };
+}
+
 /** Egzersiz detayı — kendi sayfası (modal değil, SPEC §6). */
 export default async function ExerciseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePt();
   const { id } = await params;
-  const [all, devices, pool] = await Promise.all([listExercises(), listDevices(), listAttachments()]);
-  const exercise = await getExercise(id, all);
+  const [all, devices, pool] = await Promise.all([loadAll(), listDevices(), listAttachments()]);
+  const exercise = await loadExercise(id);
   if (!exercise) notFound();
   const deviceById = new Map(devices.map((device) => [device.id, device]));
   const device = exercise.deviceId ? deviceById.get(exercise.deviceId) : undefined;
@@ -51,21 +65,24 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
   }));
 
   const rule = progressionOf(exercise);
-  // Cihaz değişirse hangi egzersize geçilir (şablonda satırın cihazı değiştirilince aynısı olur).
+  // Cihaz değişirse hangi egzersiz yapılır: düzenleyicide satırın cihazı değişince de aynı karar
+  // (`deviceSwapTarget`); aynı hareket o cihazda yapılıyorsa kendisi.
   const swaps: DeviceSwap[] = DEVICE_KINDS.flatMap((kind) =>
     devices
       .filter((item) => item.kind === kind && item.id !== exercise.deviceId)
       .map((item) => {
-        const match = alternativeForDevice(exercise, item.id, all, familyOf);
+        const match = deviceSwapTarget(exercise, item, all, familyOf);
         return {
           deviceId: item.id,
           deviceName: item.name,
           kindLabel: DEVICE_KIND_LABELS[kind],
-          exercise: match && match.id !== exercise.id ? { id: match.id, title: match.title } : null,
+          exercise: match ? { id: match.id, title: match.title } : null,
         };
       }),
   );
 
+  // Motorun kullandığı yük tanımı: bar ve plaka yüklemelide adım ve taban cihazdan (liste vermese de).
+  const loadSpec = loadSpecFor(exercise, device);
   const summary: [string, React.ReactNode][] = [
     ['Hedef kaslar', summarizeMuscles(exercise.primaryMuscles).join(', ')],
     ...(exercise.secondaryMuscles.length > 0
@@ -79,7 +96,7 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
       ? ([
           [
             'Cihaz',
-            <Link key="cihaz" href={`/dashboard/devices/${device.id}`} className="underline underline-offset-4">
+            <Link key="cihaz" href={`/dashboard/devices/${device.id}`} className="underline underline-offset-4 relative touch:before:absolute touch:before:top-1/2 touch:before:left-1/2 touch:before:h-full touch:before:min-h-11 touch:before:w-full touch:before:min-w-11 touch:before:-translate-x-1/2 touch:before:-translate-y-1/2">
               {device.name}
             </Link>,
           ],
@@ -89,7 +106,7 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
       ? ([
           [
             'Aparat',
-            <Link key="aparat" href={`/dashboard/attachments/${attachment.id}`} className="underline underline-offset-4">
+            <Link key="aparat" href={`/dashboard/attachments/${attachment.id}`} className="underline underline-offset-4 relative touch:before:absolute touch:before:top-1/2 touch:before:left-1/2 touch:before:h-full touch:before:min-h-11 touch:before:w-full touch:before:min-w-11 touch:before:-translate-x-1/2 touch:before:-translate-y-1/2">
               {attachment.name}
             </Link>,
           ],
@@ -101,8 +118,15 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
     ...(exercise.pattern ? ([['Hareket kalıbı', PATTERN_LABELS[exercise.pattern]]] as [string, React.ReactNode][]) : []),
     ['Tür', CATEGORY_LABELS[exercise.category]],
     ['Kayıt', TRACKING_LABELS[exercise.trackingType]],
-    ...(exercise.trackingType === 'weight_reps' && !(device && loadSpecFor(exercise, device).loadsKg)
-      ? ([['Ağırlık adımı / taban', `${formatKg(exercise.loadStepKg)} / ${formatKg(exercise.minLoadKg)}`]] as [string, React.ReactNode][])
+    ...(exercise.trackingType === 'weight_reps' && !loadSpec.loadsKg
+      ? ([
+          [
+            'Ağırlık adımı / taban',
+            `${formatKg(loadSpec.loadStepKg)} / ${formatKg(loadSpec.minLoadKg)}${
+              loadSpec.maxLoadKg !== undefined ? ` · en çok ${formatKg(loadSpec.maxLoadKg)}` : ''
+            }`,
+          ],
+        ] as [string, React.ReactNode][])
       : []),
     [
       'İlerleme',
@@ -114,7 +138,7 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
     exercise.source === 'library' ? 'Hazır kütüphane' : exercise.overridesLibrary ? 'Senin sürümün' : 'Senin egzersizin';
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className={`flex flex-col gap-6 ${TOUCH_TARGETS}`}>
       <PageHeader
         crumbs={[{ label: 'Egzersizler', href: '/dashboard/exercises' }, { label: exercise.title }]}
         title={exercise.title}
@@ -131,7 +155,7 @@ export default async function ExerciseDetailPage({ params }: { params: Promise<{
               <CardDescription>
                 {exercise.primaryMuscles.includes('cardio')
                   ? 'Kardiyo hareketi; haritada yalnız yardımcı kaslar görünür.'
-                  : 'Hedef tam renk, yardımcı orta, dengeleyici açık ton.'}
+                  : 'Hedef dolu, yardımcı çizgili, dengeleyici noktalı.'}
               </CardDescription>
             </CardHeader>
             <CardContent>

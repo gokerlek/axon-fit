@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { Field as FormField, Form, setInput, useForm } from '@formisch/react';
+import { rememberClient } from '@/app/giris/remembered-client';
 import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -12,8 +13,9 @@ import { INVITE_CODE_LENGTH } from '@/lib/client-status';
 import { joinSchema, type JoinInput } from '@/lib/schemas/auth';
 
 /**
- * Davet kodunu kullanır. Kare koddan gelen kod hazır doldurulur; elle de yazılabilir.
- * Hata bildirim çubuğunda değil alanın altında görünür.
+ * Kare kodla girişin birinci adımı: davet kodunu kullanır. Kare koddan gelen kod hazır doldurulur;
+ * elle de yazılabilir. Kod kullanılınca kimlik telefona yazılır ve sayfa ikinci adıma (şifre
+ * belirleme) geçer: adresten kod düşer, yenilense de kod yeniden denenmez. Hata alanın altında.
  */
 export function JoinForm({ clientId, initialCode }: { clientId: string; initialCode: string }) {
   const router = useRouter();
@@ -22,7 +24,13 @@ export function JoinForm({ clientId, initialCode }: { clientId: string; initialC
   const join = useServiceMutation({
     fn: ({ code }: JoinInput) =>
       fetchJson<{ ok: true }>('/api/join', { method: 'POST', body: JSON.stringify({ clientId, code }) }),
-    onSuccess: () => router.replace('/me'),
+    onSuccess: () => {
+      rememberClient(clientId);
+      const next = `/join?c=${encodeURIComponent(clientId)}`;
+      // Kod elle yazıldıysa adres zaten bu: sayfa sunucudan yeniden çizilsin.
+      if (`${window.location.pathname}${window.location.search}` === next) router.refresh();
+      else router.replace(next);
+    },
     notify: 'none',
   });
 
@@ -48,9 +56,9 @@ export function JoinForm({ clientId, initialCode }: { clientId: string; initialC
           </Field>
         )}
       </FormField>
-      <Button type="submit" size="lg" className="h-11 w-full" disabled={join.isPending || join.isSuccess}>
+      <Button type="submit" size="lg" className="h-12 w-full text-base" disabled={join.isPending || join.isSuccess}>
         {join.isPending || join.isSuccess ? <Spinner data-icon="inline-start" /> : null}
-        Giriş yap
+        Devam
       </Button>
     </Form>
   );

@@ -112,18 +112,20 @@ export type ProgramFormValues = v.InferOutput<typeof programFormSchema>;
 
 /**
  * Kayıt ucu: `baseRevision` null = yeni program; sayı = düzenleyicinin yüklediği sürüm.
+ * `baseCreatedAt`: yüklenen programın oluşturulma anı; silinip yeniden oluşturulan program revision
+ * 1'den başlasa da çakışma yakalanır. Göndermeyen (eski) sekmede yalnız revision denetlenir.
  * Eski biçimle açık kalmış sekmenin kaydı da kabul edilir (`phased` evrelerden, setler satıra).
  */
 export const programSaveSchema = v.pipe(
   v.unknown(),
   v.transform(upgradeProgramBody),
-  v.object({ ...bodyFields, baseRevision: v.nullable(positive) }),
+  v.object({ ...bodyFields, baseRevision: v.nullable(positive), baseCreatedAt: v.optional(timestamp) }),
   v.forward(v.partialCheck([['currentPhaseId'], ['phases']], currentExists, CURRENT_MISSING), ['currentPhaseId']),
   v.forward(v.partialCheck([['phased'], ['phases']], unphasedOk, UNPHASED_PROBLEM), ['phases']),
 );
 
-/** Evre geçişi (program sayfasındaki öneri). */
-export const programPhaseSwitchSchema = v.object({ phaseId: phaseIdSchema, baseRevision: positive });
+/** Evre geçişi (program sayfasındaki öneri): sürüm kayıttaki gibi (`baseRevision`, `baseCreatedAt`). */
+export const programPhaseSwitchSchema = v.object({ phaseId: phaseIdSchema, baseRevision: positive, baseCreatedAt: v.optional(timestamp) });
 
 export const programChangeSchema = v.object({
   scope: v.optional(v.pipe(v.string(), v.maxLength(L.changeScope))),

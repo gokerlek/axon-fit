@@ -2,21 +2,12 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Item, ItemContent, ItemMedia, ItemTitle } from '@/components/ui/item';
 import type { DeviceWithSource } from '@/lib/devices';
+import { groupWorkText, rowWorkText } from '@/lib/edit-messages';
 import type { ExerciseWithSource } from '@/lib/exercises';
 import { PROGRESSION_LABELS, RIR_LABELS } from '@/lib/progression';
 import { EQUIPMENT_LABELS } from '@/lib/schemas/exercise';
 import type { Template } from '@/lib/schemas/template';
-import { formatSets } from '@/lib/set-plan';
-import {
-  BLOCK_KIND_LABELS,
-  describeBlock,
-  formatRest,
-  groupSkipNote,
-  roundsOf,
-  rowLabels,
-  type TemplateBlock,
-  type TemplateRow,
-} from '@/lib/template-plan';
+import { BLOCK_KIND_LABELS, groupSkipNote, roundsOf, rowLabels, type TemplateBlock, type TemplateRow } from '@/lib/template-plan';
 
 type Lookups = {
   exercises: ReadonlyMap<string, ExerciseWithSource>;
@@ -25,7 +16,8 @@ type Lookups = {
 
 /**
  * Şablonun hareketleri, antrenmanın yapılış sırasıyla (detay sayfası, yalnız gösterim).
- * Her blok ızgarada bir hücre; grup tek hücrede, satırları "2a", "2b" diye.
+ * Her blok ızgarada bir hücre; grup tek hücrede, satırları "2a", "2b" diye. Setler, dinlenme ve
+ * grubun özeti düzenleyicinin kartlarıyla aynı biçimde (`rowWorkText`, `groupWorkText`).
  */
 export function TemplateSequence({ template, exercises, devices }: { template: Template } & Lookups) {
   const labels = rowLabels(template);
@@ -44,7 +36,7 @@ export function TemplateSequence({ template, exercises, devices }: { template: T
                 <Badge variant="secondary">
                   {index + 1} · {BLOCK_KIND_LABELS[block.kind]}
                 </Badge>
-                <p className="text-xs text-muted-foreground">{describeBlock({ ...block, sets: roundsOf(block) })}</p>
+                <p className="text-xs tabular-nums text-muted-foreground">{groupWorkText(block, roundsOf(block))}</p>
                 {groupSkipNote(block, titleOf) ? <p className="text-xs text-muted-foreground">{groupSkipNote(block, titleOf)}</p> : null}
               </div>
               {block.rows.map((row) => (
@@ -77,11 +69,7 @@ function RowItem({ row, block, label, exercises, devices }: { row: TemplateRow; 
     );
   }
 
-  const sets = formatSets(row.sets, exercise.trackingType);
-  const work =
-    block.kind === 'single'
-      ? `${sets} · ${block.restSeconds > 0 ? `${formatRest(block.restSeconds)} dinlenme` : 'setler arası dinlenme yok'}`
-      : sets;
+  const work = rowWorkText(row.sets, exercise.trackingType, block.kind === 'single' ? block.restSeconds : undefined);
   const overridden = row.deviceId ? devices.get(row.deviceId) : undefined;
   const own = exercise.deviceId ? devices.get(exercise.deviceId) : undefined;
 
@@ -90,7 +78,9 @@ function RowItem({ row, block, label, exercises, devices }: { row: TemplateRow; 
       {media}
       <ItemContent className="min-w-0 gap-1.5">
         <ItemTitle className="w-full">
-          <Link href={`/dashboard/exercises/${exercise.id}`} className="truncate underline-offset-4 hover:underline">
+          <Link
+            href={`/dashboard/exercises/${exercise.id}`}
+            className="truncate underline-offset-4 hover:underline touch:-my-3 touch:block touch:min-h-11 touch:py-3">
             {exercise.title}
           </Link>
         </ItemTitle>

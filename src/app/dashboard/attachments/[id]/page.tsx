@@ -1,4 +1,6 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+import { cache } from 'react';
 import { notFound } from 'next/navigation';
 import { ImageSquare } from '@phosphor-icons/react/dist/ssr';
 import { ImagePlaceholder } from '@/components/image-placeholder';
@@ -14,11 +16,20 @@ import { summarizeMuscles } from '@/lib/muscles';
 import { EditButton } from '@/components/edit-button';
 import { requirePt } from '@/lib/guards';
 
+/** Sayfa başlığı ile sayfa aynı okumayı paylaşır (istek başına bir kez). */
+const loadAttachment = cache((id: string) => getAttachment(id));
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  await requirePt();
+  const attachment = await loadAttachment((await params).id);
+  return { title: attachment?.name ?? 'Aparat bulunamadı' };
+}
+
 /** Aparat detayı — yalnız gösterir; değiştirmek için "Düzenle" (SPEC §6). */
 export default async function AttachmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePt();
   const { id } = await params;
-  const [attachment, devices, exercises] = await Promise.all([getAttachment(id), listDevices(), listExercises()]);
+  const [attachment, devices, exercises] = await Promise.all([loadAttachment(id), listDevices(), listExercises()]);
   if (!attachment) notFound();
 
   const imageUrl = attachmentImageUrl(attachment);

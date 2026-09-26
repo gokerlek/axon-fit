@@ -9,11 +9,13 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { showUndoToast } from '@/components/undo-toast';
 import { formatRecent } from '@/lib/format';
+import { focusEditorStart } from './editor-context';
 import {
   DRAFT_PREFIX,
   DRAFT_VERSION,
   draftConflict,
   draftDiffers,
+  offerDraft,
   parseDraft,
   serializeDraft,
   type DraftBase,
@@ -85,7 +87,7 @@ export type DraftOffer = {
   conflict: boolean;
 };
 
-export type EditorDraftController<TBase extends DraftBase> = {
+export type EditorDraftController<TBase extends DraftBase, TInput = unknown> = {
   /** Açılışta bulunan, yüklenen hâlden farklı taslak (karar bekliyor). */
   offer: DraftOffer | null;
   /** "Taslağa devam et": formun girdisi taslak olur, Kaydet belirir. */
@@ -101,6 +103,8 @@ export type EditorDraftController<TBase extends DraftBase> = {
    * formun "başka bir yerde değişti" uyarısı çıkar (başkasının kaydı sessizce ezilmez).
    */
   saveBase: TBase;
+  /** Devam edilen taslağın girdisi, hazırlanmadan önceki hâliyle; "Geri al" ile vazgeçilince null. */
+  restored: TInput | null;
   /** Taslağa devam edilince artar: düzenleyici baştan çizilsin (`key`). */
   generation: number;
   /** Formun girdisi değişti (`DraftAutosave` çağırır). */
@@ -113,6 +117,7 @@ export function useEditorDraft<TSchema extends v.GenericSchema<Record<string, un
   storageKey,
   base,
   baseSchema,
+  prepare,
 }: {
   form: FormStore<TSchema>;
   schema: TSchema;
@@ -121,9 +126,14 @@ export function useEditorDraft<TSchema extends v.GenericSchema<Record<string, un
   /** Yüklenen verinin sürümü (kayıtta gönderilen). */
   base: TBase;
   baseSchema: v.GenericSchema<unknown, TBase>;
-}): EditorDraftController<TBase> {
+  /**
+   * Taslak forma yazılmadan önce (programda: açılıştaki gibi silinmiş cihaz egzersizinkine döner). Saf
+   * olmalı: açılışta taslağın yüklenen hâlden farkı da hazırlanmış hâliyle ölçülür (`offerDraft`).
+   */
+  prepare?: (input: v.InferInput<TSchema>) => v.InferInput<TSchema>;
+}): EditorDraftController<TBase, v.InferInput<TSchema>> {
   const [offer, setOffer] = useState<EditorDraft<TBase> | null>(null);
-  const [continued, setContinued] = useState<{ base: TBase } | null>(null);
+  const [continued, setContinued] = useState<{ base: TBase; input: v.InferInput<TSchema> } | null>(null);
   const [generation, setGeneration] = useState(0);
   // Zamanlayıcı ve olay dinleyicileri güncel değerleri buradan okur.
   const state = useRef({ offer: null as EditorDraft<TBase> | null, writeBase: base, stopped: false, wasDirty: false });
@@ -154,14 +164,15 @@ export function useEditorDraft<TSchema extends v.GenericSchema<Record<string, un
     setOffer(draft);
   }, []);
 
-  // Açılış: depodaki taslak okunur (sunucu çiziminden sonra). Bozuksa ya da yüklenenle aynıysa silinir.
+  // Açılış: depodaki taslak okunur (sunucu çiziminden sonra). Bozuksa ya da forma yazılacağı gibi
+  // hazırlanınca yüklenenle aynıysa (ör. tek farkı sonradan silinen cihaz ya da boş not) silinir.
   useEffect(() => {
     const raw = readRaw(storageKey);
     if (raw === null) return;
     const draft = parseDraft(raw, schema, baseSchema);
-    if (draft && draftDiffers(draft.input, getInput(form))) present(draft);
+    if (draft && offerDraft(draft.input as v.InferInput<TSchema>, getInput(form), prepare)) present(draft);
     else if (!form.isDirty) removeRaw(storageKey);
-  }, [form, schema, baseSchema, storageKey, present]);
+  }, [form, schema, baseSchema, storageKey, present, prepare]);
 
   useEffect(() => {
     if (!continued) state.current.writeBase = base;
@@ -211,9 +222,10 @@ export function useEditorDraft<TSchema extends v.GenericSchema<Record<string, un
     const edited = form.isDirty ? getInput(form) : null;
     const saveBase = draftConflict(draft.base, base) ? draft.base : base;
     state.current.writeBase = saveBase;
-    setContinued({ base: saveBase });
+    const input = draft.input as v.InferInput<TSchema>;
+    setContinued({ base: saveBase, input });
     present(null);
-    setInput(form, { input: draft.input as v.InferInput<TSchema> });
+    setInput(form, { input: prepare ? prepare(input) : input });
     setGeneration((value) => value + 1);
     if (!edited) return;
     const after = getInput(form);
@@ -228,7 +240,7 @@ export function useEditorDraft<TSchema extends v.GenericSchema<Record<string, un
       setInput(form, { input: edited as v.InferInput<TSchema> });
       setGeneration((value) => value + 1);
     });
-  }, [form, base, present]);
+  }, [form, base, present, prepare]);
 
   const dismiss = useCallback(() => {
     present(null);
@@ -261,6 +273,7 @@ export function useEditorDraft<TSchema extends v.GenericSchema<Record<string, un
     discard,
     leave,
     saveBase: continued ? continued.base : base,
+    restored: continued ? continued.input : null,
     generation,
     sync,
   };
@@ -279,7 +292,10 @@ export function DraftAutosave<TSchema extends FormSchema>({ form, onChange }: { 
   return null;
 }
 
-/** Formun üstündeki taslak uyarısı: [Taslağa devam et] [At]. */
+/**
+ * Formun üstündeki taslak uyarısı: [Taslağa devam et] [At]. Karar verilince uyarı kalkar; odak
+ * düzenleyicinin ilk kartına (kart yoksa "Hareketler" başlığına) geçer.
+ */
 export function DraftNotice({
   offer,
   timeZone,
@@ -299,10 +315,25 @@ export function DraftNotice({
         <AlertDescription>Bu arada başka bir yerde kaydedildi; devam edersen kaydederken çakışma uyarısı çıkar.</AlertDescription>
       ) : null}
       <div className="col-start-2 mt-2 flex flex-wrap gap-2">
-        <Button type="button" size="sm" className="touch:h-11" onClick={onRestore}>
+        <Button
+          type="button"
+          size="sm"
+          className="touch:h-11"
+          onClick={() => {
+            onRestore();
+            focusEditorStart();
+          }}>
           Taslağa devam et
         </Button>
-        <Button type="button" variant="outline" size="sm" className="touch:h-11" onClick={onDismiss}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="touch:h-11 touch:min-w-11"
+          onClick={() => {
+            onDismiss();
+            focusEditorStart();
+          }}>
           At
         </Button>
       </div>

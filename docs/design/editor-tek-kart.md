@@ -29,6 +29,10 @@
 >
 > *2026-09-25, altıncı tur*
 > 16. **Açık Kaydet kalır; kaydedilmemiş iş korunur.** Kaydet danışana yayınlar ve değişiklik kaydına tek girdi yazar, otomatik kayıt yok. Değişiklik varken (Kaydet görünürken): sayfadaki her bağlantı (dock, danışan sekmeleri, sayfa yolu, "‹ Program", kullanıcı menüsü) önce sorar — "Kaydedilmemiş değişiklikler var" / "Çıkarsan bu değişiklikler kaydedilmez; danışan göremez." (şablonda "…kaydedilmez.") [Kal] (odakta) [Kaydetmeden çık]; yenileme ve sekme kapanmasında tarayıcının uyarısı. Form ayrıca bu tarayıcıda **yerel taslağa** yazılır (~500 ms bekleyerek): tarayıcının geri tuşu durdurulamaz, iş taslakta kalır. Düzenleyici yeniden açılınca taslak yüklenenden farklıysa formun üstünde "Kaydedilmemiş bir taslağın var · dün 14:05" [Taslağa devam et] [At]; kendiliğinden uygulanmaz. O arada başka yerde kaydedildiyse "Bu arada başka bir yerde kaydedildi; devam edersen kaydederken çakışma uyarısı çıkar." (§6).
+>
+> *2026-09-26, yedinci tur (arayüz düzeltme turu; öncekilerle çatışırsa bunlar geçer)*
+> 17. **Yüzen Kaydet (karar 15'e istisna).** Her genişlikte, kaydedilecek bir şey varken ve başlıktaki Kaydet ekranın görünen yerinde değilken (dock'un kapladığı alt pay görünmez sayılır; başlıktaki odaktaysa çıkmaz) sağ altta yüzen bir Kaydet çıkar: telefonda (`touch:`) dock'un üstünde, masaüstünde sayfanın köşesinde (`floatingSaveShown`, `editor-signals.ts`); başlıktakiyle aynı metin ve durum ("Şablonu kaydet" / "Programı kaydet", "Kaydediliyor…", oluşturmada "Şablonu oluştur" / "Programı oluştur"), 44 px, gölgeli hap. Başlıktaki Kaydet olduğu gibi kalır; başlık görünür olunca yüzen söner. Yüzen görünürken ekran dışındaki başlık Kaydet'i `inert` olur: klavye ve ekran okuyucu tek Kaydet bulur (yüzen kopya `aria-hidden` değil). Sürüklerken dock gibi çekilir (`data-reorder-hide`); seçim modunda başlıkta Kaydet olmadığı için çıkmaz. Programda evre adı, süre, sıklık ya da gün adı değişince de görünür; etiket "Programı kaydet" (yalnız hareketleri değil bütün programı kaydeder), şablonda buna eş "Şablonu kaydet". Telefonda toast'lar altta, dock'un ve yüzen Kaydet'in üstünde (`--editor-save-space`); masaüstünde üstte. "Geri al" toast'u çıkan değişikliğin cümlesini yalnız toast'un canlı bölgesi okur; düzenleyicinin `aria-live` paragrafı onu yazmaz (tek canlı bölge). Kaydetme ve çıkış deseni iki düzenleyicide birebir aynı: başlığın üstünde "‹" dönüş ("‹ Program", "‹ <şablon adı>", "‹ Şablonlar"), başlıkta ikincil görünümde "Sil" / "Programı sil" (yalnız metni kırmızı), çıkışta kaydedilmemiş değişiklik uyarısı (§6).
+> 18. **Cihaz kısayolu, görünür gruplama.** Kart yüzünün meta satırının sonunda satırın cihazı ([🏋 Olimpik bar]; satırda yazılı ya da egzersizin kendi cihazı) durur ve "Cihazı değiştir" düğmesidir (yüz düğmesinin kardeşi, dokunma alanı 44 px): kartı ve "Ayrıntılar · cihaz · kural · not"u açar, seçiciyi görünür yere kaydırıp açar (salonda iki dokunuş). Ayrıntılar'da Cihaz ilk alan. Her cihaz değişimi kartta 1,2 sn vurgulanır ve "Geri al"lı toast'la söylenir ("Kablo istasyonu 2 → Seated Row (Lat Pulldown yerine)", "Bench Press · cihaz: Smith makinesi"); satırı değiştirmeyen seçim yazılmaz. Başlıktaki düğme "Seç · Grupla"; seçim modunun ilk durum satırı "Seçmek için kartlara dokun · 2 hareket seç, süperset olsun". En az 2 kart varken ve henüz grup yokken ilk kullanımda bir kez ipucu: "kartı üstteki çizgisinden tutup başka bir kartın ortasına bırak, süperset olur". "Üstüne bırak" devredeyken sonuç ve hedef ("Süperset yap: Ayakta Calf Raise") sürüklenen kartın üstünde, sol üstte yazar ve sürüklenen kart yarı saydamlaşır (hedefin halkası ve hapı altından görünür). Kaydırma paneli açıkken başka bir karta dokunmak yalnız paneli kapatır (iOS gibi). Taslak uyarısında karar verilince odak düzenleyicinin ilk kartına (kart yoksa "Hareketler" başlığına) geçer. Kartın meta satırı, şablon detayı ve programın PT görünümü aynı biçimde yazar ("3×8–12 · 90 sn", grupta "2 hareket · 3 tur · 90 sn tur sonu") (§1, §2, §4, §5, §8).
 
 Temel C. Üstüne A'nın jestleri ve set düzenlemesi, B'nin kısayolları, v1'in seçim modu ve alt çubuğu eklendi.
 
@@ -70,7 +74,7 @@ Sayfa kenar boşluğu 16 px, liste 343 px. Telefonda "Hareketler" Card'ının ç
   - `aria-hidden` ve odaklanmaz (her kartta fazladan sekme durağı olmasın). Klavye ve ekran okuyucu yolu §2'de.
 - Yüzün tamamı gerilmiş bir `<button aria-expanded aria-controls>`, adı "Bench Press, ayrıntıları aç/kapat" (meta satırı `aria-describedby`). Açma oku yok (karar 9): açık kartta yüz koyulaşır ve rozet ana renge döner. ⧉ en sağda, bu düğmenin üstünde duran kardeş bir düğme: `z-10`, 44×44, `aria-label="Kopyala: Bench Press"`.
 - Rozet yalnız etiket.
-- Meta satırı `setsText()` + dinlenmeden oluşur. Kural, cihaz ve not işaretleri meta satırının sonunda 14 px ikon olarak durur (her birinin aria-label'ı var). Bugünkü rozet satırı kalkar.
+- Meta satırı `setsText()` + dinlenmeden oluşur (`rowWorkText`: "3×8–12 · 90 sn"; şablon detayı ve programın PT görünümü de aynı biçimde yazar). Kural ve not işaretleri 14 px ikon (her birinin aria-label'ı var); satırın cihazı meta satırının en sonunda adıyla durur ve "Cihazı değiştir" kısayoludur (karar 18). Bugünkü rozet satırı kalkar.
 - Kütüphanede olmayan hareket: başlık kırmızı "Silinmiş egzersiz", ⧉'nin yerinde 🗑 "Sil".
 
 **Kaydırınca** (yalnız yüz kayar; tutamak şeridi ve açık gövde yerinde kalır):
@@ -169,11 +173,12 @@ Açık üyede dinlenme alanı yok. Yerine şu satır çıkar: "Dinlenme grup aya
 | Sil | Sola tam kaydır (8 sn "Geri al") | Açık kartta "Sil" | Delete / Backspace (+ Geri al) |
 | İptal | Liste dışına bırak, ya da pointercancel | Esc | Esc |
 
+- **Panel açıkken başka karta dokunmak** yalnız paneli kapatır; dokunulan kart açılmaz, düğmesine basılmaz (karar 18). Sürükleme yine başlar.
 - **Hakem (`useCardGesture`, sadeleşti):** Sürükleme yalnız çizgiden başladığı için süre yarışı yok. Yüzde: |dx|>10 ve |dx|>1,5·|dy| olursa kaydırma başlar (parmak, kalem ya da farenin sol tuşu; `dragControls.start`). |dy|>8 olursa sayfa kayar (`touch-action: pan-y`). 8 px'ten az hareket dokunmadır. Sürükleme etkinken kaydırma kapalıdır. Panel açıkken çizgiye basmak paneli kapatır, sürükleme yine başlar. Kaydırmadan sonra gelen click yutulur. Yüzde `select-none` ve `-webkit-touch-callout:none` var.
 - **Sürüklerken:** kaynak kartın yerinde, kartın o anki yüksekliğinde kesik çizgili bir yer tutucu kalır (açık kart da; liste zıplamaz). Parmağın altında yüzden (çizgisiyle) oluşan bir overlay durur (ölçek 1.02, ring-2 primary/40, çizgi primary; reduced-motion'da ölçek yok). Kardeş kartlar kaymaz. Bırakılacak yeri 2 px'lik bir çizgi ve 8 px'lik bir nokta gösterir; grup içinde çizgi 12 px içeriden başlar. Ekranın üst ve alt 80 px'i otomatik kaydırma bölgesidir. `html[data-reordering]` dock'u, kullanıcı menüsünü ve alt çubuğu çeker (`data-reorder-hide`).
 - **Bırakınca:** forma tek yazım yapılır. Kart kapalı olarak yerine oturur, 1,2 sn vurgulanır. Sıralamada Geri al toast'u yok (geri sürüklemek yeter).
 - **Ekran okuyucu:** yüzün hemen arkasında sr-only bir şerit var: "Yukarı taşı · Aşağı taşı · Öncekiyle grupla / Gruptan çıkar". Klavyeyle odaklanınca görünür olur. Çizgi `aria-hidden`.
-- **Canlı bölge:** düzenleyicide tek `aria-live="polite"` paragraf.
+- **Canlı bölge:** düzenleyicide tek `aria-live="polite"` paragraf. "Geri al" toast'u çıkan işlemlerde (silme, gruplama, gruptan çıkarma, cihaz değişimi, hazır düzen, toplu işlemler) cümleyi yalnız toast'un kendi canlı bölgesi okur, paragraf yazmaz (karar 17): hiçbir cümle iki kez okunmaz.
   - Taşıma: "Bench Press 3. sıraya taşındı" (klavyeyle her adımda da).
   - Gruplama ve çıkarma: "Squat ile süperset yapıldı", "Cable Row gruptan çıktı".
   - Kopyalama, silme ve seçim sayısı: toast metniyle aynı cümle.
@@ -237,7 +242,7 @@ Kural: sağda olumlu işlemler, solda sil ve dağıt. Bir tarafta tek işlem var
 - Toplam en fazla 30 blok ve 40 hareket. Sınıra gelince işlem pasifleşir ve nedeni gösterilir.
 
 ## 5. Seçim modu
-**Giriş:** "Hareketler" başlığındaki [Seç] (listede en az 2 kart varken). Açık kartlar ve açık kaydırma paneli kapanır, odak ilk kartın onay kutusuna gider.
+**Giriş:** "Hareketler" başlığındaki [Seç · Grupla] (listede en az 2 kart varken; adı seçimin ne işe yaradığını da söyler, karar 18). Açık kartlar ve açık kaydırma paneli kapanır, odak ilk kartın onay kutusuna gider.
 
 ```
 Hareketler                         [Tümünü seç]
@@ -294,6 +299,8 @@ Gruplamak, kopyalamak ya da silmek istediklerini seç.
 - **Saf yardımcılar** (`template-edit.ts`, `node --test` ile): `groupCheck` / `groupBlocks`, `canDuplicateBlocks` / `duplicateBlocks`, `removeBlocks`. Girdi kimliklerinin sırası önemsiz (liste sırası geçer), bilinmeyen kimlik yok sayılır, olmuyorsa aynı dizi döner. Tür ve dinlenme kuralı `appendGroup` ile aynıdır (`newGroupKind`).
 
 ## 6. Alt çubuk
+
+> **Bugün (kararlar 15, 16, 17):** alt çubuk yok. Kaydet "Hareketler" başlığında; başlık ekran dışındayken sağ altta yüzen kopyası: telefonda dock'un üstünde, masaüstünde sayfanın köşesinde (karar 17, `FloatingSaveButton` in `editor-save.tsx`). Dönüş başlığın üstündeki "‹" bağlantısında (`editor-back-link.tsx`). Aşağıdaki çubuk tasarımı tarih için duruyor; kaydedilmemiş değişiklikler bölümü geçerli.
 Her iki düzenleyicide (şablon, program günü) aynı çubuk. Sayfanın formuna aittir: `<Form>`'un son çocuğudur ve `sticky` durur. Kaydet formun submit düğmesidir; "+ Hareket ekle" ve seçim modu içeriğini BlockEditor bir bağlam üzerinden verir. Programda "+ Hareket ekle" seçili güne ekler (`aria-label="Hareket ekle: Gün A"`).
 
 ```
@@ -345,7 +352,8 @@ masaüstü (≥ md): içerik sütununun altında sticky, dock'un üstünde
 
 ## 8. Set düzenleme
 - **Stepper:** Base UI NumberField sarmalayıcısı, `src/components/ui/stepper.tsx`.
-  - Boyutlar: sm 32 (masaüstü), default 44, lg 56 (antrenman).
+  - Boyutlar: sm 32 (masaüstü), default 44, lg 56 (antrenman); düzenleyicinin `auto`su dokunmatikte kenarlığın içi 44 (düğme ve kutu 44×44). Ortadaki kutu bölmesinin tamamını kaplar; yazısı dokunmatikte 16 px (iOS yakınlaştırmaz).
+  - Enter formu göndermez (`keepLineEnter`; ad ve süre kutularında da).
   - Basılı tutunca tekrarlar: 400 ms sonra başlar, sonra 100 ms'de bir.
   - Ortadaki değer yazılabilir. `useCountDraft` sayesinde "1 → 10" yazarken setler silinmez.
 - **Değerler:**

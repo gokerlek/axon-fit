@@ -17,7 +17,8 @@ import { confirmLeave } from '@/components/unsaved-changes-guard';
 
 /**
  * Sağ üstteki kullanıcı menüsü: ayarlar ve çıkış burada (üst çubuk yok, SPEC §6).
- * Avatar GitHub profil resmi; yüklenmezse kişi ikonu.
+ * Avatar GitHub profil resmi; yüklenmezse kişi ikonu. Düğme 44 px (avatar 40 px), telefonda
+ * menü öğeleri de 44 px.
  */
 export function UserMenu({ login, appName }: { login: string; appName: string }) {
   function signOut() {
@@ -36,7 +37,7 @@ export function UserMenu({ login, appName }: { login: string; appName: string })
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Hesap menüsü"
-        className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+        className="inline-flex size-11 items-center justify-center rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
         <Avatar size="lg">
           <AvatarImage src={`https://github.com/${encodeURIComponent(login)}.png?size=80`} alt="" />
           <AvatarFallback>
@@ -53,13 +54,13 @@ export function UserMenu({ login, appName }: { login: string; appName: string })
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem render={<Link href="/dashboard/settings" />}>
+          <DropdownMenuItem className="touch:min-h-11" render={<Link href="/dashboard/settings" />}>
             <GearSix />
             Görünüm ayarları
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onClick={signOut}>
+        <DropdownMenuItem variant="destructive" className="touch:min-h-11" onClick={signOut}>
           <SignOut />
           Çıkış yap
         </DropdownMenuItem>

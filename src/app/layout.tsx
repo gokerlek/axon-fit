@@ -3,7 +3,7 @@ import { Geist_Mono, Outfit } from 'next/font/google';
 import { Providers } from '@/components/providers';
 import { readAppConfig } from '@/lib/config';
 import { RADIUS_OPTIONS } from '@/lib/schemas/config';
-import { readableOn } from '@/lib/color';
+import { brandStyle as accentStyle } from '@/lib/color';
 import { cn } from '@/lib/utils';
 import './globals.css';
 
@@ -15,12 +15,15 @@ const geistMono = Geist_Mono({ subsets: ['latin', 'latin-ext'], variable: '--fon
 export async function generateMetadata(): Promise<Metadata> {
   const config = await readAppConfig();
   return {
-    title: config.appName,
+    // Her sayfa kendi adını verir (`metadata.title`): sekme, geçmiş ve ekran okuyucunun geçiş
+    // duyurusu (Next yalnız `document.title` değişince duyurur) sayfayı ayırt eder.
+    title: { default: config.appName, template: `%s · ${config.appName}` },
     description: `${config.appName} — antrenman takibi`,
     applicationName: config.appName,
     appleWebApp: { capable: true, title: config.appName, statusBarStyle: 'black-translucent' },
-    // Logo yüklendiyse sekme ve telefon kısayol ikonu da ondan üretilir.
-    ...(config.logo ? { icons: { icon: '/api/brand/logo', apple: '/api/brand/logo' } } : {}),
+    // Logo yüklendiyse sekme ve telefon kısayol ikonu da ondan üretilir; yoksa markanın nabız
+    // çizgisi (`public/favicon.ico`).
+    icons: config.logo ? { icon: '/api/brand/logo', apple: '/api/brand/logo' } : { icon: '/favicon.ico' },
   };
 }
 
@@ -33,13 +36,11 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const config = await readAppConfig();
 
-  // PT'nin seçtiği ana renk temanın --primary değişkenini ezer; üzerindeki yazı rengi
-  // kontrasta göre hesaplanır (açık renkte koyu yazı, koyu renkte açık yazı).
+  // PT'nin seçtiği ana renk temanın --primary değişkenini ezer; üzerindeki yazı rengi ve yüzey
+  // üstünde okunan türevleri (--primary-text, --primary-strong) kontrasta göre hesaplanır.
   const brandStyle = {
     '--radius': RADIUS_OPTIONS[config.radius].value,
-    ...(config.accent
-      ? { '--primary': config.accent, '--primary-foreground': readableOn(config.accent) }
-      : {}),
+    ...(config.accent ? accentStyle(config.accent) : {}),
   } as React.CSSProperties;
 
   return (

@@ -1,209 +1,140 @@
 import 'server-only';
-import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
+import { revalidateTag, unstable_cache } from 'next/cache';
 import { cookies } from 'next/headers';
-import { jwtVerify, SignJWT } from 'jose';
-import { serverEnv } from './env';
+import { readClient } from './client-record';
+import { emailLoginEnabled, serverEnv } from './env';
+import { appRepo, GithubError } from './github/client';
+import { sleep } from './github/errors';
+import { readJson, writeJson } from './github/files';
+import { checkAppRepo, createAppRepo } from './github/repos';
+import * as core from './session-core';
+import type { AuthEnv, ClientSession, LoginCodeStore, OtpResult, PtSession, Session, SessionStore } from './session-core';
+
+export type { ClientSession, OtpResult, PtSession, Session };
 
 /**
- * Oturumlar ve giriş kodu — depolama YOK.
- *
- * Giriş kodu sunucuda saklanmaz: gönderilirken kodun özeti kısa ömürlü, imzalı, httpOnly
- * bir çerezde taşınır. Böylece sunucusuz ortamda durum tutmaya gerek kalmaz ve kodun
- * kendisi hiçbir yere yazılmaz. Oturum da aynı şekilde imzalı çerezdir (SPEC §5).
+ * Oturumlar ve yedek girişin kodu (SPEC §5) — Next'e ve GitHub'a bağlama. Kurallar ve akış
+ * `session-core.ts`'te (orada test edilir); burası yalnız çerezi, ortamı, saati ve GitHub'ı verir.
  */
 
-/**
- * PT ve danışan AYRI çerezde: aynı tarayıcıda (ör. PT bir sekmede danışan olarak denerken)
- * biri ötekinin oturumunu ezmez. PT'nin çerez adı eskisiyle aynı, açık oturumlar düşmesin.
- */
-const PT_COOKIE = 'pc_oturum';
-const CLIENT_COOKIE = 'pc_danisan';
-const OTP_COOKIE = 'pc_kod';
-const SESSION_DAYS = 30;
-const OTP_TTL_SECONDS = 300;
-export const OTP_MAX_ATTEMPTS = 3;
-export const OTP_LENGTH = 6;
+const LOGIN_CODE_PATH = 'data/login-code.json';
+const LOGIN_CODE_TAG = 'login-code';
 
 /**
- * PT oturumu iki yoldan açılabilir ve doğrulaması yola göre değişir:
- * - `github`: `subject` = GitHub kullanıcı adı, `GITHUB_OWNER` ile karşılaştırılır (asıl yol)
- * - `email`:  `subject` = e-posta adresi, `PT_EMAIL` ile karşılaştırılır (yedek yol)
+ * Kodun durumu Next'in veri önbelleğinden (sunucu örnekleri arasında ortak; yalnız süreç belleği
+ * Vercel'de yetmezdi). Her yazmada düşürülür; 60 sn üst sınır, düşürme bir yerde kaybolursa diye.
+ * Kimliksiz istek bu yüzden GitHub'ın saatlik sınırını tüketemez. Repo adı anahtarda: APP_REPO
+ * değişirse eski repo'nun durumu okunmaz.
  */
-export type PtSession = { role: 'pt'; via: 'github' | 'email'; subject: string };
-export type ClientSession = {
-  role: 'client';
-  clientId: string;
-  /**
-   * Danışan kaydındaki `access.version` ile eşleşmezse oturum geçersizdir (PT erişimi
-   * kapattı); bu kontrol kaydı okuyan `sessionClient` içinde yapılır.
-   */
-  accessVersion: number;
+const readLoginCodeCached = unstable_cache(
+  (repo: string) => readJson<unknown>(repo, LOGIN_CODE_PATH),
+  ['login-code'],
+  { tags: [LOGIN_CODE_TAG], revalidate: 60 },
+);
+
+/** Veri repo'su açık ya da fork ise sebebi; 5 dk önbellekte (yanlış kurulumda her istek repo'ya bakmasın). */
+const appRepoProblem = unstable_cache(
+  async (_repo: string): Promise<string | null> => {
+    try {
+      await checkAppRepo();
+      return null;
+    } catch (error) {
+      if (error instanceof GithubError && error.status === 409) return error.message;
+      throw error;
+    }
+  },
+  ['app-repo-problem'],
+  { revalidate: 300 },
+);
+
+const loginCode: LoginCodeStore = {
+  readCached: () => readLoginCodeCached(appRepo()),
+  readFresh: () => readJson<unknown>(appRepo(), LOGIN_CODE_PATH),
+  write: (state, sha, message) => writeJson(appRepo(), LOGIN_CODE_PATH, state, { sha, message }),
+  invalidate: () => revalidateTag(LOGIN_CODE_TAG, { expire: 0 }),
+  repoProblem: () => appRepoProblem(appRepo()),
+  ensureRepo: createAppRepo,
+  wait: sleep,
 };
 
-/** Danışan oturumunda yetki her zaman buradan okunur, adresteki kimlikten değil (SPEC §5). */
-export type Session = PtSession | ClientSession;
-
-function key(): Uint8Array {
-  return new TextEncoder().encode(serverEnv().authSecret);
+function authEnv(): AuthEnv {
+  const env = serverEnv();
+  return {
+    secret: env.authSecret,
+    owner: env.owner,
+    ptEmail: env.ptEmail,
+    emailLogin: emailLoginEnabled(),
+    secureCookies: process.env.NODE_ENV === 'production',
+  };
 }
 
-function digest(value: string): string {
-  return createHash('sha256').update(`${serverEnv().authSecret}:${value}`).digest('hex');
+async function readClientRecord(id: string) {
+  return (await readClient(id))?.client ?? null;
 }
 
-function equal(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
+async function requestStore(): Promise<SessionStore> {
+  const jar = await cookies();
+  return {
+    cookies: {
+      get: (name) => jar.get(name)?.value,
+      set: (name, value, options) => {
+        jar.set(name, value, options);
+      },
+      delete: (name) => {
+        jar.delete(name);
+      },
+    },
+    env: authEnv(),
+    now: () => new Date(),
+    readClient: readClientRecord,
+    loginCode,
+  };
 }
-
-async function sign(payload: Record<string, unknown>, seconds: number): Promise<string> {
-  return new SignJWT(payload)
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime(`${seconds}s`)
-    .sign(key());
-}
-
-async function verify<T>(token: string): Promise<T | null> {
-  try {
-    const { payload } = await jwtVerify(token, key());
-    return payload as T;
-  } catch {
-    return null;
-  }
-}
-
-// ---- oturum ----------------------------------------------------------------
-
-function cookieOf(role: Session['role']): string {
-  return role === 'pt' ? PT_COOKIE : CLIENT_COOKIE;
-}
-
-const cookieOptions = (seconds: number) => ({
-  httpOnly: true,
-  sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
-  path: '/',
-  maxAge: seconds,
-});
 
 /** Oturumu kendi rolünün çerezine yazar; diğer rolün oturumuna dokunmaz. */
 export async function createSession(session: Session): Promise<void> {
-  const store = await cookies();
-  const seconds = SESSION_DAYS * 24 * 60 * 60;
-  if (session.role === 'pt' && !store.get(CLIENT_COOKIE)) {
-    // Ayırmadan önce danışan oturumu PT çerezinde tutuluyordu. PT girerken o eski danışan
-    // oturumu kendi çerezine taşınır; yoksa aynı tarayıcıdaki danışan sekmesi bir kez düşerdi.
-    const legacy = store.get(PT_COOKIE)?.value;
-    const payload = legacy ? await verify<{ role?: unknown; exp?: number }>(legacy) : null;
-    if (legacy && payload?.role === 'client') {
-      const remaining = Math.max(1, (payload.exp ?? 0) - Math.floor(Date.now() / 1000));
-      store.set(CLIENT_COOKIE, legacy, cookieOptions(remaining));
-    }
-  }
-  store.set(cookieOf(session.role), await sign({ ...session }, seconds), cookieOptions(seconds));
-}
-
-async function payloadOf(name: string): Promise<(Record<string, unknown> & { role?: unknown }) | null> {
-  const token = (await cookies()).get(name)?.value;
-  if (!token) return null;
-  return verify<Record<string, unknown>>(token);
+  await core.createSession(await requestStore(), session);
 }
 
 /** PT oturumu (yalnız PT çerezinden). */
 export async function readPtSession(): Promise<PtSession | null> {
-  const payload = await payloadOf(PT_COOKIE);
-  if (!payload || payload.role !== 'pt' || typeof payload.subject !== 'string') return null;
-  const via = payload.via === 'email' ? 'email' : payload.via === 'github' ? 'github' : null;
-  if (!via) return null;
-  const env = serverEnv();
-  // Yetki, oturumun açıldığı yola göre doğrulanır: GitHub girişinde repoların sahibi,
-  // yedek e-posta yolunda PT_EMAIL. Ayarlar sonradan değişirse eski oturum geçersiz olur.
-  const expected = via === 'github' ? env.owner : env.ptEmail;
-  if (expected && payload.subject.toLowerCase() === expected.toLowerCase()) {
-    return { role: 'pt', via, subject: payload.subject };
-  }
-  return null;
+  return core.readPtSession(await requestStore());
 }
 
-/**
- * Danışan oturumu (yalnız danışan çerezinden). Çerezi ayırmadan önce danışan oturumu PT
- * çerezinde tutuluyordu; o eski çerez de okunur ki açık danışan oturumları düşmesin.
- */
+/** Danışan oturumu (yalnız danışan çerezinden; eski düzenin PT çerezindeki danışan yükü de). */
 export async function readClientSession(): Promise<ClientSession | null> {
-  for (const name of [CLIENT_COOKIE, PT_COOKIE]) {
-    const payload = await payloadOf(name);
-    if (
-      payload?.role === 'client' &&
-      typeof payload.clientId === 'string' &&
-      typeof payload.accessVersion === 'number'
-    ) {
-      return { role: 'client', clientId: payload.clientId, accessVersion: payload.accessVersion };
-    }
-  }
-  return null;
+  return core.readClientSession(await requestStore());
 }
 
-/** PT ya da danışan: ikisine de açık okuma uçları (ör. cihaz fotoğrafı, egzersiz listesi). */
+/** Oturumun hâlâ geçerli olduğu danışan kaydı ya da null; GitHub'a ulaşılamazsa fırlatır. */
+export async function sessionClient(session: ClientSession) {
+  return core.sessionClient({ readClient: readClientRecord }, session);
+}
+
+/** İki role açık okuma uçları: PT ya da kayıtla doğrulanmış danışan. Kayıt okunamazsa fırlatır. */
 export async function readAnySession(): Promise<Session | null> {
-  return (await readPtSession()) ?? (await readClientSession());
+  return core.readAnySession(await requestStore());
 }
 
 /** Yalnız o rolün oturumunu kapatır. */
 export async function endSession(role: Session['role']): Promise<void> {
-  const store = await cookies();
-  store.delete(cookieOf(role));
-  // Eski düzende PT çerezinde kalmış danışan oturumu da temizlensin.
-  if (role === 'client' && (await payloadOf(PT_COOKIE))?.role === 'client') store.delete(PT_COOKIE);
+  await core.endSession(await requestStore(), role);
 }
 
-// ---- giriş kodu ------------------------------------------------------------
-
-export function generateOtp(): string {
-  return String(randomInt(0, 10 ** OTP_LENGTH)).padStart(OTP_LENGTH, '0');
+/** Kod isteğinin yanıttan önceki kısmı: her adrese aynı çerez. */
+export async function startOtpChallenge(email: string): Promise<void> {
+  await core.startOtpChallenge(await requestStore(), email);
 }
 
-export async function issueOtpChallenge(email: string, code: string): Promise<void> {
-  const token = await sign({ e: digest(email), c: digest(code), a: 0 }, OTP_TTL_SECONDS);
-  (await cookies()).set(OTP_COOKIE, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: OTP_TTL_SECONDS,
-  });
+/**
+ * Kod isteğinin yanıttan SONRAKİ kısmı (`after`): çereze dokunmaz. Kod üretildiyse döner (gönderimi
+ * çağıran yapar); yönetici adresi değilse ya da oran sınırındaysa null; repo sorunluysa fırlatır.
+ */
+export async function issueLoginCode(email: string): Promise<string | null> {
+  return core.issueLoginCode({ env: authEnv(), now: () => new Date(), loginCode }, email);
 }
 
-export type OtpResult = { ok: true; email: string } | { ok: false; reason: 'expired' | 'invalid' | 'too_many' };
-
+/** Kodu dener; doğruysa kod kullanılmış olur ve çerez silinir. GitHub'a ulaşılamazsa fırlatır. */
 export async function consumeOtp(code: string, email: string): Promise<OtpResult> {
-  const store = await cookies();
-  const token = store.get(OTP_COOKIE)?.value;
-  if (!token) return { ok: false, reason: 'expired' };
-
-  const payload = await verify<{ e: string; c: string; a: number; exp: number }>(token);
-  if (!payload) return { ok: false, reason: 'expired' };
-  if (payload.a >= OTP_MAX_ATTEMPTS) {
-    store.delete(OTP_COOKIE);
-    return { ok: false, reason: 'too_many' };
-  }
-  if (!equal(payload.e, digest(email))) return { ok: false, reason: 'invalid' };
-
-  if (!equal(payload.c, digest(code))) {
-    // Deneme sayacı çerezde taşınır; kalan süre korunur.
-    const remaining = Math.max(1, payload.exp - Math.floor(Date.now() / 1000));
-    const next = await sign({ e: payload.e, c: payload.c, a: payload.a + 1 }, remaining);
-    store.set(OTP_COOKIE, next, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: remaining,
-    });
-    return { ok: false, reason: 'invalid' };
-  }
-
-  store.delete(OTP_COOKIE);
-  return { ok: true, email };
+  return core.consumeOtp(await requestStore(), code, email);
 }

@@ -10,23 +10,16 @@ import {
   type BodyMuscle,
   type MuscleRole,
 } from '@/lib/muscles';
-import { cn } from '@/lib/utils';
-import { MuscleMap } from './muscle-map';
+import { MuscleMap, MuscleSwatch } from './muscle-map';
 
 type ExerciseMuscleMapProps = Pick<Exercise, 'primaryMuscles' | 'secondaryMuscles' | 'stabilizerMuscles'> & {
   bodyClassName?: string;
 };
 
-/** Açıklama kutusundaki renk noktası: haritadaki tonla aynı. */
-const DOT: Record<MuscleRole, string> = {
-  primary: 'bg-primary',
-  secondary: 'bg-primary/60',
-  stabilizer: 'bg-primary/35',
-};
-
 /**
- * Bir egzersizin çalıştırdığı kaslar: ön ve arka yan yana; hedef tam renk, yardımcı
- * orta, dengeleyici açık ton. Yalnız gösterim; tıklanmaz.
+ * Bir egzersizin çalıştırdığı kaslar: ön ve arka yan yana; hedef dolu, yardımcı çizgili,
+ * dengeleyici noktalı (renk de koyudan açığa). Yalnız gösterim; tıklanmaz. Açıklamadaki
+ * örnekler haritadaki dolgunun aynısı.
  */
 export function ExerciseMuscleMap({ primaryMuscles, secondaryMuscles, stabilizerMuscles, bodyClassName }: ExerciseMuscleMapProps) {
   const exercise = { primaryMuscles, secondaryMuscles, stabilizerMuscles };
@@ -57,7 +50,7 @@ export function ExerciseMuscleMap({ primaryMuscles, secondaryMuscles, stabilizer
         {(['primary', 'secondary', 'stabilizer'] as const).map((role) =>
           lists[role].length > 0 ? (
             <div key={role} className="flex items-baseline gap-2">
-              <span className={cn('size-2.5 shrink-0 rounded-full', DOT[role])} aria-hidden />
+              <MuscleSwatch role={role} className="translate-y-0.5 self-start" />
               <dt className="text-muted-foreground">{ROLE_LABELS[role]}</dt>
               <dd>{summarizeMuscles(lists[role]).join(', ')}</dd>
             </div>

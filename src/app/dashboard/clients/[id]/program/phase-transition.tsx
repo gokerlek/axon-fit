@@ -30,6 +30,7 @@ export function PhaseTransition({
   description,
   next,
   revision,
+  createdAt,
 }: {
   clientId: string;
   phaseName: string;
@@ -37,6 +38,8 @@ export function PhaseTransition({
   description: string;
   next: { id: string; name: string };
   revision: number;
+  /** Programın oluşturulma anı: silinip yeniden oluşturulan program (revision yine 1) da 412 verir. */
+  createdAt: string;
 }) {
   const router = useRouter();
 
@@ -44,7 +47,7 @@ export function PhaseTransition({
     fn: () =>
       fetchJson<{ revision: number }>(`/api/clients/${clientId}/program/phase`, {
         method: 'POST',
-        body: JSON.stringify({ phaseId: next.id, baseRevision: revision }),
+        body: JSON.stringify({ phaseId: next.id, baseRevision: revision, baseCreatedAt: createdAt }),
       }),
     notify: { success: `'${next.name}' evresine geçildi.` },
     onSuccess: () => router.refresh(),

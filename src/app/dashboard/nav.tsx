@@ -11,12 +11,13 @@ type NavItem = Omit<DockEntry, 'active'> & {
 };
 
 const ITEMS: NavItem[] = [
-  { href: '/dashboard', label: 'Genel bakış', icon: <SquaresFour /> },
+  { href: '/dashboard', label: 'Genel bakış', shortLabel: 'Genel', icon: <SquaresFour /> },
   { href: '/dashboard/clients', label: 'Danışanlar', icon: <UsersThree /> },
-  // Şablonlar, egzersizler ve cihazlar tek bölüm; içinde sekmeler (training-tabs.tsx). Giriş ilk sekme.
+  // Şablonlar, egzersizler, cihazlar ve aparatlar tek bölüm: başvuru kütüphanesi, içinde sekmeler
+  // (training-tabs.tsx). Giriş ilk sekme. "Antrenman" yalnız yapılan iş (seans) için kullanılır.
   {
     href: '/dashboard/templates',
-    label: 'Antrenman',
+    label: 'Kütüphane',
     icon: <Barbell />,
     sections: TRAINING_SECTIONS.map((section) => section.href),
   },
@@ -32,7 +33,7 @@ function isActive(pathname: string, item: NavItem): boolean {
   return (item.sections ?? [item.href]).some((href) => matches(pathname, href));
 }
 
-/** PT gezinmesi: masaüstünde büyüyen dock, telefonda aynı dock alt çubuk görevi görür. */
+/** PT gezinmesi: masaüstünde büyüyen dock, telefonda aynı dock etiketli alt çubuk görevi görür. */
 export function DashboardDock() {
   const pathname = usePathname();
   return (

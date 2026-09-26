@@ -51,12 +51,22 @@ const LEGACY_IDS: Record<string, string> = {
   ankle_strap: 'ayak-bilekligi',
 };
 
-/** Ada ya da eski kimliğe göre havuz kimliği: "V bar (üçgen)" → "v-bar-ucgen". */
+/**
+ * Okurken çevrilen eski kimlikler: yeni aparata verilmez. `rope` geçerli bir kimlik biçiminde;
+ * PT'nin "Rope" adlı aparatı bu kimliği alsaydı her okumada Halat'a çevrilirdi.
+ */
+export const LEGACY_ATTACHMENT_IDS: readonly string[] = Object.keys(LEGACY_IDS);
+
+/**
+ * Ada ya da eski kimliğe göre havuz kimliği: "V bar (üçgen)" → "v-bar-ucgen". Zaten geçerli
+ * bir kimlik olduğu gibi döner: 40 karakterlik ad çakışınca oluşan `…-siy-2` kırpılıp ilk
+ * aparata (`…-siy`) bağlanmasın. Çeviri yalnız eski sabit kimliğe ve ada uygulanır.
+ */
 export function attachmentIdOf(value: string): string {
-  const legacy = LEGACY_IDS[value];
-  if (legacy) return legacy;
+  if (Object.hasOwn(LEGACY_IDS, value)) return LEGACY_IDS[value] as string;
+  if (v.safeParse(attachmentIdSchema, value).success) return value;
   const harfler: Record<string, string> = { ı: 'i', ğ: 'g', ü: 'u', ş: 's', ö: 'o', ç: 'c', â: 'a' };
-  return (
+  const slug =
     value
       .toLowerCase()
       .replace(/[ığüşöçâ]/g, (ch) => harfler[ch] ?? ch)
@@ -64,13 +74,14 @@ export function attachmentIdOf(value: string): string {
       .replace(/[̀-ͯ]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
-      .slice(0, 40) || 'aparat'
-  );
+      .slice(0, 40) || 'aparat';
+  // Kimlik en az iki karakter (`attachmentIdSchema`): tek harf sayıyla uzar, "V." → "v-1" (`slugify` gibi).
+  return slug.length < 2 ? `${slug}-1` : slug;
 }
 
 /**
  * Eski kayıtlarda aparat cihazın içinde ad ya da `{ name, image }` olarak tutuluyordu;
- * artık havuzdaki kimliktir. Fotoğrafı havuzdaki aparat taşır.
+ * artık havuzdaki kimliktir. Fotoğrafı havuzdaki aparat taşır. Güncel kimlik değişmeden geçer.
  */
 export function attachmentRefOf(value: unknown): string | null {
   if (typeof value === 'string') return attachmentIdOf(value);

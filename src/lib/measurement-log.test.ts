@@ -1,5 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import * as v from 'valibot';
 import {
   addMeasurements,
   checkValues,
@@ -16,7 +17,7 @@ import {
 } from './measurement-log.ts';
 import { MEASUREMENT_IDS } from './measurements.ts';
 import { HEALTH_CONSENT_VERSION, type Client, type HealthField } from './schemas/client.ts';
-import type { MeasurementEntry } from './schemas/health.ts';
+import { healthRecordSchema, type MeasurementEntry } from './schemas/health.ts';
 
 describe('form alanları', () => {
   test('iki taraflı ölçümde sol ve sağ ayrı alan, diğerlerinde tek alan', () => {
@@ -96,6 +97,28 @@ describe('sunucu denetimi', () => {
     assert.equal(isCalendarDate('2026-02-30'), false);
     assert.equal(isCalendarDate('2026-9-1'), false);
     assert.equal(isCalendarDate('../health'), false);
+  });
+});
+
+describe('kayıt şeması', () => {
+  const kayit = {
+    conditions: [],
+    surgeryDate: '2026-08-01',
+    checkIns: [{ date: '2026-09-01', redFlag: 'none' }],
+    measurements: [{ date: '2024-02-29', id: 'waist_girth', value: 82 }],
+    movementScreens: [{ date: '2026-09-01', entries: { deep_squat: { score: 2 } } }],
+  };
+
+  test('takvimde olmayan gün kaydı bozuk sayar: sayfada sorun görünür, üzerine yazılmaz', () => {
+    assert.equal(v.safeParse(healthRecordSchema, kayit).success, true);
+    // Elle düzenlenmiş dosyada 30 Şubat: "2 Mart" diye listelenip düzenlenemez ve silinemez olmasın.
+    const bozuklar = [
+      { ...kayit, measurements: [{ date: '2026-02-30', id: 'waist_girth', value: 82 }] },
+      { ...kayit, checkIns: [{ date: '2026-04-31' }] },
+      { ...kayit, movementScreens: [{ date: '2026-02-29', entries: {} }] },
+      { ...kayit, surgeryDate: '2026-06-31' },
+    ];
+    for (const bozuk of bozuklar) assert.equal(v.safeParse(healthRecordSchema, bozuk).success, false, JSON.stringify(bozuk));
   });
 });
 

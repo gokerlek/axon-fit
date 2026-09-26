@@ -1,4 +1,6 @@
+import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
+import { EditorBackLink } from '@/components/block-editor/editor-back-link';
 import { SectionHeader } from '@/components/section-header';
 import { loadClient } from '@/lib/clients';
 import { readAppConfig } from '@/lib/config';
@@ -12,7 +14,13 @@ import { InvalidProgramAlert } from '../invalid-program-alert';
 import { ProgramActions } from '../program-actions';
 import { ProgramForm } from '../program-form';
 
-/** Program düzenleme — evreler, günler, hareketler; yıkıcı eylem ("Programı sil") başlıkta. */
+export const metadata: Metadata = { title: 'Programı düzenle' };
+
+/**
+ * Program düzenleme — evreler, günler, hareketler. Şablon düzenleyicisiyle aynı desen: başlığın üstünde
+ * "‹ Program", Kaydet ("Programı kaydet") "Hareketler" başlığında, yıkıcı eylem ("Programı sil") başlıkta
+ * ikincil görünümde.
+ */
 export default async function EditProgramPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePt();
   const { id } = await params;
@@ -28,11 +36,10 @@ export default async function EditProgramPage({ params }: { params: Promise<{ id
   if (!file.program) {
     return (
       <div className="flex flex-col gap-6">
-        <SectionHeader
-          back={{ href: `/dashboard/clients/${id}/program`, label: 'Program' }}
-          title="Programı düzenle"
-          actions={<ProgramActions clientId={id} />}
-        />
+        <div className="flex flex-col gap-2">
+          <EditorBackLink href={`/dashboard/clients/${id}/program`} label="Program" />
+          <SectionHeader title="Programı düzenle" actions={<ProgramActions clientId={id} />} />
+        </div>
         <InvalidProgramAlert problem={file.problem} />
       </div>
     );
@@ -51,16 +58,15 @@ export default async function EditProgramPage({ params }: { params: Promise<{ id
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeader
-        back={{ href: `/dashboard/clients/${id}/program`, label: 'Program' }}
-        title="Programı düzenle"
-        actions={<ProgramActions clientId={id} />}
-      />
+      <div className="flex flex-col gap-2">
+        <EditorBackLink href={`/dashboard/clients/${id}/program`} label="Program" />
+        <SectionHeader title="Programı düzenle" actions={<ProgramActions clientId={id} />} />
+      </div>
       <ProgramForm
         clientId={id}
         mode="edit"
         initial={{ phased: program.phased, currentPhaseId: program.current.phaseId, phases: program.phases }}
-        baseRevision={program.revision}
+        base={{ revision: program.revision, createdAt: program.createdAt }}
         stored={{ current: program.current, rotation: program.rotation }}
         templates={templates}
         exercises={pickerExercises(exercises)}

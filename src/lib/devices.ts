@@ -1,9 +1,8 @@
 import 'server-only';
-import * as v from 'valibot';
 import { DEVICE_LIBRARY } from '@/data/device-library';
-import { appRepo } from './github/client';
-import { readJson, writeJson } from './github/files';
-import { customDevicesSchema, type Device } from './schemas/device';
+import { appRepoFiles } from './app-repo-files';
+import { DEVICES, readCatalog, type CatalogFile } from './catalog-store';
+import type { Device } from './schemas/device';
 
 /**
  * Cihazlar: hazır katalog (pakette) + PT'nin eklediği ya da değiştirdiği cihazlar (repo'da).
@@ -11,25 +10,26 @@ import { customDevicesSchema, type Device } from './schemas/device';
  * Egzersizlerdeki gibi sunucuda önbellek yok: kaydın ardından açılan sayfa yeni kaydı görür.
  */
 
-export const CUSTOM_DEVICES_PATH = 'data/devices.json';
+export const CUSTOM_DEVICES_PATH = DEVICES.path;
 
 export type DeviceWithSource = Device & { source: 'library' | 'custom' };
 export type DeviceDetail = DeviceWithSource & { overridesLibrary: boolean };
 
-export async function readCustomDevices(): Promise<{ items: Device[]; sha: string | null }> {
-  const stored = await readJson<unknown>(appRepo(), CUSTOM_DEVICES_PATH);
-  if (!stored) return { items: [], sha: null };
-  const parsed = v.safeParse(customDevicesSchema, stored.content);
-  // Bozuk dosya uygulamayı düşürmez: hazır katalogla devam edilir.
-  return { items: parsed.success ? parsed.output : [], sha: stored.sha };
+/** PT'nin dosyası: okunabilen cihazlar, okunamayanlar (sayısı ve ham hâli) ve `sha`. */
+export type CustomDevices = CatalogFile<Device>;
+
+/**
+ * Taze okuma. Öğe öğe doğrulanır (`src/lib/stored-list.ts`): şemaya uymayan kayıt (ya da aynı
+ * kimliğin ikinci kaydı) listede görünmez ama dosyadan da düşmez. Dosya liste değilse hata verir.
+ * Yazma uçların çekirdeğinde (`src/lib/catalog-actions.ts`).
+ */
+export async function readCustomDevices(): Promise<CustomDevices> {
+  return readCatalog(appRepoFiles(), DEVICES);
 }
 
-export async function writeCustomDevices(items: Device[], message: string, sha: string | null): Promise<void> {
-  await writeJson(appRepo(), CUSTOM_DEVICES_PATH, items, { sha: sha ?? undefined, message });
-}
-
-export async function listDevices(): Promise<DeviceWithSource[]> {
-  const { items } = await readCustomDevices();
+/** Hazır katalog + PT'nin cihazları. Dosya zaten okunduysa (`custom`) yeniden okunmaz. */
+export async function listDevices(custom?: Pick<CustomDevices, 'items'>): Promise<DeviceWithSource[]> {
+  const { items } = custom ?? (await readCustomDevices());
   const customIds = new Set(items.map((item) => item.id));
   return [
     ...items.map((item) => ({ ...item, source: 'custom' as const })),

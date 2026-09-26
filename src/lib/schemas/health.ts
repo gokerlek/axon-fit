@@ -1,7 +1,8 @@
 import * as v from 'valibot';
-import { IRRITABILITY_LEVELS, RED_FLAG_CHECKS, SYMPTOM_DIRECTIONS, TOLERANCE_MODES } from '@/lib/check-in';
-import { parseCondition } from '@/lib/conditions';
-import { FMS_PATTERNS, MEASUREMENT_IDS, type FmsPattern } from '@/lib/measurements';
+import { IRRITABILITY_LEVELS, RED_FLAG_CHECKS, SYMPTOM_DIRECTIONS, TOLERANCE_MODES } from '../check-in.ts';
+import { parseCondition } from '../conditions.ts';
+import { isCalendarDate } from '../measurement-log.ts';
+import { FMS_PATTERNS, MEASUREMENT_IDS, type FmsPattern } from '../measurements.ts';
 
 /**
  * Danışanın sağlık kaydı — `client-<id>` repo'sunda `health.json` (SPEC §4).
@@ -12,7 +13,16 @@ import { FMS_PATTERNS, MEASUREMENT_IDS, type FmsPattern } from '@/lib/measuremen
  * Yük toleransı motoru (`src/lib/check-in.ts`) ikisini okurken birleştirir.
  */
 
-const isoDate = v.pipe(v.string(), v.isoDate('Tarih YYYY-AA-GG olmalı.'));
+/**
+ * Takvim günü: `isoDate` biçime bakar, ayın gün sayısına bakmaz (2026-02-30'u kabul eder). Böyle
+ * bir gün sayfada 2 Mart diye görünür ama düzenleme ve silme uçları (`isCalendarDate`) onu
+ * bulamaz: dosya bozuk sayılır, üzerine yazılmaz, sayfada sorun olarak görünür.
+ */
+const isoDate = v.pipe(
+  v.string(),
+  v.isoDate('Tarih YYYY-AA-GG olmalı.'),
+  v.check(isCalendarDate, 'Takvimde olmayan tarih.'),
+);
 const nprs = v.pipe(v.number('Sayı gir.'), v.integer('Tam sayı gir.'), v.minValue(0, 'En az 0.'), v.maxValue(10, 'En fazla 10.'));
 const minutes = v.pipe(v.number('Sayı gir.'), v.minValue(0, 'Negatif olamaz.'), v.maxValue(600, 'En fazla 600 dakika.'));
 

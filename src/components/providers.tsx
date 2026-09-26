@@ -21,6 +21,17 @@ import { GlobalLoading } from './global-loading';
  */
 const ICONS = { weight: 'fill' } as const;
 
+/**
+ * next-themes temayı ilk boyamadan önce koyan satır içi bir `<script>` çizer. Sunucu HTML'inde
+ * çalışır; istemcide yeniden çizilirse çalışmaz ve React 19 "Encountered a script tag" hatası verir.
+ * Bu, sunucu çizimi kabukta düştüğünde olur: Next hata kabuğu (`<html id="__next_error__">`)
+ * gönderip bütün uygulamayı istemcide sıfırdan çizer (ör. Suspense sınırı olmayan bir sayfada
+ * `notFound()`; panelde bunu `loading.tsx` sınırları önler). İstemcide betik bir veri bloğudur
+ * (`application/json`): hiç çalıştırılmaz, uyarı çıkmaz. Hidrasyonda türün farkı
+ * `suppressHydrationWarning` ile (kütüphane koyar) sessizdir; sunucunun betiği yerinde kalır.
+ */
+const THEME_SCRIPT = { type: typeof window === 'undefined' ? 'text/javascript' : 'application/json' };
+
 export function Providers({
   children,
   defaultTheme,
@@ -31,7 +42,12 @@ export function Providers({
   const [queryClient] = useState(makeQueryClient);
 
   return (
-    <ThemeProvider attribute="class" defaultTheme={defaultTheme} enableSystem disableTransitionOnChange>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme={defaultTheme}
+      enableSystem
+      disableTransitionOnChange
+      scriptProps={THEME_SCRIPT}>
       <QueryClientProvider client={queryClient}>
         <IconContext.Provider value={ICONS}>
           <MotionConfig reducedMotion="user">

@@ -198,12 +198,13 @@ export function assessTolerance({
   return { action: reasons[0]?.action ?? 'progress', reasons };
 }
 
-/** Artış sayılan öneriler: "hold" bunları geri çeker. */
-const RAISES = new Set<Suggestion['reason']>(['increase', 'add_rep', 'add_time', 'harder_variant']);
+/** Artış sayılan öneriler: "hold" bunları geri çeker (gerekçesi ne olursa olsun son ağırlıktan ağır öneriyle birlikte). */
+const RAISES = new Set<Suggestion['reason']>(['increase', 'range_increase', 'add_rep', 'add_time', 'harder_variant', 'device_max']);
 
 /**
  * İlerleme önerisini tolerans kararına göre düzeltir. `last` son yapılan plandır
  * (ağırlık ve hedef tekrar/süre); azaltma ondan hesaplanır, artırılmış öneriden değil.
+ * Azaltılacak yer yoksa (en hafif ayar, ağırlıksız hareket) gerekçe bunu söyler.
  */
 export function applyTolerance(
   suggestion: Suggestion,
@@ -213,10 +214,12 @@ export function applyTolerance(
   switch (tolerance.action) {
     case 'stop':
       return { ...last, reason: 'paused' };
-    case 'reduce':
-      return { weightKg: deloadWeight(last.weightKg, spec), target: last.target, reason: 'pain_reduce' };
+    case 'reduce': {
+      const weightKg = deloadWeight(last.weightKg, spec);
+      return { weightKg, target: last.target, reason: weightKg < last.weightKg ? 'pain_reduce' : 'pain_reduce_unavailable' };
+    }
     case 'hold':
-      return RAISES.has(suggestion.reason) ? { ...last, reason: 'pain_hold' } : suggestion;
+      return RAISES.has(suggestion.reason) || suggestion.weightKg > last.weightKg ? { ...last, reason: 'pain_hold' } : suggestion;
     default:
       return suggestion;
   }
@@ -238,7 +241,9 @@ function weekStart(date: string): string {
 
 /**
  * Haftalık iç yük ve önceki haftaya göre değişim (%). Eşik yok: yorum kişiye
- * özgüdür, popülasyon eşiği dayatılmaz.
+ * özgüdür, popülasyon eşiği dayatılmaz. İlk ve son hafta arasındaki seanssız haftalar 0 yükle
+ * listede durur: değişim takvimdeki önceki haftaya göredir, verisi olan son haftaya göre değil
+ * (aradan dönüş "%0" görünmesin). Önceki hafta 0 ise değişim yok (`null`).
  */
 export function weeklyLoads(checkIns: readonly CheckIn[]): { week: string; load: number; changePercent: number | null }[] {
   const totals = new Map<string, number>();
@@ -248,7 +253,15 @@ export function weeklyLoads(checkIns: readonly CheckIn[]): { week: string; load:
     const week = weekStart(item.date);
     totals.set(week, (totals.get(week) ?? 0) + load);
   }
-  const weeks = [...totals].sort(([a], [b]) => a.localeCompare(b));
+  const starts = [...totals.keys()].sort((a, b) => a.localeCompare(b));
+  const first = starts[0];
+  const last = starts.at(-1);
+  if (first === undefined || last === undefined) return [];
+  const weeks: [string, number][] = [];
+  for (let day = dayIndex(first); day <= dayIndex(last); day += 7) {
+    const week = new Date(day * 86_400_000).toISOString().slice(0, 10);
+    weeks.push([week, totals.get(week) ?? 0]);
+  }
   return weeks.map(([week, load], index) => {
     const previous = weeks[index - 1]?.[1];
     return {

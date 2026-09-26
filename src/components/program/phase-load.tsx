@@ -5,6 +5,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatNumber } from '@/lib/format';
 
 /**
+ * Kas adları açıklama listesinde kırpılmaz, satıra kayar ("Ön kol bükücü…" değil): harita bileşeni
+ * adı tek satıra sığdırır, dar sütunda (masaüstünde yarım kart) uzun ad kesilirdi.
+ */
+const WRAP_NAMES = '[&_dt]:whitespace-normal [&_dt]:[overflow-wrap:anywhere]';
+
+/**
  * Evrenin (evresizde programın) planlanan kas yükü. Sıklık varsa iki görünüm: haftalık
  * (bir tur × sıklık ÷ gün sayısı; varsayılan) ve bir tur (bütün günler birer kez).
  * Programdan hesaplanır; gerçekleşen yük set kayıtlarından ayrıca gelecek (Faz 4c).
@@ -27,7 +33,7 @@ export function PhaseLoad({
   const cycleCaption = `Bir tur: ${formatNumber(dayCount)} gün birer kez; kas başına çalışma seti.`;
   if (!weekly || factor === null || daysPerWeek === undefined) {
     return (
-      <div className="flex flex-col gap-2">
+      <div className={`flex flex-col gap-2 ${WRAP_NAMES}`}>
         <TemplateMuscleMap variant="full" bodyClassName="h-56" load={cycle} label={`${label}: bir tur`} />
         <p className="text-center text-xs text-muted-foreground">
           {cycleCaption} Haftalık görünüm için &apos;haftada kaç gün&apos; ekle.
@@ -36,7 +42,7 @@ export function PhaseLoad({
     );
   }
   return (
-    <Tabs defaultValue="weekly">
+    <Tabs defaultValue="weekly" className={WRAP_NAMES}>
       <TabsList variant="line" className="w-full justify-start">
         <TabsTrigger value="weekly" className="flex-none">
           Haftalık (plan)

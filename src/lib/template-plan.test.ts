@@ -628,6 +628,36 @@ describe('sunucuda denetim ve sadeleştirme', () => {
     assert.equal('deviceId' in (blocks[0]?.rows[0] ?? {}), false);
   });
 
+  test('programda (storedRows) egzersizinkine eşit kural ve cihaz yalnız kayıttaki aynı satırda aynen duruyorsa kalır', () => {
+    const squatRow = row('squat', { rule: { scheme: 'double', targetRir: 2 } });
+    const pressRow = row('leg-press', { deviceId: 'leg-press-a' });
+    const body = { blocks: [block('single', [squatRow]), block('single', [pressRow])] };
+
+    // Danışana özel seçim kayıtta aynen duruyor (egzersiz sonradan ona eşitlendi): kalır.
+    const kept = normalizeTemplate(body, ctx, {
+      storedRows: new Map([
+        [squatRow.id, { rule: { scheme: 'double', targetRir: 2 } }],
+        [pressRow.id, { deviceId: 'leg-press-a' }],
+      ]),
+    });
+    assert.deepEqual(kept.errors, {});
+    assert.deepEqual(kept.blocks[0]?.rows[0]?.rule, { scheme: 'double', targetRir: 2 });
+    assert.equal(kept.blocks[1]?.rows[0]?.deviceId, 'leg-press-a');
+
+    // Yeni gelen eşit değer (kayıtta yok ya da başka değer; seçicide varsayılanı yeniden seçmek): şablondaki gibi düşer.
+    for (const storedRows of [
+      new Map(),
+      new Map([
+        [squatRow.id, { rule: { scheme: 'linear' as const, targetRir: 1 } }],
+        [pressRow.id, { deviceId: 'leg-press-b' }],
+      ]),
+    ]) {
+      const fresh = normalizeTemplate(body, ctx, { storedRows });
+      assert.equal('rule' in (fresh.blocks[0]?.rows[0] ?? {}), false);
+      assert.equal('deviceId' in (fresh.blocks[1]?.rows[0] ?? {}), false);
+    }
+  });
+
   test('not kırpılır, boşsa atılır', () => {
     const { blocks } = normalizeTemplate(
       { blocks: [block('superset', [row('curl', { note: '  Yavaş indir  ' }), row('bench', { note: '   ' })])] },

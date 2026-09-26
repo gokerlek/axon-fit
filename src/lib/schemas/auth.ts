@@ -1,5 +1,6 @@
 import * as v from 'valibot';
-import { INVITE_CODE_LENGTH } from '../client-status';
+import { INVITE_CODE_LENGTH, PASSWORD_MAX_LENGTH } from '../client-status.ts';
+import { passwordProblem } from '../password-rules.ts';
 
 /**
  * Giriş şemaları — TEK kaynak.
@@ -44,3 +45,32 @@ export const joinSchema = v.object({
   ),
 });
 export type JoinInput = v.InferOutput<typeof joinSchema>;
+
+/**
+ * Danışan şifresi (`password-rules.ts`: 8–128 karakter, yaygın ya da sıralı değil). Kırpılmaz: boşluk
+ * da şifrenin parçası. Sunucu (`setClientPassword`) aynı kuralı yeniden uygular.
+ */
+export const passwordSchema = v.pipe(
+  v.string('Şifreni yaz.'),
+  v.rawCheck(({ dataset, addIssue }) => {
+    if (!dataset.typed) return;
+    const problem = passwordProblem(dataset.value);
+    if (problem) addIssue({ message: problem });
+  }),
+);
+
+/** Form ve uç: şifre belirleme (kare koddan sonra ya da `/me`'deki kart). Tekrarı aynı olmalı. */
+export const setPasswordSchema = v.pipe(
+  v.object({ password: passwordSchema, confirm: v.string() }),
+  v.forward(
+    v.partialCheck([['password'], ['confirm']], (input) => input.password === input.confirm, 'Şifreler aynı değil.'),
+    ['confirm'],
+  ),
+);
+export type SetPasswordInput = v.InferOutput<typeof setPasswordSchema>;
+
+/** Form: şifreyle giriş. Uzunluk burada denetlenmez: yanlış şifre de "yanlış" yanıtını alsın. */
+export const passwordLoginSchema = v.object({
+  password: v.pipe(v.string(), v.minLength(1, 'Şifreni yaz.'), v.maxLength(PASSWORD_MAX_LENGTH, 'Şifre çok uzun.')),
+});
+export type PasswordLoginInput = v.InferOutput<typeof passwordLoginSchema>;

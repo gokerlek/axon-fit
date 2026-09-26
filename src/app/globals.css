@@ -35,6 +35,17 @@
     --color-secondary: var(--secondary);
     --color-primary-foreground: var(--primary-foreground);
     --color-primary: var(--primary);
+    --color-primary-text: var(--primary-text);
+    --color-primary-strong: var(--primary-strong);
+    --color-primary-strong-foreground: var(--primary-strong-foreground);
+    --color-destructive-text: var(--destructive-text);
+    --color-success: var(--success);
+    /* Yazı olarak kullanılan vurgu ve yıkıcı renk okunur tondan gelir: Tailwind v4'te `text-*`
+       önce `--text-color-*`'e bakar. Böylece `text-primary` / `text-destructive` (bütün
+       varyantlarıyla) `--primary-text` / `--destructive-text` olur; `bg-`, `border-`, `ring-`
+       markanın ve yıkıcı rengin kendisi kalır (düğme, kaydırma paneli zemini değişmez). */
+    --text-color-primary: var(--primary-text);
+    --text-color-destructive: var(--destructive-text);
     --color-popover-foreground: var(--popover-foreground);
     --color-popover: var(--popover);
     --color-card-foreground: var(--card-foreground);
@@ -57,18 +68,21 @@
     --card-foreground: oklch(0.145 0 0);
     --popover: oklch(1 0 0);
     --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.841 0.238 128.85);
-    --primary-foreground: oklch(0.405 0.101 131.063);
     --secondary: oklch(0.967 0.001 286.375);
     --secondary-foreground: oklch(0.21 0.006 285.885);
     --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
+    /* 0.556 muted ve tonlu zeminlerde 4,3:1'di; 0.52 hepsinde ≥4,5:1 (color.test.ts). */
+    --muted-foreground: oklch(0.52 0 0);
     --accent: oklch(0.97 0 0);
     --accent-foreground: oklch(0.205 0 0);
     --destructive: oklch(0.577 0.245 27.325);
+    /* Yazı olarak yıkıcı renk (`text-destructive`): yüzeylerde ve `bg-destructive/10`, `/20` üstünde ≥4,5:1. */
+    --destructive-text: oklch(0.505 0.207 29.23);
+    --success: oklch(0.508 0.118 165.612);
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
+    /* Odak halkası `ring-ring/50` ile %50 saydam çizilir: o hâliyle bile bütün yüzeylerden ≥3:1. */
+    --ring: oklch(0.26 0 0);
     --chart-1: oklch(0.897 0.196 126.665);
     --chart-2: oklch(0.768 0.233 130.85);
     --chart-3: oklch(0.648 0.2 131.684);
@@ -92,8 +106,6 @@
     --card-foreground: oklch(0.985 0 0);
     --popover: oklch(0.205 0 0);
     --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.768 0.233 130.85);
-    --primary-foreground: oklch(0.405 0.101 131.063);
     --secondary: oklch(0.274 0.006 286.033);
     --secondary-foreground: oklch(0.985 0 0);
     --muted: oklch(0.269 0 0);
@@ -101,9 +113,12 @@
     --accent: oklch(0.269 0 0);
     --accent-foreground: oklch(0.985 0 0);
     --destructive: oklch(0.704 0.191 22.216);
+    /* Yüzeylerde ve `bg-destructive/20`, `/30` üstünde ≥4,5:1. */
+    --destructive-text: oklch(0.745 0.157 21.15);
+    --success: oklch(0.696 0.17 162.48);
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
+    --ring: oklch(0.8 0 0);
     --chart-1: oklch(0.897 0.196 126.665);
     --chart-2: oklch(0.768 0.233 130.85);
     --chart-3: oklch(0.648 0.2 131.684);
@@ -117,6 +132,53 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+}
+
+/*
+ * Vurgu (PT'nin ana rengi) ve ondan türeyen token'lar — SPEC §10, .omc/research/ui-fix/TOKENS.md.
+ * PT renk seçtiyse kök <html>'e `brandStyle()` (src/lib/color.ts) satır içi `--brand-*` yazar; seçmediyse
+ * buradaki varsayılanlar geçer (color.test.ts bu değerlerin türetmeyle aynı olduğunu denetler).
+ *   --primary-text        yüzey üstünde yazı/ikon/gösterge: bütün yüzeylerde ≥4,5:1
+ *   --primary-strong      seçili durum zemini: komşu yüzey ve kenarlıklardan ≥3:1
+ *   --primary-strong-foreground  üstündeki yazı: ≥4,5:1
+ * [data-brand]: vurguyu kendisi ezen öğe (ayarlardaki önizleme); token'lar orada yeniden hesaplanır.
+ * Sıra önemli: .dark kuralı :root kuralından sonra gelir (aynı özgüllük).
+ */
+:root,
+[data-brand] {
+    --primary: var(--brand, oklch(0.841 0.238 128.85));
+    --primary-foreground: var(--brand-foreground, oklch(0.39 0.101 131.063));
+    --primary-text: var(--brand-text-light, #4e7700);
+    --primary-strong: var(--brand-strong-light, #609100);
+    --primary-strong-foreground: var(--brand-strong-foreground-light, #0a0a0a);
+}
+
+.dark,
+.dark [data-brand] {
+    --primary: var(--brand, oklch(0.768 0.233 130.85));
+    --primary-foreground: var(--brand-foreground, oklch(0.39 0.101 131.063));
+    --primary-text: var(--brand-text-dark, #7ccf00);
+    --primary-strong: var(--brand-strong-dark, #7ccf00);
+    --primary-strong-foreground: var(--brand-strong-foreground-dark, #0a0a0a);
+}
+
+/*
+ * Kas haritası (SPEC §6: hedef / yardımcı / dengeleyici). Boş kas yüzeye yakın gri; hedef
+ * `--primary-strong` (kenarlıktan ≥3:1 olduğu için boş kastan da ≥3:1). Yardımcı ve dengeleyici
+ * hedefin boş kasla karışımı: parlaklık sırası boş < dengeleyici < yardımcı < hedef; renk körlüğü
+ * için ayrıca desenle çizilir (muscle-map.tsx: hedef dolu, yardımcı çizgili, dengeleyici noktalı).
+ */
+:root {
+    --muscle-neutral: color-mix(in oklab, var(--foreground) 5%, var(--card));
+    --muscle-empty: color-mix(in oklab, var(--foreground) 8%, var(--card));
+    --muscle-target: var(--primary-strong);
+    --muscle-secondary: color-mix(in oklab, var(--muscle-target) 45%, var(--muscle-empty));
+    --muscle-stabilizer: color-mix(in oklab, var(--muscle-target) 20%, var(--muscle-empty));
+}
+
+.dark {
+    --muscle-neutral: color-mix(in oklab, var(--foreground) 8%, var(--card));
+    --muscle-empty: color-mix(in oklab, var(--foreground) 12%, var(--card));
 }
 
 @layer base {
@@ -171,5 +233,29 @@ html[data-reordering] * {
 @media (prefers-reduced-motion: reduce) {
   [data-reorder-hide] {
     transition: none;
+  }
+}
+
+/*
+ * Hareket azaltma (SPEC §6: ölçek yok, yalnız saydamlık). Açılır pencereler (dialog, alert-dialog,
+ * açılır menü, select, tooltip…) tw-animate-css'in `zoom-in-95` / `slide-in-from-*` yardımcılarıyla
+ * gelir; o yardımcılar giriş/çıkış animasyonuna bu değişkenleri verir. Katmansız kural katmanlı
+ * yardımcıları ezer: `fade-in` kalır, ölçek ve kayma sıfırlanır. Sheet geçişle kayar
+ * (sheet.tsx `motion-reduce:transition-opacity`); kaydığı yer burada sıfırlanır.
+ */
+@media (prefers-reduced-motion: reduce) {
+  [class*="animate-in"],
+  [class*="animate-out"] {
+    --tw-enter-scale: 1;
+    --tw-exit-scale: 1;
+    --tw-enter-translate-x: 0;
+    --tw-enter-translate-y: 0;
+    --tw-exit-translate-x: 0;
+    --tw-exit-translate-y: 0;
+    --tw-enter-rotate: 0;
+    --tw-exit-rotate: 0;
+  }
+  [data-slot="sheet-content"] {
+    translate: none;
   }
 }

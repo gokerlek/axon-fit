@@ -17,8 +17,9 @@ import { enterCodeSchema, OTP_LENGTH, requestCodeSchema } from '@/lib/schemas/au
  * - Alan doğrulaması Formisch + Valibot: kurallar `@/lib/schemas/auth` içinde, sunucuyla ORTAK.
  * - İstek durumu React Query'de: `try/catch` yok, yükleniyor/hata oradan okunur.
  * - Kod adımı bildirim çubuğunu susturur; yanlış kod hatası alanın altında görünmeli.
+ * - Girişten sonra `next` (sunucuda doğrulanmış PT yolu) açılır, yoksa genel bakış.
  */
-export function LoginForm() {
+export function LoginForm({ next = null }: { next?: string | null }) {
   const router = useRouter();
   const [email, setEmail] = useState('');
 
@@ -35,7 +36,7 @@ export function LoginForm() {
   const verify = useServiceMutation({
     fn: (code: string) =>
       fetchJson<{ ok: true }>('/api/auth/verify', { method: 'POST', body: JSON.stringify({ email, code }) }),
-    onSuccess: () => router.replace('/dashboard'),
+    onSuccess: () => router.replace(next ?? '/dashboard'),
     notify: 'none',
   });
 

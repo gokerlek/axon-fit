@@ -15,9 +15,9 @@ export function VideoEmbed({ provider, id, title }: { provider: VideoProvider; i
         title={title}
         className="size-full"
         loading="lazy"
+        // Tam ekran `allow` içinde; ayrıca `allowFullScreen` verilince tarayıcı ikisinin çakıştığını uyarır.
         allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen"
         referrerPolicy="strict-origin-when-cross-origin"
-        allowFullScreen
       />
     </AspectRatio>
   );

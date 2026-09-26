@@ -1,7 +1,7 @@
 import * as v from 'valibot';
-import { MOVEMENT_PATTERNS } from '@/lib/alternatives';
-import { DEEP_MUSCLES } from '@/lib/deep-muscles';
-import { parseCondition } from '@/lib/conditions';
+import { MOVEMENT_PATTERNS } from '../alternatives.ts';
+import { DEEP_MUSCLES } from '../deep-muscles.ts';
+import { parseCondition } from '../conditions.ts';
 import {
   AXIAL_LOADS,
   CONTRACTION_TYPES,
@@ -11,17 +11,18 @@ import {
   RESISTANCE_PROFILES,
   SHEAR_LEVELS,
   SPINAL_ALIGNMENTS,
-} from '@/lib/exercise-filter';
-import { attachmentIdOf, attachmentIdSchema } from '@/lib/schemas/attachment';
-import { GRIPS, GRIP_WIDTHS } from '@/lib/grips';
-import { PROGRESSION_SCHEMES } from '@/lib/progression';
-import { isValidVideoId, parseVideoUrl } from '@/lib/video';
+} from '../exercise-filter.ts';
+import { attachmentIdOf, attachmentIdSchema } from './attachment.ts';
+import { GRIPS, GRIP_WIDTHS } from '../grips.ts';
+import { PROGRESSION_SCHEMES } from '../progression.ts';
+import { isValidVideoId, parseVideoUrl } from '../video.ts';
 
 /**
  * Egzersiz şeması — sunucu ve istemci ortak.
  *
  * Hazır kütüphane pakette (`src/data/exercise-library.ts`), PT'nin kendi
  * egzersizleri uygulama repo'sunda (`data/exercises.json`). İkisi aynı şekle uyar.
+ * Yol takma adıyla çalışma zamanı içe aktarması yok (testler Node'un test aracıyla çalışır).
  */
 
 export const EQUIPMENT = [
@@ -291,8 +292,12 @@ export const MUSCLE_FAMILIES: readonly { label: string; muscles: readonly Muscle
 
 /**
  * Önceki sürümlerden kalan kas değerleri (12'li grup ve 24'lü liste) → yeni parçalar.
- * Repo'daki eski kayıtlar okunurken çevrilir; yoksa şema bütün dosyayı reddeder
- * ve PT'nin egzersizleri kaybolur.
+ * Repo'daki eski kayıtlar okunurken çevrilir; yoksa kayıt okunamaz ve listede görünmez.
+ *
+ * Çeviri her okumada yeni kayıtlara da uygulanır; bu yüzden burada yalnız güncel
+ * listede (`MUSCLES`) artık olmayan adlar durur. Eski "Boyun" (`neck`) bugün de bir kas
+ * (boyun ön yüzü); çevrilirse hedef `neck` + yardımcı `nape` her okumada `[neck, nape]`
+ * hedefe dönüşürdü.
  */
 const LEGACY_MUSCLES: Record<string, readonly Muscle[]> = {
   chest: ['chest_upper', 'chest_lower'],
@@ -312,7 +317,6 @@ const LEGACY_MUSCLES: Record<string, readonly Muscle[]> = {
   abs: ['abs_upper', 'abs_lower'],
   hamstrings: ['hamstrings_medial', 'hamstrings_lateral'],
   calves: ['gastroc_medial', 'gastroc_lateral', 'soleus'],
-  neck: ['neck', 'nape'],
 };
 
 function migrateMuscles(values: unknown): unknown {

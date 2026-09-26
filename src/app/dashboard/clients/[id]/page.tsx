@@ -14,14 +14,14 @@ import { healthConsentState } from '@/lib/client-status';
 import { readAppConfig } from '@/lib/config';
 import { serverEnv } from '@/lib/env';
 import { listExercises, type ExerciseWithSource } from '@/lib/exercises';
-import { formatDate, formatNumber } from '@/lib/format';
+import { formatDate, formatNumber, todayIn } from '@/lib/format';
 import { clientRepoName } from '@/lib/github/client';
 import { countDays, currentPhaseOf, frequencyLabel, nextDayId, phaseStatus, phaseStatusLabel } from '@/lib/program-plan';
 import { readProgramFile, type ProgramFile } from '@/lib/programs';
 import { CLIENT_ID_PATTERN, CLIENT_STATUS_LABELS, HEALTH_FIELD_INFO } from '@/lib/schemas/client';
 import { templateSummary } from '@/lib/template-plan';
 import { HEALTH_STATE_DETAILS, HEALTH_STATE_LABELS } from '../health-state';
-import { AccessBadge, accessDetail, accessOf } from '../invite-state';
+import { AccessBadge, accessDetail, accessOf, passwordOf } from '../invite-state';
 import { requirePt } from '@/lib/guards';
 import { loadMeasurements } from '@/lib/health';
 import { MeasurementsCard } from './measurements-card';
@@ -84,7 +84,7 @@ function ProgramCard({
       <Card>
         <CardHeader>
           <CardTitle>Program</CardTitle>
-          <CardDescription className="text-destructive">program.json okunamadı: {file.problem}</CardDescription>
+          <CardDescription className="text-destructive">Program okunamadı: {file.problem}</CardDescription>
         </CardHeader>
         {openButton}
       </Card>
@@ -118,7 +118,7 @@ function ProgramCard({
             const isNext = day.id === next;
             return (
               <li key={day.id}>
-                <Item variant="outline" size="sm" className={isNext ? 'bg-primary/5 ring-2 ring-primary/50' : undefined}>
+                <Item variant="outline" size="sm" className={isNext ? 'bg-primary/5 ring-2 ring-primary-text' : undefined}>
                   <ItemContent>
                     <ItemTitle>{day.name}</ItemTitle>
                     <ItemDescription className="tabular-nums">
@@ -183,6 +183,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const access = accessOf(client, invite?.invite ?? null);
   const health = healthConsentState(client);
   const consent = client.consents.health;
+  // Onay danışanın kendi ekranında verilir; hiç girmemiş danışanda onay kaydı tutarsızdır (elle eklenmiş).
+  const consentWithoutJoin = Boolean(consent) && !client.access.joinedAt && !client.access.lastJoinAt;
 
   return (
     <div className="flex flex-col gap-6">
@@ -192,11 +194,11 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         actions={<EditButton href={`/dashboard/clients/${id}/edit`} />}
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      {/* Kartlar kendi boyunda: soldaki profil sağ sütunun boyuna uzayıp alt bölümü ortada bırakmasın. */}
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
         <Card>
           <CardHeader>
             <CardTitle>Profil</CardTitle>
-            <CardDescription>Danışanın kaydı kendi özel repo'sunda durur.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -214,25 +216,32 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                   <TableCell>{formatDate(client.createdAt, config.timeZone)}</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell className="text-muted-foreground">Repo</TableCell>
-                  <TableCell className="font-mono text-xs">{repo}</TableCell>
-                </TableRow>
-                <TableRow>
                   <TableCell className="align-top text-muted-foreground">Not</TableCell>
                   <TableCell className="whitespace-pre-wrap">{client.note ?? '—'}</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
           </CardContent>
+          {/* Verinin durduğu yer PT'nin işi değil; gerektiğinde (yedek, elle düzeltme) burada. */}
           <CardFooter>
-            <Button
-              variant="ghost"
-              size="sm"
-              nativeButton={false}
-              render={<a href={`https://github.com/${serverEnv().owner}/${repo}`} target="_blank" rel="noreferrer" />}>
-              <ArrowSquareOut data-icon="inline-start" weight="fill" />
-              Repo'yu GitHub'da aç
-            </Button>
+            <details className="w-full text-sm">
+              <summary className="w-fit cursor-pointer text-muted-foreground underline-offset-4 hover:underline touch:py-3">
+                Teknik ayrıntılar
+              </summary>
+              <div className="flex flex-col items-start gap-2 pt-2">
+                <p className="text-muted-foreground">
+                  Kaydın durduğu GitHub deposu: <span className="font-mono text-xs text-foreground">{repo}</span>
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  nativeButton={false}
+                  render={<a href={`https://github.com/${serverEnv().owner}/${repo}`} target="_blank" rel="noreferrer" />}>
+                  <ArrowSquareOut data-icon="inline-start" weight="fill" />
+                  GitHub'da aç
+                </Button>
+              </div>
+            </details>
           </CardFooter>
         </Card>
 
@@ -242,14 +251,14 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               <CardTitle>Giriş</CardTitle>
               <CardDescription>{accessDetail(client, invite?.invite ?? null, config.timeZone)}</CardDescription>
               <div>
-                <AccessBadge state={access} />
+                <AccessBadge state={access} password={passwordOf(client)} />
               </div>
             </CardHeader>
             {client.status !== 'archived' ? (
               <CardFooter>
                 <Button variant="outline" nativeButton={false} render={<Link href={`/dashboard/clients/${id}/invite`} />}>
                   <QrCode data-icon="inline-start" weight="fill" />
-                  {access === 'joined' ? 'Yeni cihaz için kod' : access === 'none' ? 'Davet et' : 'Davet ekranı'}
+                  {access === 'joined' ? 'Yeni kare kod' : access === 'none' ? 'Davet et' : 'Davet ekranı'}
                 </Button>
               </CardFooter>
             ) : null}
@@ -258,7 +267,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           <Card>
             <CardHeader>
               <CardTitle>Sağlık modülü</CardTitle>
-              <CardDescription>{HEALTH_STATE_DETAILS[health]}</CardDescription>
+              <CardDescription>
+                {HEALTH_STATE_DETAILS[health]}
+                {consentWithoutJoin && health !== 'off'
+                  ? ' Danışan henüz hiç giriş yapmadı; bu onay kaydı uygulama dışında eklenmiş olabilir.'
+                  : null}
+              </CardDescription>
               <div>
                 <Badge variant={health === 'granted' ? 'secondary' : 'outline'}>{HEALTH_STATE_LABELS[health]}</Badge>
               </div>
@@ -279,7 +293,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             ) : null}
           </Card>
 
-          <MeasurementsCard clientId={id} view={measurements} />
+          <MeasurementsCard clientId={id} view={measurements} today={todayIn(config.timeZone)} />
         </div>
       </div>
 

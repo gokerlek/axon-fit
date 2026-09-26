@@ -23,7 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { healthConsentState } from '@/lib/client-status';
+import { healthConsentState, healthScopeGrows } from '@/lib/client-status';
 import { fetchJson } from '@/lib/query/errors';
 import { applyFieldErrors } from '@/lib/query/field-errors';
 import { useServiceMutation } from '@/lib/query/use-service';
@@ -77,7 +77,7 @@ export function ClientForm({ editing }: { editing: Client | null }) {
         body: JSON.stringify(editing ? { ...values, id: editing.id } : values),
       }),
     invalidate: [['clients']],
-    notify: { success: editing ? 'Danışan güncellendi.' : 'Danışan eklendi, özel repo\'su açıldı.' },
+    notify: { success: editing ? 'Danışan güncellendi.' : 'Danışan eklendi.' },
     onError: (error) => applyFieldErrors(form as never, error),
     onSuccess: ({ id }) => {
       // Yeni danışanın ilk işi davet: kod yalnız o ekranda üretilip gösterilir.
@@ -94,7 +94,7 @@ export function ClientForm({ editing }: { editing: Client | null }) {
       <Card>
         <CardHeader>
           <CardTitle>Kişi</CardTitle>
-          <CardDescription>Ad ve not yalnız danışanın kendi özel repo'sunda durur.</CardDescription>
+          <CardDescription>Ad ve not yalnız bu danışana ayrılmış gizli kayıtta durur.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-x-8 gap-y-5 lg:grid-cols-2">
           <div className="flex flex-col gap-5">
@@ -168,18 +168,21 @@ export function ClientForm({ editing }: { editing: Client | null }) {
                 onaylar; onay vermezse hiçbiri tutulmaz.
               </CardDescription>
               <CardAction>
-                <Switch
-                  aria-label="Sağlık modülü"
-                  checked={Boolean(enabledField.input)}
-                  onCheckedChange={(checked) => {
-                    setInput(form, { path: ['healthEnabled'], input: checked });
-                    if (checked) {
-                      // İlk açılışta en az bilgiyle başlasın: kısıtlar ve hazır oluşluk.
-                      const current = getInput(form, { path: ['healthFields'] }) ?? [];
-                      if (current.length === 0) setInput(form, { path: ['healthFields'], input: DEFAULT_HEALTH_FIELDS });
-                    }
-                  }}
-                />
+                {/* Anahtar küçük: dokunma alanı çevresindeki etiketle 44 px (etikete dokunmak anahtarı çevirir). */}
+                <label className="-m-2 flex min-h-11 min-w-11 cursor-pointer items-center justify-center">
+                  <Switch
+                    aria-label="Sağlık modülü"
+                    checked={Boolean(enabledField.input)}
+                    onCheckedChange={(checked) => {
+                      setInput(form, { path: ['healthEnabled'], input: checked });
+                      if (checked) {
+                        // İlk açılışta en az bilgiyle başlasın: kısıtlar ve hazır oluşluk.
+                        const current = getInput(form, { path: ['healthFields'] }) ?? [];
+                        if (current.length === 0) setInput(form, { path: ['healthFields'], input: DEFAULT_HEALTH_FIELDS });
+                      }
+                    }}
+                  />
+                </label>
               </CardAction>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
@@ -187,7 +190,12 @@ export function ClientForm({ editing }: { editing: Client | null }) {
                 <FormField of={form} path={['healthFields']}>
                   {(field) => {
                     const selected = new Set(field.input ?? []);
-                    const needsReconsent = consented !== null && [...selected].some((item) => !consented.includes(item));
+                    // Sunucuyla aynı kural (`nextHealthModule`): modül yeniden açılıyor ya da kapsam genişliyorsa
+                    // (çıkarılıp geri eklenen parça dahil) onay yeniden sorulur.
+                    const needsReconsent =
+                      consented !== null &&
+                      (healthScopeGrows(editing?.modules.health ?? null, [...selected]) ||
+                        [...selected].some((item) => !consented.includes(item)));
                     const toggle = (item: HealthField) =>
                       setInput(form, {
                         path: ['healthFields'],
@@ -207,7 +215,7 @@ export function ClientForm({ editing }: { editing: Client | null }) {
                                   aria-pressed={isOn}
                                   className={cn(
                                     'h-full w-full items-start justify-start gap-3 p-3 text-left whitespace-normal',
-                                    isOn && 'ring-1 ring-primary/50',
+                                    isOn && 'ring-2 ring-primary-text',
                                   )}
                                   onClick={() => toggle(item)}>
                                   <span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
@@ -219,7 +227,7 @@ export function ClientForm({ editing }: { editing: Client | null }) {
                                       {HEALTH_FIELD_INFO[item].description}
                                     </span>
                                   </span>
-                                  {isOn ? <Check className="text-primary" /> : <Plus className="text-muted-foreground" />}
+                                  {isOn ? <Check className="text-primary-text" /> : <Plus className="text-muted-foreground" />}
                                 </Button>
                               </li>
                             );
@@ -230,8 +238,8 @@ export function ClientForm({ editing }: { editing: Client | null }) {
                           <Alert>
                             <Info weight="fill" />
                             <AlertDescription>
-                              Danışanın onayı bu parçaların hepsini kapsamıyor. Kaydedersen bir sonraki girişinde yeniden
-                              sorulur; o zamana kadar sağlık kaydı tutulmaz.
+                              Danışanın onayı bu kapsamdan önce verildi. Kaydedersen bir sonraki girişinde yeniden sorulur;
+                              o zamana kadar sağlık kaydı tutulmaz.
                             </AlertDescription>
                           </Alert>
                         ) : null}
@@ -243,7 +251,7 @@ export function ClientForm({ editing }: { editing: Client | null }) {
                 <p className="text-sm text-muted-foreground">
                   Kapalı: sağlık ekranları danışana görünmez, hiçbir sağlık kaydı tutulmaz.
                   {consentState === 'granted' || consentState === 'outdated'
-                    ? ' Daha önce tutulanlar danışanın repo\'sunda kalır; silmek için danışanı silmen gerekir.'
+                    ? ' Daha önce tutulanlar danışanın kaydında kalır; silmek için danışanı silmen gerekir.'
                     : null}
                 </p>
               )}
@@ -261,7 +269,7 @@ export function ClientForm({ editing }: { editing: Client | null }) {
         </Button>
         <Button type="submit" disabled={save.isPending}>
           {save.isPending ? <Spinner data-icon="inline-start" /> : null}
-          {save.isPending ? (editing ? 'Kaydediliyor…' : 'Repo açılıyor…') : editing ? 'Kaydet' : 'Danışanı ekle'}
+          {save.isPending ? (editing ? 'Kaydediliyor…' : 'Ekleniyor…') : editing ? 'Kaydet' : 'Danışanı ekle'}
         </Button>
       </div>
     </Form>

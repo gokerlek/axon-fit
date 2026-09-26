@@ -17,8 +17,13 @@ import {
  * Üç karar: `block` (yaptırma), `warn` (yaptır ama bil), `cue` (yaptır, şu ipucuyla).
  * Kanıtı zayıf olan hiçbir şey `block` değildir — gereksiz yasak PT'yi bunaltır.
  *
- * Bilgi eksikse kural sessizce atlanır (ör. ameliyat haftası girilmemişse ACL kuralı
- * çalışmaz); atlananlar `skipped` içinde sayılır ki ekran "değerlendirilemedi" diyebilsin.
+ * Bilgi eksikse kural sessizce atlanır ve sayılır ki ekran "değerlendirilemedi" diyebilsin. Hareketin
+ * etiketi, kısıtın hali (niteleyici) ya da sabit bir bilgi (greft tipi, topuk) eksikse kartta sayılır
+ * (`skipped`); yalnız zamanla değişen danışan bağlamı (ameliyat haftası, semptom yönü…) eksikse kart
+ * başına değil, özet satırında bir kez söylenir (`pending`): liste önizlemesinde bağlam hiç yoktur.
+ *
+ * Eklem kuralları yalnız o eklemi çalıştıran harekete işler (`touches`): kas listesi hareketin omzu
+ * çalıştırmadığını gösteriyorsa omuz kuralı pencere etiketi boş diye "atlandı" sayılmaz.
  */
 
 export const KINETIC_CHAINS = ['open', 'closed', 'semi_closed'] as const;
@@ -123,6 +128,21 @@ export type FilterContext = {
   heelElevated?: boolean;
 };
 
+/**
+ * Zamanla ya da seansla değişen danışan bağlamı. Liste önizlemesinde hiç yoktur, danışanın programında
+ * ve seansında dolar; yalnız bunlar eksik kaldığı için karar veremeyen kural her kartta değil, özet
+ * satırında bir kez söylenir. Greft tipi ve topuk sabit bilgidir (ameliyatın ve hareketin yapılışının),
+ * eksikse kural kartta sayılır.
+ */
+export const CONTEXT_LABELS = {
+  weeksPostOp: 'ameliyat haftası',
+  symptomDirection: 'semptom yönü',
+  tendinopathyStage: 'tendinopati evresi',
+  plannedReps: 'planlanan tekrar',
+  hoursSinceWaking: 'uyanmadan geçen süre',
+} as const satisfies Partial<Record<keyof FilterContext, string>>;
+export type TimedContext = keyof typeof CONTEXT_LABELS;
+
 export const DECISIONS = ['block', 'warn', 'cue'] as const;
 export type Decision = (typeof DECISIONS)[number];
 
@@ -142,8 +162,16 @@ type Rule = {
   message: string;
   /** Yalnız bu niteleyicilerde geçerli (boşsa hepsinde). */
   qualifiers?: readonly ConditionQualifier[];
-  /** `true` → kural işler, `false` → işlemez, `null` → bilgi eksik, kural atlanır. */
+  /**
+   * Hareketin tarafı — etiketler ve sabit bilgiler (greft tipi, topuğun yükseltilmesi): `true` → kural
+   * işler, `false` → işlemez, `null` → bilgi eksik, kural atlanır ve kartta sayılır.
+   */
   match: (tags: ExerciseTags, context: FilterContext) => boolean | null;
+  /**
+   * Zamanla değişen danışan bağlamına bağlı kısım; `needs` hangi bilgi olduğunu söyler. `null` → bağlam
+   * yok: kural atlanır, kart başına değil özet satırında bir kez sayılır (`FilterResult.pending`).
+   */
+  when?: { needs: TimedContext; test: (context: FilterContext, condition: ClientCondition) => boolean | null };
 };
 
 const has = (windows: readonly JointWindow[] | undefined, window: JointWindow) =>
@@ -169,9 +197,27 @@ function touches(tags: ExerciseTags, joint: 'knee' | 'shoulder'): boolean | null
   return windows === undefined && muscles.length === 0 ? null : false;
 }
 
-/** İki bilinmeyene dayanan kurallarda: biri bilinmiyorsa kural atlanır. */
+/**
+ * Üç değerli (Kleene) VE: biri yanlışsa kural işlemez, öbürü bilinmese de (diz çalıştırmayan
+ * face pull ACL kuralında "atlandı" sayılmaz); yanlış yoksa ve biri bilinmiyorsa kural atlanır.
+ */
 const and = (...values: (boolean | null)[]): boolean | null =>
-  values.some((value) => value === null) ? null : values.every(Boolean);
+  values.includes(false) ? false : values.includes(null) ? null : true;
+
+/** Üç değerli VEYA: biri doğruysa doğru; doğru yoksa biri bilinmiyorsa bilinmiyor (yanlış ∨ bilinmeyen = bilinmeyen). */
+const or = (...values: (boolean | null)[]): boolean | null =>
+  values.includes(true) ? true : values.includes(null) ? null : false;
+
+/**
+ * Tendinopati erken evrede mi (1 izometrik, 2 izotonik)? Evre bağlamdan gelir; yoksa `:reactive`
+ * niteleyicisi erken evre sayılır: reaktif tendon izometrik ve izotonik yüklemeyle başlar (Malliaras
+ * 2015, `stage in (stage_1, stage_2) → block`). Evrenin kayıtta alanı yok (Faz 5b): o gelene kadar
+ * balistik kuralı yalnız bu niteleyiciyle ya da bağlamla karar verir; ikisi de yoksa atlanır.
+ */
+function earlyTendinopathy(context: FilterContext, condition: ClientCondition): boolean | null {
+  if (context.tendinopathyStage !== undefined) return context.tendinopathyStage <= 2;
+  return condition.qualifier === 'reactive' ? true : null;
+}
 
 export const RULES: readonly Rule[] = [
   // --- Omurga ---
@@ -194,22 +240,19 @@ export const RULES: readonly Rule[] = [
     condition: 'lumbar_disc_herniation',
     decision: 'warn',
     message: 'Disk hasarı tek ağır tekrardan değil, tekrarlı fleksiyon siklüslerinden birikir: tekrar sayısını düşür.',
-    match: (tags, context) =>
-      and(
-        tags.spinalAlignment === undefined ? null : tags.spinalAlignment === 'flexion',
-        context.plannedReps === undefined ? null : context.plannedReps > 15,
-      ),
+    match: (tags) => (tags.spinalAlignment === undefined ? null : tags.spinalAlignment === 'flexion'),
+    when: { needs: 'plannedReps', test: (context) => (context.plannedReps === undefined ? null : context.plannedReps > 15) },
   },
   {
     id: 'disc-morning-flexion',
     condition: 'lumbar_disc_herniation',
     decision: 'warn',
     message: 'Uyanmadan sonraki ilk saatlerde diskteki bükülme stresi katlanır; fleksiyonlu işi güne yay.',
-    match: (tags, context) =>
-      and(
-        tags.spinalAlignment === undefined ? null : tags.spinalAlignment === 'flexion',
-        context.hoursSinceWaking === undefined ? null : context.hoursSinceWaking < 2,
-      ),
+    match: (tags) => (tags.spinalAlignment === undefined ? null : tags.spinalAlignment === 'flexion'),
+    when: {
+      needs: 'hoursSinceWaking',
+      test: (context) => (context.hoursSinceWaking === undefined ? null : context.hoursSinceWaking < 2),
+    },
   },
   {
     id: 'flexion-intolerant-end-range',
@@ -223,12 +266,11 @@ export const RULES: readonly Rule[] = [
     condition: 'lumbar_spondylolisthesis',
     decision: 'block',
     message: 'Yüksek kesme kuvveti ya da yüklü ekstansiyon kaymayı artırır; desteklenmiş bir varyant seç.',
-    match: (tags) => {
-      const shear = tags.shearForce === undefined ? null : tags.shearForce === 'high';
-      const extension = and(tags.spinalAlignment === undefined ? null : tags.spinalAlignment === 'extension', loaded(tags));
-      if (shear === true || extension === true) return true;
-      return shear === null || extension === null ? null : false;
-    },
+    match: (tags) =>
+      or(
+        tags.shearForce === undefined ? null : tags.shearForce === 'high',
+        and(tags.spinalAlignment === undefined ? null : tags.spinalAlignment === 'extension', loaded(tags)),
+      ),
   },
   {
     id: 'stenosis-loaded-extension',
@@ -242,8 +284,13 @@ export const RULES: readonly Rule[] = [
     condition: 'lumbar_disc_herniation_with_radiculopathy',
     decision: 'block',
     message: 'Son seansta semptom aşağı yayılmış: yükleme durur, önce merkezileşme sağlanır.',
-    match: (_tags, context) =>
-      context.symptomDirection === undefined ? null : context.symptomDirection === 'peripheralizing',
+    // Hareketten bağımsız: semptom aşağı yayılıyorsa bütün yükleme durur. Bilinmiyorsa her kartta
+    // değil, özet satırında bir kez söylenir.
+    match: () => true,
+    when: {
+      needs: 'symptomDirection',
+      test: (context) => (context.symptomDirection === undefined ? null : context.symptomDirection === 'peripheralizing'),
+    },
   },
   {
     id: 'cauda-equina',
@@ -271,74 +318,88 @@ export const RULES: readonly Rule[] = [
     condition: 'patellofemoral_pain',
     decision: 'warn',
     message: '90° üstü diz fleksiyonunda kapalı zincirde basınç artar; derinliği ağrısız aralıkta tut.',
-    match: (tags) => and(tags.kineticChain === undefined ? null : tags.kineticChain === 'closed', has(tags.jointWindows, 'knee_flexion_over_90')),
+    match: (tags) =>
+      and(
+        touches(tags, 'knee'),
+        tags.kineticChain === undefined ? null : tags.kineticChain === 'closed',
+        has(tags.jointWindows, 'knee_flexion_over_90'),
+      ),
   },
   {
     id: 'pfp-terminal-extension',
     condition: 'patellofemoral_pain',
     decision: 'warn',
     message: 'Açık zincirde 0–30° terminal aralık en yüksek stres bölgesidir; ROM’u 90–45° arasına al.',
-    match: (tags) => and(tags.kineticChain === undefined ? null : tags.kineticChain === 'open', has(tags.jointWindows, 'knee_terminal_extension_0_30')),
+    match: (tags) =>
+      and(
+        touches(tags, 'knee'),
+        tags.kineticChain === undefined ? null : tags.kineticChain === 'open',
+        has(tags.jointWindows, 'knee_terminal_extension_0_30'),
+      ),
   },
   {
     id: 'acl-open-chain-early',
     condition: 'acl_reconstruction_early',
     decision: 'block',
     message: 'İlk 4 haftada açık zincir diz ekstansiyonu greft üzerinde anterior kayma üretir.',
-    match: (tags, context) =>
-      and(
-        touches(tags, 'knee'),
-        tags.kineticChain === undefined ? null : tags.kineticChain === 'open',
-        context.weeksPostOp === undefined ? null : context.weeksPostOp < 4,
-      ),
+    match: (tags) => and(touches(tags, 'knee'), tags.kineticChain === undefined ? null : tags.kineticChain === 'open'),
+    when: { needs: 'weeksPostOp', test: (context) => (context.weeksPostOp === undefined ? null : context.weeksPostOp < 4) },
   },
   {
     id: 'acl-open-chain-rom',
     condition: 'acl_reconstruction_early',
     decision: 'block',
     message: 'Bu dönemde açık zincir yalnız korunan ROM penceresinde yapılır; terminal ekstansiyona girme.',
-    match: (tags, context) =>
+    // Pencere haftayla açılır (4. hafta 90–45°, … 7. hafta 90–10°), 8. haftada tam ROM.
+    match: (tags) =>
       and(
+        touches(tags, 'knee'),
         tags.kineticChain === undefined ? null : tags.kineticChain === 'open',
-        context.weeksPostOp === undefined ? null : context.weeksPostOp >= 4 && context.weeksPostOp < 12,
         has(tags.jointWindows, 'knee_terminal_extension_0_30'),
       ),
+    when: {
+      needs: 'weeksPostOp',
+      test: (context) => (context.weeksPostOp === undefined ? null : context.weeksPostOp >= 4 && context.weeksPostOp < 8),
+    },
   },
   {
     id: 'acl-hamstring-graft-load',
     condition: 'acl_reconstruction_early',
     decision: 'block',
     message: 'Hamstring grefti ilk 12 haftada yüklü açık zincir diz fleksiyonunu kaldırmaz.',
+    // Kaynakta `external_load_kg > 0`: vücut ağırlığı dışındaki her direnç (bant dahil) dış yüktür.
+    // Greft tipi ameliyatın sabit bilgisidir: bilinmezse kural kartta sayılır.
     match: (tags, context) =>
       and(
         touches(tags, 'knee'),
         tags.kineticChain === undefined ? null : tags.kineticChain === 'open',
+        tags.resistanceProfile === undefined ? null : tags.resistanceProfile !== 'bodyweight',
         context.graftType === undefined ? null : context.graftType === 'hamstring',
-        context.weeksPostOp === undefined ? null : context.weeksPostOp < 12,
       ),
+    when: { needs: 'weeksPostOp', test: (context) => (context.weeksPostOp === undefined ? null : context.weeksPostOp < 12) },
   },
   {
     id: 'tendinopathy-ballistic',
     condition: 'patellar_tendinopathy',
     decision: 'block',
     message: 'Enerji depolayan (balistik) yükleme erken evrede ağrıyı azdırır; izometrik/izotonik evreyi tamamla.',
-    match: (tags, context) =>
-      and(
-        touches(tags, 'knee'),
-        tags.contractionType === undefined ? null : tags.contractionType === 'energy_storage_ballistic',
-        context.tendinopathyStage === undefined ? true : context.tendinopathyStage <= 2,
-      ),
+    match: (tags) =>
+      and(touches(tags, 'knee'), tags.contractionType === undefined ? null : tags.contractionType === 'energy_storage_ballistic'),
+    when: { needs: 'tendinopathyStage', test: earlyTendinopathy },
   },
   {
     id: 'ankle-df-deep-squat',
     condition: 'ankle_dorsiflexion_restriction',
     decision: 'warn',
     message: 'Dorsifleksiyon yetmezken derin squat açığı belden kapatır; topuk yükselt ya da derinliği kıs.',
+    // Topuğun yükseltilmesi hareketin yapılışıdır (sabit bilgi): bilinmezse kural kartta sayılır.
+    // Kayıtta alanı yok (Faz 5b); o gelene kadar kural yalnız bağlamdaki `heelElevated` ile karar verir.
     match: (tags, context) =>
       and(
+        touches(tags, 'knee'),
         has(tags.jointWindows, 'knee_flexion_over_90'),
         loaded(tags),
-        context.heelElevated === undefined ? true : !context.heelElevated,
+        context.heelElevated === undefined ? null : !context.heelElevated,
       ),
   },
   {
@@ -355,7 +416,7 @@ export const RULES: readonly Rule[] = [
     condition: 'subacromial_pain_syndrome',
     decision: 'block',
     message: '90° abduksiyon + son aralık dış rotasyon (ense arkası) subakromiyal aralığı daraltır.',
-    match: (tags) => has(tags.jointWindows, 'shoulder_abduction_90_end_range_er'),
+    match: (tags) => and(touches(tags, 'shoulder'), has(tags.jointWindows, 'shoulder_abduction_90_end_range_er')),
   },
   {
     id: 'saps-internal-rotation-overhead',
@@ -364,6 +425,7 @@ export const RULES: readonly Rule[] = [
     message: 'Yük altında iç rotasyonda kol kaldırmak (upright row, empty can) tendonu sıkıştırır.',
     match: (tags) =>
       and(
+        touches(tags, 'shoulder'),
         tags.internalRotationUnderLoad === undefined ? null : tags.internalRotationUnderLoad,
         has(tags.jointWindows, 'shoulder_elevation_over_90'),
       ),
@@ -373,7 +435,7 @@ export const RULES: readonly Rule[] = [
     condition: 'subacromial_pain_syndrome',
     decision: 'warn',
     message: '90° üstü tekrarlı yükleme semptomu azdırabilir; skapular düzlemde ve ağrısız aralıkta çalış.',
-    match: (tags) => has(tags.jointWindows, 'shoulder_elevation_over_90'),
+    match: (tags) => and(touches(tags, 'shoulder'), has(tags.jointWindows, 'shoulder_elevation_over_90')),
   },
   {
     id: 'saps-scapular-plane-cue',
@@ -382,6 +444,7 @@ export const RULES: readonly Rule[] = [
     message: 'Kolu gövdeden 30–45° önde (skapular düzlemde) çalıştır, tam yan düzlemde değil.',
     match: (tags) =>
       and(
+        touches(tags, 'shoulder'),
         has(tags.jointWindows, 'shoulder_elevation_60_90'),
         tags.loadVector === undefined ? null : tags.loadVector !== 'diagonal_scapular_plane',
       ),
@@ -391,47 +454,47 @@ export const RULES: readonly Rule[] = [
     condition: 'anterior_shoulder_instability',
     decision: 'block',
     message: '90° abduksiyon + son aralık dış rotasyon apprehension pozisyonudur; anterior kapsülü zorlar.',
-    match: (tags) => has(tags.jointWindows, 'shoulder_abduction_90_end_range_er'),
+    match: (tags) => and(touches(tags, 'shoulder'), has(tags.jointWindows, 'shoulder_abduction_90_end_range_er')),
   },
   {
     id: 'instability-gh-extension',
     condition: 'anterior_shoulder_instability',
     decision: 'block',
     message: 'Dirseğin gövde hizasının arkasına yüklü inmesi anterior kapsülü gerer; ROM’u sınırla (floor press).',
-    match: (tags) => and(has(tags.jointWindows, 'glenohumeral_extension_beyond_neutral'), loaded(tags)),
+    match: (tags) => and(touches(tags, 'shoulder'), has(tags.jointWindows, 'glenohumeral_extension_beyond_neutral'), loaded(tags)),
   },
   {
     id: 'mdi-end-range',
     condition: 'multidirectional_shoulder_instability',
     decision: 'block',
     message: 'Son aralık omuz yüklemesi ve pasif kapsül germesi gevşekliği artırır.',
-    match: (tags) => {
-      const abd = has(tags.jointWindows, 'shoulder_abduction_90_end_range_er');
-      const ext = has(tags.jointWindows, 'glenohumeral_extension_beyond_neutral');
-      if (abd === true || ext === true) return true;
-      return abd === null || ext === null ? null : false;
-    },
+    match: (tags) =>
+      and(
+        touches(tags, 'shoulder'),
+        or(has(tags.jointWindows, 'shoulder_abduction_90_end_range_er'), has(tags.jointWindows, 'glenohumeral_extension_beyond_neutral')),
+      ),
   },
   {
     id: 'ac-horizontal-adduction',
     condition: 'ac_joint_injury',
     decision: 'block',
     message: 'Yüklü horizontal adduksiyon AC eklemini sıkıştırır; ROM’u kıs ya da nötr tutuşa geç.',
-    match: (tags) => and(tags.loadVector === undefined ? null : tags.loadVector === 'horizontal_adduction', loaded(tags)),
+    match: (tags) =>
+      and(touches(tags, 'shoulder'), tags.loadVector === undefined ? null : tags.loadVector === 'horizontal_adduction', loaded(tags)),
   },
   {
     id: 'upper-crossed-overhead',
     condition: 'upper_crossed_pattern',
     decision: 'warn',
     message: 'Skapular kontrol kurulmadan baş üstü itiş paterni pekiştirir; önce alt trapez/serratus çalış.',
-    match: (tags) => has(tags.jointWindows, 'shoulder_elevation_over_90'),
+    match: (tags) => and(touches(tags, 'shoulder'), has(tags.jointWindows, 'shoulder_elevation_over_90')),
   },
   {
     id: 'thoracic-deficit-overhead',
     condition: 'thoracic_extension_deficit',
     decision: 'warn',
     message: 'Torasik ekstansiyon yetmezken baş üstü açığı bel hiperekstansiyonuyla kapanır; landmine varyantına geç.',
-    match: (tags) => has(tags.jointWindows, 'shoulder_elevation_over_90'),
+    match: (tags) => and(touches(tags, 'shoulder'), has(tags.jointWindows, 'shoulder_elevation_over_90')),
   },
 
   // --- Sistemik ---
@@ -464,23 +527,39 @@ export type FilterResult = {
   /** En ağır karar; hiçbir kural işlemediyse `null`. */
   decision: Decision | null;
   findings: Finding[];
-  /** Bilgi eksikliğinden değerlendirilemeyen kural sayısı. */
+  /**
+   * Kartta sayılan, bilgi eksikliğinden değerlendirilemeyen kural sayısı: hareketin etiketi ya da
+   * sabit bir bilgi (greft tipi, topuk) eksik kalanlar; danışanın hali (niteleyici) yazılmamışsa o
+   * hale bağlı kurallar ve niteleyicili elle yasak, birbirini dışlayan hallere bağlı oldukları için
+   * kısıt başına tek. PT'nin "sorun yok" dediği kısıt için hiç sayılmaz.
+   */
   skipped: number;
+  /**
+   * Yalnız zamanla değişen danışan bağlamı (`CONTEXT_LABELS`) eksik kaldığı için karar veremeyen
+   * kurallar; ekran bunları kart başına değil, özet satırında bir kez söyler.
+   */
+  pending: { rule: string; needs: TimedContext }[];
   /** Egzersizde hiç etiket yoksa süzgeç çalışmaz; ekran bunu söylemeli. */
   untagged: boolean;
 };
 
 const ORDER: Record<Decision, number> = { block: 3, warn: 2, cue: 1 };
 
-/** PT'nin egzersize elle yazdığı kısıtlar ("id" ya da "id:nitelik"). */
-function manualMatch(list: readonly string[] | undefined, condition: ClientCondition): boolean {
+/**
+ * PT'nin egzersize elle yazdığı kısıtlar ("id" ya da "id:nitelik"). Niteleyicisiz yazılmışsa her
+ * şiddeti kapsar; yazılmışsa birebir eşleşmeli. Danışanın niteleyicisi yoksa niteleyicili yazım
+ * karar veremez: `null` (bilinmiyor).
+ */
+function manualMatch(list: readonly string[] | undefined, condition: ClientCondition): boolean | null {
   if (!list) return false;
-  return list.some((entry) => {
+  let unknown = false;
+  for (const entry of list) {
     const parsed = parseCondition(entry);
-    if (!parsed || parsed.id !== condition.id) return false;
-    // Niteleyicisiz yazılmışsa her şiddeti kapsar; yazılmışsa birebir eşleşmeli.
-    return parsed.qualifier === undefined || parsed.qualifier === condition.qualifier;
-  });
+    if (!parsed || parsed.id !== condition.id) continue;
+    if (parsed.qualifier === undefined || parsed.qualifier === condition.qualifier) return true;
+    if (condition.qualifier === undefined) unknown = true;
+  }
+  return unknown ? null : false;
 }
 
 const isTagged = (tags: ExerciseTags) =>
@@ -506,11 +585,17 @@ export function evaluateExercise(
   context: FilterContext = {},
 ): FilterResult {
   const findings: Finding[] = [];
+  const pending: FilterResult['pending'] = [];
   let skipped = 0;
+  // Aynı kısıt niteleyicisiyle de seçildiyse danışanın hali bilinir: niteleyicisiz yazım ayrıca
+  // değerlendirilmez (yoksa kural hem "yaptırma" hem "değerlendirilemedi" sayılırdı).
+  const qualifiedIds = new Set(conditions.filter((condition) => condition.qualifier).map((condition) => condition.id));
 
   for (const condition of conditions) {
+    if (!condition.qualifier && qualifiedIds.has(condition.id)) continue;
     // PT elle yasakladıysa kural aramaya gerek yok.
-    if (manualMatch(tags.contraindications, condition)) {
+    const manual = manualMatch(tags.contraindications, condition);
+    if (manual) {
       findings.push({
         decision: 'block',
         condition,
@@ -519,21 +604,37 @@ export function evaluateExercise(
       });
       continue;
     }
-    const cleared = manualMatch(tags.safeFor, condition);
+    // "Sorun yok" niteleyicisi bilinmeden susturmaz. Susturulan kısıtta atlanan kural sayılmaz.
+    const cleared = manualMatch(tags.safeFor, condition) === true;
+    // Danışanın hali yazılmamışsa o hale bağlı kurallar ve niteleyicili elle yasak ("…:acute") karar
+    // veremez. Hepsinin cevabı tek soruda (hangi hal?): kısıt başına tek "atlandı" sayılır.
+    let unknownQualifier = manual === null;
+    let unknownFacts = 0;
+    const waiting: FilterResult['pending'] = [];
 
     for (const rule of RULES) {
       if (rule.condition !== condition.id) continue;
-      if (rule.qualifiers && !(condition.qualifier && rule.qualifiers.includes(condition.qualifier))) continue;
       // PT "bunda sorun yok" dediyse uyarı susar; yasak susmaz (kırmızı bayrak da susmaz).
       if (cleared && rule.decision !== 'block') continue;
+      // Niteleyiciye bağlı kural: danışanın niteleyicisi başkaysa işlemez; yazılmamışsa hangi hal
+      // olduğu bilinmez → etiketler kuralı zaten düşürmüyorsa atlanır ve sayılır.
+      const qualified = !rule.qualifiers || (condition.qualifier ? rule.qualifiers.includes(condition.qualifier) : null);
+      if (qualified === false) continue;
 
-      const hit = rule.match(tags, context);
-      if (hit === null) {
-        skipped += 1;
+      const fixed = and(qualified, rule.match(tags, context));
+      const hit = and(fixed, rule.when ? rule.when.test(context, condition) : true);
+      if (hit) {
+        findings.push({ decision: rule.decision, condition, message: rule.message, rule: rule.id });
         continue;
       }
-      if (hit) findings.push({ decision: rule.decision, condition, message: rule.message, rule: rule.id });
+      if (hit === false) continue;
+      if (qualified === null) unknownQualifier = true;
+      else if (fixed === null) unknownFacts += 1;
+      else if (rule.when) waiting.push({ rule: rule.id, needs: rule.when.needs });
     }
+    if (cleared) continue;
+    skipped += unknownFacts + (unknownQualifier ? 1 : 0);
+    pending.push(...waiting);
   }
 
   findings.sort((a, b) => ORDER[b.decision] - ORDER[a.decision]);
@@ -541,8 +642,98 @@ export function evaluateExercise(
     decision: findings[0]?.decision ?? null,
     findings,
     skipped,
+    pending,
     untagged: !isTagged(tags),
   };
+}
+
+/**
+ * Kısıt seçiliyken her hareketin girdiği tek küme; özet çipleri bu sırayla yazılır ve dokununca liste o
+ * kümeye süzülür. `clear` (uygun): etiketli, hiçbir kural işlemedi ve kartta sayılan bilinmeyeni yok.
+ * `untagged` (kontrol edilmedi): hiç etiketi yok, süzgeç çalışmadı; "uygun" sayılmaz (SPEC §6).
+ */
+export const FILTER_GROUPS = ['blocked', 'warned', 'clear', 'untagged', 'unassessed'] as const;
+export type FilterGroup = (typeof FILTER_GROUPS)[number];
+
+export const FILTER_GROUP_LABELS: Record<FilterGroup, string> = {
+  blocked: 'yasak',
+  warned: 'uyarı',
+  clear: 'uygun',
+  untagged: 'kontrol edilmedi',
+  unassessed: 'eksik bilgi',
+};
+
+/**
+ * Hareketin kümesi. Karar bilinmeyenden önce gelir: yaptırma kararı eksik bilgiyle değişmez, uyarılı
+ * hareket uyarıda kalır (eksik bilgisi kartta ayrıca söylenir). Etiketsiz harekete yine de kural
+ * işleyebilir (hareketten bağımsız kırmızı bayrak): o zaman kararın kümesine girer.
+ */
+export function filterGroup(result: Pick<FilterResult, 'decision' | 'skipped' | 'untagged'>): FilterGroup {
+  if (result.decision === 'block') return 'blocked';
+  if (result.decision) return 'warned';
+  if (result.untagged) return 'untagged';
+  return result.skipped > 0 ? 'unassessed' : 'clear';
+}
+
+/** Listenin görünümü: hepsi, "Yasakları gizle" ya da tek küme (çip, "Yalnız uygunları göster"). */
+export type FilterView = 'all' | 'notBlocked' | FilterGroup;
+
+/** Hareket görünümde mi; kümesi bilinmeyen (süzgeç çalışmadı) yalnız "hepsi"nde görünür. */
+export function inFilterView(group: FilterGroup | undefined, view: FilterView): boolean {
+  if (view === 'all') return true;
+  if (group === undefined) return false;
+  return view === 'notBlocked' ? group !== 'blocked' : group === view;
+}
+
+/** Kısıt seçiliyken listenin kart rozetleri ve özet çipleri; her hareket tek kümeye girer. */
+export type FilterSummary = {
+  /**
+   * Kararı ya da kartta sayılan bilinmeyeni olan hareketler. `unassessed`: kartta söylenecek
+   * değerlendirilemeyen kural sayısı; yaptırma kararında 0 (daha ağır karar yok, sonucu değiştirmez).
+   */
+  cards: Map<string, { decision: Decision | null; message: string | null; unassessed: number }>;
+  /** Her hareketin kümesi (kimliğe göre). */
+  groups: Map<string, FilterGroup>;
+  /** Küme başına hareket sayısı; toplamı hareket sayısıdır. */
+  counts: Record<FilterGroup, number>;
+  /** Uyarılı ama bazı kuralları değerlendirilemeyen (daha ağır bir kural işleyebilir; rozet kartta kalır). */
+  warnedUnassessed: number;
+  /** Yalnız danışan bağlamı eksik kaldığı için karar veremeyen kurallar (tekrarsız) ve eksik bilgiler. */
+  pending: { rules: number; needs: TimedContext[] };
+};
+
+export function summarizeFilter(
+  items: readonly (ExerciseTags & { id: string })[],
+  conditions: readonly ClientCondition[],
+  context: FilterContext = {},
+): FilterSummary {
+  const summary: FilterSummary = {
+    cards: new Map(),
+    groups: new Map(),
+    counts: { blocked: 0, warned: 0, clear: 0, untagged: 0, unassessed: 0 },
+    warnedUnassessed: 0,
+    pending: { rules: 0, needs: [] },
+  };
+  const rules = new Set<string>();
+  const needs = new Set<TimedContext>();
+  for (const item of items) {
+    const result = evaluateExercise(item, conditions, context);
+    for (const entry of result.pending) {
+      rules.add(entry.rule);
+      needs.add(entry.needs);
+    }
+    // Etiketsiz hareket "kontrol edilmedi" kümesindedir; yaptırma kararı bilinmeyenden etkilenmez.
+    const unassessed = result.untagged || result.decision === 'block' ? 0 : result.skipped;
+    const group = filterGroup(result);
+    summary.groups.set(item.id, group);
+    summary.counts[group] += 1;
+    if (group === 'warned' && unassessed > 0) summary.warnedUnassessed += 1;
+    if (result.decision || unassessed > 0) {
+      summary.cards.set(item.id, { decision: result.decision, message: result.findings[0]?.message ?? null, unassessed });
+    }
+  }
+  summary.pending = { rules: rules.size, needs: [...needs] };
+  return summary;
 }
 
 /** Kısıt listesindeki tıbbi izin gerektirenler (egzersizden bağımsız). */

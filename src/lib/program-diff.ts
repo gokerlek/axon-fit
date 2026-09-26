@@ -1,8 +1,8 @@
 import {
-  PROGRAM_LIMITS,
   appendLog,
   capChanges,
   currentPhaseChange,
+  keepHiddenPhase,
   reconcileRotation,
   type LogKind,
   type ProgramBody,
@@ -28,7 +28,7 @@ import {
  * Program geçmişi (SPEC §7.4): PT'nin her kaydında eski ve yeni program karşılaştırılır,
  * okunur Türkçe cümleler çıkar ("Gün A: Goblet Squat 3×8–12 → 12/10/8 (piramit %80/%90/%100) · Leg
  * Press: son set AMRAP · Haftada 2 → 3 gün"). Gerekçe alanı yok. Cümleler
- * `program.json`'daki geçmişe (kırpılmış) ve commit mesajına (tamamı) girer.
+ * `program.json`'daki geçmişe (kırpılmış; tek kırpma noktası `appendLog`) ve commit mesajına (tamamı) girer.
  *
  * Satırlar satır kimliğiyle, bloklar blok kimliğiyle, günler ve evreler kendi
  * kimlikleriyle eşlenir: sıralama ya da gruplama "sil + ekle" diye yazılmaz. Setler
@@ -273,12 +273,11 @@ function frequencyChange(before: number | undefined, after: number | undefined, 
  * değişimi), evreler (bölme/kaldırma, ad, süre, sıklık, ekleme, silme, sıra), şu anki
  * evre. Evre birden çoksa kapsam "Evre · Gün", tek evrede yalnız gün adı. Evrelere
  * bölme ve evreleri kaldırma tek cümledir: o kayıtta evre adı, süre, ekleme ve günlerin
- * evre değiştirmesi ayrıca yazılmaz.
+ * evre değiştirmesi ayrıca yazılmaz. Cümleler kırpılmaz: dosyanın sınırı (300/90) `appendLog`'da.
  */
 export function diffProgram(before: ProgramBody, after: ProgramBody, ctx: DiffContext): ProgramChange[] {
   const changes: ProgramChange[] = [];
-  const push = (text: string, scope?: string) =>
-    changes.push({ ...(scope ? { scope: clip(scope, PROGRAM_LIMITS.changeScope) } : {}), text: clip(text, PROGRAM_LIMITS.changeText) });
+  const push = (text: string, scope?: string) => changes.push({ ...(scope ? { scope } : {}), text });
 
   const toggledOn = !before.phased && after.phased;
   const toggledOff = before.phased && !after.phased;
@@ -432,15 +431,17 @@ export function commitMessage(kind: LogKind, changes: readonly ProgramChange[]):
  * PT'nin kaydı: farkı çıkarır, değişiklik yoksa `null` (hiçbir şey yazılmaz). Varsa
  * revision +1, geçmişe kayıt (en fazla 60 değişiklik), şu anki evre değiştiyse yeni evre
  * şimdi başlar ve rotasyon onun ilk gününden; değişmediyse silinen ya da başka evreye
- * taşınan son gün uzlaştırılır. Evrelere bölme/kaldırma "Düzenlendi" kaydıdır.
+ * taşınan son gün uzlaştırılır. Evrelere bölme/kaldırma "Düzenlendi" kaydıdır. Evresiz program
+ * evresiz kalırsa gizli evre kayıttakidir (`keepHiddenPhase`): fark gün düzeyinde, rotasyon sürer.
  * Dönen `changes` kırpılmamıştır (commit mesajı için).
  */
 export function applyProgramEdit(
   stored: ProgramState,
-  body: ProgramBody,
+  input: ProgramBody,
   ctx: DiffContext,
   now: Date,
 ): { program: ProgramState; changes: ProgramChange[] } | null {
+  const body = keepHiddenPhase(stored, input);
   const storedDays = new Map(stored.phases.flatMap((phase) => phase.days.map((day) => [day.id, day] as const)));
   // Düzenleyici kaynağı göndermediyse kayıttaki kaynak korunur.
   const phases = body.phases.map((phase) => ({

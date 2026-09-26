@@ -64,6 +64,12 @@ export function useDragView<T>(select: (view: DragView) => T): T {
 }
 
 const selectDragging = (view: DragView) => view.activeId !== null;
+const selectArmed = (view: DragView) => view.armed;
+
+/** Orta bandında beklenmiş hedef ve sonucu (sürüklenen kartın üstündeki etiket için); değişmedikçe aynı nesne. */
+export function useArmedTarget(): DragView['armed'] {
+  return useDragView(selectArmed);
+}
 
 /** Sürükleme sürüyor mu (kaydırma o sırada kapalı). Yalnız başlangıçta ve bitişte değişir. */
 export function useDragging(): boolean {

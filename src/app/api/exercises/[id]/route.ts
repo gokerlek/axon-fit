@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
-import { GithubError } from '@/lib/github/client';
-import { readCustomExercises, writeCustomExercises } from '@/lib/exercises';
+import { appRepoFiles } from '@/lib/app-repo-files';
+import { deleteExercise } from '@/lib/catalog-actions';
 import { readPtSession } from '@/lib/session';
 
 /**
  * PT'nin kendi egzersizini siler (hazır bir egzersizin sürümüyse varsayılana döner).
- * Hazır kütüphanedekiler silinemez (pakette gelir).
+ * Hazır kütüphanedekiler silinemez (pakette gelir). Silinen egzersiz, PT'nin diğer
+ * egzersizlerinde sabitlendiği muadillerden de düşer ve kimliği bir daha verilmez;
+ * varsayılana dönüşte kimlik hazır kütüphanede yaşadığı için sabitlemeler kalır.
+ * Kurallar `deleteExercise`'ta (`src/lib/catalog-actions.ts`).
  */
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await readPtSession();
@@ -14,28 +17,6 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   }
 
   const { id } = await params;
-
-  try {
-    const { items, sha } = await readCustomExercises();
-    const target = items.find((item) => item.id === id);
-    if (!target) {
-      return NextResponse.json(
-        { error: 'Bu egzersiz hazır kütüphaneden geliyor, silinemez.' },
-        { status: 404 },
-      );
-    }
-
-    await writeCustomExercises(
-      items.filter((item) => item.id !== id),
-      `Egzersiz silindi: ${target.title}`,
-      sha,
-    );
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    const failure = error instanceof GithubError ? error : null;
-    return NextResponse.json(
-      { error: failure?.message ?? 'Egzersiz silinemedi.' },
-      { status: failure?.status ?? 502 },
-    );
-  }
+  const { status, body } = await deleteExercise(appRepoFiles(), id);
+  return NextResponse.json(body, { status });
 }

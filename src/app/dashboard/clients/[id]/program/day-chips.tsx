@@ -42,7 +42,7 @@ export function AddDayMenu({
         <Plus data-icon="inline-start" />
         Gün
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-52">
+      <DropdownMenuContent align="start" className="min-w-52 touch:**:data-[slot=dropdown-menu-item]:min-h-11 touch:**:data-[slot=dropdown-menu-sub-trigger]:min-h-11">
         <DropdownMenuItem onClick={() => addDayTo(actions, phase.id, (target, all) => blankDay(target, programIdSource(all)))}>
           <Square />
           Boş gün

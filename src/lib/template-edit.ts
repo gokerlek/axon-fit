@@ -1,5 +1,5 @@
-import { alternativeForDevice, type AlternativeCandidate } from './alternatives.ts';
-import { KIND_EQUIPMENT, type DeviceKind, type DeviceLoadSettings } from './device-loads.ts';
+import { deviceSwapTarget, type AlternativeCandidate } from './alternatives.ts';
+import type { DeviceKind, DeviceLoadSettings } from './device-loads.ts';
 import type { Equipment, Muscle } from '@/lib/schemas/exercise';
 import { moveKey, type ReorderTarget } from './reorder.ts';
 import {
@@ -22,9 +22,11 @@ import {
   kindOptions,
   randomId,
   roundsOf,
+  rowRule,
   settleKind,
   type BlockKind,
   type PlanExercise,
+  type RuleOverride,
   type TemplateBlock,
   type TemplateBody,
   type TemplateRow,
@@ -392,6 +394,18 @@ function checkMove(blocks: readonly TemplateBlock[], source: Item | null, destin
 }
 
 /**
+ * Taşıma grup üyeliğini değiştirir mi (sürükle-bırakta "Geri al" bunun için): üye üst düzeye ya
+ * da başka gruba gider, tek hareket gruba katılır. Aynı düzeyde sıralama (üst düzeyde tek ya da
+ * grup, grubunda üye) ve olmayan taşıma (`moveCheck` `ok` değilse) değiştirmez.
+ */
+export function moveRegroups(blocks: readonly TemplateBlock[], sourceId: string, destination: MoveDestination): boolean {
+  const source = itemOf(blocks, sourceId);
+  if (!source || checkMove(blocks, source, destination) !== 'ok') return false;
+  if (destination.at === 'top') return source.type === 'member';
+  return source.type !== 'member' || source.block.id !== destination.blockId;
+}
+
+/**
  * Öğeyi bir boşluğa taşır (sürükle-bırakta çizgi, klavyede `stepDestination`):
  * - Grup ve tek hareket üst düzeyde sıralanır; grup yalnız üst düzeye gider.
  * - Üye kendi grubunda sıralanır.
@@ -717,6 +731,23 @@ export function changeKind(blocks: readonly TemplateBlock[], blockId: string, ki
   );
 }
 
+/**
+ * Kural seçicilerinin (ilerleme türü, yedekte tekrar) yazacağı kural. Seçilen değer satırın etkin
+ * kuralına (özel kuralı, yoksa egzersizinki) eşitse `null`: hiçbir şey yazılmaz. Base UI Select, zaten
+ * seçili öğe yeniden seçilince de değişiklik bildirir; yazılsaydı özel kuralı olmayan satıra
+ * egzersizinkine eşit bir kural girer, form boşuna kirlenirdi. Değilse etkin kuralın öbür alanıyla
+ * birlikte yeni kural.
+ */
+export function ruleChange(
+  row: Pick<TemplateRow, 'rule' | 'sets'>,
+  exercise: Pick<PlanExercise, 'category' | 'trackingType' | 'progression'>,
+  change: Partial<RuleOverride>,
+): RuleOverride | null {
+  const { scheme, targetRir } = rowRule(row, exercise);
+  const next = { scheme: change.scheme ?? scheme, targetRir: change.targetRir ?? targetRir };
+  return next.scheme === scheme && next.targetRir === targetRir ? null : next;
+}
+
 export type DeviceSwap =
   /** Cihazda aynı kalıpta muadil var: hareket değişti (egzersiz kimlikleri). */
   | { kind: 'swapped'; row: TemplateRow; from: string; to: string }
@@ -740,38 +771,45 @@ function withoutDevice(row: TemplateRow): TemplateRow {
 /**
  * Satırın cihazı değişince ne olur (SPEC §7.3):
  * 1. Egzersizin kendi cihazı (ya da boş) → satırdaki cihaz değişikliği kalkar.
- * 2. Cihazda aynı hareket kalıbında muadil varsa (PT'nin sabitledikleri önce) → hareket ona geçer.
- * 3. Cihazın ekipmanı egzersizinkiyle aynıysa → aynı hareket bu cihazda (satıra cihaz yazılır;
- *    geçmiş egzersiz + cihaz olarak ayrı tutulur).
- * 4. Başka kalıpta da olsa muadil varsa → ona geçer.
- * 5. Hiçbiri yoksa bu cihaz seçilemez.
+ * 2. Satırda zaten yazılı cihaz → satır olduğu gibi kalır (seçicide mevcut durum). Eski kurallarla
+ *    kaydedilmiş satır da aynı cihaz yeniden seçilince başka harekete geçmez.
+ * 3. Değilse hareketi `deviceSwapTarget` seçer (egzersiz sayfasının "Cihaz değişirse"siyle aynı
+ *    karar): cihazdaki aynı kalıptaki muadil (sabitlenen önce); yoksa ekipman aynıysa aynı hareket
+ *    bu cihazda (satıra cihaz yazılır; geçmiş egzersiz + cihaz olarak ayrı tutulur); o da olmazsa
+ *    başka kalıptaki ilk muadil. Hiçbiri yoksa bu cihaz seçilemez.
  * Hareket değişince satırın kimliği, notu ve set sayısı kalır; hedefler ve kural yalnız kayıt türü aynıysa.
  */
 export function swapDevice(row: TemplateRow, deviceId: string | null, ctx: SwapContext): DeviceSwap {
   const exercise = ctx.exercises.find((item) => item.id === row.exerciseId);
   if (!exercise) return { kind: 'unavailable' };
   if (deviceId === null || deviceId === '' || deviceId === exercise.deviceId) return { kind: 'reset', row: withoutDevice(row) };
+  if (deviceId === row.deviceId) return { kind: 'device', row };
 
   const device = ctx.devices.get(deviceId);
   if (!device) return { kind: 'unavailable' };
-  const found = alternativeForDevice(exercise, deviceId, ctx.exercises, ctx.familyOf);
-  const alternative = found && found.id !== exercise.id ? found : null;
-  const swapped = (to: EditorExercise): DeviceSwap => ({
-    kind: 'swapped',
-    row: rowWithExercise(row, to, exercise),
-    from: exercise.id,
-    to: to.id,
-  });
+  const target = deviceSwapTarget(exercise, { id: deviceId, kind: device.kind }, ctx.exercises, ctx.familyOf);
+  if (!target) return { kind: 'unavailable' };
+  if (target.id === exercise.id) return { kind: 'device', row: { ...row, deviceId } };
+  return { kind: 'swapped', row: rowWithExercise(row, target, exercise), from: exercise.id, to: target.id };
+}
 
-  if (alternative && exercise.pattern && alternative.pattern === exercise.pattern) return swapped(alternative);
-  if (KIND_EQUIPMENT[device.kind] === exercise.equipment) return { kind: 'device', row: { ...row, deviceId } };
-  if (alternative) return swapped(alternative);
-  return { kind: 'unavailable' };
+/**
+ * Cihaz seçimi satırı değiştiriyor mu: hareket değiştiyse ya da satırın cihazı başkalaştıysa evet.
+ * Satırda zaten yazılı cihazı ya da (cihaz yazılı değilken) egzersizin kendi cihazını yeniden seçmek
+ * değiştirmez: forma yazılmaz, "Geri al" çıkmaz.
+ */
+export function deviceSwapChanges(row: TemplateRow, swap: DeviceSwap): swap is Exclude<DeviceSwap, { kind: 'unavailable' }> {
+  if (swap.kind === 'unavailable') return false;
+  return swap.kind === 'swapped' || (swap.row.deviceId ?? null) !== (row.deviceId ?? null);
 }
 
 export type DeviceChoice = { deviceId: string; label: string; result: Exclude<DeviceSwap, { kind: 'unavailable' }> };
 
-/** Satırın cihaz listesi: seçilebilen (sonucu olan) cihazlar, ne olacağını söyleyen etiketle. */
+/**
+ * Satırın cihaz listesi: seçilebilen (sonucu olan) cihazlar, ne olacağını söyleyen etiketle
+ * ("Dambıl seti → Dambıl Bench Press"). Satırın şu anki cihazı mevcut durumu anlatır: yalnız cihazın
+ * adı, seçilince satır değişmez (`swapDevice` 2. kural; seçici seçili etiketi buradan alır).
+ */
 export function deviceChoices(
   row: TemplateRow,
   ctx: SwapContext & { deviceList: readonly { id: string; name: string; kind: DeviceKind }[] },

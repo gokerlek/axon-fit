@@ -6,6 +6,7 @@ import { getInput, useField } from '@formisch/react';
 import { ArrowLeft, ArrowRight, ArrowSquareRight, Copy, DotsThreeVertical, FloppyDisk, Trash } from '@phosphor-icons/react';
 import { BlockEditor, useBlocks } from '@/components/block-editor/block-editor';
 import type { BlocksFormStore } from '@/components/block-editor/block-items';
+import { keepLineEnter } from '@/components/block-editor/enter-key';
 import { TemplateMuscleMap } from '@/components/muscle-map/template-muscle-map';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Field, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { dayBlocksPath } from '@/lib/editor-undo';
 import { formatDate } from '@/lib/format';
 import { exerciseSetWeights } from '@/lib/muscles';
 import {
@@ -116,7 +118,7 @@ export function DayEditor({
               <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon" aria-label={`Gün işlemleri: ${day.name}`} />}>
                 <DotsThreeVertical weight="bold" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-52">
+              <DropdownMenuContent align="end" className="min-w-52 touch:**:data-[slot=dropdown-menu-item]:min-h-11 touch:**:data-[slot=dropdown-menu-sub-trigger]:min-h-11">
                 <DropdownMenuItem
                   disabled={dayIndex === 0}
                   onClick={() => actions.update((all) => moveDay(all, phase.id, day.id, -1), { announce: `${day.name} sola taşındı` })}>
@@ -135,7 +137,7 @@ export function DayEditor({
                       <ArrowSquareRight />
                       {onlyDay ? 'Evreye taşı (evrenin tek günü)' : 'Evreye taşı'}
                     </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="min-w-48">
+                    <DropdownMenuSubContent className="min-w-48 touch:**:data-[slot=dropdown-menu-item]:min-h-11 touch:**:data-[slot=dropdown-menu-sub-trigger]:min-h-11">
                       {otherPhases.map((target) => {
                         const full = !canMoveDay(phases, day.id, target.id);
                         return (
@@ -182,13 +184,16 @@ export function DayEditor({
               value={nameField.input ?? ''}
               placeholder="Ör. Gün A"
               aria-invalid={Boolean(nameField.errors) || undefined}
+              onKeyDown={keepLineEnter}
             />
             <FieldError>{nameField.errors?.[0]}</FieldError>
           </Field>
           {source ? (
             <p className="text-sm text-muted-foreground">
               {templateIds.has(source.templateId) ? (
-                <Link href={`/dashboard/templates/${source.templateId}`} className="underline underline-offset-4">
+                <Link
+                  href={`/dashboard/templates/${source.templateId}`}
+                  className="underline underline-offset-4 touch:inline-flex touch:min-h-11 touch:items-center">
                   &apos;{source.templateName}&apos; şablonundan
                 </Link>
               ) : (
@@ -204,6 +209,8 @@ export function DayEditor({
         key={day.id}
         form={blocksForm}
         path={path}
+        // "Geri al" günü kimliğiyle bulur: toast açıkken gün taşınsa (sıra, evre, araya gün) da kendi gününe yazar.
+        undoPath={() => dayBlocksPath(actions.current(), day.id)}
         exercises={exercises}
         devices={devices}
         newIds={() => programIdSource((getInput(form, { path: ['phases'] }) ?? []) as unknown as ProgramPhase[])}

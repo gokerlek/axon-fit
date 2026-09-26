@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ImageSquare, Plus } from '@phosphor-icons/react/dist/ssr';
 import { ImagePlaceholder } from '@/components/image-placeholder';
@@ -6,11 +7,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { attachmentImageUrl } from '@/lib/attachment-media';
-import { listAttachments } from '@/lib/attachments';
+import { CUSTOM_ATTACHMENTS_PATH, listAttachments, readCustomAttachments } from '@/lib/attachments';
 import { listDevices } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
 import { TrainingTabs } from '../training-tabs';
+import { UnreadableRecordsAlert } from '../unreadable-records-alert';
 import { requirePt } from '@/lib/guards';
+
+export const metadata: Metadata = { title: 'Aparatlar' };
 
 /**
  * Aparat havuzu: hazır liste + PT'nin aparatları. Cihazlar buradan seçer, egzersiz
@@ -18,7 +22,8 @@ import { requirePt } from '@/lib/guards';
  */
 export default async function AttachmentsPage() {
   await requirePt();
-  const [attachments, devices, exercises] = await Promise.all([listAttachments(), listDevices(), listExercises()]);
+  const [file, devices, exercises] = await Promise.all([readCustomAttachments(), listDevices(), listExercises()]);
+  const attachments = await listAttachments(file);
   const deviceCount = new Map<string, number>();
   for (const device of devices) {
     for (const id of new Set(device.attachments ?? [])) deviceCount.set(id, (deviceCount.get(id) ?? 0) + 1);
@@ -47,6 +52,7 @@ export default async function AttachmentsPage() {
           </Button>
         }
       />
+      <UnreadableRecordsAlert count={file.invalid} path={CUSTOM_ATTACHMENTS_PATH} />
 
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {attachments.map((attachment) => {

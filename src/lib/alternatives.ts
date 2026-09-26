@@ -1,3 +1,5 @@
+import { KIND_EQUIPMENT, type DeviceKind } from './device-loads.ts';
+
 /**
  * Muadil (alternatif) hareket önerisi — alet doluysa, yoksa ya da danışan için uygun
  * değilse yerine ne yapılır.
@@ -8,7 +10,9 @@
  * - Güç hareketleri (bileşik, izolasyon, kondisyon) ile ısınma/soğuma birbirine önerilmez.
  * - Sıra: aynı hareket kalıbı önce; sonra aynı hedef kas (tam parça), aynı kas ailesi,
  *   bütün kas yükünün örtüşmesi ve aynı tutuş.
- * PT'nin sabitledikleri her zaman en başta gelir.
+ * PT'nin sabitledikleri her zaman en başta gelir. Cihaz değişince geçilecek hareket ayrı bir
+ * karardır (`deviceSwapTarget`): orada cihazdaki aynı kalıptaki muadil, başka kalıpta
+ * sabitlenenin önüne geçer.
  *
  * Saf fonksiyonlar; yol takma adıyla çalışma zamanı içe aktarması yapmaz (testler
  * Node'un kendi test aracıyla çalışır). Kas aileleri çağırandan gelir.
@@ -202,9 +206,9 @@ export function groupByEquipment<T extends AlternativeCandidate>(alternatives: r
 }
 
 /**
- * Cihaz değişince hangi egzersiz yapılır: kaynağın bu cihazla yapılan en iyi muadili.
- * Kaynak zaten o cihazdaysa kendisi; uygun muadil yoksa `null`. Şablonda satırın
- * cihazı değiştirilince egzersiz buna göre değişir.
+ * Kaynağın bu cihazla yapılan en iyi muadili: cihazdaki adayların sıralamasında ilki (PT'nin
+ * sabitledikleri önce, kalıbı ne olursa olsun). Kaynak zaten o cihazdaysa kendisi; uygun muadil
+ * yoksa `null`. Cihaz değişince hangi hareketin yapılacağı bu değil: o karar `deviceSwapTarget`'ta.
  */
 export function alternativeForDevice<T extends AlternativeCandidate>(
   source: T,
@@ -217,4 +221,30 @@ export function alternativeForDevice<T extends AlternativeCandidate>(
   // PT'nin sabitledikleri de bu cihazdaysa önce onlar.
   const best = rankAlternatives(source, [source, ...onDevice], familyOf, { limit: 1 })[0];
   return best?.exercise ?? null;
+}
+
+/**
+ * Cihaz değişince hangi hareket yapılır (SPEC §7.3, §7.4). Karar tek yerde: düzenleyicide satırın
+ * cihazı (`swapDevice`) ve egzersiz sayfasındaki "Cihaz değişirse" bunu kullanır.
+ * 1. Kaynak zaten bu cihazdaysa kendisi.
+ * 2. Cihazda aynı hareket kalıbında muadil varsa sıralamadaki ilki (PT'nin sabitledikleri önce).
+ *    Cihazdaki bütün muadillere bakılır: başka kalıptaki sabitlenen, aynı kalıptakinin önüne geçmez.
+ * 3. Cihazın ekipmanı kaynağınkiyle aynıysa kaynağın kendisi: aynı hareket bu cihazda yapılır.
+ * 4. Başka kalıpta da olsa muadil varsa sıralamanın ilki (sabitlenen önce).
+ * 5. Hiçbiri yoksa `null`: bu cihazla yapılamaz.
+ */
+export function deviceSwapTarget<T extends AlternativeCandidate>(
+  source: T,
+  device: { id: string; kind: DeviceKind },
+  candidates: readonly T[],
+  familyOf: (muscle: string) => string,
+): T | null {
+  if (source.deviceId === device.id) return source;
+  const onDevice = candidates.filter((candidate) => candidate.deviceId === device.id);
+  // Cihazdaki bütün adaylar sıralanır, hiçbiri kesilmez.
+  const ranked = rankAlternatives(source, onDevice, familyOf, { limit: onDevice.length });
+  const samePattern = ranked.find((alternative) => alternative.samePattern);
+  if (samePattern) return samePattern.exercise;
+  if (KIND_EQUIPMENT[device.kind] === source.equipment) return source;
+  return ranked[0]?.exercise ?? null;
 }

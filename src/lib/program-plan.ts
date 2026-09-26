@@ -242,6 +242,24 @@ export function dayFromTemplate(
   };
 }
 
+/**
+ * Şablondan gün, düzenleyiciye hazır: bloklar yeni kimlikle kopyalanır (`dayFromTemplate`), silinmiş
+ * cihaza yazılmış satırlar açılıştaki gibi egzersizin kendi cihazına döner (SPEC §7.4; cihaz silinince
+ * şablon dosyası değişmez). Başlangıç şablonu ve "Gün ekle → Şablondan" bunu kullanır; düşen satırlar
+ * düzenleyicinin uyarısında sayılır (`droppedDeviceNotice`).
+ */
+export function dayFromTemplateForEditing(
+  phase: Pick<ProgramPhase, 'days'>,
+  template: TemplateOption,
+  ids: ProgramIdSource,
+  now: Date,
+  deviceIds: ReadonlySet<string>,
+): { day: ProgramDay; droppedDeviceRowIds: string[] } {
+  const day = dayFromTemplate(phase, template, ids, now);
+  const prepared = prepareForEditing(day, deviceIds);
+  return { day: { ...day, blocks: prepared.blocks }, droppedDeviceRowIds: prepared.droppedDeviceRowIds };
+}
+
 /** Günün kopyası aynı evreye: yeni kimlikler, sıradaki ad, kaynak aynı. */
 export function copyDay(phase: Pick<ProgramPhase, 'days'>, day: ProgramDay, ids: ProgramIdSource): ProgramDay {
   return {
@@ -277,12 +295,24 @@ export function sourceNames(phases: Phases): string[] {
   return names;
 }
 
-/** Oluşturma kaydının cümlesi: hangi şablonlardan. */
+/**
+ * Oluşturma kaydının cümlesi: hangi şablonlardan (gün sırasıyla). Geçmişin sınırına (300
+ * karakter) sığmayan adlar "… ve n şablon daha" olur; hepsi günlerin kaynağında durur.
+ */
 export function creationChange(body: Pick<ProgramBody, 'phases'>): ProgramChange {
   const names = sourceNames(body.phases);
   if (names.length === 0) return { text: 'Program oluşturuldu' };
-  const quoted = names.map((name) => `'${name}'`).join(', ');
-  return { text: `Program oluşturuldu: ${quoted} ${names.length === 1 ? 'şablonundan' : 'şablonlarından'}` };
+  const text = (shown: number) => {
+    const quoted = names
+      .slice(0, shown)
+      .map((name) => `'${name}'`)
+      .join(', ');
+    const rest = names.length - shown;
+    return `Program oluşturuldu: ${quoted} ${shown === 1 ? 'şablonundan' : 'şablonlarından'}${rest > 0 ? ` … ve ${rest} şablon daha` : ''}`;
+  };
+  let shown = names.length;
+  while (shown > 1 && text(shown).length > PROGRAM_LIMITS.changeText) shown -= 1;
+  return { text: text(shown) };
 }
 
 /** Yeni program kaydı: sürüm 2, şu anki evre şimdi başlar, geçmişte tek "oluşturuldu". */
@@ -297,8 +327,20 @@ export function createProgramRecord(body: ProgramBody, now: Date): ProgramState 
     phases: body.phases,
     current: { phaseId: body.currentPhaseId, startedAt: at },
     rotation: {},
-    log: [{ at, revision: 1, kind: 'create', changes: [creationChange(body)] }],
+    log: appendLog([], { at, revision: 1, kind: 'create', changes: [creationChange(body)] }),
   };
+}
+
+/**
+ * Düzenleyicinin yüklediği program sürümü: `revision` ve oluşturulma anı (`createdAt`). Program silinip
+ * yeniden oluşturulunca revision yine 1'den başlar; oluşturulma anı farklı olduğu için çakışma (412)
+ * atlanmaz. Oluşturulma anı olmayan taraf (eski sekme, eski taslak) yalnız revision'la karşılaştırılır.
+ */
+export type ProgramBase = { revision: number; createdAt?: string };
+
+/** Aynı program sürümü mü: kayıtta (sunucu, 412) ve taslakta (`draftConflict`) aynı karşılaştırma. */
+export function sameProgramBase(a: ProgramBase, b: ProgramBase): boolean {
+  return a.revision === b.revision && (a.createdAt === undefined || b.createdAt === undefined || a.createdAt === b.createdAt);
 }
 
 /** Şablondan program: evresiz, şablonla dolu tek gün ("Gün A"). */
@@ -329,6 +371,18 @@ export function dayToTemplate(
     }),
   }));
   return { template: { name, description: '', blocks }, droppedNotes };
+}
+
+/**
+ * "Şablon olarak kaydet"in yerel kopyası ("Şablondan…" hemen kullanabilsin): sunucunun yazdığı gibi
+ * şablon kurallarıyla sadeleşir (`normalizeTemplate`: egzersizinkine eşit kural ve cihaz düşer).
+ * Programda kalan danışana özel eşit seçim şablona geçmez; sayfa yenilenince gelen şablonla aynıdır.
+ */
+export function savedTemplateOption(
+  template: TemplateOption,
+  ctx: { exercises: ReadonlyMap<string, PlanExercise>; deviceIds: ReadonlySet<string> },
+): TemplateOption {
+  return { ...template, blocks: normalizeTemplate(template, ctx).blocks };
 }
 
 /* --- düzenleyici işlemleri --- */
@@ -450,6 +504,19 @@ export function mergePhases(
   };
 }
 
+/**
+ * Evresiz program evresiz kaydedilirken gizli evre aynı gün listesidir: düzenleyicide evreler
+ * açılıp kapansa da (böl → evre ekle → şu anki yap → kaldır) kimliği ve adı kayıttakinden gelir.
+ * Böylece fark gün düzeyinde çıkar, evreden söz etmez; şu anki evre ve rotasyon değişmez.
+ * Taraflardan biri evreliyse gövde aynen döner.
+ */
+export function keepHiddenPhase(stored: Pick<ProgramBody, 'phased' | 'phases'>, body: ProgramBody): ProgramBody {
+  const hidden = stored.phased ? undefined : stored.phases[0];
+  const [only, ...others] = body.phases;
+  if (body.phased || !hidden || !only || others.length > 0 || (only.id === hidden.id && only.name === hidden.name)) return body;
+  return { ...body, currentPhaseId: hidden.id, phases: [{ ...only, id: hidden.id, name: hidden.name }] };
+}
+
 /** Gün başka evreye taşınabilir mi: başka evre, kaynakta tek gün değil, hedef dolu (7) değil. */
 export function canMoveDay(phases: Phases, dayId: string, targetPhaseId: string): boolean {
   const source = phases.find((phase) => phase.days.some((day) => day.id === dayId));
@@ -533,6 +600,20 @@ export function prepareProgramForEditing(
   return { phases: next, droppedDeviceRowIds };
 }
 
+/**
+ * Düzenleyicinin uyarısı: cihazı silindiği için egzersizin kendi cihazına dönen satırlar (açılışta,
+ * şablondan gelen günde, geri yüklenen taslakta not edilir), bugünkü hâliyle sayılır: satır formda
+ * duruyor ve PT ona başka cihaz seçmedi. "Kaydedince kalıcı olur" yalnız kaydedilecek iş varken
+ * (`unsaved`: Kaydet görünür). Sayılacak satır yoksa `null`.
+ */
+export function droppedDeviceNotice(phases: Phases, noted: ReadonlySet<string>, unsaved: boolean): string | null {
+  const count = phases
+    .flatMap((phase) => phase.days.flatMap((day) => day.blocks.flatMap((block) => block.rows)))
+    .filter((row) => noted.has(row.id) && row.deviceId === undefined).length;
+  if (count === 0) return null;
+  return `${count} satırın cihazı silinmiş; egzersizin kendi cihazına döndü.${unsaved ? ' Kaydedince kalıcı olur.' : ''}`;
+}
+
 /** Kütüphanede olmayan egzersize bağlı satırlar, gün gün. */
 export function missingExerciseDays(
   phases: Phases,
@@ -549,20 +630,35 @@ export function missingExerciseDays(
 /**
  * Kayıttan önce sunucuda: her gün `normalizeTemplate`'ten geçer (kütüphane denetimi,
  * sadeleştirme). Hata anahtarları Formisch yollarıdır (`phases.1.days.0.blocks.0.rows.0.exerciseId`).
- * Adlar kırpılır; sıklık ve kaynak aynen kalır, süre yalnız evreli programda.
+ * Adlar kırpılır; sıklık ve kaynak aynen kalır, süre yalnız evreli programda. Silinen cihaza
+ * yazılmış satır, düzenleyicinin açılışındaki gibi egzersizin cihazına döner (SPEC §7.4): şablondan
+ * eklenen gün, geri yüklenen taslak ya da eski sekme yüzünden kayıt reddedilmez; düşen satırlar
+ * (`droppedDeviceRowIds`) PT'ye bildirilir, sessiz kalmaz. Egzersizinkine eşit
+ * kural ya da cihaz yalnız kayıttaki (`stored`; oluştururken yok) aynı satırda aynen duruyorsa kalır:
+ * danışana özel seçim egzersiz sonradan ona eşitlense de kaybolmaz; yeni gelen eşit değer şablondaki
+ * gibi düşer (seçicide gösterilen varsayılanı yeniden seçmek değişiklik üretmez).
  */
 export function normalizeProgram(
   body: Pick<ProgramBody, 'phased' | 'phases'>,
   ctx: { exercises: ReadonlyMap<string, PlanExercise>; deviceIds: ReadonlySet<string> },
-): { phases: ProgramPhase[]; errors: Record<string, string> } {
+  stored: Pick<ProgramBody, 'phases'> | null,
+): { phases: ProgramPhase[]; errors: Record<string, string>; droppedDeviceRowIds: string[] } {
   const errors: Record<string, string> = {};
+  const droppedDeviceRowIds: string[] = [];
+  const storedRows = new Map(
+    (stored?.phases ?? []).flatMap((phase) =>
+      phase.days.flatMap((day) => day.blocks.flatMap((block) => block.rows.map((row) => [row.id, row] as const))),
+    ),
+  );
   const phases = body.phases.map((phase, i): ProgramPhase => ({
     id: phase.id,
     name: phase.name.trim(),
     ...(body.phased && phase.weeks !== undefined ? { weeks: phase.weeks } : {}),
     ...(phase.daysPerWeek !== undefined ? { daysPerWeek: phase.daysPerWeek } : {}),
     days: phase.days.map((day, j): ProgramDay => {
-      const normalized = normalizeTemplate({ blocks: day.blocks }, ctx);
+      const prepared = prepareForEditing(day, ctx.deviceIds);
+      droppedDeviceRowIds.push(...prepared.droppedDeviceRowIds);
+      const normalized = normalizeTemplate(prepared, ctx, { storedRows });
       for (const [key, message] of Object.entries(normalized.errors)) errors[`phases.${i}.days.${j}.${key}`] = message;
       return {
         id: day.id,
@@ -572,7 +668,7 @@ export function normalizeProgram(
       };
     }),
   }));
-  return { phases, errors };
+  return { phases, errors, droppedDeviceRowIds };
 }
 
 /* --- rotasyon ve evreler --- */
@@ -667,6 +763,14 @@ export function phaseStatusLabel(status: PhaseStatus): string {
     case 'ended':
       return `Süresi doldu (${status.weeks} hafta)`;
   }
+}
+
+/** Evre çubuğu: geçen süre ÷ evrenin süresi, 0–1 (başlangıçtan önce 0, süre dolunca 1); süresiz evrede `null`. */
+export function phaseProgress(program: Pick<ProgramState, 'phases' | 'current'>, now: Date): number | null {
+  const weeks = currentPhaseOf(program)?.phase.weeks;
+  if (weeks === undefined) return null;
+  const elapsed = now.getTime() - new Date(program.current.startedAt).getTime();
+  return Math.min(1, Math.max(0, elapsed / (weeks * WEEK_MS)));
 }
 
 /* --- sıklık ve haftalık yük --- */
@@ -776,9 +880,19 @@ export function currentPhaseChange(fromName: string, toName: string): ProgramCha
   return { text: `Şu anki evre: '${fromName}' → '${toName}'` };
 }
 
-/** Geçmişe ekler: en yenisi üstte, en fazla 200 kayıt. */
+/**
+ * Geçmişe ekler: en yenisi üstte, en fazla 200 kayıt. Geçmişe giden her cümle (oluşturma,
+ * düzenleme, evre geçişi) buradan geçer ve dosyanın sınırında kesilir: kapsam 90, metin 300 karakter.
+ */
 export function appendLog(log: readonly ProgramLogEntry[], entry: ProgramLogEntry): ProgramLogEntry[] {
-  return [entry, ...log].slice(0, PROGRAM_LIMITS.log);
+  const clip = (value: string, max: number) => (value.length <= max ? value : `${value.slice(0, max - 1)}…`);
+  const changes = entry.changes.map(
+    ({ scope, text }): ProgramChange => ({
+      ...(scope !== undefined ? { scope: clip(scope, PROGRAM_LIMITS.changeScope) } : {}),
+      text: clip(text, PROGRAM_LIMITS.changeText),
+    }),
+  );
+  return [{ ...entry, changes }, ...log].slice(0, PROGRAM_LIMITS.log);
 }
 
 /** Tek kayıtta en fazla 60 değişiklik; fazlası "… ve n değişiklik daha" olur (tamamı commit'te). */

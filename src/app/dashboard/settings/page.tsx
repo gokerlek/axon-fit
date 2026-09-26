@@ -1,12 +1,16 @@
+import type { Metadata } from 'next';
 import { PageHeader } from '@/components/page-header';
-import { readAppConfig } from '@/lib/config';
+import { loadAppConfig } from '@/lib/config';
 import { SetupForm } from '@/app/setup/setup-form';
 import { requirePt } from '@/lib/guards';
+
+export const metadata: Metadata = { title: 'Görünüm' };
 
 /** Ayarlar → Görünüm. Kurulum sihirbazıyla aynı form; kaydedince sayfada kalır. */
 export default async function SettingsPage() {
   await requirePt();
-  const config = await readAppConfig();
+  // Sihirbazla aynı kural: okunamazsa varsayılanlarla dolu form gösterilmez.
+  const config = await loadAppConfig();
 
   return (
     <div className="flex flex-col gap-6">

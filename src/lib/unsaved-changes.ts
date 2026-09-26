@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { sameProgramBase, type ProgramBase } from './program-plan.ts';
 
 /**
  * Kaydedilmemiş değişiklikler (tasarım PT kararı 16): düzenleyicinin yerel taslağı ve sayfadan
@@ -23,11 +24,24 @@ export function programDraftKey(clientId: string): string {
   return `${DRAFT_PREFIX}program.${clientId}`;
 }
 
-/** Taslağın dayandığı sürüm: şablonda dosyanın sha'sı, programda revision; yenide null. */
-export type DraftBase = string | number | null;
+/**
+ * Taslağın dayandığı sürüm: şablonda dosyanın sha'sı; programda revision ve oluşturulma anı
+ * (`ProgramBase`: silinip yeniden oluşturulan program revision 1'den başlasa da ayrılır); yenide null.
+ */
+export type DraftBase = string | ProgramBase | null;
 
 export const TEMPLATE_DRAFT_BASE = v.nullable(v.pipe(v.string(), v.regex(/^[0-9a-f]{40}$/)));
-export const PROGRAM_DRAFT_BASE = v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1)));
+const REVISION = v.pipe(v.number(), v.integer(), v.minValue(1));
+/** Eski taslakta yalnız revision (sayı) durur: çifte çevrilir, çakışma yalnız revision'la denetlenir. */
+export const PROGRAM_DRAFT_BASE = v.nullable(
+  v.union([
+    v.object({ revision: REVISION, createdAt: v.optional(v.pipe(v.string(), v.isoTimestamp())) }),
+    v.pipe(
+      REVISION,
+      v.transform((revision): ProgramBase => ({ revision })),
+    ),
+  ]),
+);
 
 export type EditorDraft<TBase extends DraftBase = DraftBase> = {
   version: typeof DRAFT_VERSION;
@@ -108,14 +122,19 @@ export function parseDraft<TBase extends DraftBase>(
   return { version: DRAFT_VERSION, base: base.output, savedAt: data.savedAt, input };
 }
 
-/** Karşılaştırma biçimi: anahtarlar sıralı; boş değerler (undefined, null, NaN) yok sayılır. */
+/**
+ * Karşılaştırma biçimi: anahtarlar sıralı; boş değerler (undefined, null, NaN) ve nesnedeki boş metin
+ * alanları yok sayılır. İsteğe bağlı metin alanında boş metinle alanın olmaması aynı hâldir: program
+ * formu notsuz satıra `note: ''` yazar, hareket düzenleyici notsuz satır üretir (`editor-undo.ts`'in
+ * geri alma karşılaştırmasıyla aynı kural).
+ */
 function normalize(value: unknown): unknown {
   if (value === null || value === undefined || isNaNumber(value)) return undefined;
   if (Array.isArray(value)) return value.map((item) => normalize(item) ?? null);
   if (isRecord(value)) {
     const result: Record<string, unknown> = {};
     for (const key of Object.keys(value).sort()) {
-      const item = key === '__proto__' ? undefined : normalize(value[key]);
+      const item = key === '__proto__' || value[key] === '' ? undefined : normalize(value[key]);
       if (item !== undefined) result[key] = item;
     }
     return result;
@@ -129,12 +148,26 @@ export function draftDiffers(draftInput: unknown, loadedInput: unknown): boolean
 }
 
 /**
+ * Açılışta depodaki taslak sunulur mu: forma yazılacağı gibi hazırlanınca (`prepare`; programda silinmiş
+ * cihaz egzersizinkine döner) yüklenen hâlden farklıysa. Değilse "Taslağa devam et" formu değiştirmezdi:
+ * taslak sunulmaz ve silinir, her açılışta yeniden çıkmaz. Şablon düzenleyici `prepare` vermez.
+ */
+export function offerDraft<T>(draftInput: T, loadedInput: unknown, prepare?: (input: T) => T): boolean {
+  return draftDiffers(prepare ? prepare(draftInput) : draftInput, loadedInput);
+}
+
+/**
  * Taslak o arada kaydedilmiş bir sürümün üstüne mi: kayıtta bir sürüm varken taslağınki ondan
- * farklıysa. O zaman taslağa devam edilirse kayıt taslağın sürümüyle gider ve sunucu 412 ile
- * çakışma uyarısını çıkarır. Kayıtta sürüm yoksa (oluşturma) çakışacak bir şey de yoktur.
+ * farklıysa (programda revision ya da oluşturulma anı; sunucunun 412'siyle aynı `sameProgramBase`).
+ * O zaman taslağa devam edilirse kayıt taslağın sürümüyle gider ve sunucu 412 ile çakışma
+ * uyarısını çıkarır. Kayıtta sürüm yoksa (oluşturma) çakışacak bir şey de yoktur.
  */
 export function draftConflict(draftBase: DraftBase, currentBase: DraftBase): boolean {
-  return currentBase !== null && draftBase !== currentBase;
+  if (currentBase === null) return false;
+  if (typeof draftBase === 'object' && draftBase !== null && typeof currentBase === 'object') {
+    return !sameProgramBase(draftBase, currentBase);
+  }
+  return draftBase !== currentBase;
 }
 
 /** Bir bağlantı tıklaması, DOM'dan bağımsız. */

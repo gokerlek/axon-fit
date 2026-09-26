@@ -11,7 +11,9 @@ import { cn } from '@/lib/utils';
  * 400 ms sonra 100 ms'de bir tekrarlar.
  *
  * Boyutlar: `sm` 32 px (masaüstü), `default` 44 px, `lg` 56 px (antrenman); `auto` ince
- * işaretçide 32, dokunmatikte ya da dar ekranda 44 px.
+ * işaretçide 32, dokunmatikte ya da dar ekranda kenarlığın içi 44 px. Ortadaki kutu kendi
+ * bölmesinin tamamını kaplar (birim, "sn", üstünde durur): dokunma alanı bölmenin kendisi. Kutunun
+ * yazısı dokunmatikte 16 px (iOS daha küçük yazılı kutuya odaklanınca sayfayı yakınlaştırır).
  *
  * Düğmeler Base UI'dakiler gibi sekme durağı değildir (klavyede kutu yeter); dokunmatik ekran
  * okuyucusu onlara ulaşır. Tekrar hızı Base UI'da sabit olduğu için düğmeler buradadır.
@@ -21,11 +23,12 @@ export type StepperSource = 'type' | 'step';
 
 type Size = 'sm' | 'default' | 'lg' | 'auto';
 
+/** Kabın yüksekliği. Dokunmatikte kenarlığın içi 44 px kalsın diye `auto` 46 px (düğme ve kutu 44×44). */
 const HEIGHT: Record<Size, string> = {
   sm: 'h-8',
   default: 'h-11',
   lg: 'h-14 text-base',
-  auto: 'h-8 touch:h-11',
+  auto: 'h-8 touch:h-[2.875rem]',
 };
 
 const BUTTON: Record<Size, string> = {
@@ -40,7 +43,7 @@ const CENTER: Record<Size, { plain: string; unit: string }> = {
   sm: { plain: 'w-10', unit: 'w-14' },
   default: { plain: 'w-11', unit: 'w-16' },
   lg: { plain: 'w-14', unit: 'w-20' },
-  auto: { plain: 'w-10 touch:w-11', unit: 'w-14 touch:w-16' },
+  auto: { plain: 'w-10 touch:w-12', unit: 'w-14 touch:w-16' },
 };
 
 const REPEAT = { delay: 400, interval: 100 } as const;
@@ -175,6 +178,8 @@ export type StepperProps = {
   inputRef?: (element: HTMLInputElement | null) => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  /** Kutunun tuşları (ör. düzenleyicide Enter formu göndermesin: `keepLineEnter`). */
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
   className?: string;
 };
 
@@ -196,6 +201,7 @@ export function Stepper({
   inputRef,
   onFocus,
   onBlur,
+  onKeyDown,
   className,
 }: StepperProps) {
   const local = useRef<HTMLInputElement>(null);
@@ -262,7 +268,7 @@ export function Stepper({
           HEIGHT[size],
         )}>
         <StepButton direction={-1} label={decrementLabel} size={size} disabled={disabled || atMin} onStep={() => stepBy(-1)} onPress={commitTyped} />
-        <span className={cn('flex shrink-0 items-center justify-center gap-0.5 border-x border-input px-1', unit ? CENTER[size].unit : CENTER[size].plain)}>
+        <span className={cn('relative flex shrink-0 items-center justify-center border-x border-input', unit ? CENTER[size].unit : CENTER[size].plain)}>
           <NumberField.Input
             ref={setInput}
             id={id}
@@ -271,6 +277,7 @@ export function Stepper({
             aria-describedby={ariaDescribedBy}
             aria-invalid={invalid || undefined}
             onFocus={onFocus}
+            onKeyDown={onKeyDown}
             onBlur={() => {
               onBlur?.();
               // Base UI boş kutuyu `null` bildirir; çağıran yazmadıysa (değer duruyorsa) kutu değere döner.
@@ -278,10 +285,14 @@ export function Stepper({
                 if (local.current?.value.trim() === '' && latest.current.value !== null) setResetKey((key) => key + 1);
               }, 0);
             }}
-            className={cn('h-full w-full min-w-0 bg-transparent font-medium tabular-nums outline-none', unit ? 'text-right' : 'text-center')}
+            // Dokunmatikte 16 px: iOS 16 px'ten küçük kutuya odaklanınca sayfayı yakınlaştırır.
+            className={cn(
+              'h-full w-full min-w-0 bg-transparent px-1 font-medium tabular-nums outline-none touch:text-base',
+              unit ? 'pr-5 text-right' : 'text-center',
+            )}
           />
           {unit ? (
-            <span className="shrink-0 text-xs text-muted-foreground" aria-hidden>
+            <span className="pointer-events-none absolute right-1.5 text-xs text-muted-foreground" aria-hidden>
               {unit}
             </span>
           ) : null}

@@ -22,7 +22,8 @@ export function SectionHeader({
       {back ? (
         <Link
           href={back.href}
-          className="flex w-fit items-center gap-1 rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
+          // Telefonda dokunma alanı en az 44×44 px (SPEC §6); görünen bağlantı aynı kalır.
+          className="relative flex w-fit items-center gap-1 rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 touch:before:absolute touch:before:top-1/2 touch:before:left-1/2 touch:before:h-full touch:before:min-h-11 touch:before:w-full touch:before:min-w-11 touch:before:-translate-x-1/2 touch:before:-translate-y-1/2">
           <CaretLeft weight="fill" className="size-3.5" />
           {back.label}
         </Link>

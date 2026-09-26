@@ -10,11 +10,15 @@
 export const GRIPS = ['pronated', 'supinated', 'neutral', 'mixed'] as const;
 export type Grip = (typeof GRIPS)[number];
 
+/**
+ * Parantez içi avucun yönü: bağlamdan bağımsız. "Ters/düz" harekete göre değişir
+ * ("Ters Tutuş Lat Pulldown" supinasyondur), o yüzden kullanılmaz.
+ */
 export const GRIP_LABELS: Record<Grip, string> = {
-  pronated: 'Pronasyon (ters)',
-  supinated: 'Supinasyon (düz)',
-  neutral: 'Nötr (çekiç)',
-  mixed: 'Karışık',
+  pronated: 'Pronasyon (avuç aşağı)',
+  supinated: 'Supinasyon (avuç yukarı)',
+  neutral: 'Nötr (avuçlar içe)',
+  mixed: 'Karışık (bir avuç aşağı, biri yukarı)',
 };
 
 export const GRIP_WIDTHS = ['narrow', 'shoulder', 'wide'] as const;
@@ -26,7 +30,7 @@ export const GRIP_WIDTH_LABELS: Record<GripWidth, string> = {
   wide: 'Geniş',
 };
 
-/** Tutuşun okunur özeti: "Geniş pronasyon (ters)". */
+/** Tutuşun okunur özeti: "Geniş pronasyon (avuç aşağı)". */
 export function describeGrip(grip?: Grip, width?: GripWidth): string | null {
   if (!grip && !width) return null;
   if (!grip) return GRIP_WIDTH_LABELS[width as GripWidth];

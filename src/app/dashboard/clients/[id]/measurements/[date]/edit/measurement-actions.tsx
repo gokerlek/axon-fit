@@ -42,8 +42,8 @@ export function MeasurementActions({ clientId, date, dateLabel }: { clientId: st
         <AlertDialogHeader>
           <AlertDialogTitle>{dateLabel} ölçümleri silinsin mi?</AlertDialogTitle>
           <AlertDialogDescription>
-            O günün bütün değerleri kayıttan ve grafiklerden çıkar. Danışanın repo&apos;sunun git geçmişinde kalır; tamamen
-            gitmesi için danışanın kendisi silinmelidir.
+            O günün bütün değerleri kayıttan ve grafiklerden çıkar. Danışanın kaydının değişiklik geçmişinde bir kopyası
+            kalır; tamamen gitmesi için danışanın kendisi silinmelidir.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

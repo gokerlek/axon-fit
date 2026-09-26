@@ -1,6 +1,10 @@
-import { readAppConfig } from '@/lib/config';
+import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
+import { loadAppConfig } from '@/lib/config';
 import { requirePt } from '@/lib/guards';
 import { SetupForm } from './setup-form';
+
+export const metadata: Metadata = { title: 'Kurulum' };
 
 /**
  * Kurulum sihirbazı (SPEC §10). İlk girişte buraya düşülür; kurulumdan sonra
@@ -8,7 +12,10 @@ import { SetupForm } from './setup-form';
  */
 export default async function SetupPage() {
   await requirePt();
-  const config = await readAppConfig();
+  // Form kayıtlı değerlerle açılır; okunamazsa hata sayfası (varsayılanlar kaydedilip markayı ezmesin).
+  const config = await loadAppConfig();
+  // Kurulum bittiyse aynı form Ayarlar → Görünüm'de, gezinmesiyle birlikte açılır.
+  if (config.setupCompleted) redirect('/dashboard/settings');
   const firstRun = !config.setupCompleted;
 
   return (

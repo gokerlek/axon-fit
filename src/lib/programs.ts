@@ -5,18 +5,28 @@ import type { ExerciseWithSource } from './exercises';
 import { clientRepoName, GithubError } from './github/client';
 import { deleteFile, getFileSha, readJson, writeJson } from './github/files';
 import { applyProgramEdit, commitMessage, type DiffContext } from './program-diff';
-import { createProgramRecord, startPhase, type ProgramBody, type ProgramState } from './program-plan';
+import {
+  createProgramRecord,
+  normalizeProgram,
+  sameProgramBase,
+  startPhase,
+  type ProgramBase,
+  type ProgramBody,
+  type ProgramState,
+} from './program-plan';
 import { programSchema, type Program } from './schemas/program';
+import type { PlanExercise } from './template-plan';
 
 /**
  * Danışana özel program (SPEC §3, §7.4): danışanın kendi repo'sunda `program.json`.
  *
- * Çakışma denetimi dosyanın sha'sıyla değil `revision` ile: PT'nin her içerik yazımı
- * (oluşturma, kayıt, evre geçişi) revision'ı bir artırır; antrenman ekranının rotasyon
- * yazımı artırmaz. Düzenleyici yüklediği revision'ı gönderir; sunucu dosyayı taze okur,
- * revision tutmuyorsa kaydetmez (412), tutuyorsa taze sha ile yazar. Arada rotasyon
- * yazıldıysa GitHub 409 verir, sunucu bir kez yeniden okuyup dener — PT'nin açık
- * düzenlemesi antrenman bitti diye boşa düşmez.
+ * Çakışma denetimi dosyanın sha'sıyla değil `revision` ve oluşturulma anıyla (`createdAt`): PT'nin
+ * her içerik yazımı (oluşturma, kayıt, evre geçişi) revision'ı bir artırır; antrenman ekranının
+ * rotasyon yazımı artırmaz. Düzenleyici yüklediği revision'ı ve oluşturulma anını gönderir; sunucu
+ * dosyayı taze okur, tutmuyorsa kaydetmez (412), tutuyorsa taze sha ile yazar. Oluşturulma anı,
+ * silinip yeniden oluşturulan programı (revision yine 1) ayırır; göndermeyen eski sekme yalnız
+ * revision'la denetlenir (`sameProgramBase`). Arada rotasyon yazıldıysa GitHub 409 verir, sunucu bir
+ * kez yeniden okuyup dener — PT'nin açık düzenlemesi antrenman bitti diye boşa düşmez.
  *
  * Her kayıtta değişikliklerin özeti hem dosyadaki geçmişe hem commit mesajına girer.
  * Sürüm 1 dosya okunurken sürüm 2'ye çevrilir (şema); her yazım sürüm 2'dir.
@@ -76,7 +86,10 @@ export function programDiffContext(exercises: readonly ExerciseWithSource[], dev
 }
 
 export type SaveProgramResult =
-  | { status: 'created' | 'saved' | 'unchanged'; revision: number }
+  /** droppedDevices: cihazı artık olmayan (o arada silinmiş) satırlar; egzersizin kendi cihazına döndüler. */
+  | { status: 'created' | 'saved' | 'unchanged'; revision: number; droppedDevices: number }
+  /** Kütüphane denetimi geçmedi: alan hataları (Formisch yolları, `phases.0.days.1.…`). */
+  | { status: 'invalid'; errors: Record<string, string> }
   /** missing: düzenlenen program silinmiş · stale: o arada başka yerde kaydedilmiş · exists: oluştururken başkası oluşturmuş. */
   | { status: 'missing' | 'stale' | 'exists' };
 
@@ -85,34 +98,41 @@ function isConflict(error: unknown): boolean {
 }
 
 /**
- * Oluşturma (`baseRevision` null) ya da kayıt. Gövde sunucuda denetlenmiş ve
- * sadeleştirilmiş olmalı (`normalizeProgram`). Değişiklik yoksa hiçbir şey yazılmaz.
+ * Oluşturma (`base` null) ya da kayıt. Gövde taze okunan kayda göre kütüphaneyle
+ * denetlenir ve sadeleştirilir (`normalizeProgram`): egzersizinkine eşit kural ya da cihaz yalnız
+ * kayıttaki aynı satırda duruyorsa kalır. Değişiklik yoksa hiçbir şey yazılmaz.
  */
 export async function saveProgram(
   clientId: string,
   body: ProgramBody,
-  baseRevision: number | null,
+  base: ProgramBase | null,
+  library: { exercises: ReadonlyMap<string, PlanExercise>; deviceIds: ReadonlySet<string> },
   ctx: DiffContext,
 ): Promise<SaveProgramResult> {
   for (let attempt = 0; ; attempt += 1) {
     const stored = await readProgramFile(clientId);
     const now = new Date();
     try {
-      if (baseRevision === null) {
+      if (base === null) {
         if (stored) return { status: 'exists' };
-        const program = createProgramRecord(body, now);
+        const normalized = normalizeProgram(body, library, null);
+        if (Object.keys(normalized.errors).length > 0) return { status: 'invalid', errors: normalized.errors };
+        const program = createProgramRecord({ ...body, phases: normalized.phases }, now);
         await writeProgramFile(clientId, program, { message: commitMessage('create', program.log[0]?.changes ?? []) });
-        return { status: 'created', revision: program.revision };
+        return { status: 'created', revision: program.revision, droppedDevices: normalized.droppedDeviceRowIds.length };
       }
       if (!stored) return { status: 'missing' };
-      if (!stored.program || stored.program.revision !== baseRevision) return { status: 'stale' };
-      const result = applyProgramEdit(stored.program, body, ctx, now);
-      if (!result) return { status: 'unchanged', revision: stored.program.revision };
+      if (!stored.program || !sameProgramBase(stored.program, base)) return { status: 'stale' };
+      const normalized = normalizeProgram(body, library, stored.program);
+      if (Object.keys(normalized.errors).length > 0) return { status: 'invalid', errors: normalized.errors };
+      const droppedDevices = normalized.droppedDeviceRowIds.length;
+      const result = applyProgramEdit(stored.program, { ...body, phases: normalized.phases }, ctx, now);
+      if (!result) return { status: 'unchanged', revision: stored.program.revision, droppedDevices };
       await writeProgramFile(clientId, result.program, {
         sha: stored.sha,
         message: commitMessage(result.program.log[0]?.kind ?? 'edit', result.changes),
       });
-      return { status: 'saved', revision: result.program.revision };
+      return { status: 'saved', revision: result.program.revision, droppedDevices };
     } catch (error) {
       // Arada başka bir yazım (ör. rotasyon) oldu: taze okuyup bir kez daha; revision yine denetlenir.
       if (attempt === 0 && isConflict(error)) continue;
@@ -126,11 +146,11 @@ export type SwitchPhaseResult =
   | { status: 'missing' | 'stale' | 'unknown' };
 
 /** PT onaylı evre geçişi (program sayfasındaki öneri). */
-export async function switchPhase(clientId: string, phaseId: string, baseRevision: number): Promise<SwitchPhaseResult> {
+export async function switchPhase(clientId: string, phaseId: string, base: ProgramBase): Promise<SwitchPhaseResult> {
   for (let attempt = 0; ; attempt += 1) {
     const stored = await readProgramFile(clientId);
     if (!stored) return { status: 'missing' };
-    if (!stored.program || stored.program.revision !== baseRevision) return { status: 'stale' };
+    if (!stored.program || !sameProgramBase(stored.program, base)) return { status: 'stale' };
     const program = stored.program;
     const next = startPhase(program, phaseId, new Date());
     if (!next) {

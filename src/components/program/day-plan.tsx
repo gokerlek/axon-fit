@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge';
+import { groupWorkText, rowWorkText } from '@/lib/edit-messages';
 import { formatSets } from '@/lib/set-plan';
 import {
   BLOCK_KIND_LABELS,
@@ -14,9 +15,10 @@ import { cn } from '@/lib/utils';
 
 /**
  * Bir antrenman gününün (ya da şablonun) yapılış sırası: gruplar rozet ve anlatımla,
- * satırda etiket, hareket, setler ("3 × 8–12 tekrar", "12 / 10 / 8 tekrar · piramit";
- * tek harekette dinlenmeyle) ve not. Danışana (`audience="client"`) AMRAP "yapabildiğin
- * kadar" diye yazılır. Kancasız: sunucu bileşenlerinde de çalışır.
+ * satırda etiket, hareket, setler (tek harekette dinlenmeyle) ve not. PT'ye düzenleyicinin
+ * kartlarıyla aynı biçim ("3×8–12 · 90 sn", grupta "2 hareket · 3 tur · 90 sn tur sonu";
+ * `rowWorkText`, `groupWorkText`); danışana (`audience="client"`) açık dil ("3 × 8–12 tekrar ·
+ * 1 dk 30 sn dinlenme", AMRAP "yapabildiğin kadar"). Kancasız: sunucu bileşenlerinde de çalışır.
  *
  * Kütüphanede olmayan egzersiz: `missing="show"` (PT) "Silinmiş egzersiz" olarak
  * kimliğiyle görünür; `missing="hide"` (danışan) satır hiç çizilmez.
@@ -46,16 +48,23 @@ export function DayPlan({
               <div className="flex flex-col gap-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">{BLOCK_KIND_LABELS[block.kind]}</Badge>
-                  <span className="text-xs text-muted-foreground">{describeBlock({ ...block, sets: roundsOf({ rows }) })}</span>
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {audience === 'pt' ? groupWorkText({ ...block, rows }, roundsOf({ rows })) : describeBlock({ ...block, sets: roundsOf({ rows }) })}
+                  </span>
                 </div>
                 {skipNote({ ...block, rows }, exercises)}
               </div>
             ) : null}
             {rows.map((row) => {
               const exercise = exercises.get(row.exerciseId);
-              const sets = formatSets(row.sets, exercise?.trackingType ?? 'weight_reps', audience);
+              const trackingType = exercise?.trackingType ?? 'weight_reps';
+              const rest = block.kind === 'single' ? block.restSeconds : undefined;
               const work =
-                block.kind === 'single' && block.restSeconds > 0 ? `${sets} · ${formatRest(block.restSeconds)} dinlenme` : sets;
+                audience === 'pt'
+                  ? rowWorkText(row.sets, trackingType, rest)
+                  : rest !== undefined && rest > 0
+                    ? `${formatSets(row.sets, trackingType, 'client')} · ${formatRest(rest)} dinlenme`
+                    : formatSets(row.sets, trackingType, 'client');
               return (
                 <div key={row.id} className="flex items-baseline gap-3">
                   <span className="w-6 shrink-0 text-sm font-medium tabular-nums text-muted-foreground">{labels.get(row.id)}</span>

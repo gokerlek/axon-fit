@@ -1,5 +1,7 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { cache } from 'react';
 import { WarningCircle } from '@phosphor-icons/react/dist/ssr';
 import { EditButton } from '@/components/edit-button';
 import { TemplateMuscleMap } from '@/components/muscle-map/template-muscle-map';
@@ -22,12 +24,27 @@ import { TemplateSequence } from '../template-sequence';
 const LOAD_DESCRIPTION =
   'Kas başına çalışma seti: hedef 1, yardımcı 0,5, dengeleyici 0,25 sayılır; ısınma ve soğuma hareketleri sayılmaz.';
 
+/** Sayfa ve başlığı (metadata) aynı isteğin tek okumasını paylaşır. */
+const readTemplate = cache(readTemplateFile);
+
+/** Sekme başlığı: şablonun adı. */
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  await requirePt();
+  const { id } = await params;
+  if (!TEMPLATE_ID_PATTERN.test(id)) return {};
+  const file = await readTemplate(id);
+  return file ? { title: file.template?.name ?? file.name ?? id } : {};
+}
+
+/** Satır içi bağlantılar (cihazlar) dokunmatikte 44 px yüksekliğinde. */
+const TOUCH_LINK = 'touch:inline-flex touch:min-h-11 touch:items-center';
+
 /** Şablon detayı — yalnız gösterim; tek eylem "Düzenle" (SPEC §6). */
 export default async function TemplateDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePt();
   const { id } = await params;
   if (!TEMPLATE_ID_PATTERN.test(id)) notFound();
-  const [file, exercises, devices, config] = await Promise.all([readTemplateFile(id), listExercises(), listDevices(), readAppConfig()]);
+  const [file, exercises, devices, config] = await Promise.all([readTemplate(id), listExercises(), listDevices(), readAppConfig()]);
   if (!file) notFound();
 
   if (!file.template) {
@@ -70,7 +87,7 @@ export default async function TemplateDetailPage({ params }: { params: Promise<{
             const comma = index < summary.deviceIds.length - 1 ? ',' : '';
             return device ? (
               <span key={deviceId}>
-                <Link href={`/dashboard/devices/${device.id}`} className="underline underline-offset-4">
+                <Link href={`/dashboard/devices/${device.id}`} className={`underline underline-offset-4 ${TOUCH_LINK}`}>
                   {device.name}
                 </Link>
                 {comma}

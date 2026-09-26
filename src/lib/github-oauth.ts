@@ -2,6 +2,7 @@ import 'server-only';
 import { randomBytes } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { serverEnv } from './env';
+import { safeReturnPath } from './navigation';
 
 /**
  * GitHub ile giriş (SPEC §5) — yalnız PT için.
@@ -12,6 +13,8 @@ import { serverEnv } from './env';
  */
 
 const STATE_COOKIE = 'pc_oauth_state';
+/** Girişten sonra dönülecek PT sayfası (`/login?next=…`); GitHub dönüşüne kadar taşınır. */
+const RETURN_COOKIE = 'pc_oauth_return';
 const STATE_TTL_SECONDS = 600;
 const SCOPE = 'read:user';
 
@@ -26,16 +29,24 @@ function clientCredentials(): { id: string; secret: string } {
   return { id, secret };
 }
 
-/** Yetki ekranına gidecek adresi üretir ve CSRF için tek kullanımlık `state` çerezi kurar. */
-export async function startGithubLogin(callbackUrl: string): Promise<string> {
+/**
+ * Yetki ekranına gidecek adresi üretir ve CSRF için tek kullanımlık `state` çerezi kurar.
+ * `returnTo` (doğrulanmış PT yolu) dönüşte oraya gidilsin diye aynı süreyle saklanır.
+ */
+export async function startGithubLogin(callbackUrl: string, returnTo: string | null = null): Promise<string> {
   const state = randomBytes(32).toString('base64url');
-  (await cookies()).set(STATE_COOKIE, state, {
+  const store = await cookies();
+  const options = {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: 'lax' as const,
     secure: process.env.NODE_ENV === 'production',
     path: '/',
     maxAge: STATE_TTL_SECONDS,
-  });
+  };
+  store.set(STATE_COOKIE, state, options);
+  const next = safeReturnPath(returnTo);
+  if (next) store.set(RETURN_COOKIE, next, options);
+  else store.delete(RETURN_COOKIE);
 
   const url = new URL('https://github.com/login/oauth/authorize');
   url.searchParams.set('client_id', clientCredentials().id);
@@ -44,6 +55,14 @@ export async function startGithubLogin(callbackUrl: string): Promise<string> {
   url.searchParams.set('state', state);
   url.searchParams.set('allow_signup', 'false');
   return url.toString();
+}
+
+/** Girişten sonra dönülecek yolu okur ve çerezi yakar; yol yine doğrulanır (açık yönlendirme yok). */
+export async function consumeReturnPath(): Promise<string | null> {
+  const store = await cookies();
+  const value = store.get(RETURN_COOKIE)?.value ?? null;
+  store.delete(RETURN_COOKIE);
+  return safeReturnPath(value);
 }
 
 /** `state` çerezini doğrular ve her durumda yakar (tek kullanımlık). */

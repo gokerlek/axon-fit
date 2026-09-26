@@ -23,7 +23,9 @@ import { useServiceMutation } from '@/lib/query/use-service';
 
 /**
  * Düzenleme sayfasının yıkıcı eylemleri (SPEC §6, §11):
- * - "Erişimi kapat": açık oturumlar düşer, bekleyen davet iptal olur (ör. telefon kayboldu)
+ * - "Erişimi kapat": açık oturumlar düşer, bekleyen davet iptal olur, şifre artık açmaz (ör. telefon
+ *   kayboldu). Danışan yeni kare kodla girip yeni şifre belirler. Şifreyi unutmak için gerekmez:
+ *   yeni kare kod yeter (davet ekranı).
  * - "Sil": repo ve içindeki her şey gider. PT danışanın adını yazarak doğrular (SPEC §9.2)
  */
 export function ClientActions({ id, name }: { id: string; name: string | null }) {
@@ -37,7 +39,7 @@ export function ClientActions({ id, name }: { id: string; name: string | null })
   const revoke = useServiceMutation({
     fn: () => fetchJson<{ ok: true }>(`/api/clients/${id}/revoke`, { method: 'POST' }),
     invalidate: [['clients']],
-    notify: { success: 'Erişim kapatıldı. Yeniden girmesi için yeni kod üret.' },
+    notify: { success: 'Erişim kapatıldı. Yeniden girmesi için yeni kare kod üret.' },
     onSuccess: () => {
       router.push(`/dashboard/clients/${id}`);
       router.refresh();
@@ -68,8 +70,8 @@ export function ClientActions({ id, name }: { id: string; name: string | null })
             <AlertDialogHeader>
               <AlertDialogTitle>{name} için erişim kapatılsın mı?</AlertDialogTitle>
               <AlertDialogDescription>
-                Açık bütün oturumları hemen düşer, kullanılmamış davet kodu geçersiz olur. Verisi yerinde kalır; yeniden
-                girmesi için yeni kod üretirsin.
+                Açık oturumları hemen düşer, kullanılmamış kare kod ve şifresi artık açmaz. Verisi yerinde kalır; yeni kare
+                kodla girip yeni şifre belirler. Yalnız şifresini unuttuysa bunu yapma: davet ekranında yeni kare kod yeter.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

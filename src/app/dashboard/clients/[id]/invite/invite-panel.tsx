@@ -19,8 +19,10 @@ import { useServiceMutation } from '@/lib/query/use-service';
 type Issued = { code: string; expiresAt: string; url: string };
 
 /**
- * Davet kodu üretir ve gösterir. Kod yalnız bu bileşenin belleğinde yaşar: repo'ya
- * özeti yazılır, sayfadan çıkınca bir daha gösterilemez — gerekirse yenisi üretilir.
+ * Kare kod üretir ve gösterir. Birincil öğe kare kod ve bağlantı; 8 haneli kod ikincil (bağlantı
+ * açılmazsa elle yazılır). Kod yalnız bu bileşenin belleğinde yaşar: repo'ya özeti yazılır, sayfadan
+ * çıkınca bir daha gösterilemez — gerekirse yenisi üretilir. Yeni kare kod aynı zamanda şifre
+ * sıfırlamanın tek yolu: danışan onunla girip yeni şifre belirler (SPEC §5).
  */
 export function InvitePanel({
   clientId,
@@ -33,7 +35,7 @@ export function InvitePanel({
   clientName: string;
   /** Geçerli, kullanılmamış bir davet var: yenisi onu geçersiz kılar. */
   hasPending: boolean;
-  /** Danışan zaten girdi: yeni kod yalnız yeni bir cihaz içindir, açık oturumu kapatmaz. */
+  /** Danışan zaten girdi: yeni kare kod şifre sıfırlamak içindir, açık oturumu kapatmaz. */
   joined: boolean;
   /** Uygulama ayarındaki saat dilimi: son kullanma saati PT'nin saatiyle yazılır. */
   timeZone: string;
@@ -60,11 +62,19 @@ export function InvitePanel({
     }
   };
 
-  const generateButton = (
-    <Button onClick={() => issue.mutate()} disabled={issue.isPending}>
-      {issue.isPending ? <Spinner data-icon="inline-start" /> : <QrIcon data-icon="inline-start" weight="fill" />}
-      {joined ? 'Yeni cihaz için kod üret' : issued || hasPending ? 'Yeni kod üret' : 'Davet kodu üret'}
-    </Button>
+  const again = joined || hasPending || Boolean(issued);
+  const generate = (
+    <div className="flex flex-col items-center gap-2 text-center">
+      <Button onClick={() => issue.mutate()} disabled={issue.isPending}>
+        {issue.isPending ? <Spinner data-icon="inline-start" /> : <QrIcon data-icon="inline-start" weight="fill" />}
+        {again ? 'Yeni kare kod üret' : 'Kare kod üret'}
+      </Button>
+      {again ? (
+        <p className="text-xs text-muted-foreground">
+          Danışan şifresini unuttuysa yeni kare kodla girer ve yeni şifre belirler; kod kullanılınca eski şifre açmaz.
+        </p>
+      ) : null}
+    </div>
   );
 
   if (!issued) {
@@ -77,17 +87,17 @@ export function InvitePanel({
                 <QrIcon weight="fill" />
               </EmptyMedia>
               <EmptyTitle>
-                {joined ? `${clientName} zaten giriş yaptı` : hasPending ? 'Bekleyen bir davet var' : 'Kare kodu üret'}
+                {joined ? `${clientName} zaten katıldı` : hasPending ? 'Bekleyen bir kare kod var' : 'Henüz kare kod yok'}
               </EmptyTitle>
               <EmptyDescription>
                 {joined
-                  ? 'Yeni kod yalnız yeni bir telefon ya da tarayıcı için gerekir; açık oturumunu kapatmaz. Telefonu kaybolduysa önce düzenleme sayfasından erişimi kapat.'
+                  ? 'Şifresiyle girer, yeni kare kod gerekmez. Yeni kod kullanılınca eski şifresi açmaz; açık oturumları kapanmaz. Telefonu kaybolduysa önce düzenleme sayfasından erişimi kapat.'
                   : hasPending
-                    ? 'Kodun kendisi saklanmadığı için yeniden gösterilemez. Yeni kod üretirsen eskisi anında geçersiz olur.'
-                    : `${clientName} kodu okutunca kendi ekranına girer. Kod tek kullanımlıktır.`}
+                    ? 'Kodun kendisi saklanmadığı için yeniden gösterilemez. Yenisini üretirsen eskisi anında geçersiz olur.'
+                    : `${clientName} kare kodu okutup şifresini belirler. Kod tek kullanımlıktır.`}
               </EmptyDescription>
             </EmptyHeader>
-            <EmptyContent>{generateButton}</EmptyContent>
+            <EmptyContent>{generate}</EmptyContent>
           </Empty>
         </CardContent>
       </Card>
@@ -97,18 +107,11 @@ export function InvitePanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{clientName} için davet</CardTitle>
+        <CardTitle>{clientName} için kare kod</CardTitle>
         <CardDescription>Son kullanma: {formatDateTime(issued.expiresAt, timeZone)}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-5">
         <QrCode value={issued.url} label={`${clientName} için davet kare kodu`} className="w-full max-w-64 border" />
-
-        <div className="flex flex-col items-center gap-1">
-          <span className="text-xs text-muted-foreground">Kod</span>
-          <span className="font-mono text-3xl font-semibold tracking-widest tabular-nums">
-            {formatInviteCode(issued.code)}
-          </span>
-        </div>
 
         <InputGroup className="w-full">
           <InputGroupInput readOnly value={issued.url} aria-label="Davet bağlantısı" onFocus={(e) => e.currentTarget.select()} />
@@ -119,14 +122,22 @@ export function InvitePanel({
           </InputGroupAddon>
         </InputGroup>
 
+        <div className="flex w-full flex-col gap-1 rounded-lg border border-dashed p-3 text-sm">
+          <span className="text-muted-foreground">Bağlantı açılmıyorsa kodu elle gir</span>
+          <span className="font-mono font-medium tabular-nums">{formatInviteCode(issued.code)}</span>
+          <span className="text-xs text-muted-foreground">
+            Kare kodla açılan ekranda kod hazır gelir; gelmezse danışan bu kodu yazar.
+          </span>
+        </div>
+
         <Alert>
           <WarningCircle weight="fill" />
           <AlertDescription>
-            Bu kod bir daha gösterilmez. Bağlantıyı yalnız {clientName} ile paylaş: kimde olursa o girer.
+            Bu kod bir daha gösterilmez. Bağlantıyı yalnız {clientName} ile paylaş: kimde olursa o girer ve şifre belirler.
           </AlertDescription>
         </Alert>
 
-        {generateButton}
+        {generate}
       </CardContent>
     </Card>
   );

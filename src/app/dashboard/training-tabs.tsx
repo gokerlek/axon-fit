@@ -2,44 +2,47 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TabsNav, TabsNavLink } from '@/components/ui/tabs';
+import { USER_MENU_SPOT } from '@/components/user-menu-spot';
 
-/** Antrenman bölümünün sayfaları; dock'ta tek "Antrenman" öğesi bunlara açılır. */
+/** Kütüphane bölümünün sayfaları; dock'ta tek "Kütüphane" öğesi bunlara açılır. */
 export const TRAINING_SECTIONS = [
-  { href: '/dashboard/templates', label: 'Şablonlar', ready: true },
-  { href: '/dashboard/exercises', label: 'Egzersizler', ready: true },
-  { href: '/dashboard/devices', label: 'Cihazlar', ready: true },
-  { href: '/dashboard/attachments', label: 'Aparatlar', ready: true },
+  { href: '/dashboard/templates', label: 'Şablonlar' },
+  { href: '/dashboard/exercises', label: 'Egzersizler' },
+  { href: '/dashboard/devices', label: 'Cihazlar' },
+  { href: '/dashboard/attachments', label: 'Aparatlar' },
 ] as const;
 
+/** Bu yol hangi Kütüphane sekmesinde (alt sayfalar dahil); bölüm dışındaysa null. */
+export function librarySection(pathname: string): string | null {
+  return (
+    TRAINING_SECTIONS.find((section) => pathname === section.href || pathname.startsWith(`${section.href}/`))?.href ?? null
+  );
+}
+
 /**
- * Antrenman bölümünün sekmeleri: Şablonlar · Egzersizler · Cihazlar · Aparatlar. Her sekme kendi
- * sayfasıdır (adres değişir, geri tuşu çalışır). Bölümün girişi Şablonlar.
+ * Kütüphane bölümünün sekmeleri: Şablonlar · Egzersizler · Cihazlar · Aparatlar. Her sekme kendi
+ * sayfasıdır (adres değişir, geri tuşu çalışır); bu yüzden gezinmedir, `tablist` değil. Bölümün
+ * girişi Şablonlar.
+ *
+ * Sekmeler sayfanın ilk satırıdır; sağ üstte kullanıcı menüsü durur. Menünün yeri satırda ayrılır
+ * (`USER_MENU_SPOT`): sekmeler yanına sığarsa aynı satırda, sığmazsa (telefon) menünün altındaki
+ * satırda tam genişlikte durur (`flex-wrap-reverse`: taşan satır üste değil alta iner).
  */
 export function TrainingTabs() {
   const pathname = usePathname();
-  const current = TRAINING_SECTIONS.find((section) => pathname.startsWith(section.href))?.href ?? '/dashboard/templates';
+  const current = librarySection(pathname) ?? '/dashboard/templates';
 
   return (
-    <Tabs value={current}>
-      <TabsList aria-label="Antrenman bölümü">
-        {TRAINING_SECTIONS.map((section) =>
-          section.ready ? (
-            <TabsTrigger
-              key={section.href}
-              value={section.href}
-              nativeButton={false}
-              render={<Link href={section.href} />}
-              className="px-3">
-              {section.label}
-            </TabsTrigger>
-          ) : (
-            <TabsTrigger key={section.href} value={section.href} disabled className="px-3" title="Yakında">
-              {section.label}
-            </TabsTrigger>
-          ),
-        )}
-      </TabsList>
-    </Tabs>
+    <div className="flex flex-wrap-reverse items-start justify-between gap-x-3 gap-y-2">
+      <TabsNav aria-label="Kütüphane" className="grow md:grow-0">
+        {TRAINING_SECTIONS.map((section) => (
+          <TabsNavLink key={section.href} active={section.href === current} render={<Link href={section.href} />}>
+            {section.label}
+          </TabsNavLink>
+        ))}
+      </TabsNav>
+      <span aria-hidden className={USER_MENU_SPOT} />
+    </div>
   );
 }

@@ -30,6 +30,17 @@ export function parseRange(params: { aralik?: string; bas?: string; bit?: string
   return { preset, from: rangeStart(preset, today) };
 }
 
+/**
+ * Seçili aralık: seçili durum tonu (`--primary-strong`, komşu düğme ve yüzeyden ≥3:1; üstünde okunur
+ * yazı), içinde zemin renginde halka (yalnız renk değil şekil de) — `ui/toggle`'ın basılı durumuyla aynı.
+ */
+const SELECTED = [
+  'aria-[current=page]:border-primary-strong aria-[current=page]:bg-primary-strong aria-[current=page]:text-primary-strong-foreground',
+  'aria-[current=page]:inset-ring-2 aria-[current=page]:inset-ring-background aria-[current=page]:hover:bg-primary-strong',
+  // Çerçeveli düğmenin koyu tema zemini (`dark:bg-input/30`) daha özgül: seçili ton koyuda da yazılır.
+  'dark:aria-[current=page]:border-primary-strong dark:aria-[current=page]:bg-primary-strong dark:aria-[current=page]:hover:bg-primary-strong',
+].join(' ');
+
 /** Hazır aralıklar bağlantı, özel aralık GET formu: JavaScript'siz de çalışır. */
 export function RangeFilter({ base, range }: { base: string; range: DateRange }) {
   return (
@@ -41,7 +52,8 @@ export function RangeFilter({ base, range }: { base: string; range: DateRange })
             <Button
               key={preset}
               size="sm"
-              variant={active ? 'secondary' : 'outline'}
+              variant="outline"
+              className={SELECTED}
               aria-current={active ? 'page' : undefined}
               nativeButton={false}
               render={<Link href={preset === 'tumu' ? base : `${base}?aralik=${preset}`} scroll={false} />}>
@@ -53,13 +65,13 @@ export function RangeFilter({ base, range }: { base: string; range: DateRange })
       <form method="get" action={base} className="flex flex-wrap items-end gap-2" aria-label="Özel tarih aralığı">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Başlangıç
-          <Input type="date" name="bas" defaultValue={range.preset === null ? range.from : undefined} className="h-8 w-40" />
+          <Input type="date" name="bas" defaultValue={range.preset === null ? range.from : undefined} className="w-40" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Bitiş
-          <Input type="date" name="bit" defaultValue={range.preset === null ? range.to : undefined} className="h-8 w-40" />
+          <Input type="date" name="bit" defaultValue={range.preset === null ? range.to : undefined} className="w-40" />
         </label>
-        <Button type="submit" size="sm" variant={range.preset === null ? 'secondary' : 'outline'}>
+        <Button type="submit" size="sm" variant="outline">
           Uygula
         </Button>
       </form>

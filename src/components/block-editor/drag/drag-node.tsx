@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useMemo } from 'react';
 import { useDraggable, useDroppable, type DraggableSyntheticListeners } from '@dnd-kit/core';
 import { CardGrabber } from '@/components/exercise-card';
 import { sameDestination } from '@/lib/drop-target';
+import { DROP_OUTCOME_LABELS } from '@/lib/edit-messages';
 import type { CombineOutcome, MoveDestination } from '@/lib/template-edit';
 import { cn } from '@/lib/utils';
 import { useDragView, type DragView } from './drag-store';
@@ -114,13 +115,6 @@ export function DropFace({ itemId, disabled = false, render, children, ...props 
   return render({ ...props, ref: target.setNodeRef, 'data-armed': target.armed, children } as ShellProps);
 }
 
-const OUTCOME_LABELS: Record<Exclude<CombineOutcome, 'not_allowed'>, string> = {
-  superset: 'Süperset yap',
-  becomes_circuit: 'Ekle · devre olur',
-  join: 'Gruba ekle',
-  full: 'Grup dolu (8)',
-};
-
 /** Orta bandında beklenen hedefte ⧉'nin yerine çıkan sonuç hapı ("Süperset yap"…). */
 export function DropPill({ itemId }: { itemId: string }) {
   const outcome = useArmed(itemId);
@@ -134,7 +128,7 @@ export function DropPill({ itemId }: { itemId: string }) {
         'pointer-events-none absolute top-1/2 right-3 z-20 -translate-y-1/2 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap',
         full ? 'bg-muted text-muted-foreground' : 'bg-primary text-primary-foreground',
       )}>
-      {OUTCOME_LABELS[outcome]}
+      {DROP_OUTCOME_LABELS[outcome]}
     </span>
   );
 }
@@ -163,8 +157,8 @@ export function DropLine({ destination, edge }: { destination: MoveDestination; 
       aria-hidden
       data-slot="drop-line"
       className={cn(
-        'pointer-events-none absolute z-30 h-0.5 rounded-full bg-primary',
-        'before:absolute before:top-1/2 before:-left-1 before:size-2 before:-translate-y-1/2 before:rounded-full before:bg-primary',
+        'pointer-events-none absolute z-30 h-0.5 rounded-full bg-primary-text',
+        'before:absolute before:top-1/2 before:-left-1 before:size-2 before:-translate-y-1/2 before:rounded-full before:bg-primary-text',
         inGroup ? 'inset-x-3' : 'inset-x-0',
         edge === 'before' ? (inGroup ? '-top-px' : '-top-[7px]') : inGroup ? '-bottom-px' : '-bottom-[7px]',
       )}

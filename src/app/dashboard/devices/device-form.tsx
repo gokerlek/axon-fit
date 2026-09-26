@@ -131,7 +131,7 @@ function AttachmentPicker({
                         type="button"
                         variant={isOn ? 'secondary' : 'outline'}
                         aria-pressed={isOn}
-                        className={`h-auto w-full justify-start gap-3 p-2 text-left ${isOn ? 'ring-1 ring-primary/50' : ''}`}
+                        className={`h-auto w-full justify-start gap-3 p-2 text-left ${isOn ? 'ring-2 ring-primary-text' : ''}`}
                         onClick={() => toggle(attachment.id)}>
                         <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-background">
                           {imageUrl ? (
@@ -143,7 +143,7 @@ function AttachmentPicker({
                           )}
                         </span>
                         <span className="flex-1 truncate font-normal">{attachment.name}</span>
-                        {isOn ? <Check className="text-primary" /> : <Plus className="text-muted-foreground" />}
+                        {isOn ? <Check className="text-primary-text" /> : <Plus className="text-muted-foreground" />}
                       </Button>
                     </li>
                   );
@@ -209,8 +209,12 @@ function NumberField({
  */
 export function DeviceForm({ editing, attachments }: { editing: Device | null; attachments: Attachment[] }) {
   const router = useRouter();
-  // Görsel formun şemasında yok; ayrı uçtan yönetilir.
-  const start: FormStart = editing ? (({ id: _id, image: _image, ...rest }) => rest)(editing) : BLANK;
+  // Görsel formun şemasında yok; ayrı uçtan yönetilir. Havuzda artık olmayan (silinmiş)
+  // aparat forma alınmaz: seçicide görünmez, kaldırılamaz olurdu ve sunucu da reddeder.
+  const pool = new Set(attachments.map((attachment) => attachment.id));
+  const start: FormStart = editing
+    ? (({ id: _id, image: _image, ...rest }) => ({ ...rest, attachments: rest.attachments?.filter((id) => pool.has(id)) }))(editing)
+    : BLANK;
   const form = useForm({ schema: deviceFormSchema, initialInput: start });
   const [weightsText, setWeightsText] = useState((start.weightsKg ?? []).map(kgText).join(' '));
   const [image, setImage] = useState<ImageChange>(KEEP);
@@ -360,7 +364,7 @@ export function DeviceForm({ editing, attachments }: { editing: Device | null; a
                           setInput(form, { path: ['addOnsKg'], input: (value as string[]).map(Number).sort((a, b) => a - b) })
                         }>
                         {ADD_ON_OPTIONS.map((option) => (
-                          <ToggleGroupItem key={option} value={String(option)} className="tabular-nums">
+                          <ToggleGroupItem key={option} value={String(option)} className="tabular-nums touch:h-11">
                             +{kgText(option)} kg
                           </ToggleGroupItem>
                         ))}
@@ -390,7 +394,7 @@ export function DeviceForm({ editing, attachments }: { editing: Device | null; a
                           if (next) setInput(form, { path: ['pulleyRatio'], input: next });
                         }}>
                         {PULLEY_RATIOS.map((ratio) => (
-                          <ToggleGroupItem key={ratio} value={String(ratio)} className="px-3 tabular-nums">
+                          <ToggleGroupItem key={ratio} value={String(ratio)} className="px-3 tabular-nums touch:h-11">
                             {ratio === 1 ? 'Tek (1:1)' : ratio === 2 ? 'Çift (2:1)' : `${ratio}:1`}
                           </ToggleGroupItem>
                         ))}

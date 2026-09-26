@@ -97,6 +97,16 @@ export const clientSchema = v.object({
     lastJoinAt: v.optional(timestamp),
     /** PT'nin erişimi son kapattığı an; sonraki girişte kalkar. */
     revokedAt: v.optional(timestamp),
+    /**
+     * Danışanın şifreyi son belirlediği an (yalnız bilgi; özeti `auth.json`'da, SPEC §5). "Erişimi
+     * kapat" siler: kapatmadan önceki şifre açmaz, danışan yeni kare kodla girip yenisini belirler.
+     */
+    passwordSetAt: v.optional(timestamp),
+    /**
+     * Şifre girişinin çok sayıda yanlış denemeden sonra kapandığı an (PT ekranında rozet; SPEC §5).
+     * Yeni kare kodla girilince ya da yeni şifre belirlenince kalkar.
+     */
+    loginLockedAt: v.optional(timestamp),
   }),
   /** Faz 7: bağlantı verilen diğer danışanlar (yalnız kimlik). */
   visibleTo: v.array(clientIdSchema),

@@ -1,4 +1,6 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { cache } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { getAttachment } from '@/lib/attachments';
@@ -6,10 +8,19 @@ import { AttachmentActions } from '../../attachment-actions';
 import { AttachmentForm } from '../../attachment-form';
 import { requirePt } from '@/lib/guards';
 
+/** Sayfa başlığı ile sayfa aynı okumayı paylaşır (istek başına bir kez). */
+const loadAttachment = cache((id: string) => getAttachment(id));
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  await requirePt();
+  const attachment = await loadAttachment((await params).id);
+  return { title: attachment ? `Düzenle: ${attachment.name}` : 'Aparat bulunamadı' };
+}
+
 export default async function EditAttachmentPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePt();
   const { id } = await params;
-  const attachment = await getAttachment(id);
+  const attachment = await loadAttachment(id);
   if (!attachment) notFound();
   const { source, overridesLibrary, ...editable } = attachment;
 

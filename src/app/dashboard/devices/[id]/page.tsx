@@ -1,4 +1,6 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+import { cache } from 'react';
 import { notFound } from 'next/navigation';
 import { ImageSquare } from '@phosphor-icons/react/dist/ssr';
 import { DeviceKindIcon } from '@/components/device-kind-icon';
@@ -19,11 +21,20 @@ import { summarizeMuscles } from '@/lib/muscles';
 import { EditButton } from '@/components/edit-button';
 import { requirePt } from '@/lib/guards';
 
+/** Sayfa başlığı ile sayfa aynı okumayı paylaşır (istek başına bir kez). */
+const loadDevice = cache((id: string) => getDevice(id));
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  await requirePt();
+  const device = await loadDevice((await params).id);
+  return { title: device?.name ?? 'Cihaz bulunamadı' };
+}
+
 /** Cihaz detayı — kendi sayfası (modal değil). */
 export default async function DeviceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePt();
   const { id } = await params;
-  const [device, exercises, pool] = await Promise.all([getDevice(id), listExercises(), listAttachments()]);
+  const [device, exercises, pool] = await Promise.all([loadDevice(id), listExercises(), listAttachments()]);
   if (!device) notFound();
 
   const used = exercises.filter((exercise) => exercise.deviceId === id);

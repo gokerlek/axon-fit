@@ -2,6 +2,10 @@ import 'server-only';
 import { Octokit } from 'octokit';
 import { CLIENT_REPO_PREFIX, serverEnv } from '../env';
 import { CLIENT_ID_PATTERN } from '../schemas/client';
+import { GithubError } from './errors';
+
+/** Hata tipi saf modülde (`errors.ts`): testlerdeki çekirdekler de aynı sınıfı kullanır. */
+export { GithubError };
 
 /**
  * GitHub erişiminin tek kapısı.
@@ -19,15 +23,6 @@ let client: Octokit | null = null;
 export function gh(): Octokit {
   client ??= new Octokit({ auth: serverEnv().githubToken, userAgent: 'pulsecoach' });
   return client;
-}
-
-export class GithubError extends Error {
-  readonly status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = 'GithubError';
-    this.status = status;
-  }
 }
 
 export function clientRepoName(clientId: string): string {

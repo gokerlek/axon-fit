@@ -4,7 +4,21 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
-import { Heartbeat, MagnifyingGlass, Plus, X, YoutubeLogo } from '@phosphor-icons/react';
+import {
+  CheckCircle,
+  CircleDashed,
+  Heartbeat,
+  Lightbulb,
+  MagnifyingGlass,
+  Plus,
+  Prohibit,
+  Question,
+  Warning,
+  WarningCircle,
+  X,
+  YoutubeLogo,
+  type Icon,
+} from '@phosphor-icons/react';
 import { MuscleMap } from '@/components/muscle-map/muscle-map';
 import { PageHeader } from '@/components/page-header';
 import { TrainingTabs } from '../training-tabs';
@@ -15,14 +29,37 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Toggle } from '@/components/ui/toggle';
 import { ConstraintPicker, formatConstraints, parseConstraints } from './constraint-picker';
-import { conditionInfo } from '@/lib/conditions';
-import { DECISION_LABELS, evaluateExercise, type Decision } from '@/lib/exercise-filter';
+import { TOUCH_TARGETS } from './touch-targets';
+import { conditionLabel } from '@/lib/conditions';
+import {
+  CONTEXT_LABELS,
+  DECISION_LABELS,
+  FILTER_GROUP_LABELS,
+  FILTER_GROUPS,
+  inFilterView,
+  requiresClearance,
+  summarizeFilter,
+  type Decision,
+  type FilterGroup,
+  type FilterView,
+} from '@/lib/exercise-filter';
 import { countByMuscle, isBodyMuscle, parseMuscles, summarizeMuscles, works } from '@/lib/muscles';
 import { fetchJson } from '@/lib/query/errors';
 import { useServiceQuery } from '@/lib/query/use-service';
 import { EQUIPMENT_LABELS, MUSCLE_LABELS, type Exercise, type Muscle } from '@/lib/schemas/exercise';
 
 type ExerciseWithSource = Exercise & { source: 'library' | 'custom' };
+
+/** Özet çiplerinin ve kart rozetlerinin ikonları: renk tek başına anlam taşımaz. */
+const GROUP_ICONS: Record<FilterGroup, Icon> = {
+  blocked: Prohibit,
+  warned: Warning,
+  clear: CheckCircle,
+  untagged: CircleDashed,
+  unassessed: Question,
+};
+const DECISION_ICONS: Record<Decision, Icon> = { block: Prohibit, warn: Warning, cue: Lightbulb };
+const UNTAGGED_HINT = 'Bu hareketin medikal etiketi yok; kısıtlara göre kontrol edilemedi.';
 
 /**
  * Egzersiz listesi: arama ve kas haritasıyla süzme. Her kart detay sayfasına gider;
@@ -34,17 +71,21 @@ type ExerciseWithSource = Exercise & { source: 'library' | 'custom' };
 export function ExerciseList({
   initial,
   deviceNames,
+  notice,
 }: {
   initial: ExerciseWithSource[];
   /** Cihaz kimliği → adı: kartta ekipman yerine cihaz yazar. */
   deviceNames: Record<string, string>;
+  /** Başlığın altındaki uyarı (ör. okunamayan PT kayıtları); sunucuda hazırlanır. */
+  notice?: React.ReactNode;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const selected = useMemo(() => parseMuscles(searchParams.get('muscle')), [searchParams]);
   const constraints = useMemo(() => parseConstraints(searchParams.get('limit')), [searchParams]);
   const [search, setSearch] = useState('');
-  const [hideBlocked, setHideBlocked] = useState(false);
+  // Kısıt süzgecinin görünümü: hepsi, yasak dışı ya da tek küme (çip, "Yalnız uygunları göster").
+  const [view, setView] = useState<FilterView>('all');
 
   const { data } = useServiceQuery({
     key: ['exercises'],
@@ -86,28 +127,21 @@ export function ExerciseList({
     return [...matched.filter(isTarget), ...matched.filter((item) => !isTarget(item))];
   }, [exercises, search, selected]);
 
-  // Kısıt seçiliyse her hareket süzgeçten geçer; sonuç kartta rozet olur.
-  const decisions = useMemo(() => {
-    if (constraints.length === 0) return new Map<string, { decision: Decision; message: string }>();
-    const map = new Map<string, { decision: Decision; message: string }>();
-    for (const item of exercises) {
-      const result = evaluateExercise(item, constraints);
-      const first = result.findings[0];
-      if (result.decision && first) map.set(item.id, { decision: result.decision, message: first.message });
-    }
-    return map;
-  }, [exercises, constraints]);
-
-  const blockedCount = [...decisions.values()].filter((item) => item.decision === 'block').length;
-  const untaggedCount = useMemo(
-    () => (constraints.length === 0 ? 0 : exercises.filter((item) => evaluateExercise(item, constraints).untagged).length),
+  // Kısıt seçiliyse her hareket süzgeçten geçer ve tek kümeye girer (yasak, uyarı, uygun, kontrol
+  // edilmedi, eksik bilgi); karar, eksik bilgi ve "kontrol edilmedi" kartta rozet, sayılar özet çiplerinde.
+  // Yalnız danışan bağlamı (ameliyat haftası…) eksikse özet satırında bir kez söylenir.
+  const summary = useMemo(
+    () => summarizeFilter(constraints.length === 0 ? [] : exercises, constraints),
     [exercises, constraints],
   );
+  const clearance = requiresClearance(constraints);
 
   const selectedBody = selected.filter(isBodyMuscle);
-  // "Yasakları gizle" yalnız görünümü daraltır; sayım hep tam liste üstünden.
-  const shown = hideBlocked ? visible.filter((item) => decisions.get(item.id)?.decision !== 'block') : visible;
-  const filtering = selected.length > 0 || search.trim().length > 0;
+  // Görünüm yalnız listeyi daraltır; sayım hep tam liste üstünden. Kısıt yoksa süzgeç yok.
+  const activeView: FilterView = constraints.length === 0 ? 'all' : view;
+  const shown = activeView === 'all' ? visible : visible.filter((item) => inFilterView(summary.groups.get(item.id), activeView));
+  const filtering = selected.length > 0 || search.trim().length > 0 || activeView !== 'all';
+  const showOnly = (next: FilterView) => (pressed: boolean) => setView(pressed ? next : 'all');
 
   return (
     <div className="flex flex-col gap-5">
@@ -121,14 +155,15 @@ export function ExerciseList({
           </>
         }
         actions={
-          <Button nativeButton={false} render={<Link href="/dashboard/exercises/new" />}>
+          <Button className="touch:min-h-11" nativeButton={false} render={<Link href="/dashboard/exercises/new" />}>
             <Plus data-icon="inline-start" />
             Yeni egzersiz
           </Button>
         }
       />
+      {notice}
 
-      <div className="grid gap-5 lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-start">
+      <div className={`grid gap-5 lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-start ${TOUCH_TARGETS}`}>
         <Card className="lg:sticky lg:top-6">
           <CardHeader>
             <CardTitle>Kas haritası</CardTitle>
@@ -189,8 +224,9 @@ export function ExerciseList({
             <CardHeader>
               <CardTitle>Kısıtlar</CardTitle>
               <CardDescription>
-                Danışanın sakatlığını seç; uygun olmayan hareketler işaretlenir. Etiketlenmemiş hareket
-                değerlendirilemez, listede sessizce kalır.
+                Danışanın kısıtlarını seç; uygun olmayan hareketler işaretlenir, etiketi olmayanlar “kontrol
+                edilmedi” diye görünür. “Eksik bilgi”: hareketin etiketi ya da kısıtın şiddeti gibi bir bilgi
+                eksik, bazı kurallar değerlendirilemedi.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
@@ -199,26 +235,72 @@ export function ExerciseList({
               </div>
 
               {constraints.length > 0 ? (
-                <div className="flex flex-col gap-2 text-sm">
-                  <p className="text-muted-foreground" aria-live="polite">
-                    <span className="tabular-nums text-destructive">{blockedCount}</span> hareket yasak ·{' '}
-                    <span className="tabular-nums">{decisions.size - blockedCount}</span> uyarı ·{' '}
-                    <span className="tabular-nums">{untaggedCount}</span> etiketsiz
-                  </p>
-                  {constraints.some((item) => conditionInfo(item.id).redFlag) ? (
-                    <p className="text-destructive">
-                      Kırmızı bayrak: bu kısıtta program yazmadan önce tıbbi izin gerekir.
+                <div className="flex flex-col gap-3 text-sm">
+                  {/* Her hareket tek kümede; çipe dokununca liste o kümeye süzülür, yeniden dokununca hepsi. */}
+                  <div className="flex flex-wrap gap-1.5" role="group" aria-label="Kısıt özeti: dokununca liste o kümeye süzülür">
+                    {FILTER_GROUPS.map((group) => {
+                      const GroupIcon = GROUP_ICONS[group];
+                      return (
+                        <Toggle
+                          key={group}
+                          variant="outline"
+                          size="sm"
+                          className={group === 'blocked' ? 'text-destructive' : undefined}
+                          pressed={activeView === group}
+                          onPressedChange={showOnly(group)}
+                          disabled={summary.counts[group] === 0 && activeView !== group}>
+                          <GroupIcon data-icon="inline-start" aria-hidden />
+                          <span className="tabular-nums">{summary.counts[group]}</span> {FILTER_GROUP_LABELS[group]}
+                        </Toggle>
+                      );
+                    })}
+                  </div>
+                  <div className="flex flex-col gap-1 text-muted-foreground" aria-live="polite">
+                    {/* Kısıt değişince sayılar duyurulsun (çipler düğme; canlı bölgede değiller). */}
+                    <p className="sr-only">
+                      {FILTER_GROUPS.map((group) => `${summary.counts[group]} ${FILTER_GROUP_LABELS[group]}`).join(', ')}
+                    </p>
+                    {summary.warnedUnassessed > 0 ? (
+                      <p>
+                        Uyarılı <span className="tabular-nums">{summary.warnedUnassessed}</span> harekette bazı kurallar
+                        eksik bilgi yüzünden değerlendirilemedi.
+                      </p>
+                    ) : null}
+                    {summary.pending.rules > 0 ? (
+                      <p>
+                        Danışan bağlamı olmadan <span className="tabular-nums">{summary.pending.rules}</span> kural
+                        değerlendirilemedi (eksik: {summary.pending.needs.map((need) => CONTEXT_LABELS[need]).join(', ')});
+                        “uygun” sayılanlar bu kurallara göre kontrol edilmedi.
+                      </p>
+                    ) : null}
+                  </div>
+                  {clearance.length > 0 ? (
+                    <p className="flex items-start gap-1.5 text-destructive">
+                      <WarningCircle aria-hidden className="mt-0.5 size-4 shrink-0" />
+                      <span>
+                        Kırmızı bayrak: {clearance.map((condition) => conditionLabel(condition)).join(', ')} için program
+                        yazmadan önce tıbbi izin gerekir.
+                      </span>
                     </p>
                   ) : null}
-                  <Toggle
-                    variant="outline"
-                    size="sm"
-                    className="self-start"
-                    pressed={hideBlocked}
-                    onPressedChange={setHideBlocked}
-                    disabled={blockedCount === 0}>
-                    Yasakları gizle
-                  </Toggle>
+                  <div className="flex flex-wrap gap-2">
+                    <Toggle
+                      variant="outline"
+                      size="sm"
+                      pressed={activeView === 'notBlocked'}
+                      onPressedChange={showOnly('notBlocked')}
+                      disabled={summary.counts.blocked === 0 && activeView !== 'notBlocked'}>
+                      Yasakları gizle
+                    </Toggle>
+                    <Toggle
+                      variant="outline"
+                      size="sm"
+                      pressed={activeView === 'clear'}
+                      onPressedChange={showOnly('clear')}
+                      disabled={summary.counts.clear === 0 && activeView !== 'clear'}>
+                      Yalnız uygunları göster
+                    </Toggle>
+                  </div>
                 </div>
               ) : null}
             </CardContent>
@@ -250,13 +332,24 @@ export function ExerciseList({
                   <MagnifyingGlass />
                 </EmptyMedia>
                 <EmptyTitle>Uyan egzersiz yok</EmptyTitle>
-                <EmptyDescription>Başka bir ad dene ya da kas seçimini değiştir.</EmptyDescription>
+                <EmptyDescription>
+                  {activeView === 'all'
+                    ? 'Başka bir ad dene ya da kas seçimini değiştir.'
+                    : 'Bu kısıt kümesinde, aramaya ve kas seçimine uyan hareket yok.'}
+                </EmptyDescription>
               </EmptyHeader>
-              {selected.length > 0 ? (
-                <EmptyContent>
-                  <Button variant="outline" size="sm" onClick={() => setSelected([])}>
-                    Seçimi temizle
-                  </Button>
+              {selected.length > 0 || activeView !== 'all' ? (
+                <EmptyContent className="flex-row flex-wrap justify-center">
+                  {activeView !== 'all' ? (
+                    <Button variant="outline" size="sm" onClick={() => setView('all')}>
+                      Bütün hareketleri göster
+                    </Button>
+                  ) : null}
+                  {selected.length > 0 ? (
+                    <Button variant="outline" size="sm" onClick={() => setSelected([])}>
+                      Seçimi temizle
+                    </Button>
+                  ) : null}
                 </EmptyContent>
               ) : null}
             </Empty>
@@ -265,7 +358,10 @@ export function ExerciseList({
             <ul className="relative grid gap-3 sm:grid-cols-2">
               <AnimatePresence initial={false} mode="popLayout">
                 {shown.map((item) => {
-                  const verdict = decisions.get(item.id);
+                  const verdict = summary.cards.get(item.id);
+                  const unassessed = verdict?.unassessed ?? 0;
+                  const unchecked = summary.groups.get(item.id) === 'untagged';
+                  const DecisionIcon = verdict?.decision ? DECISION_ICONS[verdict.decision] : null;
                   const onlySecondary =
                     selected.length > 0 && !selected.some((muscle) => item.primaryMuscles.includes(muscle));
                   return (
@@ -278,7 +374,7 @@ export function ExerciseList({
                       transition={{ type: 'spring', stiffness: 400, damping: 34 }}>
                       <Link
                         href={`/dashboard/exercises/${item.id}`}
-                        title={verdict?.message}
+                        title={verdict?.message ?? (unchecked ? UNTAGGED_HINT : undefined)}
                         className="block h-full rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
                         <Card
                           size="sm"
@@ -287,18 +383,36 @@ export function ExerciseList({
                           }`}>
                           <CardHeader>
                             <CardTitle className="truncate">{item.title}</CardTitle>
-                            <CardDescription className="flex items-center gap-1.5">
+                            {/* `min-w-0`: uzun kas/ekipman satırı kısalır, rozetler kartın dışına taşmaz. */}
+                            <CardDescription className="flex min-w-0 items-center gap-1.5">
                               <span className="truncate">
                                 {summarizeMuscles(item.primaryMuscles).join(', ')} ·{' '}
                                 {(item.deviceId && deviceNames[item.deviceId]) || EQUIPMENT_LABELS[item.equipment]}
                               </span>
                               {item.video ? <YoutubeLogo className="size-4 shrink-0" aria-label="videolu" /> : null}
                             </CardDescription>
-                            {item.source === 'custom' || onlySecondary || verdict ? (
-                              <CardAction className="flex gap-1">
-                                {verdict ? (
+                            {item.source === 'custom' || onlySecondary || verdict || unchecked ? (
+                              // Rozetler en çok 9 rem: dar kartta alt satıra geçer, başlığa en az ~120 px kalır.
+                              <CardAction className="flex max-w-36 flex-wrap justify-end gap-1">
+                                {verdict?.decision && DecisionIcon ? (
                                   <Badge variant={verdict.decision === 'block' ? 'destructive' : 'outline'}>
+                                    <DecisionIcon data-icon="inline-start" aria-hidden />
                                     {DECISION_LABELS[verdict.decision].toLocaleLowerCase('tr')}
+                                  </Badge>
+                                ) : null}
+                                {unassessed > 0 ? (
+                                  <Badge
+                                    variant="outline"
+                                    title={`${unassessed} kural değerlendirilemedi: hareketin etiketi ya da kısıtın bir bilgisi (şiddet, greft tipi…) eksik.`}>
+                                    <Question data-icon="inline-start" aria-hidden />
+                                    <span aria-hidden>eksik bilgi</span>
+                                    <span className="sr-only">{unassessed} kural değerlendirilemedi</span>
+                                  </Badge>
+                                ) : null}
+                                {unchecked ? (
+                                  <Badge variant="outline" className="text-muted-foreground" title={UNTAGGED_HINT}>
+                                    <CircleDashed data-icon="inline-start" aria-hidden />
+                                    kontrol edilmedi
                                   </Badge>
                                 ) : null}
                                 {onlySecondary ? <Badge variant="outline">yardımcı</Badge> : null}

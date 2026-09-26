@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Plus } from '@phosphor-icons/react/dist/ssr';
 import { DeviceKindIcon } from '@/components/device-kind-icon';
@@ -9,9 +10,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { DEVICE_KIND_LABELS, DEVICE_KINDS, describeDeviceLoads } from '@/lib/device-loads';
 import { deviceImageUrl } from '@/lib/device-media';
-import { listDevices } from '@/lib/devices';
+import { CUSTOM_DEVICES_PATH, listDevices, readCustomDevices } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
 import { requirePt } from '@/lib/guards';
+import { UnreadableRecordsAlert } from '../unreadable-records-alert';
+
+export const metadata: Metadata = { title: 'Cihazlar' };
 
 /**
  * Cihazlar: hazır katalog + PT'nin cihazları, türe göre gruplu. Egzersizler cihaza
@@ -19,7 +23,8 @@ import { requirePt } from '@/lib/guards';
  */
 export default async function DevicesPage() {
   await requirePt();
-  const [devices, exercises] = await Promise.all([listDevices(), listExercises()]);
+  const [file, exercises] = await Promise.all([readCustomDevices(), listExercises()]);
+  const devices = await listDevices(file);
   const usage = new Map<string, number>();
   for (const exercise of exercises) {
     if (exercise.deviceId) usage.set(exercise.deviceId, (usage.get(exercise.deviceId) ?? 0) + 1);
@@ -44,6 +49,7 @@ export default async function DevicesPage() {
           </Button>
         }
       />
+      <UnreadableRecordsAlert count={file.invalid} path={CUSTOM_DEVICES_PATH} />
 
       {DEVICE_KINDS.map((kind) => {
         const group = devices.filter((device) => device.kind === kind);

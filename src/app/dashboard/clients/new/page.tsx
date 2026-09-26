@@ -1,6 +1,9 @@
+import type { Metadata } from 'next';
 import { PageHeader } from '@/components/page-header';
 import { ClientForm } from '../client-form';
 import { requirePt } from '@/lib/guards';
+
+export const metadata: Metadata = { title: 'Yeni danışan' };
 
 export default async function NewClientPage() {
   await requirePt();
@@ -9,7 +12,7 @@ export default async function NewClientPage() {
       <PageHeader
         crumbs={[{ label: 'Danışanlar', href: '/dashboard/clients' }, { label: 'Yeni danışan' }]}
         title="Yeni danışan"
-        description="Kaydettiğinde hesabında bu danışana özel, gizli bir repo açılır. Repo adında isim geçmez, yalnız kimlik."
+        description="Kaydettiğinde danışanın verisi senin hesabında, yalnız ona ayrılmış gizli bir kayıtta tutulur; kaydın adında isim geçmez."
       />
       <ClientForm editing={null} />
     </div>

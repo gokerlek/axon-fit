@@ -1,59 +1,102 @@
 import 'server-only';
 import { cache } from 'react';
 import { revalidateTag, unstable_cache } from 'next/cache';
-import * as v from 'valibot';
-import { checkInvite, newClientId, newInvite, type InviteCheck } from './client-access';
-import { INVITE_MAX_ATTEMPTS, inviteStatus } from './client-status';
+import { newClientId } from './client-access';
+import { readClient, writeClient } from './client-record';
+import { nextHealthModule } from './client-status';
+import * as core from './clients-core';
+import { CLIENT_INDEX_PATH, type ClientStore } from './clients-core';
 import { serverEnv } from './env';
 import { appRepo, clientRepoName, GithubError } from './github/client';
+import { writeToFreshRepo } from './github/errors';
 import { deleteFile, readJson, writeJson } from './github/files';
 import { clientRepoExists, createClientRepo, deleteClientRepo } from './github/repos';
 import { commitMessage } from './program-diff';
 import type { ProgramState } from './program-plan';
 import { writeProgramFile } from './programs';
-import {
-  clientIndexSchema,
-  clientSchema,
-  HEALTH_CONSENT_VERSION,
-  inviteSchema,
-  type Client,
-  type ClientIndexEntry,
-  type ClientInput,
-  type ClientStatus,
-  type HealthField,
-  type Invite,
-} from './schemas/client';
+import type { Client, ClientInput, ClientStatus, HealthField, Invite } from './schemas/client';
 
 /**
- * Danışanlar (SPEC §3, §5).
+ * Danışanlar (SPEC §3, §5) — GitHub'a ve Next'e bağlama. Akışlar (düzenleme, davet, erişim, onay)
+ * `clients-core.ts`'te, orada test edilir.
  *
- * Her danışan kendi özel repo'sunda: `client.json` kaydın kendisi, `invite.json` davetin
- * özeti, `program.json` danışana özel program (`src/lib/programs.ts`). Uygulama
+ * Her danışan kendi özel repo'sunda: `client.json` kaydın kendisi (`client-record.ts`), `invite.json`
+ * davetin özeti, `auth.json` şifrenin özeti ve deneme sayacı (yalnız burada; uygulama repo'suna hiç
+ * yazılmaz), `program.json` danışana özel program (`src/lib/programs.ts`). Uygulama
  * repo'sundaki `data/clients.json` yalnız kimlik ve durum tutar; liste
  * önce oradan, sonra her danışanın kendi repo'sundan okunur (30 danışan → 30 istek).
  */
 
-export const CLIENT_INDEX_PATH = 'data/clients.json';
-const CLIENT_PATH = 'client.json';
+export { CLIENT_INDEX_PATH, readClient };
+
 const INVITE_PATH = 'invite.json';
+const AUTH_PATH = 'auth.json';
+const CLIENT_INDEX_TAG = 'client-index';
+
+/** Danışanın şifreyle giriş özetinin önbellek etiketi: kaydı ya da `auth.json`'u her yazıldığında düşer. */
+const loginTag = (id: string) => `auth-${id}`;
+const dropLoginGate = (id: string) => revalidateTag(loginTag(id), { expire: 0 });
+
+/**
+ * Şifreyle girişin ön kararı için özet, Next'in veri önbelleğinde (sunucu örnekleri arasında ortak):
+ * kilitli, kapalı, arşivde ya da şifresiz hesaba gelen istekler GitHub'a gitmez. Her yazmada düşer;
+ * 60 sn üst sınır, dosya elle değiştirilirse diye. Özette şifrenin özeti yok (`loginGateOf`).
+ */
+function readLoginGate(id: string) {
+  return unstable_cache(
+    async () => {
+      const [client, auth] = await Promise.all([readClient(id), readJson<unknown>(clientRepoName(id), AUTH_PATH)]);
+      return core.loginGateOf(client?.client ?? null, auth);
+    },
+    ['client-login-gate', id],
+    { tags: [loginTag(id)], revalidate: 60 },
+  )();
+}
+
+function store(): ClientStore {
+  return {
+    secret: serverEnv().authSecret,
+    now: () => new Date(),
+    readClient,
+    writeClient: async (client, sha, message) => {
+      await writeClient(client, sha, message);
+      dropLoginGate(client.id);
+    },
+    readInvite: (id) => readJson<unknown>(clientRepoName(id), INVITE_PATH),
+    writeInvite: (id, invite, sha, message) => writeJson(clientRepoName(id), INVITE_PATH, invite, { sha, message }),
+    deleteInvite: (id, sha, message) => deleteFile(clientRepoName(id), INVITE_PATH, { sha, message }),
+    readAuth: (id) => readJson<unknown>(clientRepoName(id), AUTH_PATH),
+    writeAuth: async (id, auth, sha, message) => {
+      const written = await writeJson(clientRepoName(id), AUTH_PATH, auth, { sha, message });
+      dropLoginGate(id);
+      return written;
+    },
+    deleteAuth: async (id, sha, message) => {
+      await deleteFile(clientRepoName(id), AUTH_PATH, { sha, message });
+      dropLoginGate(id);
+    },
+    readLoginGate,
+    readIndex: () => readJson<unknown>(appRepo(), CLIENT_INDEX_PATH),
+    writeIndex: async (items, sha, message) => {
+      await writeJson(appRepo(), CLIENT_INDEX_PATH, items, { sha, message });
+    },
+    invalidateIndex: () => revalidateTag(CLIENT_INDEX_TAG, { expire: 0 }),
+    deleteRepo: async (id) => {
+      await deleteClientRepo(id);
+      dropLoginGate(id);
+    },
+    log: (message) => console.error(message),
+  };
+}
 
 /* --- uygulama repo'sundaki kimlik listesi --- */
-
-async function readIndex(): Promise<{ items: ClientIndexEntry[]; sha: string | null }> {
-  const stored = await readJson<unknown>(appRepo(), CLIENT_INDEX_PATH);
-  if (!stored) return { items: [], sha: null };
-  const parsed = v.safeParse(clientIndexSchema, stored.content);
-  if (!parsed.success) throw new GithubError(`${CLIENT_INDEX_PATH} beklenen biçimde değil.`, 500);
-  return { items: parsed.output, sha: stored.sha };
-}
 
 /**
  * Listedeki kimlikler, önbellekli. Herkese açık giriş ucu bilinmeyen kimlikleri GitHub'a
  * gitmeden reddeder: rastgele kimlikle gelen istekler saatlik istek sınırını tüketemez.
  * Liste her yazıldığında önbellek düşer.
  */
-const CLIENT_INDEX_TAG = 'client-index';
-const knownIds = unstable_cache(async () => (await readIndex()).items.map((item) => item.id), ['client-index'], {
+const knownIds = unstable_cache(async () => (await core.readIndex(store())).items.map((item) => item.id), ['client-index'], {
   tags: [CLIENT_INDEX_TAG],
   revalidate: 300,
 });
@@ -62,37 +105,7 @@ export async function isKnownClient(id: string): Promise<boolean> {
   return (await knownIds()).includes(id);
 }
 
-/**
- * Listeyi günceller. Aynı dosyaya iki yazma çakışırsa (409) taze okuyup bir kez
- * yeniden dener: değişiklik kimlik bazında olduğu için yeniden uygulamak güvenli.
- */
-async function updateIndex(change: (items: ClientIndexEntry[]) => ClientIndexEntry[], message: string): Promise<void> {
-  for (let attempt = 0; ; attempt += 1) {
-    const { items, sha } = await readIndex();
-    try {
-      await writeJson(appRepo(), CLIENT_INDEX_PATH, change(items), { sha: sha ?? undefined, message });
-      revalidateTag(CLIENT_INDEX_TAG, { expire: 0 });
-      return;
-    } catch (error) {
-      if (attempt === 0 && error instanceof GithubError && error.status === 409) continue;
-      throw error;
-    }
-  }
-}
-
 /* --- danışanın kendi repo'su --- */
-
-export async function readClient(id: string): Promise<{ client: Client; sha: string } | null> {
-  const stored = await readJson<unknown>(clientRepoName(id), CLIENT_PATH);
-  if (!stored) return null;
-  const parsed = v.safeParse(clientSchema, stored.content);
-  if (!parsed.success) throw new GithubError(`${id}: danışan kaydı beklenen biçimde değil.`, 500);
-  return { client: parsed.output, sha: stored.sha };
-}
-
-async function writeClient(client: Client, sha: string | undefined, message: string): Promise<void> {
-  await writeJson(clientRepoName(client.id), CLIENT_PATH, client, { sha, message });
-}
 
 /**
  * PT ekranları için (istek başına bir kez okunur: danışan çatısı ve sayfa aynı kaydı paylaşır):
@@ -115,11 +128,7 @@ export const loadClient = cache(async function loadClient(
 });
 
 export async function readInvite(id: string): Promise<{ invite: Invite; sha: string } | null> {
-  const stored = await readJson<unknown>(clientRepoName(id), INVITE_PATH);
-  if (!stored) return null;
-  const parsed = v.safeParse(inviteSchema, stored.content);
-  // Bozuk davet açılmaz ama listeyi de düşürmez: PT yenisini üretir.
-  return parsed.success ? { invite: parsed.output, sha: stored.sha } : null;
+  return core.parseInvite(await readJson<unknown>(clientRepoName(id), INVITE_PATH));
 }
 
 export type ClientSummary =
@@ -128,7 +137,7 @@ export type ClientSummary =
   | { id: string; status: ClientStatus; ok: false; problem: string };
 
 export async function listClients(): Promise<ClientSummary[]> {
-  const { items } = await readIndex();
+  const { items } = await core.readIndex(store());
   const summaries = await Promise.all(
     items.map(async (entry): Promise<ClientSummary> => {
       try {
@@ -147,37 +156,11 @@ export async function listClients(): Promise<ClientSummary[]> {
 
 /* --- oluşturma, güncelleme, silme --- */
 
-/** Kayda giren alanlar: başlangıç şablonu kayda değil, programa gider. */
-type ClientFields = ClientInput;
-
-function healthModule(input: ClientFields, previous: Client['modules']['health'] | null, now: string) {
-  if (!input.healthEnabled) return { enabled: false, fields: [] };
-  return {
-    enabled: true,
-    fields: [...new Set(input.healthFields)],
-    enabledAt: previous?.enabled ? (previous.enabledAt ?? now) : now,
-  };
-}
-
-/** Repo yeni açıldığında içerik ucu kısa bir süre 404/409 verebilir: birkaç kez dener. */
-async function writeFreshRepo(client: Client): Promise<void> {
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      await writeClient(client, undefined, 'Danışan kaydı oluşturuldu');
-      return;
-    } catch (error) {
-      const retryable = error instanceof GithubError && (error.status === 404 || error.status === 409);
-      if (!retryable || attempt >= 3) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 600 * (attempt + 1)));
-    }
-  }
-}
-
 /**
  * Yeni danışan: özel repo açılır, kayıt yazılır; başlangıç şablonu seçildiyse program da
  * aynı adımda yazılır. Herhangi biri yazılamazsa repo silinir — ya hepsi ya hiçbiri.
  */
-export async function createClient(input: ClientFields, options: { program?: ProgramState } = {}): Promise<string> {
+export async function createClient(input: ClientInput, options: { program?: ProgramState } = {}): Promise<string> {
   let id = newClientId();
   // 36⁸ uzayında çakışma pratikte olmaz; yine de var olan bir repo'nun üzerine gidilmez.
   if (await clientRepoExists(id)) id = newClientId();
@@ -190,19 +173,20 @@ export async function createClient(input: ClientFields, options: { program?: Pro
     ...(input.note ? { note: input.note } : {}),
     createdAt: now,
     status: 'active',
-    modules: { health: healthModule(input, null, now) },
+    modules: { health: nextHealthModule(null, { enabled: input.healthEnabled, fields: input.healthFields }, now) },
     consents: {},
     access: { version: 1 },
     visibleTo: [],
   };
 
   try {
-    await writeFreshRepo(client);
+    // Repo yeni açıldı: içerik ucu kısa bir süre 404/409 verebilir, ilk yazma birkaç kez denenir.
+    await writeToFreshRepo(() => writeClient(client, undefined, 'Danışan kaydı oluşturuldu'));
     if (options.program) {
       await writeProgramFile(id, options.program, { message: commitMessage('create', options.program.log[0]?.changes ?? []) });
     }
     // Listeye YALNIZ kimlik ve durum girer (SPEC §3).
-    await updateIndex((items) => [...items.filter((item) => item.id !== id), { id, status: 'active' }], 'Danışan eklendi');
+    await core.updateIndex(store(), (items) => [...items.filter((item) => item.id !== id), { id, status: 'active' }], 'Danışan eklendi');
   } catch (error) {
     // Yarım kalan kayıt öksüz repo bırakmasın: repo'da henüz yalnız bu kayıt (ve program) var.
     await deleteClientRepo(id).catch(() => undefined);
@@ -211,153 +195,52 @@ export async function createClient(input: ClientFields, options: { program?: Pro
   return id;
 }
 
-export async function updateClient(id: string, input: ClientFields): Promise<void> {
-  const stored = await readClient(id);
-  if (!stored) throw new GithubError('Danışan bulunamadı.', 404);
-  const { client, sha } = stored;
-  const now = new Date().toISOString();
-  const { note: _note, ...rest } = client;
-  const next: Client = {
-    ...rest,
-    name: input.name,
-    ...(input.note ? { note: input.note } : {}),
-    status: input.status,
-    modules: { ...client.modules, health: healthModule(input, client.modules.health, now) },
-  };
-  await writeClient(next, sha, 'Danışan güncellendi');
-  if (next.status !== client.status) {
-    await updateIndex(
-      (items) => items.map((item) => (item.id === id ? { ...item, status: next.status } : item)),
-      'Danışan durumu değişti',
-    );
-  }
+/** PT'nin düzenlemesi (ad, not, durum, sağlık modülü); bkz. `clients-core.ts`. */
+export async function updateClient(id: string, input: ClientInput): Promise<void> {
+  await core.updateClient(store(), id, input);
 }
 
-/**
- * Danışanı ve bütün verisini kalıcı siler: repo gider (GitHub 90 gün geri alınabilir tutar),
- * listeden kimlik satırı çıkar. Repo zaten yoksa yalnız satır temizlenir.
- */
+/** Danışanı ve bütün verisini kalıcı siler (repo dahil). */
 export async function deleteClient(id: string): Promise<void> {
-  try {
-    await deleteClientRepo(id);
-  } catch (error) {
-    if (!(error instanceof GithubError && error.status === 404)) throw error;
-  }
-  await updateIndex((items) => items.filter((item) => item.id !== id), 'Danışan silindi');
+  await core.deleteClient(store(), id);
 }
 
 /* --- davet ve erişim --- */
 
-/** Yeni davet: eskisinin üzerine yazar, yani eski kod anında geçersiz olur. Kod yalnız bu yanıtta var. */
+/** Yeni davet kodu; eskisi anında geçersiz olur. Kod yalnız bu yanıtta var. */
 export async function issueInvite(id: string): Promise<{ code: string; expiresAt: string }> {
-  const stored = await readClient(id);
-  if (!stored) throw new GithubError('Danışan bulunamadı.', 404);
-  if (stored.client.status === 'archived') throw new GithubError('Arşivdeki danışana davet üretilemez.', 409);
-
-  const { invite, code } = newInvite(serverEnv().authSecret, id, new Date());
-  const current = await readJson<unknown>(clientRepoName(id), INVITE_PATH);
-  await writeJson(clientRepoName(id), INVITE_PATH, invite, { sha: current?.sha, message: 'Yeni davet kodu' });
-  return { code, expiresAt: invite.expiresAt };
+  return core.issueInvite(store(), id);
 }
 
-/**
- * Daveti kullanır. Deneme, kod karşılaştırılmadan ÖNCE `sha` kilidiyle sayılır: aynı anda
- * gelen tahminlerden yalnız sayacı yazabilen karşılaştırılır, yazamayan hiç denenmez (hata
- * yukarı çıkar, "biraz sonra tekrar dene"). GitHub istek sınırında da sayaç yazılamadığı
- * için tahmin bedava olmaz. Doğru kodda davet aynı kilitle `used: true` olur — aynı kod iki
- * cihazdan denense de yalnız biri oturum açar.
- */
-export async function redeemInvite(
-  id: string,
-  code: string,
-): Promise<{ ok: true; client: Client } | { ok: false; reason: Exclude<InviteCheck, { ok: true }>['reason'] | 'archived' }> {
-  const repo = clientRepoName(id);
-  const stored = await readInvite(id);
-  const now = new Date();
-  const status = inviteStatus(stored?.invite ?? null, now);
-  if (!stored || status !== 'pending') return { ok: false, reason: stored && status !== 'pending' ? status : 'none' };
-
-  const attempts = stored.invite.attempts + 1;
-  const counted = { ...stored.invite, attempts };
-  const reserved = await writeJson(repo, INVITE_PATH, counted, { sha: stored.sha, message: 'Davet kodu denendi' });
-
-  const check = checkInvite(stored.invite, { secret: serverEnv().authSecret, clientId: id, code, now });
-  if (!check.ok) return attempts >= INVITE_MAX_ATTEMPTS ? { ok: false, reason: 'locked' } : check;
-
-  const record = await readClient(id);
-  if (!record) return { ok: false, reason: 'none' };
-  if (record.client.status === 'archived') return { ok: false, reason: 'archived' };
-
-  try {
-    await writeJson(repo, INVITE_PATH, { ...counted, used: true, usedAt: now.toISOString() }, {
-      sha: reserved.sha,
-      message: 'Davet kullanıldı',
-    });
-  } catch (error) {
-    // Başka bir cihaz aynı anda kullandı.
-    if (error instanceof GithubError && error.status === 409) return { ok: false, reason: 'used' };
-    throw error;
-  }
-
-  // Katılım kayda yazılır: davet dosyası bir sonraki kodda ezilir. Yazılamazsa giriş yine
-  // geçerli (oturum kuşağı değişmedi); yalnız PT ekranındaki tarih eksik kalır.
-  const { revokedAt: _revoked, ...access } = record.client.access;
-  const joined: Client = {
-    ...record.client,
-    access: { ...access, joinedAt: access.joinedAt ?? now.toISOString(), lastJoinAt: now.toISOString() },
-  };
-  await writeClient(joined, record.sha, 'Danışan giriş yaptı').catch(() => undefined);
-  return { ok: true, client: joined };
+/** Daveti kullanır (deneme sayılır, sonra karşılaştırılır); bkz. `clients-core.ts`. */
+export async function redeemInvite(id: string, code: string): ReturnType<typeof core.redeemInvite> {
+  return core.redeemInvite(store(), id, code);
 }
 
-/** Açık bütün oturumları düşürür ve bekleyen daveti iptal eder. */
+/** Açık bütün oturumları düşürür, bekleyen daveti iptal eder, şifreyi geçersiz kılar. */
 export async function revokeAccess(id: string): Promise<void> {
-  const stored = await readClient(id);
-  if (!stored) throw new GithubError('Danışan bulunamadı.', 404);
-  const { client, sha } = stored;
-  await writeClient(
-    { ...client, access: { ...client.access, version: client.access.version + 1, revokedAt: new Date().toISOString() } },
-    sha,
-    'Danışanın erişimi kapatıldı',
-  );
-  const invite = await readJson<unknown>(clientRepoName(id), INVITE_PATH);
-  if (invite) await deleteFile(clientRepoName(id), INVITE_PATH, { sha: invite.sha, message: 'Davet iptal edildi' });
+  await core.revokeAccess(store(), id);
 }
 
-/**
- * Danışanın sağlık onayı ya da onayı geri çekmesi. Onay, danışanın EKRANDA GÖRDÜĞÜ
- * parçaları ve metin sürümünü taşır; PT bu arada listeyi değiştirdiyse onay reddedilir
- * (409) ve danışan güncel listeyi görüp yeniden karar verir. Görmediği bir parçaya
- * onay yazılmaz.
- */
+/* --- şifre (ilk giriş kare kodla, sonrakiler şifreyle) --- */
+
+/** Oturumdaki danışanın şifresini belirler; bkz. `clients-core.ts`. Şifre hiçbir yere düz yazılmaz. */
+export async function setClientPassword(
+  session: { clientId: string; accessVersion: number; joinedAt?: string | undefined },
+  password: string,
+): ReturnType<typeof core.setClientPassword> {
+  return core.setClientPassword(store(), session, password);
+}
+
+/** Şifreyle giriş (deneme sayılır, sonra karşılaştırılır); bkz. `clients-core.ts`. */
+export async function loginWithPassword(id: string, password: string): ReturnType<typeof core.loginWithPassword> {
+  return core.loginWithPassword(store(), id, password);
+}
+
+/** Danışanın sağlık onayı ya da onayı geri çekmesi. */
 export async function setHealthConsent(
   id: string,
   decision: { granted: boolean; fields: HealthField[]; version: string },
 ): Promise<Client> {
-  const stored = await readClient(id);
-  if (!stored) throw new GithubError('Danışan bulunamadı.', 404);
-  const { client, sha } = stored;
-  const module = client.modules.health;
-  if (!module.enabled) throw new GithubError('Sağlık modülü kapalı.', 409);
-  if (decision.granted) {
-    const shown = new Set(decision.fields);
-    const same = shown.size === module.fields.length && module.fields.every((field) => shown.has(field));
-    if (!same || decision.version !== HEALTH_CONSENT_VERSION) {
-      throw new GithubError('Antrenörün sorulan bilgileri değiştirdi. Sayfayı yenileyip yeniden bak.', 409);
-    }
-  }
-  const next: Client = {
-    ...client,
-    consents: {
-      ...client.consents,
-      health: {
-        granted: decision.granted,
-        version: HEALTH_CONSENT_VERSION,
-        fields: decision.granted ? module.fields : [],
-        at: new Date().toISOString(),
-      },
-    },
-  };
-  await writeClient(next, sha, decision.granted ? 'Sağlık verisi onayı verildi' : 'Sağlık verisi onayı geri çekildi');
-  return next;
+  return core.setHealthConsent(store(), id, decision);
 }

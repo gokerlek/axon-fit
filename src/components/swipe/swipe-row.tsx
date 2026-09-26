@@ -11,7 +11,8 @@
  * - Reduced-motion'da panel anında oturur, silmede yüz kaymaz.
  * - Tam kaydırma eşiği geçilince bir kez titreşir, panel parmağa kadar uzar, ikon yüzün
  *   kenarını izler; parmak eşiğin altına dönerse iptal.
- * - Aynı anda tek panel açık (`SwipeGroup`); dışarı dokunmak ve Esc kapatır.
+ * - Aynı anda tek panel açık (`SwipeGroup`); dışarı dokunmak ve Esc kapatır. Başka karta dokunmak
+ *   yalnız kapatır (o kartı açmaz).
  * - Spinner ve ✓ durumları yok (işlemler anında; geri alma toast'ta). İkonlar Phosphor,
  *   renkler tema token'larından.
  * - Yüz tutamak çizgisiyle birlikte kayar; açık gövde bu bileşenin dışındadır. Çizgiye basış
@@ -65,7 +66,40 @@ type Group = {
 
 const SwipeGroupContext = createContext<Group | null>(null);
 
-/** Aynı anda tek panel açık kalır; dışarı dokunmak (sürükleme tutamağı dahil) ve Esc kapatır. */
+/** Başka bir karta yapılan dokunuş (yüz, tutamak, açık gövde): panel açıkken yalnız paneli kapatır. */
+const CARD = '[data-slot=exercise-card], [data-slot=exercise-group]';
+
+/**
+ * Bu basışın `click`'ini yutar (iOS gibi: panel açıkken ilk dokunuş yalnız kapatır, dokunulan kartı
+ * açmaz). Basış kaydırmaya dönerse (pointercancel) ya da tıklama gelmezse bırakılır: sonraki
+ * dokunuşlar etkilenmez.
+ */
+function swallowClick(down: PointerEvent) {
+  const onClick = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    release();
+  };
+  const onEnd = (event: PointerEvent) => {
+    if (event.pointerId !== down.pointerId) return;
+    // Tıklama bırakıştan hemen sonra gelir; gelmezse (sürükleme, uzun basış) yutucu kalkar.
+    window.setTimeout(release, event.type === 'pointercancel' ? 0 : 400);
+  };
+  const release = () => {
+    document.removeEventListener('click', onClick, true);
+    document.removeEventListener('pointerup', onEnd, true);
+    document.removeEventListener('pointercancel', onEnd, true);
+  };
+  document.addEventListener('click', onClick, true);
+  document.addEventListener('pointerup', onEnd, true);
+  document.addEventListener('pointercancel', onEnd, true);
+}
+
+/**
+ * Aynı anda tek panel açık kalır; dışarı dokunmak (sürükleme tutamağı dahil) ve Esc kapatır. Panel
+ * açıkken başka bir karta dokunmak yalnız paneli kapatır: dokunulan kart açılmaz, düğmesine basılmaz
+ * (sürükleme yine başlar).
+ */
 export function SwipeGroup({ children }: { children: React.ReactNode }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const openElement = useRef<HTMLElement | null>(null);
@@ -82,6 +116,7 @@ export function SwipeGroup({ children }: { children: React.ReactNode }) {
     const onPointerDown = (event: PointerEvent) => {
       if (event.target instanceof Node && openElement.current?.contains(event.target)) return;
       close();
+      if (event.target instanceof Element && event.target.closest(CARD)) swallowClick(event);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') close();

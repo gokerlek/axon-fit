@@ -1,21 +1,32 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getDeepError, setInput, useField, useFieldArray } from '@formisch/react';
 import { ArrowsSplit, Barbell, CaretDown, LinkBreak, NoteBlank, Plus, TrendUp, Trash, WarningCircle } from '@phosphor-icons/react';
 import { ARMED, CardBadge, CardFace, CardGrabber, ExerciseCard, ExerciseCardSection, PLACEHOLDER } from '@/components/exercise-card';
-import { GroupedSelect, LabeledSelect } from '@/components/labeled-select';
+import { LabeledSelect } from '@/components/labeled-select';
 import { SwipeRow, type SwipeAction } from '@/components/swipe/swipe-row';
 import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { DEVICE_KIND_LABELS, DEVICE_KINDS, loadSpecFor } from '@/lib/device-loads';
+import { deviceChangeMessage, dropTargetLabel, groupWorkText, rowWorkText } from '@/lib/edit-messages';
 import { familyOf } from '@/lib/muscles';
-import { describeRule, describeSetRules, PROGRESSION_LABELS, RIR_LABELS, type ProgressionScheme } from '@/lib/progression';
+import { describeRule, describeSetRules, PROGRESSION_LABELS, RIR_LABELS } from '@/lib/progression';
 import type { ReorderTarget } from '@/lib/reorder';
-import { isStraight, setsText } from '@/lib/set-plan';
-import { changeKind, deviceChoices, setRow, swapDevice, type PickerExercise } from '@/lib/template-edit';
+import { isStraight } from '@/lib/set-plan';
+import {
+  changeKind,
+  deviceChoices,
+  deviceSwapChanges,
+  ruleChange,
+  setRow,
+  swapDevice,
+  type EditorDevice,
+  type PickerExercise,
+} from '@/lib/template-edit';
 import {
   BLOCK_KIND_HINTS,
   BLOCK_KIND_LABELS,
@@ -25,13 +36,15 @@ import {
   roundsOf,
   rowRule,
   type BlockKind,
+  type RuleOverride,
   type TemplateBlock,
   type TemplateRow,
 } from '@/lib/template-plan';
 import { cn } from '@/lib/utils';
 import { DragGroup, DragItem, DropFace, DropLine, DropPill, Grabber } from './drag/drag-node';
-import { useDragging } from './drag/drag-store';
+import { useArmedTarget, useDragging } from './drag/drag-store';
 import { blockField, bodyId, faceId, groupTitle, rowTitle, useEditor, type Editor } from './editor-context';
+import { keepLineEnter } from './enter-key';
 import { BlockSecondsField, RoundsField, SetCountField, SetsSection, SetsSummary, TargetField } from './set-table';
 
 export { EditorContext, blockField, rowTitle, useEditor, type BlocksFormStore, type BlocksPath } from './editor-context';
@@ -48,10 +61,6 @@ export const FULL_MESSAGE = 'Şablon dolu: en fazla 40 hareket, 30 blok';
 const KEY_TARGETS: Partial<Record<string, ReorderTarget>> = { ArrowUp: 'up', ArrowDown: 'down', Home: 'top', End: 'end' };
 
 const KEY_SHORTCUTS = 'Alt+ArrowUp Alt+ArrowDown Alt+Home Alt+End Alt+ArrowRight Alt+ArrowLeft Delete';
-
-function seconds(value: number): string {
-  return Number.isFinite(value) ? `${value} sn` : '? sn';
-}
 
 /** Yüzdeki klavye: Alt+↑/↓/Home/End taşır, Alt+→ öncekiyle gruplar, Alt+← ayırır, Delete siler, Esc kapatır. */
 function useFaceKeys(itemId: string, isOpen: boolean): React.KeyboardEventHandler<HTMLButtonElement> {
@@ -158,24 +167,72 @@ function Mark({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-/** Meta satırı: setler (`setsText`) + dinlenme; sonunda kural, cihaz, not ve hata işaretleri. */
-function RowMeta({ block, row, exercise, invalid }: { block: TemplateBlock; row: TemplateRow; exercise: PickerExercise | undefined; invalid: boolean }) {
+/** Satırın cihazı: satırda yazılı olan, yoksa egzersizin kendi cihazı. */
+function rowDevice(row: TemplateRow, exercise: PickerExercise | undefined, devices: ReadonlyMap<string, EditorDevice>): EditorDevice | undefined {
+  const deviceId = row.deviceId ?? exercise?.deviceId;
+  return deviceId ? devices.get(deviceId) : undefined;
+}
+
+/** Meta satırının sonundaki cihaz etiketi ([🏋 Kablo istasyonu 2]); kısayol düğmesi aynı ölçüde. */
+const DEVICE_LABEL = 'inline-flex h-4 max-w-28 shrink-0 items-center gap-1 text-xs leading-4 text-muted-foreground';
+
+function DeviceLabel({ name }: { name: string }) {
+  return (
+    <>
+      <Barbell aria-hidden className="size-3.5 shrink-0" />
+      <span className="truncate underline decoration-muted-foreground/50 decoration-dotted underline-offset-2">{name}</span>
+    </>
+  );
+}
+
+/**
+ * "Cihazı değiştir" kısayolu: meta satırındaki cihazın tam üstüne oturan kardeş düğme (yüz düğmesinin
+ * içinde düğme olmaz). Dokunma alanı 44 px'e uzar. Kartı ve Ayrıntılar'ı açar, cihaz seçicisini açar.
+ */
+function DeviceShortcut({ rowId, name }: { rowId: string; name: string }) {
+  const editor = useEditor();
+  return (
+    <button
+      type="button"
+      aria-label={`Cihazı değiştir: ${name}`}
+      title="Cihazı değiştir"
+      className={cn(
+        DEVICE_LABEL,
+        "relative rounded-sm outline-none select-none after:absolute after:-inset-x-2 after:-inset-y-3.5 after:content-[''] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
+      )}
+      onClick={() => editor.openDevice(rowId)}>
+      <DeviceLabel name={name} />
+    </button>
+  );
+}
+
+/**
+ * Meta satırı: setler + dinlenme (`rowWorkText`, şablon detayıyla aynı biçim); kural, not ve hata
+ * işaretleri; sonda cihaz. `shortcut` iken cihazın yerini görünmez kopyası tutar, üstünde "Cihazı
+ * değiştir" düğmesi durur (`DeviceShortcut`).
+ */
+function RowMeta({
+  block,
+  row,
+  exercise,
+  invalid,
+  shortcut = false,
+}: {
+  block: TemplateBlock;
+  row: TemplateRow;
+  exercise: PickerExercise | undefined;
+  invalid: boolean;
+  shortcut?: boolean;
+}) {
   const { devices } = useEditor();
-  const device = row.deviceId ? devices.get(row.deviceId) : undefined;
-  const text = exercise
-    ? `${setsText(row.sets, exercise.trackingType)}${block.kind === 'single' ? ` · ${seconds(block.restSeconds)}` : ''}`
-    : null;
+  const device = exercise ? rowDevice(row, exercise, devices) : undefined;
+  const text = exercise ? rowWorkText(row.sets, exercise.trackingType, block.kind === 'single' ? block.restSeconds : undefined) : null;
   return (
     <>
       {text ? <span className="truncate tabular-nums">{text}</span> : <span className="truncate font-mono">{row.exerciseId}</span>}
       {row.rule ? (
         <Mark label="Kendi ilerleme kuralı var">
           <TrendUp aria-hidden />
-        </Mark>
-      ) : null}
-      {row.deviceId ? (
-        <Mark label={`Cihaz: ${device?.name ?? row.deviceId}`}>
-          <Barbell aria-hidden />
         </Mark>
       ) : null}
       {row.note?.trim() ? (
@@ -188,13 +245,77 @@ function RowMeta({ block, row, exercise, invalid }: { block: TemplateBlock; row:
           <WarningCircle aria-hidden className="text-destructive" />
         </Mark>
       ) : null}
+      {device ? (
+        shortcut ? (
+          <span aria-hidden className={cn(DEVICE_LABEL, 'invisible ml-auto')}>
+            <DeviceLabel name={device.name} />
+          </span>
+        ) : (
+          <span role="img" aria-label={`Cihaz: ${device.name}`} className={cn(DEVICE_LABEL, 'ml-auto')}>
+            <DeviceLabel name={device.name} />
+          </span>
+        )
+      ) : null}
     </>
   );
 }
 
 const RIR_ITEMS: Record<string, string> = Object.fromEntries(Object.entries(RIR_LABELS).map(([rir, label]) => [rir, label]));
 
-/** Satırın ayrıntıları: ilerleme kuralı, cihaz ve not. */
+type DeviceGroup = { label: string; options: { value: string; label: string }[] };
+
+/**
+ * Satırın cihaz seçicisi (türe göre gruplu; boş seçenek egzersizin cihazı ya da "Cihazsız"). Kart
+ * yüzündeki "Cihazı değiştir" istediğinde (`deviceRequest`) görünür yere kaydırılır ve açılır.
+ */
+function DeviceSelect({
+  rowId,
+  value,
+  groups,
+  empty,
+  onChange,
+}: {
+  rowId: string;
+  value: string;
+  groups: DeviceGroup[];
+  empty: string;
+  onChange: (value: string) => void;
+}) {
+  const { deviceRequest, settleDevice } = useEditor();
+  const [open, setOpen] = useState(false);
+  const id = `device-${rowId}`;
+  const requested = deviceRequest?.rowId === rowId ? deviceRequest.nonce : 0;
+  useEffect(() => {
+    if (!requested) return;
+    settleDevice();
+    // Kart ve bölüm açılıp çizildi: önce seçici görünür yere gelir, liste sonra açılır (altında konumlansın).
+    document.getElementById(id)?.scrollIntoView({ block: 'center' });
+    requestAnimationFrame(() => setOpen(true));
+  }, [requested, id, settleDevice]);
+  const items = [{ value: '', label: empty }, ...groups.flatMap((group) => group.options)];
+  return (
+    <Select items={items} value={value} open={open} onOpenChange={setOpen} onValueChange={(next) => onChange(next ?? '')}>
+      <SelectTrigger id={id} className={cn('w-full', SELECT_TOUCH.triggerClassName)}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent className={SELECT_TOUCH.contentClassName}>
+        <SelectItem value="">{empty}</SelectItem>
+        {groups.map((group) => (
+          <SelectGroup key={group.label}>
+            <SelectLabel>{group.label}</SelectLabel>
+            {group.options.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/** Satırın ayrıntıları: cihaz (başlıktaki sırayla önce: salonda en sık değişen), ilerleme kuralı ve not. */
 function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: number; rowIndex: number; row: TemplateRow; exercise: PickerExercise }) {
   const editor = useEditor();
   const { form, path, devices, deviceList, exerciseList, exercises } = editor;
@@ -219,23 +340,48 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
     // eslint-disable-next-line react-hooks/exhaustive-deps -- satırın yalnız egzersizi ve cihazı seçenekleri değiştirir
   }, [row.exerciseId, row.deviceId, swapContext, deviceList, devices]);
 
-  const writeRule = (next: { scheme: ProgressionScheme; targetRir: number }) =>
-    setInput(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'rule'), input: next });
+  // Zaten etkin olan değer yeniden seçilince yazılmaz (`ruleChange`): form boşuna kirlenmesin.
+  const writeRule = (change: Partial<RuleOverride>) => {
+    const next = ruleChange(row, exercise, change);
+    if (next) setInput(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'rule'), input: next });
+  };
 
+  // Her cihaz değişimi kartta vurgulanır ve "Geri al"lı toast'la söylenir; satırı değiştirmeyen seçim yazılmaz.
   const changeDevice = (value: string) => {
     const result = swapDevice(row, value || null, swapContext);
-    if (result.kind === 'unavailable') return;
-    if (result.kind === 'swapped') {
-      const from = exercises.get(result.from)?.title ?? result.from;
-      const to = exercises.get(result.to)?.title ?? result.to;
-      editor.updateWithUndo((before) => setRow(before, result.row), `Cihaz değişince hareket de değişti: ${from} → ${to}`);
-      return;
-    }
-    editor.update((before) => setRow(before, result.row));
+    if (!deviceSwapChanges(row, result)) return;
+    const name = (id: string | undefined) => (id ? (devices.get(id)?.name ?? id) : null);
+    const title = exercise.title;
+    const message =
+      result.kind === 'swapped'
+        ? deviceChangeMessage({
+            kind: 'swapped',
+            device: name(value) ?? '',
+            from: exercises.get(result.from)?.title ?? result.from,
+            to: exercises.get(result.to)?.title ?? result.to,
+          })
+        : result.kind === 'device'
+          ? deviceChangeMessage({ kind: 'device', device: name(value) ?? '', title })
+          : deviceChangeMessage({ kind: 'reset', device: name(exercise.deviceId), title });
+    editor.updateWithUndo((before) => setRow(before, result.row), message, { highlight: row.id });
   };
 
   return (
     <div id={`details-${row.id}`} className="grid grid-cols-1 gap-4 px-3 pt-3 pb-3 sm:grid-cols-2">
+      <Field className="gap-1.5">
+        <FieldLabel htmlFor={`device-${row.id}`}>Cihaz</FieldLabel>
+        <DeviceSelect
+          rowId={row.id}
+          value={row.deviceId ?? ''}
+          groups={groups}
+          empty={ownDevice ? `Egzersizin cihazı: ${ownDevice.name}` : 'Cihazsız'}
+          onChange={changeDevice}
+        />
+        <FieldDescription>
+          Cihaz değişince hareket, o cihazdaki muadiline geçer; muadil yoksa aynı hareket bu cihazda yapılır.
+        </FieldDescription>
+      </Field>
+
       <Field className="gap-1.5">
         <FieldLabel htmlFor={`scheme-${row.id}`}>İlerleme</FieldLabel>
         <div className="grid grid-cols-2 gap-2">
@@ -244,14 +390,14 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
             id={`scheme-${row.id}`}
             value={rule.scheme}
             labels={PROGRESSION_LABELS}
-            onChange={(scheme) => writeRule({ scheme, targetRir: rule.targetRir })}
+            onChange={(scheme) => writeRule({ scheme })}
           />
           <LabeledSelect
             {...SELECT_TOUCH}
             id={`rir-${row.id}`}
             value={String(rule.targetRir)}
             labels={RIR_ITEMS}
-            onChange={(rir) => writeRule({ scheme: rule.scheme, targetRir: Number(rir) })}
+            onChange={(rir) => writeRule({ targetRir: Number(rir) })}
           />
         </div>
         <FieldDescription>{describeRule(rule, spec)}</FieldDescription>
@@ -268,21 +414,6 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
         ) : null}
       </Field>
 
-      <Field className="gap-1.5">
-        <FieldLabel htmlFor={`device-${row.id}`}>Cihaz</FieldLabel>
-        <GroupedSelect
-          {...SELECT_TOUCH}
-          id={`device-${row.id}`}
-          value={row.deviceId ?? ''}
-          groups={groups}
-          empty={ownDevice ? `Egzersizin cihazı: ${ownDevice.name}` : 'Cihazsız'}
-          onChange={changeDevice}
-        />
-        <FieldDescription>
-          Cihaz değişince hareket, o cihazdaki muadiline geçer; muadil yoksa aynı hareket bu cihazda yapılır.
-        </FieldDescription>
-      </Field>
-
       <Field data-invalid={Boolean(noteField.errors) || undefined} className="gap-1.5 sm:col-span-2">
         <FieldLabel htmlFor={`note-${row.id}`}>Not</FieldLabel>
         <Input
@@ -292,6 +423,7 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
           maxLength={TEMPLATE_LIMITS.note}
           placeholder="Dizleri içe kaçırma"
           value={typeof noteField.input === 'string' ? noteField.input : ''}
+          onKeyDown={keepLineEnter}
         />
         <FieldDescription>{editor.noteHint}</FieldDescription>
         <FieldError>{noteField.errors?.[0]}</FieldError>
@@ -300,7 +432,7 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
   );
 }
 
-/** Açılır bölümün 44 px başlığı ("Ayrıntılar · kural · not"). */
+/** Açılır bölümün 44 px başlığı ("Ayrıntılar · cihaz · kural · not"). */
 function DisclosureButton({ open, controls, onToggle, children }: { open: boolean; controls: string; onToggle: () => void; children: React.ReactNode }) {
   return (
     <button
@@ -335,8 +467,8 @@ function RemoveButton({ itemId, label = 'Sil' }: { itemId: string; label?: strin
 
 /**
  * Açık kart (tek hareket ya da üye): Set ve Dinlenme stepper'ları (üyede dinlenme grupta),
- * Hedef ve çipler (düz olmayan setlerde özet), "Setleri ayrı düzenle", "Ayrıntılar · kural ·
- * not", alt satır.
+ * Hedef ve çipler (düz olmayan setlerde özet), "Setleri ayrı düzenle", "Ayrıntılar · cihaz ·
+ * kural · not" (cihazsız harekette "cihaz" yazmaz), alt satır.
  */
 function RowBody({
   block,
@@ -364,6 +496,7 @@ function RowBody({
   const setsOpen = setError || (editor.setsOpen.get(row.id) ?? !straight);
   const detailsOpen = editor.detailsOpen.has(row.id);
   const onKeyDown = useBodyEscape(row.id);
+  const device = rowDevice(row, exercise, editor.devices);
 
   return (
     <div id={bodyId(row.id)} onKeyDown={onKeyDown}>
@@ -404,7 +537,7 @@ function RowBody({
       {exercise ? (
         <div className="border-t">
           <DisclosureButton open={detailsOpen} controls={`details-${row.id}`} onToggle={() => editor.toggleDetails(row.id)}>
-            Ayrıntılar <span className="text-muted-foreground">· kural · not</span>
+            Ayrıntılar <span className="text-muted-foreground">· {device ? 'cihaz · ' : ''}kural · not</span>
           </DisclosureButton>
           {detailsOpen ? <RowDetails blockIndex={blockIndex} rowIndex={rowIndex} row={row} exercise={exercise} /> : null}
         </div>
@@ -436,6 +569,7 @@ function RowCard({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; b
   useField(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'exerciseId') });
   const exercise = exercises.get(row.exerciseId);
   const title = rowTitle(row, exercises);
+  const device = rowDevice(row, exercise, editor.devices);
   const single = block.kind === 'single';
   const last = rowIndex === block.rows.length - 1;
   const isOpen = open.has(row.id);
@@ -466,7 +600,8 @@ function RowCard({ block, blockIndex, row, rowIndex }: { block: TemplateBlock; b
         badge={<CardBadge>{labels.get(row.id)}</CardBadge>}
         title={title}
         titleClassName={exercise ? undefined : 'text-destructive'}
-        meta={<RowMeta block={block} row={row} exercise={exercise} invalid={invalid} />}
+        meta={<RowMeta block={block} row={row} exercise={exercise} invalid={invalid} shortcut={Boolean(device) && !selecting} />}
+        metaAction={device && !selecting ? <DeviceShortcut rowId={row.id} name={device.name} /> : undefined}
         label={selecting ? title : `${title}, ayrıntıları aç/kapat`}
         expanded={isOpen}
         controls={bodyId(row.id)}
@@ -638,14 +773,7 @@ function GroupCard({ block, blockIndex }: { block: TemplateBlock; blockIndex: nu
     Boolean(getDeepError(form, { path: blockField(path, blockIndex, 'transitionSeconds') }));
   const onKeyDown = useFaceKeys(block.id, isOpen);
   const tooMany = editor.blocks.length - 1 + block.rows.length > TEMPLATE_LIMITS.blocks;
-  const meta = [
-    `${block.rows.length} hareket`,
-    `${rounds} tur`,
-    `${seconds(block.restSeconds)} tur sonu`,
-    block.kind === 'circuit' && block.transitionSeconds !== undefined ? `istasyon ${seconds(block.transitionSeconds)}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const meta = groupWorkText(block, rounds);
 
   const end: SwipeAction[] = [
     {
@@ -743,7 +871,7 @@ function GroupCard({ block, blockIndex }: { block: TemplateBlock; blockIndex: nu
           variant="ghost"
           aria-haspopup="dialog"
           aria-label={`Gruba hareket ekle: ${title}`}
-          className="h-11 w-full rounded-none rounded-b-[inherit] border-t border-primary/25 text-primary hover:bg-primary/8 hover:text-primary"
+          className="h-11 w-full rounded-none rounded-b-[inherit] border-t border-primary/25 text-primary-text hover:bg-primary/8 hover:text-primary-text"
           onClick={(event) => editor.openAddToGroup(block.id, event)}>
           <Plus data-icon="inline-start" />
           Gruba hareket ekle
@@ -770,39 +898,61 @@ export function BlockItem({ block, blockIndex, count }: { block: TemplateBlock; 
   );
 }
 
-/** Sürüklenen overlay: kartın yüzü ve çizgisi (açık gövde yok), hafif büyümüş ve halkalı. */
+/**
+ * Sürüklenen overlay: kartın yüzü ve çizgisi (açık gövde yok), hafif büyümüş ve halkalı. "Üstüne bırak"
+ * devredeyken hedef overlay'in altında kalır: sonucu ve hedefin adı overlay'in üstünde, sol üstte yazar
+ * (parmak ortadaki çizgide), overlay yarı saydamlaşır (hedefin halkası ve hapı görünür).
+ */
 export function ItemPreview({ itemId }: { itemId: string }) {
   const { blocks, exercises, labels } = useEditor();
+  const armed = useArmedTarget();
   const blockIndex = blocks.findIndex((block) => block.id === itemId || block.rows.some((row) => row.id === itemId));
   const block = blocks[blockIndex];
   if (!block) return null;
   const group = block.id === itemId && block.kind !== 'single';
   const row = block.rows.find((item) => item.id === itemId);
   const exercise = row ? exercises.get(row.exerciseId) : undefined;
+  const titleOf = (exerciseId: string) => exercises.get(exerciseId)?.title ?? 'Silinmiş egzersiz';
+  const outcome = armed ? dropTargetLabel(blocks, armed.targetId, armed.outcome, titleOf) : null;
+  const full = armed?.outcome === 'full';
   return (
-    <div
-      className={cn(
-        'origin-top rounded-lg border bg-card text-sm shadow-lg ring-2 ring-primary/40 motion-safe:scale-[1.02]',
-        group && 'rounded-xl border-primary/40 bg-[color-mix(in_oklab,var(--primary)_4%,var(--card))]',
-      )}>
-      {group || !row ? (
-        <CardFace
-          static
-          grabber={<CardGrabber tone="group" dragging />}
-          badge={<CardBadge tone="group">{blockIndex + 1}</CardBadge>}
-          title={BLOCK_KIND_LABELS[block.kind]}
-          meta={<span className="truncate">{`${block.rows.length} hareket · ${roundsOf(block)} tur`}</span>}
-        />
-      ) : (
-        <CardFace
-          static
-          grabber={<CardGrabber dragging />}
-          badge={<CardBadge>{labels.get(row.id)}</CardBadge>}
-          title={rowTitle(row, exercises)}
-          titleClassName={exercise ? undefined : 'text-destructive'}
-          meta={<RowMeta block={block} row={row} exercise={exercise} invalid={false} />}
-        />
-      )}
+    <div className="relative">
+      {outcome ? (
+        <span
+          aria-hidden
+          data-slot="drop-outcome"
+          className={cn(
+            'absolute bottom-full left-0 mb-2 max-w-full truncate rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap shadow-md',
+            full ? 'bg-muted text-muted-foreground' : 'bg-primary text-primary-foreground',
+          )}>
+          {outcome}
+        </span>
+      ) : null}
+      <div
+        className={cn(
+          'origin-top rounded-lg border bg-card text-sm shadow-lg ring-2 ring-primary/40 motion-safe:scale-[1.02] motion-safe:transition-opacity motion-safe:duration-100',
+          group && 'rounded-xl border-primary/40 bg-[color-mix(in_oklab,var(--primary)_4%,var(--card))]',
+          outcome && !full && 'opacity-60',
+        )}>
+        {group || !row ? (
+          <CardFace
+            static
+            grabber={<CardGrabber tone="group" dragging />}
+            badge={<CardBadge tone="group">{blockIndex + 1}</CardBadge>}
+            title={BLOCK_KIND_LABELS[block.kind]}
+            meta={<span className="truncate tabular-nums">{groupWorkText(block, roundsOf(block))}</span>}
+          />
+        ) : (
+          <CardFace
+            static
+            grabber={<CardGrabber dragging />}
+            badge={<CardBadge>{labels.get(row.id)}</CardBadge>}
+            title={rowTitle(row, exercises)}
+            titleClassName={exercise ? undefined : 'text-destructive'}
+            meta={<RowMeta block={block} row={row} exercise={exercise} invalid={false} />}
+          />
+        )}
+      </div>
     </div>
   );
 }

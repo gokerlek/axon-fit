@@ -1,11 +1,14 @@
 import type { JoiningOutcome } from './drop-target.ts';
-import type { AddToGroupOutcome, GroupCheck } from './template-edit.ts';
+import type { AddToGroupOutcome, CombineOutcome, GroupCheck } from './template-edit.ts';
+import { setsText, type SetSpec } from './set-plan.ts';
 import { BLOCK_KIND_LABELS, type TemplateBlock } from './template-plan.ts';
+import type { TrackingType } from './progression.ts';
 
 /**
  * Düzenleyicinin duyuru ve toast cümleleri (canlı bölge, "Geri al" bildirimleri): taşıma,
  * üstüne bırakıp gruplama, klavyeyle taşımada uç, seçim modunun durum satırı ve toplu
- * işlemleri, "Gruba hareket ekle" sheet'i. Saf; yol takma adıyla çalışma zamanı içe
+ * işlemleri, cihaz değişimi, "Gruba hareket ekle" sheet'i; kartların meta satırları (şablon
+ * detayı ve programın PT görünümüyle ortak). Saf; yol takma adıyla çalışma zamanı içe
  * aktarması yapmaz (testler Node'un kendi test aracıyla çalışır).
  */
 
@@ -70,11 +73,13 @@ export function moveMessage(before: readonly TemplateBlock[], after: readonly Te
 }
 
 /**
- * Üstüne bırakıp gruplamanın cümlesi (toast ve duyuru; önce hesaplanır): "Süperset yapıldı:
- * Squat + Bench Press", "Süperset devreye dönüştü", "Cable Row gruba eklendi (Devre 2)".
+ * Üstüne bırakıp gruplamanın cümlesi (toast ve duyuru; `before` → `after`): "Süperset yapıldı:
+ * Squat + Bench Press", "Süperset devreye dönüştü", "Cable Row gruba eklendi (Devre 2)". Grubun
+ * sırası birleşmeden sonraki listeden: üstündeki tek hareket gruba girince grup bir sıra yukarı kayar.
  */
 export function combineMessage(
   before: readonly TemplateBlock[],
+  after: readonly TemplateBlock[],
   sourceId: string,
   targetId: string,
   outcome: JoiningOutcome,
@@ -82,11 +87,13 @@ export function combineMessage(
 ): string {
   const source = titleOfItem(before, sourceId, titleOf);
   if (outcome === 'superset') return `Süperset yapıldı: ${titleOfItem(before, targetId, titleOf)} + ${source}`;
-  const blockIndex = before.findIndex((block) => block.id === targetId || block.rows.some((row) => row.id === targetId));
-  const group = before[blockIndex];
+  const holdsTarget = (block: TemplateBlock) => block.id === targetId || block.rows.some((row) => row.id === targetId);
+  const group = before.find(holdsTarget);
   if (!group) return '';
   if (outcome === 'becomes_circuit') return `${BLOCK_KIND_LABELS[group.kind]} devreye dönüştü`;
-  return `${source} gruba eklendi (${groupName(group, blockIndex)})`;
+  const blockIndex = after.findIndex(holdsTarget);
+  const joined = after[blockIndex];
+  return joined ? `${source} gruba eklendi (${groupName(joined, blockIndex)})` : '';
 }
 
 /** Klavyeyle taşımada öğe zaten uçta: "Squat zaten ilk sırada", üyede "grupta zaten son sırada". */
@@ -103,10 +110,11 @@ export function selectedRowCount(blocks: readonly TemplateBlock[], blockIds: Rea
 
 /**
  * Seçim çubuğunun durum satırı: kaç kart seçili ve "Grupla" ne yapar ya da neden pasif;
- * kopya sığmıyorsa sonuna eklenir ("Kopyala" pasif). Pasif düğmenin nedeni burada yazar.
+ * kopya sığmıyorsa sonuna eklenir ("Kopyala" pasif). Pasif düğmenin nedeni burada yazar. Hiç
+ * seçim yokken seçimin ne işe yaradığını da söyler ("2 hareket seç, süperset olsun").
  */
 export function selectionStatus(count: number, check: GroupCheck, pointer: 'touch' | 'mouse' = 'touch'): string {
-  if (count === 0) return `Seçmek için kartlara ${pointer === 'touch' ? 'dokun' : 'tıkla'}`;
+  if (count === 0) return `Seçmek için kartlara ${pointer === 'touch' ? 'dokun' : 'tıkla'} · 2 hareket seç, süperset olsun`;
   return check === 'superset'
     ? `${count} seçili · süperset olur`
     : check === 'circuit'
@@ -151,6 +159,88 @@ export function addToGroupTitle(kind: TemplateBlock['kind'], blockIndex: number)
 }
 
 /**
+ * Cihaz değişiminin cümlesi (toast ve duyuru; "Geri al"lı). Biçim cihaz seçicisinin seçenekleriyle
+ * aynı ("Kablo istasyonu 2 → Seated Row"):
+ * - hareket de değişti: "Kablo istasyonu 2 → Seated Row (Lat Pulldown yerine)"
+ * - aynı hareket başka cihazda: "Bench Press · cihaz: Smith makinesi"
+ * - egzersizin cihazına dönüldü: "Bench Press · egzersizin cihazı: Olimpik bar", cihazı yoksa "Bench Press · cihazsız"
+ */
+export type DeviceChange =
+  | { kind: 'swapped'; device: string; from: string; to: string }
+  | { kind: 'device'; device: string; title: string }
+  | { kind: 'reset'; device: string | null; title: string };
+
+export function deviceChangeMessage(change: DeviceChange): string {
+  switch (change.kind) {
+    case 'swapped':
+      return `${change.device} → ${change.to} (${change.from} yerine)`;
+    case 'device':
+      return `${change.title} · cihaz: ${change.device}`;
+    case 'reset':
+      return change.device ? `${change.title} · egzersizin cihazı: ${change.device}` : `${change.title} · cihazsız`;
+  }
+}
+
+/** "Üstüne bırak"ın sonuç hapı (hedefte ve sürüklenen kartın üstünde). */
+export const DROP_OUTCOME_LABELS: Record<Exclude<CombineOutcome, 'not_allowed'>, string> = {
+  superset: 'Süperset yap',
+  becomes_circuit: 'Ekle · devre olur',
+  join: 'Gruba ekle',
+  full: 'Grup dolu (8)',
+};
+
+/**
+ * "Üstüne bırak" devredeyken sürüklenen kartın üstündeki etiket: sonuç ve hedef ("Süperset yap:
+ * Squat", "Ekle · devre olur: Süperset 2", "Gruba ekle: Devre 3"). Hedef bir grubun üyesi ya da yüzüyse
+ * grubun adı yazılır (bırakılan gruba katılır). Dolu grupta yalnız "Grup dolu (8)"; olmayan birleştirmede
+ * ve bilinmeyen hedefte `null`.
+ */
+export function dropTargetLabel(blocks: readonly TemplateBlock[], targetId: string, outcome: CombineOutcome, titleOf: TitleOf): string | null {
+  if (outcome === 'not_allowed') return null;
+  if (outcome === 'full') return DROP_OUTCOME_LABELS.full;
+  for (const [blockIndex, block] of blocks.entries()) {
+    const only = block.rows[0];
+    if (block.kind === 'single' && only?.id === targetId) return `${DROP_OUTCOME_LABELS[outcome]}: ${titleOf(only.exerciseId)}`;
+    if (block.kind !== 'single' && (block.id === targetId || block.rows.some((row) => row.id === targetId))) {
+      return `${DROP_OUTCOME_LABELS[outcome]}: ${groupName(block, blockIndex)}`;
+    }
+  }
+  return null;
+}
+
+/** Dinlenme: saniyeyle (stepper'daki gibi), yoksa "dinlenme yok"; bozuk girdide "? sn". */
+function restText(seconds: number): string {
+  if (!Number.isFinite(seconds)) return '? sn';
+  return seconds > 0 ? `${seconds} sn` : 'dinlenme yok';
+}
+
+/**
+ * Hareketin setleri ve dinlenmesi, tek biçim (düzenleyicinin meta satırı, şablon detayı, programın PT
+ * görünümü): `setsText` + dinlenme. "3×8–12 · 90 sn", "12/10/8+ (piramit %80/%90/%100) · 90 sn",
+ * "3×30 sn · dinlenme yok"; grup üyesinde dinlenme grupta, yalnız setler (`restSeconds` verilmez).
+ */
+export function rowWorkText(sets: readonly SetSpec[], trackingType: TrackingType, restSeconds?: number): string {
+  const line = setsText(sets, trackingType);
+  return restSeconds === undefined ? line : `${line} · ${restText(restSeconds)}`;
+}
+
+/**
+ * Grubun özeti, tek biçim (düzenleyicide grubun yüzü, şablon detayı, programın PT görünümü):
+ * "2 hareket · 3 tur · 90 sn tur sonu", devrede " · istasyon 15 sn".
+ */
+export function groupWorkText(block: Pick<TemplateBlock, 'kind' | 'restSeconds' | 'transitionSeconds'> & { rows: readonly unknown[] }, rounds: number): string {
+  const rest = Number.isFinite(block.restSeconds) && block.restSeconds <= 0 ? 'tur sonu dinlenme yok' : `${restText(block.restSeconds)} tur sonu`;
+  const station =
+    block.kind === 'circuit' && block.transitionSeconds !== undefined
+      ? ` · istasyon ${Number.isFinite(block.transitionSeconds) ? `${block.transitionSeconds} sn` : '? sn'}`
+      : '';
+  return `${block.rows.length} hareket · ${rounds} tur · ${rest}${station}`;
+}
+
+/** Kütüphane sheet'i sona eklerken şablon dolu: liste pasif, neden durum satırında (`sheetStatus`). */
+export const SHEET_FULL_MESSAGE = 'Şablon dolu: en fazla 40 hareket ve 30 blok olur.';
+
+/**
  * "Gruba hareket ekle" sheet'inin durum satırı, eklemeden önce: dolu grupta ve dolu
  * şablonda liste pasif, süpersette ya da 6'lı komplekste "Eklenirse devre olur".
  */
@@ -164,4 +254,13 @@ export function addToGroupHint(outcome: AddToGroupOutcome): { blocked: string | 
 /** Gruba eklendikten sonra: "Cable Row eklendi", tür değiştiyse "Cable Row eklendi · grup devre oldu". */
 export function addedToGroupMessage(title: string, before: TemplateBlock['kind'], after: TemplateBlock['kind']): string {
   return before === after ? `${title} eklendi` : `${title} eklendi · grup ${BLOCK_KIND_LABELS[after].toLocaleLowerCase('tr-TR')} oldu`;
+}
+
+/**
+ * Kütüphane sheet'inin durum satırı: eklenemiyorsa nedeni (liste pasif; neden yalnız burada
+ * yazar, az önceki onayın arkasında), yoksa son onay ya da eklemeden önceki ipucu.
+ */
+export function sheetStatus(blocked: string | null, status: string, hint: string): string {
+  if (blocked) return status ? `${status} · ${blocked}` : blocked;
+  return status || hint;
 }

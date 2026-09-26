@@ -1,5 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { prepareProgramForEditing, type ProgramPhase } from './program-plan.ts';
 import { programFormSchema } from './schemas/program.ts';
 import { templateFormSchema } from './schemas/template.ts';
 import {
@@ -9,10 +10,12 @@ import {
   draftDiffers,
   fitsForm,
   leaveHref,
+  offerDraft,
   parseDraft,
   programDraftKey,
   serializeDraft,
   templateDraftKey,
+  type DraftBase,
   type LinkClick,
 } from './unsaved-changes.ts';
 
@@ -53,7 +56,8 @@ function programInput() {
   };
 }
 
-const stored = (input: unknown, base: string | number | null = SHA) => serializeDraft({ version: 1, base, savedAt: at, input });
+/** Depodaki taslak; `base` eski biçimde de olabilir (programda yalnız revision sayısı). */
+const stored = (input: unknown, base: DraftBase | number = SHA) => serializeDraft({ version: 1, base: base as DraftBase, savedAt: at, input });
 
 describe('taslak anahtarı', () => {
   test('şablon kimlikle, yeni şablon ve program danışanla', () => {
@@ -89,8 +93,10 @@ describe('taslak yazma ve okuma', () => {
     assert.ok(parseDraft(stored(program, 3), programFormSchema, PROGRAM_DRAFT_BASE));
   });
 
-  test('program: revision ya da oluşturmada null', () => {
-    assert.equal(parseDraft(stored(programInput(), 7), programFormSchema, PROGRAM_DRAFT_BASE)?.base, 7);
+  test('program: revision ve oluşturulma anı, oluşturmada null; eski taslağın yalnız revision\'ı çifte çevrilir', () => {
+    const base = { revision: 7, createdAt: at };
+    assert.deepEqual(parseDraft(stored(programInput(), base), programFormSchema, PROGRAM_DRAFT_BASE)?.base, base);
+    assert.deepEqual(parseDraft(stored(programInput(), 7), programFormSchema, PROGRAM_DRAFT_BASE)?.base, { revision: 7 });
     assert.equal(parseDraft(stored(programInput(), null), programFormSchema, PROGRAM_DRAFT_BASE)?.base, null);
   });
 
@@ -108,8 +114,10 @@ describe('taslak yazma ve okuma', () => {
     drop(stored({ name: 'x', description: '' }));
     drop(stored({ ...templateInput(), blocks: [{ ...templateInput().blocks[0], kind: 'garip' }] }));
     drop(stored(templateInput(), SHA), programFormSchema);
-    // Programın sürümü sayıdır.
-    assert.equal(parseDraft(stored(programInput(), SHA), programFormSchema, PROGRAM_DRAFT_BASE), null);
+    // Programın sürümü revision (ve oluşturulma anı); sha, sıfır revision ya da bozuk tarih değil.
+    for (const base of [SHA, 0, { revision: 0 }, { revision: 3, createdAt: 'dün' }, { createdAt: at }]) {
+      assert.equal(parseDraft(stored(programInput(), base as DraftBase), programFormSchema, PROGRAM_DRAFT_BASE), null);
+    }
   });
 
   test('şema denetimi yalnız yapıya bakar', () => {
@@ -146,21 +154,73 @@ describe('taslak farkı', () => {
     assert.equal(draftDiffers({ name: 'A' }, { name: 'B' }), true);
     assert.equal(draftDiffers(templateInput({ min: 8 }), templateInput({ min: 10 })), true);
   });
+
+  test('boş metin alanı ile alanın olmaması aynı hâl (program formu notsuz satıra boş not yazar); dizide değil', () => {
+    assert.equal(draftDiffers({ blocks: [{ note: '' }] }, { blocks: [{}] }), false);
+    assert.equal(draftDiffers({ blocks: [{ note: 'yavaş' }] }, { blocks: [{}] }), true);
+    assert.equal(draftDiffers({ tags: [''] }, { tags: [] }), true);
+  });
+});
+
+describe('açılışta taslak', () => {
+  /** Program formunun taslak hazırlığı (`program-form.tsx` `prepareDraft`): silinmiş cihaz egzersizinkine döner. */
+  const prepare = (input: ReturnType<typeof programInput>) => ({
+    ...input,
+    phases: prepareProgramForEditing(input.phases as unknown as ProgramPhase[], new Set(['smith'])).phases as unknown as ReturnType<
+      typeof programInput
+    >['phases'],
+  });
+  /** Taslak: ilk satırın cihazı (sonradan silinen 'eski'), isteğe bağlı gün adı. */
+  const draftWith = (deviceId: string | undefined, dayName = 'Gün A') => {
+    const input = programInput();
+    const day = input.phases[0]!.days[0]!;
+    day.name = dayName;
+    day.blocks[0]!.rows[0]!.deviceId = deviceId as never;
+    return input;
+  };
+
+  test('tek farkı sonradan silinen cihaz olan taslak hazırlanınca yüklenen hâle eşit: sunulmaz (silinir)', () => {
+    const loaded = programInput();
+    // Hazırlanmadan karşılaştırılsaydı her açılışta yeniden sunulurdu.
+    assert.equal(offerDraft(draftWith('eski'), loaded), true);
+    assert.equal(offerDraft(draftWith('eski'), loaded, prepare), false);
+    // Başka bir farkla ya da var olan cihazla sunulur.
+    assert.equal(offerDraft(draftWith('eski', 'Bacak'), loaded, prepare), true);
+    assert.equal(offerDraft(draftWith('smith'), loaded, prepare), true);
+  });
+
+  test('tek farkı boş not olan taslak sunulmaz (silinir); şablon düzenleyici hazırlık vermez', () => {
+    const loaded = templateInput();
+    const { note: _note, ...withoutNote } = loaded.blocks[0]!.rows[0]!;
+    const draft = { ...loaded, blocks: [{ ...loaded.blocks[0]!, rows: [withoutNote] }] };
+    assert.equal(offerDraft(draft, loaded), false);
+    assert.equal(offerDraft({ ...draft, name: 'Alt vücut B' }, loaded), true);
+  });
 });
 
 describe('çakışma', () => {
+  const created = '2026-09-24T08:00:00.000Z';
+
   test('kayıttaki sürüm değiştiyse', () => {
     assert.equal(draftConflict(SHA, SHA), false);
     assert.equal(draftConflict(SHA, 'b'.repeat(40)), true);
-    assert.equal(draftConflict(3, 4), true);
+    assert.equal(draftConflict({ revision: 4, createdAt: created }, { revision: 4, createdAt: created }), false);
+    assert.equal(draftConflict({ revision: 3, createdAt: created }, { revision: 4, createdAt: created }), true);
     // Oluşturmadan kalma taslak, o arada oluşturulmuş programın düzenlemesinde.
-    assert.equal(draftConflict(null, 4), true);
+    assert.equal(draftConflict(null, { revision: 4, createdAt: created }), true);
+  });
+
+  test('program silinip yeniden oluşturulduysa revision yine 1 olsa da çakışır (ABA)', () => {
+    assert.equal(draftConflict({ revision: 1, createdAt: created }, { revision: 1, createdAt: '2026-09-25T08:00:00.000Z' }), true);
+    // Eski taslak (oluşturulma anı yok): geriye uyumlu, yalnız revision'la denetlenir.
+    assert.equal(draftConflict({ revision: 1 }, { revision: 1, createdAt: created }), false);
+    assert.equal(draftConflict({ revision: 1 }, { revision: 2, createdAt: created }), true);
   });
 
   test('oluşturmada çakışacak kayıt yok', () => {
     assert.equal(draftConflict(null, null), false);
     // Program o arada silinmiş: taslak yeni program olur.
-    assert.equal(draftConflict(4, null), false);
+    assert.equal(draftConflict({ revision: 4, createdAt: created }, null), false);
   });
 });
 

@@ -6,6 +6,12 @@
  * (`vimeo.com/123/abc`); kimlik `123:abc` olarak saklanır, oynatıcıya `?h=abc` gider.
  */
 
+/**
+ * Tanınmayan bağlantının uyarısı: formda yazarken hata olarak gösterilir; egzersiz şemasının
+ * gönderimdeki mesajıyla aynı cümle (`exercise-form-logic.test.ts` ikisini karşılaştırır).
+ */
+export const UNRECOGNIZED_VIDEO_URL = 'Bu bağlantıyı tanıyamadım. YouTube ya da Vimeo video bağlantısı yapıştır.';
+
 export type VideoProvider = 'youtube' | 'vimeo';
 export type VideoRef = { provider: VideoProvider; id: string };
 
@@ -35,7 +41,17 @@ export function parseVideoUrl(input: string): VideoRef | null {
     ref = { provider: 'youtube', id: id ?? '' };
   } else if (host === 'vimeo.com' || host === 'player.vimeo.com') {
     // vimeo.com/123 · vimeo.com/123/abc · vimeo.com/channels/x/123 · player.vimeo.com/video/123?h=abc
-    const index = parts.findIndex((part) => /^\d+$/.test(part));
+    // vimeo.com/showcase/111/video/123 · vimeo.com/album/222/video/123 · vimeo.com/groups/x/videos/123
+    // Kimlik `video`/`videos` parçasından sonraki sayı, yoksa son sayı (showcase, albüm ve
+    // kanal numarası video değil). Liste dışı videoda kimliği gizli anahtar izler; anahtar
+    // yalnız rakamsa da kimlik sayılmaz: vimeo.com/123/456 → 123, anahtar 456.
+    const isNumber = (part: string | undefined) => part !== undefined && /^\d+$/.test(part);
+    let index = parts.findIndex((part, i) => (part === 'video' || part === 'videos') && isNumber(parts[i + 1]));
+    if (index >= 0) index += 1;
+    else {
+      index = parts.reduce((last, part, i) => (isNumber(part) ? i : last), -1);
+      if (index > 0 && isNumber(parts[index - 1]) && parts[index - 2] !== 'channels') index -= 1;
+    }
     if (index >= 0) {
       const hash = url.searchParams.get('h') ?? (parts[index + 1] && /^[0-9a-f]+$/.test(parts[index + 1] ?? '') ? parts[index + 1] : null);
       ref = { provider: 'vimeo', id: hash ? `${parts[index]}:${hash}` : (parts[index] ?? '') };

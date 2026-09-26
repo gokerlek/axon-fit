@@ -71,7 +71,8 @@ export function AlternativesCard({ exerciseId, rows, swaps }: { exerciseId: stri
         <CardTitle>Muadiller</CardTitle>
         <CardDescription>
           Alet doluysa ya da yoksa yerine yapılabilecekler.{' '}
-          <Link href={`/dashboard/exercises/${exerciseId}/edit`} className="underline underline-offset-4">
+          {/* Cümle içi bağlantı: telefonda görünmez 44 px dokunma alanı (düğme ve sayfa yolundaki kalıp). */}
+          <Link href={`/dashboard/exercises/${exerciseId}/edit`} className="relative underline underline-offset-4 touch:before:absolute touch:before:top-1/2 touch:before:left-1/2 touch:before:h-full touch:before:min-h-11 touch:before:w-full touch:before:min-w-11 touch:before:-translate-x-1/2 touch:before:-translate-y-1/2">
             Düzenle
           </Link>{' '}
           diyerek kendi seçtiklerini sabitleyebilirsin; sabitlediklerin en üstte çıkar.
@@ -121,7 +122,7 @@ export function AlternativesCard({ exerciseId, rows, swaps }: { exerciseId: stri
                       </ItemContent>
                       {row.pinned ? (
                         <ItemActions>
-                          <PushPin weight="fill" className="size-4 text-primary" aria-label="Senin sabitlediğin" />
+                          <PushPin weight="fill" className="size-4 text-primary-text" aria-label="Senin sabitlediğin" />
                         </ItemActions>
                       ) : null}
                     </Item>

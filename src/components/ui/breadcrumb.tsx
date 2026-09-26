@@ -9,7 +9,7 @@ import { CaretRightIcon, DotsThreeIcon } from "@phosphor-icons/react"
 function Breadcrumb({ className, ...props }: React.ComponentProps<"nav">) {
   return (
     <nav
-      aria-label="breadcrumb"
+      aria-label="Sayfa yolu"
       data-slot="breadcrumb"
       className={cn(className)}
       {...props}
@@ -49,7 +49,11 @@ function BreadcrumbLink({
     defaultTagName: "a",
     props: mergeProps<"a">(
       {
-        className: cn("transition-colors hover:text-foreground", className),
+        // Telefonda dokunma alanı en az 44×44 px (SPEC §6); görünen metin aynı kalır.
+        className: cn(
+          "relative transition-colors hover:text-foreground touch:before:absolute touch:before:top-1/2 touch:before:left-1/2 touch:before:h-full touch:before:min-h-11 touch:before:w-full touch:before:min-w-11 touch:before:-translate-x-1/2 touch:before:-translate-y-1/2",
+          className
+        ),
       },
       props
     ),
@@ -110,7 +114,7 @@ function BreadcrumbEllipsis({
     >
       <DotsThreeIcon
       />
-      <span className="sr-only">More</span>
+      <span className="sr-only">Daha fazla</span>
     </span>
   )
 }

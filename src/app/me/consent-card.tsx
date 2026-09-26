@@ -22,10 +22,24 @@ import { fetchJson } from '@/lib/query/errors';
 import { useServiceMutation } from '@/lib/query/use-service';
 import { HEALTH_CONSENT_VERSION, HEALTH_FIELD_INFO, type HealthField } from '@/lib/schemas/client';
 
+/** Onay kartının cümlesi için kısa adlar: "antrenörün ağrı ve ölçüm kayıtlarını görebilir". */
+const SHORT_NAMES: Record<HealthField, string> = {
+  conditions: 'kısıt',
+  readiness: 'hazır oluşluk',
+  check_in: 'ağrı',
+  measurements: 'ölçüm',
+  screening: 'hareket taraması',
+};
+
+function listTr(items: readonly string[]): string {
+  return items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} ve ${items[items.length - 1]}`;
+}
+
 /**
  * Sağlık verisi onayı (SPEC §9.4). PT modülü açsa da danışan onaylamadan hiçbir sağlık
  * kaydı tutulmaz; onay istendiği an geri çekilebilir. Metnin sürümü değişirse
- * (`HEALTH_CONSENT_VERSION`) yeniden sorulur.
+ * (`HEALTH_CONSENT_VERSION`) yeniden sorulur. Telefon: karar düğmeleri 44 px, onaydan sonra da
+ * kapsam listesi görünür (danışan neyin tutulduğunu her zaman görür).
  */
 export function ConsentCard({ state, fields }: { state: Exclude<HealthConsentState, 'off'>; fields: HealthField[] }) {
   const router = useRouter();
@@ -59,12 +73,16 @@ export function ConsentCard({ state, fields }: { state: Exclude<HealthConsentSta
     return (
       <Card size="sm">
         <CardHeader>
-          <CardTitle>Sağlık takibi açık</CardTitle>
-          <CardDescription>Onayın geçerli. Geri çekersen yeni sağlık kaydı tutulmaz.</CardDescription>
+          <CardTitle>Sağlık takibi</CardTitle>
+          <CardDescription>
+            Sağlık takibi açık: antrenörün {listTr(fields.map((field) => SHORT_NAMES[field]))} kayıtlarını görebilir.
+            İstediğin zaman kapatabilirsin.
+          </CardDescription>
         </CardHeader>
+        <CardContent>{list}</CardContent>
         <CardFooter>
           <AlertDialog>
-            <AlertDialogTrigger render={<Button variant="outline" size="sm" />}>Onayı geri çek</AlertDialogTrigger>
+            <AlertDialogTrigger render={<Button variant="outline" className="h-11 w-full" />}>Onayı geri çek</AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Onayını geri çekmek istiyor musun?</AlertDialogTitle>
@@ -74,8 +92,8 @@ export function ConsentCard({ state, fields }: { state: Exclude<HealthConsentSta
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Vazgeç</AlertDialogCancel>
-                <AlertDialogAction disabled={decide.isPending} onClick={() => decide.mutate(false)}>
+                <AlertDialogCancel className="h-11">Vazgeç</AlertDialogCancel>
+                <AlertDialogAction className="h-11" disabled={decide.isPending} onClick={() => decide.mutate(false)}>
                   {decide.isPending ? <Spinner data-icon="inline-start" /> : null}
                   Geri çek
                 </AlertDialogAction>
@@ -96,7 +114,7 @@ export function ConsentCard({ state, fields }: { state: Exclude<HealthConsentSta
         </CardHeader>
         <CardContent>{list}</CardContent>
         <CardFooter>
-          <Button size="sm" disabled={decide.isPending} onClick={() => decide.mutate(true)}>
+          <Button className="h-11 w-full" disabled={decide.isPending} onClick={() => decide.mutate(true)}>
             {decide.isPending ? <Spinner data-icon="inline-start" /> : null}
             Onaylıyorum
           </Button>
@@ -114,23 +132,23 @@ export function ConsentCard({ state, fields }: { state: Exclude<HealthConsentSta
         </CardTitle>
         <CardDescription>
           {state === 'outdated'
-            ? 'Antrenörün yeni bir bilgi eklemek istiyor ya da metin güncellendi. Yeniden onaylayana kadar sağlık kaydı tutulmaz.'
+            ? 'Antrenörün sağlık takibini yeniden başlattı, yeni bir bilgi eklemek istiyor ya da metin güncellendi. Yeniden onaylayana kadar sağlık kaydı tutulmaz.'
             : 'Antrenörün programını güvenle ayarlamak için şu bilgileri tutmak istiyor:'}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {list}
         <p className="text-sm text-muted-foreground">
-          Bu bilgiler yalnız senin için açılmış gizli bir kayıtta durur ve yalnız antrenörün görür. Onay vermezsen hiçbiri
-          tutulmaz, antrenmanların yine kaydedilir. Onayını istediğin an buradan geri çekebilirsin.
+          Bu bilgileri yalnız antrenörün görür. Onay vermezsen hiçbiri tutulmaz; antrenmanların yine kaydedilir. İstediğin
+          zaman kapatabilirsin.
         </p>
       </CardContent>
-      <CardFooter className="flex gap-2">
-        <Button disabled={decide.isPending} onClick={() => decide.mutate(true)}>
+      <CardFooter className="flex flex-col gap-2">
+        <Button className="h-11 w-full" disabled={decide.isPending} onClick={() => decide.mutate(true)}>
           {decide.isPending && decide.variables ? <Spinner data-icon="inline-start" /> : null}
           Onaylıyorum
         </Button>
-        <Button variant="ghost" disabled={decide.isPending} onClick={() => decide.mutate(false)}>
+        <Button variant="outline" className="h-11 w-full" disabled={decide.isPending} onClick={() => decide.mutate(false)}>
           Şimdi değil
         </Button>
       </CardFooter>
