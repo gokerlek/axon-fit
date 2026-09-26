@@ -6,7 +6,8 @@ import { programFile } from './session-fixtures.ts';
 
 /**
  * Antrenman ekranı testlerinin kalıpları — YALNIZ testler için. Egzersizler kütüphanedekilerin sade
- * hâli: Bench Press (halter, 2,5 kg adım, 20 kg bar), Goblet Squat (dambıl seti), Plank (süreli).
+ * hâli: Bench Press (halter, 2,5 kg adım, 20 kg bar), Goblet Squat (dambıl seti), Plank (süreli); Bench'in
+ * muadilleri Dumbbell Press (dambıl seti) ve Şınav (vücut ağırlığı), Plank'ınki Crunch (tekrarla).
  */
 
 export const BENCH: WorkoutExercise = {
@@ -17,6 +18,7 @@ export const BENCH: WorkoutExercise = {
   equipment: 'barbell',
   primaryMuscles: ['chest_lower'],
   secondaryMuscles: ['triceps_long'],
+  pattern: 'horizontal_push',
   loadStepKg: 2.5,
   minLoadKg: 20,
 };
@@ -46,9 +48,48 @@ export const PLANK: WorkoutExercise = {
   minLoadKg: 0,
 };
 
+export const DB_PRESS: WorkoutExercise = {
+  id: 'dumbbell-press',
+  title: 'Dumbbell Press',
+  category: 'compound',
+  trackingType: 'weight_reps',
+  equipment: 'dumbbell',
+  deviceId: 'dambil-seti',
+  primaryMuscles: ['chest_lower'],
+  secondaryMuscles: ['triceps_long'],
+  pattern: 'horizontal_push',
+  loadStepKg: 2,
+  minLoadKg: 0,
+};
+
+export const PUSH_UP: WorkoutExercise = {
+  id: 'push-up',
+  title: 'Şınav',
+  category: 'compound',
+  trackingType: 'bodyweight_reps',
+  equipment: 'bodyweight',
+  primaryMuscles: ['chest_lower'],
+  secondaryMuscles: ['triceps_long'],
+  pattern: 'horizontal_push',
+  loadStepKg: 0,
+  minLoadKg: 0,
+};
+
+export const CRUNCH: WorkoutExercise = {
+  id: 'crunch',
+  title: 'Crunch',
+  category: 'isolation',
+  trackingType: 'bodyweight_reps',
+  equipment: 'bodyweight',
+  primaryMuscles: ['abs_upper'],
+  secondaryMuscles: [],
+  loadStepKg: 0,
+  minLoadKg: 0,
+};
+
 export const DUMBBELLS: WorkoutDevice = { id: 'dambil-seti', kind: 'dumbbell', weightsKg: [4, 6, 8, 10, 12, 14, 16, 18, 20] };
 
-export const EXERCISES = new Map([BENCH, GOBLET, PLANK].map((exercise) => [exercise.id, exercise]));
+export const EXERCISES = new Map([BENCH, GOBLET, PLANK, DB_PRESS, PUSH_UP, CRUNCH].map((exercise) => [exercise.id, exercise]));
 export const DEVICES = new Map([[DUMBBELLS.id, DUMBBELLS]]);
 
 /** Ayrıştırılmış program (`programFile` + istenen değişiklik). */
@@ -67,4 +108,12 @@ export function workoutDay(options: { raw?: Record<string, unknown>; dayId?: str
   });
   if (!day) throw new Error('Gün kurulamadı.');
   return day;
+}
+
+/** Gün A'nın blokları verilenlerle değiştirilmiş gün planı (gruplar, piramit, süreli set). */
+export function dayWithBlocks(blocks: unknown[], history: SessionDoc[] = []): WorkoutDay {
+  const raw = programFile();
+  const days = (raw.phases as { days: { blocks: unknown[] }[] }[])[0]?.days;
+  if (days?.[0]) days[0].blocks = blocks;
+  return workoutDay({ raw, history });
 }

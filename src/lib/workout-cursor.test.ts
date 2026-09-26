@@ -2,7 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { SessionDoc, SessionEntry } from './schemas/session.ts';
 import { at, groupBlock, plan, sessionDoc, sessionEntry, singleBlock, W1, workingSet } from './testing/session-fixtures.ts';
-import { doNow, dropUnit, entryStatusOf, prefillSet, restoreUnit, skipUnit, workoutCursor } from './workout-cursor.ts';
+import { doNow, dropUnit, entryForRow, entryStatusOf, prefillSet, restoreUnit, rowKeyOf, skipUnit, workoutCursor } from './workout-cursor.ts';
 
 let setCounter = 0;
 /** Harekete `count` çalışma seti ekler. */
@@ -159,6 +159,17 @@ describe('geç, sona al, bugün yapma, geri al, şimdi yap', () => {
       entries: [...doc.entries, sessionEntry('e_swapxx', { swappedFrom: 'r_aaaaaa', exerciseId: 'dumbbell-press', title: 'Dumbbell Press' })],
     };
     assert.equal(workoutCursor(day, swapped).next?.entryId, 'e_swapxx');
+  });
+
+  test('satırın kaydı: muadil önce, sonra satırın kendi kaydı; eklenen hareket kendi kimliğiyle', () => {
+    const own = sessionEntry('e_ownxxx', { rowId: 'r_aaaaaa' });
+    const swap = sessionEntry('e_swapxx', { swappedFrom: 'r_aaaaaa', exerciseId: 'dumbbell-press' });
+    const added = sessionEntry('e_addxxx', { added: true, plannedSets: 2 });
+    assert.equal(entryForRow([own, swap, added], 'r_aaaaaa')?.id, 'e_swapxx');
+    assert.equal(entryForRow([own, added], 'r_aaaaaa')?.id, 'e_ownxxx');
+    assert.equal(entryForRow([own, added], 'e_addxxx')?.id, 'e_addxxx');
+    assert.equal(entryForRow([own], 'e_ownxxx'), undefined);
+    assert.deepEqual([rowKeyOf(own), rowKeyOf(swap), rowKeyOf(added)], ['r_aaaaaa', 'r_aaaaaa', 'e_addxxx']);
   });
 
   test('durum sayılardan', () => {

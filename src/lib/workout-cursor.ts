@@ -123,9 +123,21 @@ function unitSkipped(unit: CursorUnit): boolean {
   return unit.members.length > 0 && unit.members.every((member) => member.skipped);
 }
 
-/** Plan satırının kaydı: muadille değiştirildiyse yenisi, yoksa satırın kendi kaydı. */
+/**
+ * Plan satırının kaydı: muadille değiştirildiyse yenisi, yoksa satırın kendi kaydı. Eklenen hareketin
+ * satırı günün etkin hâlinde kaydın kendi kimliğiyle durur (`workout-flow.ts`): anahtar o kimlikse kayıt.
+ */
 export function entryForRow(entries: readonly SessionEntry[], rowId: string): SessionEntry | undefined {
-  return entries.find((entry) => entry.swappedFrom === rowId) ?? entries.find((entry) => entry.rowId === rowId && !entry.added);
+  return (
+    entries.find((entry) => entry.swappedFrom === rowId) ??
+    entries.find((entry) => entry.rowId === rowId && !entry.added) ??
+    entries.find((entry) => entry.added && entry.id === rowId)
+  );
+}
+
+/** Kaydın günün planındaki satırı: muadilde yerini aldığı satır, eklenen harekette kendi kimliği. */
+export function rowKeyOf(entry: Pick<SessionEntry, 'id' | 'rowId' | 'swappedFrom' | 'added'>): string | undefined {
+  return entry.swappedFrom ?? (entry.added ? entry.id : entry.rowId);
 }
 
 /** Planın ve seansın birimleri, yapılış sırasında. */

@@ -1,10 +1,10 @@
 import { formatKg, formatNumber } from './format.ts';
-import { nextSetInPlan, type SetTarget, type TrackingType } from './progression.ts';
-import { SESSION_ID_LENGTHS, type SessionDoc, type SessionEntry, type SessionSet } from './schemas/session.ts';
+import { isFullLoad, isOverload, nextSetInPlan, type Effort, type SetTarget, type TrackingType } from './progression.ts';
+import { SESSION_ID_LENGTHS, SESSION_LIMITS, type SessionDoc, type SessionEntry, type SessionSet } from './schemas/session.ts';
 import { volumeOf, waterOf, workingSetCount } from './session-index.ts';
 import { normalizeSession, withDeletions } from './session-merge.ts';
 import { toSetResults } from './session-results.ts';
-import { randomId, type TemplateRow } from './template-plan.ts';
+import { randomId, ROW_ID_PATTERN, type TemplateRow } from './template-plan.ts';
 import { entryForRow, entryStatusOf, prefillSet, workoutCursor, type PreviousSet, type Stamp, type WorkoutCursor } from './workout-cursor.ts';
 import { dayBody, type WorkoutDay, type WorkoutRow } from './workout-plan.ts';
 
@@ -22,6 +22,13 @@ import { dayBody, type WorkoutDay, type WorkoutRow } from './workout-plan.ts';
  *   önceki basamağı plandan farklı yaptıysa onun ağırlığı) → plan.
  *   Tekrar/süre: taslak → geçen seferki aynı sıradaki setin aynı ağırlıktaki değeri → aralığın altı
  *   (`prefillSet`; tepe hiçbir zaman önceden dolmaz).
+ * - Set türleri (§2.4): ısınma setleri satırdaki ✓ ile yazılır (`type: warmup`, `setIndex` ısınmanın
+ *   sırası), imleci ve hacmi etkilemez; aşırı yük (`isOverload`) hareket başına bir kez onaylanır, sonra
+ *   setler `overload` işaretiyle yazılır ve PT'ye bildirim gider.
+ * - Zorluk hareket başına bir kez (§2.5): hareketin (grupta bütün üyelerin) son setinden sonra;
+ *   cevap AMRAP olmayan bütün çalışma setlerine yazılır. AMRAP'ta sorulmaz: tam yükte AMRAP olmayan
+ *   set yoksa soru da yok. Ara setlerde "Kolaydı · sonraki set X kg" kısayolu yalnız o sete `easy`
+ *   yazar; artışı `nextSetInPlan`'in "kolay ve tepede" kuralı verir.
  */
 
 type Random = (n: number) => Uint8Array;
@@ -34,6 +41,25 @@ function takenIds(doc: SessionDoc): Set<string> {
     for (const set of entry.sets) ids.add(set.id);
   }
   return ids;
+}
+
+/** Yeni hareket kaydı kimliği (belgedeki ve silinmiş kimliklerle çakışmaz): "Hareket ekle". */
+export function newEntryId(doc: SessionDoc, random?: Random): string {
+  return randomId('e', SESSION_ID_LENGTHS.e, takenIds(doc), random);
+}
+
+/**
+ * Plan satırının kaydının kimliği: iki cihaz aynı satıra aynı kimliği verir (birleşimde tek kayıt,
+ * setler birleşir). Kimlik alınmışsa (silinmiş kayıt) rastgele.
+ */
+export function rowEntryId(rowId: string, taken: Set<string>, random?: Random): string {
+  const id = `e_${rowId.slice(2)}`;
+  return ROW_ID_PATTERN.test(rowId) && !taken.has(id) ? id : randomId('e', SESSION_ID_LENGTHS.e, taken, random);
+}
+
+/** Plan satırının yeni kaydının kimliği (`rowEntryId`, belgedeki kimliklerle): "Değiştir". */
+export function newRowEntryId(doc: SessionDoc, rowId: string, random?: Random): string {
+  return rowEntryId(rowId, takenIds(doc), random);
 }
 
 /** Yeni antrenman (telefonda; dosya ilk setle oluşur, tasarım §4.3). `today`: uygulamanın saat dilimindeki gün. */
@@ -175,21 +201,20 @@ function withStatus(entry: SessionEntry, planned: number, stamp: Stamp): Session
 }
 
 /**
- * "Set bitti": hareketin kaydı yoksa oluşur; set o günkü hedefi ve planı taşır. Ağırlık yalnız
- * ağırlıklı harekette; süreli harekette değer saniyedir.
+ * Satırın hareket kaydı; yoksa yenisi (henüz belgede değil). Kayıt ilk setle, ilk ısınmayla ya da ayar
+ * notuyla açılır; geçen seferki ayar notu kayda taşınır (dokunulmayan not sonraki seferde de sürer).
  */
-export function logSet(
-  day: WorkoutDay,
-  doc: SessionDoc,
-  input: { rowId: string; setIndex: number; kg?: number | undefined; value: number; stamp: Stamp; random?: Random },
-): { doc: SessionDoc; setId: string } {
-  const row = day.rows[input.rowId];
-  const template = templateRowOf(day, input.rowId);
-  if (!row || !template) throw new Error('Satır bu günün planında yok.');
-  const taken = takenIds(doc);
-  const existing = entryForRow(doc.entries, input.rowId);
-  const entry: SessionEntry = existing ?? {
-    id: randomId('e', SESSION_ID_LENGTHS.e, taken, input.random),
+function entryFor(day: WorkoutDay, doc: SessionDoc, rowId: string, stamp: Stamp, taken: Set<string>, random?: Random): SessionEntry {
+  const row = day.rows[rowId];
+  if (!row) throw new Error('Satır bu günün planında yok.');
+  const existing = entryForRow(doc.entries, rowId);
+  if (existing) return existing;
+  // Eklenen hareketin kaydı eklenirken açılır; satırı kayıtsız kalamaz (plan satırı değildir).
+  if (!ROW_ID_PATTERN.test(rowId)) throw new Error('Eklenen hareketin kaydı yok.');
+  const id = rowEntryId(rowId, taken, random);
+  taken.add(id);
+  return {
+    id,
     rowId: row.rowId,
     blockId: row.blockId,
     exerciseId: row.exerciseId,
@@ -197,14 +222,60 @@ export function logSet(
     ...(row.deviceId ? { deviceId: row.deviceId } : {}),
     status: 'pending',
     plan: { topWeightKg: row.plan.topWeightKg, reason: row.plan.reason },
-    updatedAt: input.stamp.at,
-    by: input.stamp.by,
+    ...(row.setupNote ? { setupNote: row.setupNote } : {}),
+    updatedAt: stamp.at,
+    by: stamp.by,
     sets: [],
   };
+}
+
+/**
+ * Günün her satırının kaydı (henüz yoksa boş, `pending`; geçen seferki ayar notu taşınır). Yapılış sırası
+ * (`order`) hareket kimlikleriyle yazıldığı için "geç", "şimdi yap" ve "hareket ekle" önce bunu ister:
+ * kaydı olmayan hareket sırada yer tutamaz. Hepsi varsa aynı belge.
+ */
+export function ensureEntries(day: WorkoutDay, doc: SessionDoc, stamp: Stamp, random?: Random): SessionDoc {
+  const taken = takenIds(doc);
+  const created: SessionEntry[] = [];
+  const known = { ...doc, entries: doc.entries };
+  for (const block of day.blocks) {
+    for (const row of block.rows) {
+      if (!day.rows[row.id] || entryForRow(known.entries, row.id)) continue;
+      const entry = entryFor(day, known, row.id, stamp, taken, random);
+      created.push(entry);
+      known.entries = [...known.entries, entry];
+    }
+  }
+  return created.length === 0 ? doc : normalizeSession(known);
+}
+
+/** Kaydı belgeye yazar (yeniyse ekler) ve belgeyi kanonik biçime döndürür. */
+function putEntry(doc: SessionDoc, entry: SessionEntry, extra: Partial<Pick<SessionDoc, 'notices'>> = {}): SessionDoc {
+  const known = doc.entries.some((item) => item.id === entry.id);
+  const entries = known ? doc.entries.map((item) => (item.id === entry.id ? entry : item)) : [...doc.entries, entry];
+  return normalizeSession({ ...doc, ...extra, entries });
+}
+
+/**
+ * "Set bitti": hareketin kaydı yoksa oluşur; set o günkü hedefi ve planı taşır. Ağırlık yalnız
+ * ağırlıklı harekette; süreli harekette değer saniyedir. `overload`: aşırı yük onaylandı (ya da bu
+ * harekette zaten onaylanmıştı); hareketin ilk aşırı yük setinde PT'ye bildirim (`notices`).
+ */
+export function logSet(
+  day: WorkoutDay,
+  doc: SessionDoc,
+  input: { rowId: string; setIndex: number; kg?: number | undefined; value: number; overload?: boolean; stamp: Stamp; random?: Random },
+): { doc: SessionDoc; setId: string } {
+  const row = day.rows[input.rowId];
+  const template = templateRowOf(day, input.rowId);
+  if (!row || !template) throw new Error('Satır bu günün planında yok.');
+  const taken = takenIds(doc);
+  const entry = entryFor(day, doc, input.rowId, input.stamp, taken, input.random);
   const planned = row.plan.sets.find((item) => item.setIndex === input.setIndex);
   const weighted = row.trackingType === 'weight_reps';
   const setId = randomId('st', SESSION_ID_LENGTHS.st, taken, input.random);
   const target = template.sets[input.setIndex];
+  const overload = Boolean(input.overload && weighted);
   const set: SessionSet = {
     id: setId,
     type: 'working',
@@ -215,12 +286,28 @@ export function logSet(
     ...(weighted ? { topWeightKg: row.plan.topWeightKg } : {}),
     plannedSetCount: row.plan.sets.length,
     ...(weighted && planned ? { plannedKg: planned.weightKg } : {}),
+    ...(overload ? { overload: true } : {}),
     at: input.stamp.at,
     by: input.stamp.by,
   };
+  const first = overload && !entry.sets.some((item) => item.type === 'working' && item.overload);
   const updated = withStatus({ ...entry, sets: [...entry.sets, set] }, row.plan.sets.length, input.stamp);
-  const entries = existing ? doc.entries.map((item) => (item.id === existing.id ? updated : item)) : [...doc.entries, updated];
-  return { doc: normalizeSession({ ...doc, entries }), setId };
+  const notices = first ? { notices: [...doc.notices, { kind: 'overload' as const, at: input.stamp.at }] } : {};
+  return { doc: putEntry(doc, updated, notices), setId };
+}
+
+/**
+ * Aşırı yük (tasarım §2.4, v1 K14): girilen ağırlık planın çok üstünde mi (`isOverload`). Hareket
+ * başına bir kez sorulur (`ask`: "Hedefin çok üzerindesin"); onaylandıktan sonra (`confirmed`) sorulmaz,
+ * setler yine işaretlenir ve satırda görünür. Ağırlıksız harekette ya da sınırın altında `none`.
+ */
+export type OverloadState = 'none' | 'ask' | 'confirmed';
+
+export function overloadState(day: WorkoutDay, doc: Pick<SessionDoc, 'entries'>, next: Pick<NextSet, 'rowId' | 'plannedKg'>, kg: number | undefined): OverloadState {
+  const row = day.rows[next.rowId];
+  if (!row || row.trackingType !== 'weight_reps' || kg === undefined || !isOverload(next.plannedKg, kg)) return 'none';
+  const entry = entryForRow(doc.entries, next.rowId);
+  return entry?.sets.some((set) => set.type === 'working' && set.overload) ? 'confirmed' : 'ask';
 }
 
 export function findSet(doc: Pick<SessionDoc, 'entries'>, setId: string): { entry: SessionEntry; set: SessionSet } | null {
@@ -243,6 +330,16 @@ export function editSet(doc: SessionDoc, setId: string, values: { kg?: number | 
     editedAt: stamp.at,
     by: stamp.by,
   };
+  const entries = doc.entries.map((entry) => (entry === found.entry ? { ...entry, sets: entry.sets.map((item) => (item.id === setId ? next : item)) } : entry));
+  return normalizeSession({ ...doc, entries });
+}
+
+/** Setin zorluğu ("Seti düzelt", "Kolaydı" kısayolu); `undefined` zorluğu kaldırır (motor `good` sayar). */
+export function setSetEffort(doc: SessionDoc, setId: string, effort: Effort | undefined, stamp: Stamp): SessionDoc {
+  const found = findSet(doc, setId);
+  if (!found || found.set.type !== 'working' || found.set.effort === effort) return doc;
+  const { effort: _old, ...rest } = found.set;
+  const next: SessionSet = { ...rest, ...(effort ? { effort } : {}), editedAt: stamp.at, by: stamp.by };
   const entries = doc.entries.map((entry) => (entry === found.entry ? { ...entry, sets: entry.sets.map((item) => (item.id === setId ? next : item)) } : entry));
   return normalizeSession({ ...doc, entries });
 }
@@ -270,12 +367,18 @@ export function addWaterTap(doc: SessionDoc, d: 1 | -1, stamp: Stamp, random?: R
 export type AfterLog =
   /** Aynı harekette sıradaki set: dinlenme (0 ise doğrudan giriş paneli). */
   | { kind: 'same'; restSeconds: number }
+  /** Grupta aynı turun sıradaki üyesi: dinlenme yok; devrede istasyon geçişi sayar. */
+  | { kind: 'member'; transitionSeconds: number }
   /** Hareket bitti: sıradaki hareket gelir, dinlenme onun üstünde açılır. */
   | { kind: 'next'; restSeconds: number }
   /** Son hareketin son seti: dinlenme yok, bitirme sorusu. */
   | { kind: 'done' };
 
-/** `before`: set kaydedilmeden önceki belge; dinlenme o setin ardındaki (`restAfterSeconds`). */
+/**
+ * `before`: set kaydedilmeden önceki belge; dinlenme o setin ardındaki (`restAfterSeconds`). Grupta
+ * tur sürerken (aynı birim, aynı tur, başka üye) dinlenme yok: süperset ve komplekste 0, devrede
+ * istasyon geçişi; tur sonunda blok dinlenmesi.
+ */
 export function afterLog(day: WorkoutDay, before: Pick<SessionDoc, 'entries' | 'order'>, after: Pick<SessionDoc, 'entries' | 'order'>): AfterLog {
   const was = cursorOf(day, before);
   const now = cursorOf(day, after);
@@ -283,7 +386,131 @@ export function afterLog(day: WorkoutDay, before: Pick<SessionDoc, 'entries' | '
   const restSeconds = was.next?.restAfterSeconds ?? 0;
   const oldUnit = was.next ? was.units[was.next.unit]?.key : undefined;
   const newUnit = now.units[now.next.unit]?.key;
-  return { kind: oldUnit === newUnit ? 'same' : 'next', restSeconds };
+  if (oldUnit !== newUnit) return { kind: 'next', restSeconds };
+  if (was.next && now.next.round === was.next.round && now.next.member !== was.next.member) return { kind: 'member', transitionSeconds: restSeconds };
+  return { kind: 'same', restSeconds };
+}
+
+/* --- ısınma --- */
+
+export type WarmupView = { index: number; kg: number; reps: number; logged: SessionSet | undefined };
+
+/** Satırın ısınma setleri ve (yapıldıysa) kayıtları; `setIndex` ısınmanın sırası. */
+export function warmupViews(day: WorkoutDay, doc: Pick<SessionDoc, 'entries'>, rowId: string): WarmupView[] {
+  const warmups = day.rows[rowId]?.warmups ?? [];
+  if (warmups.length === 0) return [];
+  const sets = (entryForRow(doc.entries, rowId)?.sets ?? []).filter((set) => set.type === 'warmup');
+  const logged = new Map(sets.map((set, position) => [set.setIndex ?? position, set]));
+  return warmups.map((warmup, index) => ({ index, kg: warmup.kg, reps: warmup.reps, logged: logged.get(index) }));
+}
+
+/** Isınma seti yapıldı (satırdaki ✓): hacme ve rekora girmez, imleci ilerletmez. Zaten yapıldıysa aynı belge. */
+export function logWarmup(day: WorkoutDay, doc: SessionDoc, input: { rowId: string; index: number; stamp: Stamp; random?: Random }): SessionDoc {
+  const view = warmupViews(day, doc, input.rowId)[input.index];
+  if (!view || view.logged) return doc;
+  const taken = takenIds(doc);
+  const entry = entryFor(day, doc, input.rowId, input.stamp, taken, input.random);
+  const set: SessionSet = {
+    id: randomId('st', SESSION_ID_LENGTHS.st, taken, input.random),
+    type: 'warmup',
+    setIndex: input.index,
+    kg: view.kg,
+    reps: view.reps,
+    at: input.stamp.at,
+    by: input.stamp.by,
+  };
+  return putEntry(doc, { ...entry, sets: [...entry.sets, set] });
+}
+
+/** Isınma ✓'u geri alındı: set silinir (kimliği iz listesine girer). */
+export function unlogWarmup(day: WorkoutDay, doc: SessionDoc, input: { rowId: string; index: number; stamp: Stamp }): SessionDoc {
+  const logged = warmupViews(day, doc, input.rowId)[input.index]?.logged;
+  return logged ? deleteSet(day, doc, logged.id, input.stamp) : doc;
+}
+
+/* --- ayar notu --- */
+
+/** Hareketin ayar notu: bu antrenmandaki kayıt (danışan değiştirdiyse ya da sildiyse) → geçen seferki. */
+export function setupNoteOf(day: WorkoutDay, doc: Pick<SessionDoc, 'entries'>, rowId: string): string | undefined {
+  const entry = entryForRow(doc.entries, rowId);
+  return entry ? entry.setupNote : day.rows[rowId]?.setupNote;
+}
+
+/** Ayar notunu yazar (boş metin siler); kayıt yoksa açılır. Kendi başına gönderilmez, sonraki sete biner. */
+export function setSetupNote(day: WorkoutDay, doc: SessionDoc, input: { rowId: string; note: string; stamp: Stamp; random?: Random }): SessionDoc {
+  const text = input.note.trim().replace(/\s+/g, ' ').slice(0, SESSION_LIMITS.setupNote);
+  if (!day.rows[input.rowId] || (setupNoteOf(day, doc, input.rowId) ?? '') === text) return doc;
+  const entry = entryFor(day, doc, input.rowId, input.stamp, takenIds(doc), input.random);
+  const { setupNote: _old, ...rest } = entry;
+  return putEntry(doc, { ...rest, ...(text ? { setupNote: text } : {}), updatedAt: input.stamp.at, by: input.stamp.by });
+}
+
+/* --- zorluk (hareket başına bir kez) ve "Kolaydı" --- */
+
+/** Zorluk seçenekleri (danışana): "Başaramadım" yok; tekrar alt sınırın altındaysa bu zaten kaçırmadır. */
+export const EFFORT_CHOICES = ['easy', 'good', 'hard'] as const satisfies readonly Effort[];
+export type EffortChoice = (typeof EFFORT_CHOICES)[number];
+
+/** Zorluğu sorulan setler: AMRAP olmayan, plandaki çalışma setleri. */
+function rated(entry: SessionEntry): SessionSet[] {
+  return entry.sets.filter((set) => set.type === 'working' && !set.extra && !set.target?.amrap);
+}
+
+/** Soru sorulur mu: tam yükte AMRAP olmayan bir set var (motorun zorluğa baktığı setler). */
+function asksEffort(entry: SessionEntry): boolean {
+  return rated(entry).some((set) => isFullLoad(set.target ?? {}));
+}
+
+/** Cevap: tam yükteki son setin zorluğu ("Kolaydı" kısayolu son sete yazılmaz). */
+function answerOf(entry: SessionEntry): Effort | undefined {
+  const last = rated(entry)
+    .filter((set) => isFullLoad(set.target ?? {}))
+    .reduce<SessionSet | undefined>((best, set) => (!best || (set.setIndex ?? 0) >= (best.setIndex ?? 0) ? set : best), undefined);
+  return last?.effort;
+}
+
+export type EffortQuestion = { entryId: string; rowId: string; title: string; answer: Effort | undefined };
+
+/**
+ * "<Hareket> nasıldı?" (§2.5): set, birimin (tek hareket ya da grubun) son setiyse birimin zorluğu
+ * sorulan hareketleri; birim bitmediyse boş. Grupta üyeler sırayla sorulur.
+ */
+export function effortQuestions(day: WorkoutDay, doc: Pick<SessionDoc, 'entries' | 'order'>, setId: string): EffortQuestion[] {
+  const found = findSet(doc, setId);
+  if (!found || found.set.type !== 'working') return [];
+  const unit = cursorOf(day, doc).units.find((item) => item.members.some((member) => member.entryId === found.entry.id));
+  if (!unit || unit.slots.some((slot) => (unit.members[slot.member]?.done ?? 0) <= slot.round)) return [];
+  return unit.members.flatMap((member) => {
+    const entry = doc.entries.find((item) => item.id === member.entryId);
+    if (!entry || !member.rowId || !asksEffort(entry)) return [];
+    return [{ entryId: entry.id, rowId: member.rowId, title: entry.title, answer: answerOf(entry) }];
+  });
+}
+
+/** Cevap hareketin AMRAP olmayan bütün çalışma setlerine yazılır (set başına ayrım "Seti düzelt"te). */
+export function setEntryEffort(doc: SessionDoc, entryId: string, effort: Effort, stamp: Stamp): SessionDoc {
+  const entry = doc.entries.find((item) => item.id === entryId);
+  if (!entry) return doc;
+  const sets = entry.sets.map((set) =>
+    set.type === 'working' && !set.target?.amrap && set.effort !== effort ? { ...set, effort, editedAt: stamp.at, by: stamp.by } : set,
+  );
+  return normalizeSession({ ...doc, entries: doc.entries.map((item) => (item.id === entryId ? { ...item, sets } : item)) });
+}
+
+/**
+ * "Kolaydı · sonraki set X kg" (§2.5): az önce kaydedilen set aralığın tepesindeyse ve sıradaki set
+ * aynı hareketin aynı yükteki setiyse, o sete `easy` yazmak sonraki seti bir adım artırır
+ * (`nextSetInPlan`). Artmıyorsa (cihazın en ağır ayarı, başka yüzde, AMRAP) null. `taken`: dokunuldu.
+ */
+export function easyShortcut(day: WorkoutDay, doc: SessionDoc, setId: string): { kg: number; taken: boolean } | null {
+  const found = findSet(doc, setId);
+  const set = found?.set;
+  if (!found || !set || set.type !== 'working' || set.extra || !set.target || set.target.amrap || (set.reps ?? 0) < set.target.max) return null;
+  const next = nextSet(day, doc);
+  if (!next || next.kg === undefined || next.rowId !== found.entry.rowId) return null;
+  if (set.effort === 'easy') return next.kg > (set.kg ?? 0) ? { kg: next.kg, taken: true } : null;
+  const raised = nextSet(day, setSetEffort(doc, setId, 'easy', { at: set.editedAt ?? set.at, by: set.by ?? doc.writer }));
+  return raised?.kg !== undefined && raised.kg > next.kg ? { kg: raised.kg, taken: false } : null;
 }
 
 /* --- bitiş özeti --- */
@@ -297,8 +524,10 @@ export type WorkoutSummary = {
   water: number;
   doneSets: number;
   plannedSets: number;
-  /** Yapılmayanlar: planlanan seti tamamlanmamış hareketler. */
-  remaining: { rowId: string; title: string; done: number; planned: number }[];
+  /** Geçilmemiş her hareketin planlı setleri yapıldı ("Antrenman tamamlandı, bitirelim mi?"). */
+  allDone: boolean;
+  /** Yapılmayanlar: planlanan seti tamamlanmamış hareketler; geçilenler (Geçilenler'deki) işaretli. */
+  remaining: { rowId: string; title: string; done: number; planned: number; skipped: boolean }[];
 };
 
 export function workoutSummary(day: WorkoutDay, doc: SessionDoc, now: Date): WorkoutSummary {
@@ -306,11 +535,12 @@ export function workoutSummary(day: WorkoutDay, doc: SessionDoc, now: Date): Wor
   const remaining = cursor.units.flatMap((unit) =>
     unit.members.flatMap((member) =>
       member.rowId && member.done < member.planned
-        ? [{ rowId: member.rowId, title: day.rows[member.rowId]?.title ?? '', done: member.done, planned: member.planned }]
+        ? [{ rowId: member.rowId, title: day.rows[member.rowId]?.title ?? '', done: member.done, planned: member.planned, skipped: member.skipped }]
         : [],
     ),
   );
   return {
+    allDone: cursor.allDone,
     exercises: doc.entries.filter((entry) => entry.sets.some((set) => set.type === 'working')).length,
     sets: workingSetCount(doc),
     volumeKg: volumeOf(doc),

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import type { SessionDoc } from './schemas/session.ts';
 import { sameSessionData } from './session-merge.ts';
 import { at, sessionDoc, sessionEntry, W1, W2, workingSet } from './testing/session-fixtures.ts';
-import { workoutDay } from './testing/workout-fixtures.ts';
+import { DEVICES, PUSH_UP, workoutDay } from './testing/workout-fixtures.ts';
+import { addedRowFor, rekeyExtra } from './workout-plan.ts';
 import {
   acknowledge,
   backoffMs,
@@ -20,6 +21,7 @@ import {
   withChange,
 } from './workout-outbox.ts';
 import { startRest } from './workout-rest.ts';
+import { startSetTimer } from './workout-timer.ts';
 
 const set = (id: string, minute: number, extra = {}) => workingSet(id, minute, { setIndex: 0, ...extra });
 const docWith = (sets: ReturnType<typeof set>[], extra: Partial<SessionDoc> = {}) =>
@@ -92,12 +94,13 @@ describe('kuyruk: sunucunun yanıtı', () => {
 });
 
 describe('kuyruk: telefondaki kayıt', () => {
-  test('yazılıp okunur; dinlenme ve taslak korunur', () => {
+  test('yazılıp okunur; dinlenme, taslak ve süreli setin sayacı korunur', () => {
     const local = {
       ...withChange(createLocalWorkout(docWith([]), workoutDay()), docWith([set('st_aaaaaaaa', 1)]), { send: true }),
       rest: startRest('st_aaaaaaaa', 90, 1_000),
       restCount: 1,
       draft: { rowId: 'r_aaaaaa', setIndex: 1, kg: 25 },
+      timer: startSetTimer({ rowId: 'r_bbbbbb', setIndex: 0, target: { min: 30, max: 45 } }, 2_000),
       lastSentAt: 500,
     };
     const parsed = parseLocalWorkout(JSON.stringify(local));
@@ -114,5 +117,16 @@ describe('kuyruk: telefondaki kayıt', () => {
     assert.equal(parseLocalWorkout(JSON.stringify({ ...local, plan: { dayId: 1 } })), null);
     // Onaylı belge okunamazsa yalnız o düşer.
     assert.equal(parseLocalWorkout(JSON.stringify({ ...local, acked: { bozuk: true } }))?.acked, null);
+  });
+
+  test('muadil ve eklenen hareketlerin planları ve sağlık onayı korunur; bozuk plan atlanır, eski kayıtta boş', () => {
+    const extra = rekeyExtra(addedRowFor({ key: 'push-up', exercise: PUSH_UP, devices: DEVICES, history: [] }), 'e_added1');
+    const local = createLocalWorkout(docWith([]), workoutDay(), null, { extras: { 'e_added1:push-up': extra }, pain: true });
+    assert.deepEqual(parseLocalWorkout(JSON.stringify(local)), local);
+    const broken = parseLocalWorkout(JSON.stringify({ ...local, extras: { 'e_added1:push-up': extra, 'x:y': { row: 1 } } }));
+    assert.deepEqual(Object.keys(broken?.extras ?? {}), ['e_added1:push-up']);
+    const { extras: _extras, pain: _pain, ...old } = local;
+    const legacy = parseLocalWorkout(JSON.stringify(old));
+    assert.deepEqual([legacy?.extras, legacy?.pain], [{}, false]);
   });
 });

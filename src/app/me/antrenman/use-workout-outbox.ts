@@ -9,7 +9,8 @@ import { acknowledge, backoffMs, hasUnsent, KEEPALIVE_MAX_BYTES, sendDelay, send
  * - Uçta aynı anda tek istek; dönünce belge yine kirliyse son hâl gider. Set yazımı birleştirme
  *   penceresine uyar (son yazmadan 15 sn; kota azsa 60 sn). Boşta gönderim yok.
  * - Bağlantı yoksa ya da sınır/geçici hata: üstel bekleme; bağlantı gelince (`online`) hemen.
- * - Sayfa gizlenince ya da kapanınca yalnız onaylanmamış değişiklik varsa `keepalive`'la son hâl.
+ * - Sayfa gizlenince ya da kapanınca yalnız onaylanmamış değişiklik varsa `keepalive`'la son hâl;
+ *   ilk setten önce hiçbir şey (dosya ilk sette oluşur, öncesi o yazıma ya da bitişe biner).
  * - 410: antrenman silinmiş; 409 `finished`: başka cihazda bitirilmiş (çağıran sorar); 401: oturum
  *   kapandı (veri telefonda kalır); şema hatası (4xx): "Tekrar dene"ye kadar durur.
  */
@@ -107,7 +108,8 @@ function createRunner(get: () => Options, report: (problem: OutboxProblem) => vo
   /** Sayfa gizlenirken ya da kapanırken: onaylanmamış değişiklik varsa son hâl (sırası önemsiz). */
   function keepalive() {
     const local = get().localRef.current;
-    if (stopped || !local || !hasUnsent(local)) return;
+    // Dosya ilk sette oluşur (§4.3): henüz onaylı belge yoksa yalnız bekleyen set değişikliği gider.
+    if (stopped || !local || !hasUnsent(local) || (local.acked === null && !sendPending(local))) return;
     const body = JSON.stringify(local.doc);
     if (body.length > KEEPALIVE_MAX_BYTES) return;
     try {
