@@ -23,6 +23,8 @@ import { SESSION_LIMITS, type RotationChoice } from '@/lib/schemas/session';
 import { cn } from '@/lib/utils';
 import { FINISH_REASON_LABELS, FINISH_REASONS, type FinishReason, type FinishRotation } from '@/lib/workout-flow';
 import { EFFORT_CHOICES, type EffortChoice, type WorkoutSummary } from '@/lib/workout-session';
+import { DELETE_BODY } from '@/lib/session-history';
+import { DeleteDialog } from '../delete-dialog';
 import { AmrapReps, EffortPrompt, type EffortPromptView } from './rest-panel';
 
 const BOTTOM = 'gap-0 rounded-t-2xl pb-[env(safe-area-inset-bottom)]';
@@ -384,8 +386,9 @@ function EditSetBody({
 }
 
 /**
- * Set silme onayı (tasarım §2.10): telefonda düğmeler üst üste, Vazgeç en altta ve odak onda. Metin
- * çelişmez: set uygulamadan kalkar, sunucuya ulaştıysa deponun geçmişinde kalır ("kalabilir" değil).
+ * Set silme onayı (tasarım §2.10): Geçmiş'teki silmeyle aynı onay (`DeleteDialog`: telefonda düğmeler üst
+ * üste, Vazgeç en altta ve odak onda). Metin çelişmez: set uygulamadan kalkar, sunucuya ulaştıysa deponun
+ * geçmişinde kalır ("kalabilir" değil); henüz gönderilmediyse depoya da yazılmaz.
  */
 export function DeleteSetDialog({
   target,
@@ -396,46 +399,20 @@ export function DeleteSetDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const cancel = useRef<HTMLButtonElement>(null);
-  const [detail, setDetail] = useState(false);
   return (
-    <AlertDialog open={target !== null} onOpenChange={(open) => (open ? undefined : onCancel())} onOpenChangeComplete={(open) => (open ? undefined : setDetail(false))}>
-      <AlertDialogContent initialFocus={cancel}>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Bu set silinsin mi?</AlertDialogTitle>
-          <AlertDialogDescription className="flex flex-col gap-2 text-left">
-            <span className="font-medium text-foreground tabular-nums">{target?.text}</span>
-            <span>
-              {target?.sent
-                ? 'Uygulamadan kalkar, geri getirilemez. Antrenörünün veri deposunun geçmişinde kalır.'
-                : 'Uygulamadan kalkar, geri getirilemez. Henüz gönderilmediği için depoya da yazılmaz.'}
-            </span>
-          </AlertDialogDescription>
-          {target?.sent ? (
-            <div className="w-full text-left">
-              <Button variant="ghost" className="-ml-2 h-11 px-2 text-muted-foreground" aria-expanded={detail} onClick={() => setDetail(!detail)}>
-                Ayrıntı
-                <CaretDown data-icon="inline-end" className={detail ? 'rotate-180' : undefined} />
-              </Button>
-              {detail ? (
-                <p className="text-sm text-muted-foreground">
-                  Deponun eski sürümlerinde ve kayıt notlarında kalır. Rekorların ve önerilerin kalan kayıtlara göre yeniden
-                  hesaplanır. Tamamen silinmesi için antrenörüne yaz.
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel ref={cancel} className="h-11">
-            Vazgeç
-          </AlertDialogCancel>
-          <Button variant="destructive" className="h-11" onClick={onConfirm}>
-            Sil
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <DeleteDialog
+      open={target !== null}
+      title="Bu set silinsin mi?"
+      subject={target?.text ?? ''}
+      body={target?.sent ? DELETE_BODY : 'Uygulamadan kalkar, geri getirilemez. Henüz gönderilmediği için depoya da yazılmaz.'}
+      detail={
+        target?.sent
+          ? 'Deponun eski sürümlerinde ve kayıt notlarında kalır. Rekorların ve önerilerin kalan kayıtlara göre yeniden hesaplanır. Tamamen silinmesi için antrenörüne yaz.'
+          : null
+      }
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   );
 }
 

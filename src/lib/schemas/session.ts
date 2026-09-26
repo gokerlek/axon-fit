@@ -289,6 +289,16 @@ export const sessionIndexExerciseSchema = v.object({
   stage: v.optional(codeSchema),
   oneOff: v.optional(v.literal(true)),
   lighter: v.optional(v.literal(true)),
+  /**
+   * Rekorların girdisi (`session-records.ts`): ağırlık başına en çok tekrar (ağırlıksızda 0 kg) ve en uzun
+   * süre; ısınma hariç. Bu alan eklenmeden yazılmış bitmiş satır onarımda dosyasından yeniden kurulur.
+   */
+  best: v.optional(
+    v.object({
+      sets: v.optional(v.pipe(v.array(v.object({ kg, reps: int(1, SESSION_LIMITS.reps) })), v.maxLength(SESSION_LIMITS.setsPerEntry))),
+      seconds: v.optional(int(1, SESSION_LIMITS.seconds)),
+    }),
+  ),
 });
 export type SessionIndexExercise = v.InferOutput<typeof sessionIndexExerciseSchema>;
 
@@ -308,7 +318,7 @@ export const sessionIndexRowSchema = v.object({
   durationMin: v.optional(int(0, 24 * 60)),
   volumeKg: v.pipe(v.number(), v.minValue(0)),
   sets: int(0, SESSION_LIMITS.entries * SESSION_LIMITS.setsPerEntry),
-  /** Rekor sayısı (özet hesabı gelince; §2.8). */
+  /** Rekor kıran hareket sayısı (§2.8; `withRecords` index her değiştiğinde baştan hesaplar); sıfırsa yok. */
   prs: v.optional(int(0, 1000)),
   water: int(0, SESSION_LIMITS.waterTaps),
   exercises: v.array(sessionIndexExerciseSchema),

@@ -140,8 +140,8 @@ async function readSessionBlob(repo: SessionRepo, sha: string): Promise<SessionD
   }
 }
 
-/** Geçmiş: index'ten seçilen antrenmanlar, blob kimliğiyle (okunamayan düşer). */
-async function readHistory(repo: SessionRepo, index: SessionIndex, exerciseIds: ReadonlySet<string>): Promise<SessionDoc[]> {
+/** Geçmiş: index'ten seçilen antrenmanlar, blob kimliğiyle (okunamayan düşer). Özetin "Gelecek sefer"i de bununla. */
+export async function readHistory(repo: SessionRepo, index: SessionIndex, exerciseIds: ReadonlySet<string>): Promise<SessionDoc[]> {
   const rows = historyRows(index, exerciseIds);
   return (await Promise.all(rows.map((row) => readSessionBlob(repo, row.sha)))).filter((doc): doc is SessionDoc => doc !== null);
 }

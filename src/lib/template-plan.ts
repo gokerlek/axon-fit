@@ -298,6 +298,11 @@ export function setSlots(template: TemplateBody): SetSlot[] {
 
 const NO_LOAD_CATEGORIES = new Set<Category>(['warmup', 'cooldown']);
 
+/** Kas yüküne girer mi: ısınma ve soğuma türündeki hareketler sayılmaz (şablon, program ve antrenman özeti). */
+export function countsForLoad(category: Category): boolean {
+  return !NO_LOAD_CATEGORIES.has(category);
+}
+
 function clean(value: number): number {
   return Math.round(value * 1000) / 1000;
 }

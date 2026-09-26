@@ -180,7 +180,7 @@ function lastWorkingSetId(doc: SessionDoc): string | null {
  * Bitiş (§2.7): "Antrenman tamamlandı, bitirelim mi?" ya da erken bitişte yapılmayanlar, hazır seçilmiş
  * "Sıradaki antrenman: Gün B · Değiştir" (`finishRotation`) ve bir kez sorulan isteğe bağlı neden; plandan
  * sapma ya da öneri varsa ardından "Programını güncelleyelim mi?" (`program-feedback.ts`), kararlar bitişin
- * tek commit'ine biner.
+ * tek commit'ine biner. Bitince özet karuseli açılır (§2.8, `/me/antrenman/ozet/[id]`).
  *
  * "Set bitti": önce ✓ satıra düşer ve düğme "Kaydedildi" der; 220 ms sonra panel dinlenmeye döner.
  * Hareket bittiyse kart sola çıkar, sıradaki sağdan gelir, dinlenme onun üstünde açılır; son setten sonra
@@ -249,17 +249,22 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
     [clientId],
   );
 
+  /** Telefondaki antrenman sunucuda bitti ya da silindi: yerel kopya ve saklanan plan düşer, Bugün tazelenir. */
+  const release = useCallback(() => {
+    localRef.current = null;
+    clearLocalWorkout(clientId);
+    clearWorkoutCache(clientId);
+    void queryClient.invalidateQueries({ queryKey: ['me', 'workout'] });
+  }, [clientId, queryClient]);
+
   const leave = useCallback(
     (message: string, kind: 'success' | 'info' = 'success') => {
-      localRef.current = null;
-      clearLocalWorkout(clientId);
-      clearWorkoutCache(clientId);
-      void queryClient.invalidateQueries({ queryKey: ['me', 'workout'] });
+      release();
       router.replace('/me');
       if (kind === 'success') toast.success(message);
       else toast(message);
     },
-    [clientId, queryClient, router],
+    [release, router],
   );
 
   const { outbox, problem, online } = useWorkoutOutbox({
@@ -815,7 +820,8 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
 
   /**
    * Bitişi gönderir (tek commit): `feedback` "Programını güncelleyelim mi?"nin kararları; uygulanmayan ağırlık
-   * önce seansa işlenir (`oneOff` / `lighter`). Başarılıysa program güncellemesi ayrı bir bildirimle söylenir.
+   * önce seansa işlenir (`oneOff` / `lighter`). Başarılıysa özet karuseli açılır (§2.8, dock yok); program
+   * güncellemesi bir an sonra bildirimle söylenir.
    */
   const submitFinish = useCallback(
     async (rotation: RotationChoice | null, health: FinishHealth | undefined, feedback: FinishFeedback | undefined) => {
@@ -836,9 +842,10 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
           method: 'POST',
           body: JSON.stringify({ doc, ...(rotation ? { rotation } : {}), ...(health ? { health } : {}), ...(feedback ? { feedback } : {}) }),
         });
-        leave('Antrenman kaydedildi. Antrenörün görecek.');
+        release();
+        router.replace(`/me/antrenman/ozet/${current.doc.id}`);
         const message = result.feedback ? feedbackMessage(result.feedback) : null;
-        // Sayfa değişirken ikinci bildirim bir an sonra (prototip): ilki okunsun.
+        // Özet açılırken bir an sonra (prototip): önce özetin ilk kartı görünsün.
         if (message) window.setTimeout(() => toast(message.title, { description: message.description }), 450);
       } catch (error) {
         if (error instanceof ApiError && error.status === 410) {
@@ -857,7 +864,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
         );
       }
     },
-    [outbox, leave, commit],
+    [outbox, leave, release, router, commit],
   );
 
   /**

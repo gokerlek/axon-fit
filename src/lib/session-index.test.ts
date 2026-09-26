@@ -80,8 +80,19 @@ describe('index satırı', () => {
       sets: 4,
       water: 1,
       exercises: [
-        { exerciseId: 'bench-press', rowId: 'r_aaaaaa', deviceId: 'olympic-bar', topKg: 62.5, sets: 3, full: true, reason: 'increase', stage: 'novice' },
-        { exerciseId: 'plank', sets: 1, full: true },
+        {
+          exerciseId: 'bench-press',
+          rowId: 'r_aaaaaa',
+          deviceId: 'olympic-bar',
+          topKg: 62.5,
+          sets: 3,
+          full: true,
+          reason: 'increase',
+          stage: 'novice',
+          // Rekor girdisi: ağırlık başına en çok tekrar; ısınma girmez.
+          best: { sets: [{ kg: 50, reps: 12 }, { kg: 62.5, reps: 10 }] },
+        },
+        { exerciseId: 'plank', sets: 1, full: true, best: { seconds: 60 } },
       ],
       notices: ['other_day', 'overload', 'unfinished'],
     });
@@ -152,6 +163,29 @@ describe('index onarımı', () => {
       return null;
     });
     assert.deepEqual(reads, []);
+    assert.equal(again.changed, false);
+  });
+
+  test('rekor girdisi olmadan yazılmış eski satır sha tutsa da dosyasından kurulur; rekor sayısı hesaplanır', async () => {
+    const heavier = finished('s_bbbbbbbb', 3000, {
+      entries: [sessionEntry('e_bbbbbb', { sets: [workingSet('st_bbbbbbbb', 3001, { kg: 65, reps: 5 })] })],
+    });
+    const lighter = finished('s_aaaaaaaa', 0, { entries: [sessionEntry('e_aaaaaa', { sets: [workingSet('st_aaaaaaaa', 1)] })] });
+    const [fa, fb] = files(lighter, heavier);
+    const old = (doc: SessionDoc, sha: string) => {
+      const row = indexRowOf(doc, sha);
+      return { ...row, exercises: row.exercises.map(({ best: _best, ...rest }) => rest) };
+    };
+    const index = { version: 1 as const, items: [old(heavier, fb!.sha), old(lighter, fa!.sha)], deleted: [] };
+    const reads: string[] = [];
+    const result = await repairIndex(index, [fa!, fb!], async (file) => {
+      reads.push(file.path);
+      return file.path === fa!.path ? lighter : heavier;
+    });
+    assert.deepEqual(reads.sort(), ['sessions/s_aaaaaaaa.json', 'sessions/s_bbbbbbbb.json']);
+    assert.equal(result.changed, true);
+    assert.equal(result.index.items.find((row) => row.id === 's_bbbbbbbb')?.prs, 1);
+    const again = await repairIndex(result.index, [fa!, fb!], async () => assert.fail('okunmamalı'));
     assert.equal(again.changed, false);
   });
 
