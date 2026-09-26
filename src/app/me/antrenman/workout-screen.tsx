@@ -933,7 +933,8 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
       setSwapTarget(null);
       if (doc === current.doc) return;
       const extras = option ? { ...current.extras, [extraKey(target.rowId, option.exerciseId)]: option.extra } : current.extras;
-      commitFlow(current, doc, { extras });
+      // Hareket değişti: eski hareketin taslağı ve sayacı yenisine taşınmaz (muadil kendi önerisiyle).
+      commitFlow(current, doc, { extras, draft: null, timer: null });
       const to = option?.title ?? current.plan.rows[target.rowId]?.title ?? '';
       toast.success(option ? `${from} yerine ${to}` : `Yeniden ${to}`);
       announce(option ? `${from} yerine ${to}` : `Asıl hareket: ${to}`);
@@ -985,8 +986,8 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
     if (!current) return;
     setFinishing(true);
     outbox.stop();
-    // Dosya yazıldıysa (setler sonradan silindi) iz dosyasına döner; yazılmadıysa silinecek bir şey yok.
-    if (current.acked) {
+    // Dosya yazılmış olabilir (onaylı ya da yolda bir PUT): iz dosyasına döner; hiç gönderilmediyse silinecek bir şey yok.
+    if (current.acked || current.lastSentAt !== null) {
       try {
         await fetchJson(`/api/me/sessions/${current.doc.id}`, { method: 'DELETE' });
       } catch (error) {

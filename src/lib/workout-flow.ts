@@ -5,7 +5,7 @@ import { isStraight } from './set-plan.ts';
 import { BLOCK_KIND_LABELS, FALLBACK_REST_SECONDS, ROW_ID_PATTERN, type BlockKind, type TemplateBlock } from './template-plan.ts';
 import { doNow, dropUnit, entryForRow, entryStatusOf, restoreUnit, skipUnit, type CursorUnit, type Stamp } from './workout-cursor.ts';
 import { dayBody, extraKey, type ExtraRow, type ExtraRows, type WorkoutDay, type WorkoutRow } from './workout-plan.ts';
-import { cursorOf, ensureEntries, newEntryId, plannedSetCounts } from './workout-session.ts';
+import { cursorOf, ensureEntries, newRowEntryId, plannedSetCounts } from './workout-session.ts';
 
 /**
  * Antrenman akışı ve geçme (tasarım §2.6) — saf: ☰ akış sheet'inin listesi, "Hareketi geç ›" (sona al,
@@ -279,7 +279,7 @@ export function swapRow(day: WorkoutDay, doc: SessionDoc, input: { rowId: string
   if ((current?.exerciseId ?? original.exerciseId) === exerciseId) return doc;
   const { stamp } = input;
   const entry: SessionEntry = {
-    id: current?.id ?? newEntryId(doc, input.random),
+    id: current?.id ?? newRowEntryId(doc, input.rowId, input.random),
     ...(input.extra ? { swappedFrom: input.rowId } : { rowId: input.rowId }),
     blockId: original.blockId,
     exerciseId,

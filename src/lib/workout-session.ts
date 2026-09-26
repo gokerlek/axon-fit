@@ -43,9 +43,23 @@ function takenIds(doc: SessionDoc): Set<string> {
   return ids;
 }
 
-/** Yeni hareket kaydı kimliği (belgedeki ve silinmiş kimliklerle çakışmaz): "Değiştir", "Hareket ekle". */
+/** Yeni hareket kaydı kimliği (belgedeki ve silinmiş kimliklerle çakışmaz): "Hareket ekle". */
 export function newEntryId(doc: SessionDoc, random?: Random): string {
   return randomId('e', SESSION_ID_LENGTHS.e, takenIds(doc), random);
+}
+
+/**
+ * Plan satırının kaydının kimliği: iki cihaz aynı satıra aynı kimliği verir (birleşimde tek kayıt,
+ * setler birleşir). Kimlik alınmışsa (silinmiş kayıt) rastgele.
+ */
+export function rowEntryId(rowId: string, taken: Set<string>, random?: Random): string {
+  const id = `e_${rowId.slice(2)}`;
+  return ROW_ID_PATTERN.test(rowId) && !taken.has(id) ? id : randomId('e', SESSION_ID_LENGTHS.e, taken, random);
+}
+
+/** Plan satırının yeni kaydının kimliği (`rowEntryId`, belgedeki kimliklerle): "Değiştir". */
+export function newRowEntryId(doc: SessionDoc, rowId: string, random?: Random): string {
+  return rowEntryId(rowId, takenIds(doc), random);
 }
 
 /** Yeni antrenman (telefonda; dosya ilk setle oluşur, tasarım §4.3). `today`: uygulamanın saat dilimindeki gün. */
@@ -197,7 +211,7 @@ function entryFor(day: WorkoutDay, doc: SessionDoc, rowId: string, stamp: Stamp,
   if (existing) return existing;
   // Eklenen hareketin kaydı eklenirken açılır; satırı kayıtsız kalamaz (plan satırı değildir).
   if (!ROW_ID_PATTERN.test(rowId)) throw new Error('Eklenen hareketin kaydı yok.');
-  const id = randomId('e', SESSION_ID_LENGTHS.e, taken, random);
+  const id = rowEntryId(rowId, taken, random);
   taken.add(id);
   return {
     id,

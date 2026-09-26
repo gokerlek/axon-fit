@@ -4,7 +4,8 @@ import * as v from 'valibot';
 import { sessionDocSchema, type SessionDoc } from './schemas/session.ts';
 import { at, W1, workingSet } from './testing/session-fixtures.ts';
 import { BENCH, CRUNCH, DB_PRESS, dayWithBlocks, DEVICES, PLANK, PUSH_UP, workoutDay } from './testing/workout-fixtures.ts';
-import { cursorOf, logSet, newSessionDoc, nextSet } from './workout-session.ts';
+import { mergeAll } from './session-merge.ts';
+import { cursorOf, logSet, newSessionDoc, nextSet, setViews } from './workout-session.ts';
 import {
   addExercise,
   canSwap,
@@ -23,9 +24,9 @@ import {
 } from './workout-flow.ts';
 import { addedRowFor, extraKey, rekeyExtra, swapRowFor, type ExtraRows, type WorkoutDay } from './workout-plan.ts';
 
-/** Belirlenimli "rastgelelik": her çağrıda farklı baytlar, kimlikler çakışmaz. */
-function sequence() {
-  let n = 0;
+/** Belirlenimli "rastgelelik": her çağrıda farklı baytlar, kimlikler çakışmaz (`from`: başka bir cihaz). */
+function sequence(from = 0) {
+  let n = from;
   return (size: number) => Uint8Array.from({ length: size }, () => (n++ * 7) % 252);
 }
 
@@ -189,6 +190,19 @@ describe('"Hareketi geç ›", "Bugün yapma", "Geri al"', () => {
     const result = skipAt(day, start(day), 'b_aaaaaa', stamp(1), sequence());
     assert.equal(nextRow(day, result?.doc as SessionDoc), 'r_dddddd');
     assert.equal(result?.doc.entries.filter((entry) => entry.skip?.moved).length, 2);
+  });
+
+  test('iki cihaz: birinde geçmenin açtığı boş kayıt, ötekinde aynı satırın seti; birleşimde tek kayıt, set görünür', () => {
+    const day = threeDay();
+    const server = logNext(day, start(day), 1);
+    const skipped = skipAt(day, server, 'b_bbbbbb', stamp(2), sequence(40));
+    assert.ok(skipped);
+    const logged = logSet(day, server, { rowId: 'r_dddddd', setIndex: 0, kg: 20, value: 10, stamp: stamp(3), random: sequence(90) }).doc;
+    for (const merged of [mergeAll([skipped.doc, logged]), mergeAll([logged, skipped.doc])] as SessionDoc[]) {
+      assert.equal(merged.entries.filter((entry) => entry.rowId === 'r_dddddd').length, 1);
+      assert.equal(setViews(day, merged, 'r_dddddd')[0]?.logged?.reps, 10);
+      valid(merged);
+    }
   });
 });
 

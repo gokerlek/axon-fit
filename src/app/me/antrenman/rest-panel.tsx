@@ -241,111 +241,114 @@ export function RestPanel({
 }) {
   const ended = view.state === 'ended';
   return (
-    <div onPointerDownCapture={onTouch} className="flex h-full flex-col overflow-y-auto overscroll-contain px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-      {summary ? (
-        <p className="-mx-4 flex min-h-11 shrink-0 items-center gap-2 border-b px-4 text-sm text-muted-foreground tabular-nums">
-          {summary.finished ? (
-            <span className="inline-flex size-5.5 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary [&_svg]:size-3.5">
-              <Check weight="bold" />
+    <div onPointerDownCapture={onTouch} className="flex h-full flex-col">
+      {/* Gövde kayar; "Sıradaki / Sonraki sete geç" altta sabit (Safari çubuklarıyla 680 px'te de başparmak bölgesinde). */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4">
+        {summary ? (
+          <p className="-mx-4 flex min-h-11 shrink-0 items-center gap-2 border-b px-4 text-sm text-muted-foreground tabular-nums">
+            {summary.finished ? (
+              <span className="inline-flex size-5.5 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary [&_svg]:size-3.5">
+                <Check weight="bold" />
+              </span>
+            ) : null}
+            <span className="min-w-0 truncate">
+              <span className="font-semibold text-foreground">{summary.title}</span> · {summary.done}/{summary.planned} set
+              {summary.finished ? ' · bitti' : ''}
             </span>
-          ) : null}
-          <span className="min-w-0 truncate">
-            <span className="font-semibold text-foreground">{summary.title}</span> · {summary.done}/{summary.planned} set
-            {summary.finished ? ' · bitti' : ''}
-          </span>
-        </p>
-      ) : null}
+          </p>
+        ) : null}
 
-      <div className="flex min-h-12 shrink-0 items-center gap-1">
-        <h2 id="rest-title" tabIndex={-1} className="flex-1 font-heading text-lg font-semibold outline-none">
-          Dinlenme
-        </h2>
-        <Button variant="ghost" className="h-11 px-2 text-muted-foreground" onClick={onMinimize}>
-          <CaretDown data-icon="inline-start" />
-          Küçült
-        </Button>
-        <Button variant="ghost" className="-mr-2 h-11 px-3" onClick={onSkip} aria-label="Dinlenmeyi atla">
-          Atla
-          <CaretRight data-icon="inline-end" />
-        </Button>
-      </div>
-
-      {saved ? (
-        <div className="flex min-h-11 shrink-0 items-center gap-2 text-sm tabular-nums">
-          <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary [&_svg]:size-3.5">
-            <Check weight="bold" />
-          </span>
-          <span className="min-w-0 flex-1 truncate">{saved.text}</span>
-          <Button variant="ghost" className="-mr-2 h-11 px-3" onClick={() => onEditSaved(saved.setId)}>
-            Düzelt
+        <div className="flex min-h-12 shrink-0 items-center gap-1">
+          <h2 id="rest-title" tabIndex={-1} className="flex-1 font-heading text-lg font-semibold outline-none">
+            Dinlenme
+          </h2>
+          <Button variant="ghost" className="h-11 px-2 text-muted-foreground" onClick={onMinimize}>
+            <CaretDown data-icon="inline-start" />
+            Küçült
+          </Button>
+          <Button variant="ghost" className="-mr-2 h-11 px-3" onClick={onSkip} aria-label="Dinlenmeyi atla">
+            Atla
+            <CaretRight data-icon="inline-end" />
           </Button>
         </div>
-      ) : null}
 
-      {amrap ? <AmrapReps reps={amrap.reps} onChange={onAmrap} /> : null}
+        {saved ? (
+          <div className="flex min-h-11 shrink-0 items-center gap-2 text-sm tabular-nums">
+            <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary [&_svg]:size-3.5">
+              <Check weight="bold" />
+            </span>
+            <span className="min-w-0 flex-1 truncate">{saved.text}</span>
+            <Button variant="ghost" className="-mr-2 h-11 px-3" onClick={() => onEditSaved(saved.setId)}>
+              Düzelt
+            </Button>
+          </div>
+        ) : null}
 
-      {lockWarning ? (
-        <Alert className="my-1 shrink-0">
-          <LockSimple />
-          <AlertDescription>Ekranı kilitleme; kilitlenirse dinlenme bitişi çalmayabilir.</AlertDescription>
-        </Alert>
-      ) : null}
+        {amrap ? <AmrapReps reps={amrap.reps} onChange={onAmrap} /> : null}
 
-      {effort ? <EffortPrompt view={effort} onAnswer={onEffort} /> : null}
+        {lockWarning ? (
+          <Alert className="my-1 shrink-0">
+            <LockSimple />
+            <AlertDescription>Ekranı kilitleme; kilitlenirse dinlenme bitişi çalmayabilir.</AlertDescription>
+          </Alert>
+        ) : null}
 
-      {easy ? (
-        <Button
-          variant={easy.taken ? 'default' : 'outline'}
-          aria-pressed={easy.taken}
-          className="my-1 h-11 shrink-0 self-start rounded-full px-4"
-          onClick={onEasy}>
-          {easy.taken ? <Check data-icon="inline-start" weight="bold" /> : <ArrowUp data-icon="inline-start" weight="bold" />}
-          {easy.taken ? `Sonraki set ${formatKg(easy.kg)}` : `Kolaydı · sonraki set ${formatKg(easy.kg)}`}
-        </Button>
-      ) : null}
+        {effort ? <EffortPrompt view={effort} onAnswer={onEffort} /> : null}
 
-      <div className="mt-2.5 mb-1.5 grid shrink-0 grid-cols-[1fr_auto_1fr] items-center justify-items-center">
-        <Button variant="secondary" className="size-14 flex-col gap-0 rounded-full text-base leading-none tabular-nums" onClick={() => onAdjust(-15)} aria-label="Dinlenmeyi 15 saniye kısalt">
-          −15
-          <span className="text-[0.6875rem] font-medium text-muted-foreground">sn</span>
-        </Button>
-        <RestRing endsAt={endsAt} total={total} view={view} />
-        <Button variant="secondary" className="size-14 flex-col gap-0 rounded-full text-base leading-none tabular-nums" onClick={() => onAdjust(15)} aria-label="Dinlenmeyi 15 saniye uzat">
-          +15
-          <span className="text-[0.6875rem] font-medium text-muted-foreground">sn</span>
-        </Button>
+        {easy ? (
+          <Button
+            variant={easy.taken ? 'default' : 'outline'}
+            aria-pressed={easy.taken}
+            className="my-1 h-11 shrink-0 self-start rounded-full px-4"
+            onClick={onEasy}>
+            {easy.taken ? <Check data-icon="inline-start" weight="bold" /> : <ArrowUp data-icon="inline-start" weight="bold" />}
+            {easy.taken ? `Sonraki set ${formatKg(easy.kg)}` : `Kolaydı · sonraki set ${formatKg(easy.kg)}`}
+          </Button>
+        ) : null}
+
+        <div className="mt-2.5 mb-1.5 grid shrink-0 grid-cols-[1fr_auto_1fr] items-center justify-items-center">
+          <Button variant="secondary" className="size-14 flex-col gap-0 rounded-full text-base leading-none tabular-nums" onClick={() => onAdjust(-15)} aria-label="Dinlenmeyi 15 saniye kısalt">
+            −15
+            <span className="text-[0.6875rem] font-medium text-muted-foreground">sn</span>
+          </Button>
+          <RestRing endsAt={endsAt} total={total} view={view} />
+          <Button variant="secondary" className="size-14 flex-col gap-0 rounded-full text-base leading-none tabular-nums" onClick={() => onAdjust(15)} aria-label="Dinlenmeyi 15 saniye uzat">
+            +15
+            <span className="text-[0.6875rem] font-medium text-muted-foreground">sn</span>
+          </Button>
+        </div>
+        <p className="min-h-5.5 shrink-0 text-center text-[0.9375rem] font-medium text-primary tabular-nums">
+          {ended ? `Dinlenme ${clockText(view.seconds)} önce bitti` : ''}
+        </p>
+
+        <div className="relative mt-1 shrink-0">
+          <Button variant="secondary" className="h-14 w-full gap-2.5 text-base" onClick={onWater}>
+            <Drop className="size-5 text-primary" />
+            <span>
+              Su içtim ·{' '}
+              <motion.b key={water} initial={{ scale: 1.15 }} animate={{ scale: 1 }} transition={tween(DURATION.fast)} className="inline-block font-semibold tabular-nums">
+                {water}
+              </motion.b>
+            </span>
+          </Button>
+          <AnimatePresence>
+            {undoWater ? (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={tween(DURATION.fast)}
+                className="absolute top-1/2 right-2 -translate-y-1/2">
+                <Button variant="outline" className="h-10 px-3 text-[0.8125rem]" onClick={onUndoWater}>
+                  +1 · Geri al
+                </Button>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+        </div>
       </div>
-      <p className="min-h-5.5 shrink-0 text-center text-[0.9375rem] font-medium text-primary tabular-nums">
-        {ended ? `Dinlenme ${clockText(view.seconds)} önce bitti` : ''}
-      </p>
 
-      <div className="relative mt-1 shrink-0">
-        <Button variant="secondary" className="h-14 w-full gap-2.5 text-base" onClick={onWater}>
-          <Drop className="size-5 text-primary" />
-          <span>
-            Su içtim ·{' '}
-            <motion.b key={water} initial={{ scale: 1.15 }} animate={{ scale: 1 }} transition={tween(DURATION.fast)} className="inline-block font-semibold tabular-nums">
-              {water}
-            </motion.b>
-          </span>
-        </Button>
-        <AnimatePresence>
-          {undoWater ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={tween(DURATION.fast)}
-              className="absolute top-1/2 right-2 -translate-y-1/2">
-              <Button variant="outline" className="h-10 px-3 text-[0.8125rem]" onClick={onUndoWater}>
-                +1 · Geri al
-              </Button>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-      </div>
-
-      <div className="mt-auto flex min-h-14 shrink-0 items-center justify-center pt-2">
+      <div className="flex min-h-14 shrink-0 items-center justify-center px-4 pt-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
         {ended ? (
           <Button size="lg" className="h-14 w-full text-base" onClick={onSkip}>
             Sonraki sete geç
