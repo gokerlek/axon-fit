@@ -9,7 +9,7 @@ import { planSession, warmupSets, type LoadSpec, type ProgressionRule, type Sess
 import { recommend, type Why } from './recommend.ts';
 import type { TrainingExperience } from './schemas/client.ts';
 import type { Program } from './schemas/program.ts';
-import { effectiveSchedule, weekTarget, type EffectiveSchedule } from './training-days.ts';
+import { effectiveSchedule, scheduleSince, weekTarget, type EffectiveSchedule } from './training-days.ts';
 import type { SessionDoc, SessionEntry, SessionIndex, SessionIndexRow, SkipReason } from './schemas/session.ts';
 import { waterOf } from './session-index.ts';
 import { exerciseHistory } from './session-results.ts';
@@ -548,11 +548,23 @@ export function afterFinish<T extends { today: string; week: WeekCount; water: {
   };
 }
 
-/** Bugün'ün ve Ayarlar'ın "Günlerini değiştir"i için: geçerli günler, PT'ninkiler, danışanınki ve sıklık. */
-export type WorkoutSchedule = EffectiveSchedule & { daysPerWeek: number | null };
+/**
+ * Bugün'ün ve Ayarlar'ın "Günlerini değiştir"i için: geçerli günler, PT'ninkiler, danışanınki ve sıklık.
+ * `since`: kaçan gün penceresinin başladığı takvim günü (uygulamanın saat diliminde; `scheduleSince`, Genel
+ * bakış'ın "Kaçan gün"üyle aynı kural): Bugün'ün şeridi o gün ve öncesini "kaçırıldı" diye işaretlemez.
+ */
+export type WorkoutSchedule = EffectiveSchedule & { daysPerWeek: number | null; since: string | null };
 
-export function scheduleOf(program: Program): WorkoutSchedule {
-  return { ...effectiveSchedule(program), daysPerWeek: currentPhaseOf(program)?.phase.daysPerWeek ?? null };
+export function scheduleOf(
+  program: Program,
+  context: { client: Parameters<typeof scheduleSince>[1]; timeZone: string },
+): WorkoutSchedule {
+  const since = scheduleSince(program, context.client);
+  return {
+    ...effectiveSchedule(program),
+    daysPerWeek: currentPhaseOf(program)?.phase.daysPerWeek ?? null,
+    since: since ? todayIn(context.timeZone, new Date(since)) : null,
+  };
 }
 
 /**

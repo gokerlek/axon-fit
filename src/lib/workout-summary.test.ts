@@ -18,6 +18,7 @@ import {
   summaryWeek,
   versusLastText,
   weekText,
+  workedList,
   workedMuscles,
   type MuscleSource,
 } from './workout-summary.ts';
@@ -42,7 +43,18 @@ function setWeightsOf(exercise: MuscleSource): Partial<Record<string, number>> {
   return weights;
 }
 
-const labels = (muscles: readonly string[]) => muscles.map((muscle) => muscle.toUpperCase());
+/** `groupMuscles`'ın sade hâli: göğsün iki parçası birlikteyse "GÖĞÜS", öteki kaslar büyük harfle. */
+const CHEST = ['chest_upper', 'chest_lower'];
+function groups(muscles: readonly string[]) {
+  const result: { label: string; muscles: string[] }[] = [];
+  const chest = CHEST.every((part) => muscles.includes(part));
+  for (const muscle of muscles) {
+    if (chest && CHEST.includes(muscle)) {
+      if (!result.some((item) => item.label === 'GÖĞÜS')) result.push({ label: 'GÖĞÜS', muscles: [...CHEST] });
+    } else result.push({ label: muscle.toUpperCase(), muscles: [muscle] });
+  }
+  return result;
+}
 
 function sets(prefix: string, values: [number | undefined, number][], overrides: Partial<SessionEntry['sets'][number]> = {}) {
   return values.map(([kg, reps], i) => workingSet(`st_${prefix}${String(i).padStart(2, '0')}`, i + 1, { kg, reps, plannedSetCount: 3, ...overrides }));
@@ -75,6 +87,33 @@ describe('kas yükü', () => {
   test('çalışan kaslar: hedef ve yardımcı, yükü çok olan önce; dengeleyici ve kardiyo yok', () => {
     const load = sessionMuscleLoad(entries, LIBRARY, setWeightsOf);
     assert.deepEqual(workedMuscles(entries, LIBRARY, load), ['chest_lower', 'lats', 'triceps_long', 'biceps']);
+  });
+
+  test('çalışan kasların listesi tek tanım: sayı = liste; aile tek ad, seti en çok çalışan parçanınki', () => {
+    const load = { chest_lower: 3, chest_upper: 1.5, lats: 2, abs_upper: 0.75 };
+    const list = workedList(['chest_lower', 'lats', 'chest_upper'], load, groups);
+    assert.deepEqual(list, [
+      { label: 'GÖĞÜS', muscles: ['chest_upper', 'chest_lower'], sets: 3 },
+      { label: 'LATS', muscles: ['lats'], sets: 2 },
+    ]);
+    assert.deepEqual(workedList([], load, groups), []);
+  });
+
+  test('dengeleyicisi çok hareket: kas sayısı, liste ve harita aynı kaslar (yalnız dengeleyici olan yok)', () => {
+    const SQUAT: MuscleSource = {
+      category: 'compound',
+      primaryMuscles: ['quadriceps', 'glutes'],
+      secondaryMuscles: ['adductors'],
+      stabilizerMuscles: ['abs_upper', 'abs_lower', 'obliques', 'erectors', 'hamstrings_medial', 'hamstrings_lateral', 'soleus'],
+    };
+    const library = new Map<string, MuscleSource>([['squat', SQUAT]]);
+    const doc = finished('s_ffffffff', 9000, [sessionEntry('e_ffffff', { exerciseId: 'squat', title: 'Squat', sets: sets('ffffff', [[80, 8], [80, 8], [80, 7]]) })]);
+    const index = upsertIndexRow(emptySessionIndex(), indexRowOf(doc, '9'.repeat(40)));
+    const summary = sessionSummary({ doc, index, timeZone: TZ, exercises: library, setWeightsOf, muscleGroups: groups, week: null, changes: [], next: null });
+    assert.equal(summary.muscles, 3);
+    assert.deepEqual(summary.worked.map((item) => item.label), ['QUADRICEPS', 'GLUTES', 'ADDUCTORS']);
+    assert.deepEqual(Object.keys(summary.load).sort(), ['adductors', 'glutes', 'quadriceps']);
+    assert.equal(summary.topMuscle, 'QUADRICEPS');
   });
 });
 
@@ -198,7 +237,7 @@ describe('özet', () => {
       timeZone: TZ,
       exercises: LIBRARY,
       setWeightsOf,
-      muscleLabels: labels,
+      muscleGroups: groups,
       week: { done: 2, target: 3, current: true },
       changes: [{ text: 'Bench Press: çalışma ağırlığı 60 → 62,5 kg', state: 'applied' }],
       next: [{ title: 'Bench Press', text: '62,5 kg × 9' }],
@@ -230,7 +269,18 @@ describe('özet', () => {
         ['Plank', 'geçildi', 'skipped'],
       ],
     );
-    assert.deepEqual(summary.load, { chest_lower: 3, triceps_long: 1.5, lats: 1, biceps: 0.5, abs_upper: 0.25, cardio: 0.25 });
+    // Harita listeyle aynı kaslar: yalnız dengeleyici olan karın ve kardiyo yok.
+    assert.deepEqual(summary.load, { chest_lower: 3, triceps_long: 1.5, lats: 1, biceps: 0.5 });
+    assert.deepEqual(
+      summary.worked.map((item) => [item.label, item.sets]),
+      [
+        ['CHEST_LOWER', 3],
+        ['TRICEPS_LONG', 1.5],
+        ['LATS', 1],
+        ['BICEPS', 0.5],
+      ],
+    );
+    assert.equal(summary.muscles, summary.worked.length);
   });
 
   test('index satırı yoksa belgeden eklenir; ilk antrenmanda rekor ve karşılaştırma yok, "Gelecek sefer" boşsa null', () => {
@@ -240,7 +290,7 @@ describe('özet', () => {
       timeZone: TZ,
       exercises: LIBRARY,
       setWeightsOf,
-      muscleLabels: labels,
+      muscleGroups: groups,
       week: null,
       changes: [],
       next: [],

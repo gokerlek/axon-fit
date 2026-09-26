@@ -15,6 +15,7 @@ import {
   ptScheduleEdit,
   relativeDayText,
   resetClientSchedule,
+  scheduleSince,
   todayState,
   todayStatusText,
   weekDates,
@@ -60,6 +61,28 @@ describe('antrenman günleri: takvim', () => {
     assert.equal(wed?.missed, true, 'çarşamba seçiliydi, antrenman yok');
     assert.equal(thu?.today, true);
     assert.equal(fri?.missed, false, 'gelecek gün kaçmış sayılmaz');
+  });
+
+  test('gün şeridi: pencereden (program, günler, katılım) önceki seçili gün kaçmış sayılmaz', () => {
+    // Pazar kurulan program: aynı haftanın pazartesi ve çarşambası "kaçırıldı" olmaz.
+    const sunday = weekStrip({ today: '2026-09-27', weekdays: [1, 3, 5], doneDays: [], since: '2026-09-27' });
+    assert.deepEqual(sunday.filter((day) => day.missed), []);
+    // Çarşamba katıldı: pazartesi ve çarşamba sayılmaz, cuma kaçtı.
+    const wednesday = weekStrip({ today: '2026-09-27', weekdays: [1, 3, 5], doneDays: [], since: '2026-09-23' });
+    assert.deepEqual(wednesday.filter((day) => day.missed).map((day) => day.date), ['2026-09-25']);
+    // Pencere yoksa (eski önbellek) eski davranış.
+    assert.equal(weekStrip({ today: '2026-09-27', weekdays: [1, 3, 5], doneDays: [], since: null }).filter((day) => day.missed).length, 3);
+  });
+
+  test('pencerenin başı: program, PT\'nin günleri, danışanın katmanı, ilk giriş ve durum değişiminin en yenisi', () => {
+    const program = { createdAt: '2026-09-01T10:00:00.000Z', schedule: { weekdays: [1, 3, 5], at: '2026-09-10T10:00:00.000Z' } };
+    const client = { access: {}, statusChangedAt: undefined };
+    assert.equal(scheduleSince(program, client), '2026-09-10T10:00:00.000Z');
+    assert.equal(scheduleSince({ ...program, clientSchedule: { weekdays: [2], at: '2026-09-12T10:00:00.000Z' } }, client), '2026-09-12T10:00:00.000Z');
+    assert.equal(scheduleSince(program, { access: { joinedAt: '2026-09-20T10:00:00.000Z', lastJoinAt: '2026-09-25T10:00:00.000Z' } }), '2026-09-20T10:00:00.000Z', 'ilk giriş, son giriş değil');
+    assert.equal(scheduleSince(program, { access: { lastJoinAt: '2026-09-21T10:00:00.000Z' } }), '2026-09-21T10:00:00.000Z', 'eski kayıtta son giriş');
+    assert.equal(scheduleSince(program, { access: {}, statusChangedAt: '2026-09-24T10:00:00.000Z' }), '2026-09-24T10:00:00.000Z', 'duraklatmadan dönüş');
+    assert.equal(scheduleSince({}, { access: {} }), undefined);
   });
 });
 

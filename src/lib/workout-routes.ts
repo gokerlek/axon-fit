@@ -293,7 +293,7 @@ export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null): P
       ...(problem ? { problem } : {}),
       day,
       week: weekOf(index, program, now, timeZone),
-      schedule: program ? scheduleOf(program) : null,
+      schedule: program ? scheduleOf(program, { client, timeZone }) : null,
       water: {
         file: waterFile && waterFile !== 'broken' ? waterOnDay(parseWaterFile(waterFile.content).file.taps, today, timeZone) : 0,
         sessions: sessionWaterOn(index, today),
@@ -434,6 +434,7 @@ export function scheduleRoute(deps: SessionRouteDeps, headers: Headers, origin: 
   return run(deps, null, 'schedule', async ({ client, repo }) => {
     const parsed = v.safeParse(clientScheduleBodySchema, input);
     if (!parsed.success) return { status: 400, body: { error: 'En az bir gün seç.' } };
+    const timeZone = await deps.timeZone();
     for (let attempt = 0; ; attempt += 1) {
       // Bozuk JSON 500 fırlatır: dosya ezilmez.
       const file = await repo.read('program.json');
@@ -442,17 +443,23 @@ export function scheduleRoute(deps: SessionRouteDeps, headers: Headers, origin: 
       if (!program.success) return { status: 409, body: { error: PROGRAM_PROBLEM } };
       const applied = applyClientSchedule(program.output, parsed.output.weekdays, deps.now());
       if (!applied) {
-        const body: ScheduleResponse = { schedule: scheduleOf(program.output), unchanged: true };
+        const body: ScheduleResponse = { schedule: scheduleOf(program.output, { client, timeZone }), unchanged: true };
         return { status: 200, body };
       }
       const raw = isRecord(file.content) && file.content.version === 2 ? file.content : program.output;
       const { clientSchedule: _dropped, ...rest } = raw as Record<string, unknown>;
-      const next = { ...rest, ...(applied.program.clientSchedule ? { clientSchedule: applied.program.clientSchedule } : {}), log: applied.program.log };
+      // PT'nin günlerine dönüşte `schedule.at` şimdi olur (`applyClientSchedule`): kaçan gün penceresi eski katmanın anına geri açılmasın.
+      const next = {
+        ...rest,
+        ...(applied.program.schedule ? { schedule: applied.program.schedule } : {}),
+        ...(applied.program.clientSchedule ? { clientSchedule: applied.program.clientSchedule } : {}),
+        log: applied.program.log,
+      };
       try {
         await repo.write('program.json', next, { sha: file.sha, message: `Program (danışan): ${applied.text}` });
         repo.noticesChanged();
         deps.log(`[program] ${client.id} günler`);
-        const body: ScheduleResponse = { schedule: scheduleOf(applied.program) };
+        const body: ScheduleResponse = { schedule: scheduleOf(applied.program, { client, timeZone }) };
         return { status: 200, body };
       } catch (error) {
         if (attempt === 0 && error instanceof GithubError && error.status === 409) continue;

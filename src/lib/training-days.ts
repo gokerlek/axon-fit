@@ -76,6 +76,35 @@ export function effectiveSchedule(program: Scheduled): EffectiveSchedule {
   return { weekdays, pt, client, source: client ? 'client' : pt.length > 0 ? 'pt' : null };
 }
 
+function latestIso(values: readonly (string | undefined)[]): string | undefined {
+  let best: { at: number; iso: string } | undefined;
+  for (const iso of values) {
+    const at = iso ? Date.parse(iso) : Number.NaN;
+    if (iso && !Number.isNaN(at) && (!best || at > best.at)) best = { at, iso };
+  }
+  return best?.iso;
+}
+
+/**
+ * Kaçan gün penceresinin başladığı an (§2.11): programın kurulduğu, geçerli günlerin son değiştiği (PT'nin
+ * değişikliği, danışanın katmanı ya da katmanın kalkması), danışanın ilk girişi ve durumunun son değiştiği
+ * (duraklatılıp yeniden açılma) anların en yenisi. O günün kendisi ve öncesi kaçmış sayılmaz: danışan
+ * yetişemeyebilirdi. Genel bakış'ın "Kaçan gün"ü (`attention.ts`) ve Bugün'ün gün şeridi (`weekStrip`) aynı
+ * kuralla; hiçbiri bilinmiyorsa undefined.
+ */
+export function scheduleSince(
+  program: Scheduled & { createdAt?: string | undefined },
+  client: { access: { joinedAt?: string | undefined; lastJoinAt?: string | undefined }; statusChangedAt?: string | undefined },
+): string | undefined {
+  return latestIso([
+    program.createdAt,
+    program.schedule?.at,
+    effectiveSchedule(program).client?.at,
+    client.access.joinedAt ?? client.access.lastJoinAt,
+    client.statusChangedAt,
+  ]);
+}
+
 /** "Bu hafta x/y"nin y'si: seçili gün sayısı, yoksa haftalık sıklık, o da yoksa null. */
 export function weekTarget(weekdays: readonly number[], daysPerWeek?: number): number | null {
   const count = normalizeWeekdays(weekdays).length;
@@ -119,23 +148,26 @@ export type StripDay = {
   selected: boolean;
   /** O gün antrenman yapıldı (seçili olmasa da). */
   done: boolean;
-  /** Seçili gün geçti ve o gün antrenman yok. */
+  /** Seçili gün geçti ve o gün antrenman yok; pencereden (`since`) önceki gün kaçmış sayılmaz. */
   missed: boolean;
   today: boolean;
 };
 
 /**
  * Bugün kartının 7 günlük şeridi (pazartesi başlar): seçili günler halkalı, yapılanlar dolu, kaçanlar
- * soluk. `doneDays`: bu hafta antrenman yapılan günler (`weekOf().days`).
+ * soluk. `doneDays`: bu hafta antrenman yapılan günler (`weekOf().days`). `since`: kaçan gün penceresinin
+ * başladığı takvim günü (`scheduleSince`, uygulamanın saat diliminde); o gün ve öncesi kaçmış sayılmaz
+ * (pazar kurulan programda o haftanın pazartesisi "kaçırıldı" olmaz).
  */
-export function weekStrip(input: { today: string; weekdays: readonly number[]; doneDays: Iterable<string> }): StripDay[] {
+export function weekStrip(input: { today: string; weekdays: readonly number[]; doneDays: Iterable<string>; since?: string | null | undefined }): StripDay[] {
   const selected = new Set(normalizeWeekdays(input.weekdays));
   const done = new Set(input.doneDays);
   return weekDates(input.today).map((date) => {
     const weekday = isoWeekdayOf(date);
     const isSelected = selected.has(weekday);
     const isDone = done.has(date);
-    return { date, weekday, selected: isSelected, done: isDone, missed: isSelected && !isDone && date < input.today, today: date === input.today };
+    const counted = !input.since || date > input.since;
+    return { date, weekday, selected: isSelected, done: isDone, missed: isSelected && !isDone && date < input.today && counted, today: date === input.today };
   });
 }
 

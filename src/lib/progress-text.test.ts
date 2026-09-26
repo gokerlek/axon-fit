@@ -8,6 +8,7 @@ import {
   adherenceText,
   circumferenceText,
   describeTrend,
+  e1rmNote,
   formatChangePct,
   formatSeconds,
   groupRoleText,
@@ -18,12 +19,14 @@ import {
   metricForecast,
   metricMinSpan,
   metricPoints,
+  progressCopy,
   recordLabel,
   recordPrevious,
   recordValue,
   recentAverage,
   STRENGTH_METHOD_NOTE,
   strengthDetail,
+  strengthMethodNote,
   strengthMissingText,
   streakText,
   waterSummary,
@@ -296,5 +299,54 @@ describe('grafik bölümü metinleri', () => {
   test('su: kayıtlı gün ve o günlerin ortalaması', () => {
     assert.deepEqual(waterSummary([{ glasses: 0 }, { glasses: 5 }, { glasses: 8 }, { glasses: 0 }]), { recorded: 2, average: 6.5 });
     assert.deepEqual(waterSummary([{ glasses: 0 }]), { recorded: 0, average: null });
+  });
+});
+
+describe('kime yazıldığı: danışan ve PT', () => {
+  /** Metinlerin hepsi, işlevler örnek değerlerle çağrılmış. */
+  function texts(copy: ReturnType<typeof progressCopy>): string[] {
+    return Object.values(copy).flatMap((value) => {
+      if (typeof value === 'string') return [value];
+      if (Array.isArray(value)) return value;
+      const call = value as (arg: never) => string;
+      return [call(3 as never), call('Son 8 haftada' as never)];
+    });
+  }
+
+  // Danışana yazılan ikinci tekil biçimler; PT metninde hiçbiri olmamalı.
+  const SECOND_PERSON = /kaldırdığın|yaptığın|yaptığında|içtiğin|girdiğin|eklediğin|çalıştırdığın|ağrın\b|antrenörüne|cevapların|kaydın\b|planın|planındır|haftan\b|deneyimin|iyilerin|iyini|kırdın|Ölçümlerin|puanın|seçtiğin|setlerini|kazandın|İlerlemen|dokun/;
+
+  test('PT: ikinci tekil yok; ad yalnız özne ("Ayşe kaldırınca"), eksiz', () => {
+    const copy = progressCopy('pt', 'Ayşe');
+    for (const text of texts(copy)) assert.doesNotMatch(text, SECOND_PERSON, text);
+    assert.equal(copy.strengthIntro, 'Ayşe hangi kasında güç kazandı: hareketlerindeki en iyi setlerin gidişatı.');
+    assert.equal(copy.recordSessions(2), '2 antrenmanda rekor kırdı');
+    assert.ok(copy.recordsEmpty.includes('Ayşe bir harekette daha ağır kaldırınca'));
+    assert.ok(copy.painFootnote.includes('Ayşe ile konuş'));
+    assert.equal(copy.firstWorkout('3 Ağustos 2026'), 'İlk antrenman 3 Ağustos 2026');
+    assert.equal(copy.unavailable('Su kaydı'), 'Su kaydı şu an okunamadı. Biraz sonra sayfayı yenile.');
+    // Ad verilmezse "Danışan".
+    assert.ok(progressCopy('pt').effortEmpty.startsWith('Danışan antrenman sonrası'));
+  });
+
+  test('danışan: önceki metinler aynen', () => {
+    const copy = progressCopy('client');
+    assert.equal(copy.strengthIntro, 'Hangi kasında güç kazandın: hareketlerindeki en iyi setlerin gidişatı.');
+    assert.equal(copy.recordSessions(3), '3 antrenmanda rekor kırdın');
+    assert.equal(copy.unavailable('Su kaydın'), 'Su kaydın şu an okunamadı. Biraz sonra yeniden dene; sürerse antrenörüne haber ver.');
+    assert.equal(copy.firstWorkout('3 Ağustos 2026'), 'İlk antrenmanın 3 Ağustos 2026');
+    assert.equal(copy.e1rmNote, e1rmNote());
+    assert.deepEqual(copy.methodNote, STRENGTH_METHOD_NOTE);
+    assert.equal(copy.highRepDays(1), highRepDaysText(1));
+  });
+
+  test('PT: yöntem notu, tahmini maksimum, çok tekrarlı günler, başarı', () => {
+    assert.ok(strengthMethodNote('pt')[0]!.includes("Bütün setleri 12'den çok tekrarlı gün de sayılır"));
+    assert.deepEqual(strengthMethodNote('pt').slice(1), STRENGTH_METHOD_NOTE.slice(1));
+    assert.ok(e1rmNote('pt').startsWith('Tek tekrarda kaldırabileceği en ağır yükün tahmini; kaldırması gereken'));
+    assert.ok(highRepDaysText(2, 'pt').endsWith("Ağırlık “En ağır”da, güç gelişimi Gelişim'de görünür."));
+    assert.equal(achievementDetail({ id: 'first_workout', achievedOn: null, current: 0, target: 1 }, 1, 'pt'), 'İlk antrenmanını bitirince.');
+    assert.equal(achievementDetail({ id: 'first_record', achievedOn: null, current: 0, target: 1 }, 1, 'pt'), 'Bir harekette en iyisini geçince.');
+    assert.equal(achievementDetail({ id: 'workouts_25', achievedOn: null, current: 12, target: 25 }, 3, 'pt'), '12/25 antrenman');
   });
 });

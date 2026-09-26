@@ -10,7 +10,7 @@ import type { Client, Invite } from './schemas/client.ts';
 import type { MeasurementEntry } from './schemas/health.ts';
 import type { Program } from './schemas/program.ts';
 import type { SessionIndex } from './schemas/session.ts';
-import { addDays, effectiveSchedule, isoWeekdayOf, normalizeWeekdays } from './training-days.ts';
+import { addDays, effectiveSchedule, isoWeekdayOf, normalizeWeekdays, scheduleSince } from './training-days.ts';
 import { shortDayText } from './workout-summary.ts';
 
 /**
@@ -192,15 +192,6 @@ export function measurementDeclines(entries: readonly MeasurementEntry[]): Measu
     }));
 }
 
-function latestIso(values: readonly (string | undefined)[]): string | undefined {
-  let best: { at: number; iso: string } | undefined;
-  for (const iso of values) {
-    const at = iso ? Date.parse(iso) : Number.NaN;
-    if (iso && !Number.isNaN(at) && (!best || at > best.at)) best = { at, iso };
-  }
-  return best?.iso;
-}
-
 /**
  * Danışanın dosyalarından özet. `index` onarılmış index (`readIndex`: başlanıp hiç bitirilmemiş antrenmanlar da
  * satırdır, o gün kaçan sayılmaz), `proposals` ham dosya, `measurements` yalnız ölçüm onayı sürüyorsa (yoksa
@@ -222,14 +213,8 @@ export function attentionFactsOf(input: {
   let schedule: AttentionFacts['schedule'] = null;
   if (program) {
     const days = effectiveSchedule(program);
-    // Günler programdan, günlerin son değişmesinden, ilk girişten ve duraklatmadan dönüşten önce sayılmaz.
-    const since = latestIso([
-      program.createdAt,
-      program.schedule?.at,
-      days.client?.at,
-      client.access.joinedAt ?? client.access.lastJoinAt,
-      client.statusChangedAt,
-    ]);
+    // Günler programdan, günlerin son değişmesinden, ilk girişten ve duraklatmadan dönüşten önce sayılmaz (Bugün'ün şeridiyle aynı kural).
+    const since = scheduleSince(program, client);
     if (days.weekdays.length > 0 && since) schedule = { weekdays: days.weekdays, since };
   }
 

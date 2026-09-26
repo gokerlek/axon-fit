@@ -17,8 +17,9 @@ import type { WorkoutDay } from './workout-plan.ts';
  *    rekor sayısı, aynı günün önceki antrenmanına göre toplam ağırlık farkı, "Bu hafta 2/3 · 2 bardak su".
  * 2. **Rekorlar ve gelişim:** hareket başına bir rekor (`session-records.ts`), geçen sefere göre ↑ ↓ =,
  *    "Gelecek sefer" (öneri motorunun bu antrenman dahil planı; yalnız en yeni antrenmanda).
- * 3. **Çalışan kaslar:** set başına hedef 1, yardımcı 0,5, dengeleyici 0,25 (`ROLE_SET_WEIGHT`); kas sayısında
- *    dengeleyici sayılmaz, aileler tek ad.
+ * 3. **Çalışan kaslar:** set başına hedef 1, yardımcı 0,5, dengeleyici 0,25 (`ROLE_SET_WEIGHT`). Çalışan kas tek
+ *    tanımla (`workedList`): hedef ya da yardımcı olduğu bir hareketin çalışma seti var; yalnız dengeleyici olan
+ *    kas sayılmaz, aileler tek ad. Sayı, liste ve harita aynı kaslar ("14 kas" yazıp listede 25 kas olmaz).
  * 4. **Hareketler:** hareket başına set, tekrar ve üst ağırlık; geçilen ve yarım hareketler; bu antrenmanın
  *    program değişiklikleri (programa yazılan ve antrenörün onayındakiler).
  *
@@ -58,7 +59,7 @@ export function sessionMuscleLoad<E extends MuscleSource>(
   return load;
 }
 
-/** Çalışan kaslar (hedef ya da yardımcı; dengeleyici ve kardiyo sayılmaz), yükü en çok olan önce. */
+/** Çalışan kaslar (hedef ya da yardımcı; yalnız dengeleyici olan kas ve kardiyo sayılmaz), yükü en çok olan önce. */
 export function workedMuscles<E extends MuscleSource>(
   entries: readonly SessionEntry[],
   exercises: ReadonlyMap<string, E>,
@@ -71,6 +72,24 @@ export function workedMuscles<E extends MuscleSource>(
     for (const muscle of [...exercise.primaryMuscles, ...exercise.secondaryMuscles]) if (muscle !== 'cardio') worked.add(muscle);
   }
   return [...worked].sort((a, b) => (load[b] ?? 0) - (load[a] ?? 0));
+}
+
+/** Özetin çalışan kası: ad (aile tamamsa tek ad), altındaki kaslar ve kesirli seti. */
+export type WorkedMuscle = { label: string; muscles: string[]; sets: number };
+
+/**
+ * Çalışan kasların listesi (3. kartın sayısı, listesi ve haritası; tasarım §2.8): `workedMuscles`, aileler tek ad
+ * (`group`: `muscles.ts` → `groupMuscles`). Ailenin seti en çok çalışan parçasınınki: aynı set her parçaya ayrı
+ * sayıldığı için toplam şişer. Seti çok olan önce; eşitse ilk görünüş sırası.
+ */
+export function workedList(
+  worked: readonly string[],
+  load: Readonly<Record<string, number>>,
+  group: (muscles: readonly string[]) => { label: string; muscles: readonly string[] }[],
+): WorkedMuscle[] {
+  return group(worked)
+    .map((item) => ({ label: item.label, muscles: [...item.muscles], sets: Math.max(0, ...item.muscles.map((muscle) => load[muscle] ?? 0)) }))
+    .sort((a, b) => b.sets - a.sets);
 }
 
 /* --- metinler --- */
@@ -272,7 +291,7 @@ export type SessionSummary = {
   minutes: number;
   volumeKg: number;
   sets: number;
-  /** Çalışan kas sayısı (aileler tek ad). */
+  /** Çalışan kas sayısı (`worked`'ün uzunluğu: aileler tek ad, yalnız dengeleyici olan kas yok). */
   muscles: number;
   prs: number;
   versusLast: string | null;
@@ -282,7 +301,10 @@ export type SessionSummary = {
   compare: CompareLine[];
   /** Yalnız en yeni antrenmanda (öneri motorunun planı); yoksa null. */
   next: NextLine[] | null;
+  /** Haritanın yükü: yalnız çalışan kaslar (listeyle aynı kaslar), kesirli set. */
   load: Record<string, number>;
+  /** Çalışan kasların listesi, seti çok olan önce (`workedList`). */
+  worked: WorkedMuscle[];
   /** Kas sayısı başlığının altındaki "En çok: göğüs". */
   topMuscle: string | null;
   /** "17 set · 142 tekrar". */
@@ -293,7 +315,7 @@ export type SessionSummary = {
 
 /**
  * Özetin bütün kartları. `index` onarılmış index'tir; antrenmanın satırı yoksa (okunamadıysa) belgesinden
- * eklenir. Kas adları ve rol payları kütüphanenin yardımcılarından (`muscles.ts`) verilir: aileler tek ad.
+ * eklenir. Kas grupları ve rol payları kütüphanenin yardımcılarından (`muscles.ts`) verilir: aileler tek ad.
  */
 export function sessionSummary<E extends MuscleSource>(input: {
   doc: SessionDoc;
@@ -301,7 +323,7 @@ export function sessionSummary<E extends MuscleSource>(input: {
   timeZone: string;
   exercises: ReadonlyMap<string, E>;
   setWeightsOf: (exercise: E) => Partial<Record<string, number>>;
-  muscleLabels: (muscles: readonly string[]) => string[];
+  muscleGroups: (muscles: readonly string[]) => { label: string; muscles: readonly string[] }[];
   week: SummaryWeek | null;
   changes: readonly ChangeLine[];
   next: NextLine[] | null;
@@ -313,8 +335,9 @@ export function sessionSummary<E extends MuscleSource>(input: {
   const volumeKg = volumeOf(doc);
   const sets = workingSetCount(doc);
 
-  const load = sessionMuscleLoad(doc.entries, input.exercises, input.setWeightsOf);
-  const worked = input.muscleLabels(workedMuscles(doc.entries, input.exercises, load));
+  const total = sessionMuscleLoad(doc.entries, input.exercises, input.setWeightsOf);
+  const worked = workedList(workedMuscles(doc.entries, input.exercises, total), total, input.muscleGroups);
+  const load = Object.fromEntries(worked.flatMap((item) => item.muscles.map((muscle) => [muscle, total[muscle] ?? 0] as const)));
 
   // Hareketin adı antrenmandaki hâliyle (egzersiz ve cihaz anahtarıyla).
   const titles = new Map<string, string>();
@@ -358,7 +381,8 @@ export function sessionSummary<E extends MuscleSource>(input: {
     compare,
     next: input.next && input.next.length > 0 ? input.next : null,
     load,
-    topMuscle: worked[0] ?? null,
+    worked,
+    topMuscle: worked[0]?.label ?? null,
     totals: [`${formatNumber(sets)} set`, ...(reps > 0 ? [`${formatNumber(reps)} tekrar`] : []), ...(seconds > 0 ? [`${formatNumber(seconds)} sn`] : [])].join(' · '),
     exercises,
     changes: [...input.changes],

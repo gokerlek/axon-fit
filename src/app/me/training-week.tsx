@@ -52,7 +52,8 @@ export function WeekStrip({ clientId }: { clientId: string }) {
   if (isPending && !data) return <Skeleton className="h-[6.25rem] w-full rounded-lg" />;
   if (!data?.schedule) return null;
   const schedule = data.schedule;
-  const strip = weekStrip({ today: data.today, weekdays: schedule.weekdays, doneDays: data.week.days });
+  // Program kurulmadan, günler değişmeden ya da danışan katılmadan önceki günler kaçmış sayılmaz (Genel bakış'la aynı kural).
+  const strip = weekStrip({ today: data.today, weekdays: schedule.weekdays, doneDays: data.week.days, since: schedule.since });
 
   const saved = (next: WorkoutSchedule) => {
     // Hemen görünsün; sonra sunucudan taze (plan damgası değişti, telefondaki plan da yenilenir).

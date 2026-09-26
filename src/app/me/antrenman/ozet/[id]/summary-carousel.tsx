@@ -290,19 +290,30 @@ function RecordsCard({ summary }: { summary: SessionSummary }) {
   );
 }
 
+/**
+ * Çalışan kaslar (tasarım §2.8): sayı, harita ve liste tek tanımdan (`summary.worked`): hedef ya da yardımcı
+ * olarak çalışan kaslar, aileler tek ad; yalnız dengeleyici olan kas ne sayılır ne listelenir ne boyanır.
+ */
 function MusclesCard({ summary }: { summary: SessionSummary }) {
-  const worked = Object.entries(summary.load).some(([muscle, value]) => muscle !== 'cardio' && value > 0);
   return (
     <>
       <Eyebrow>Çalışan kaslar</Eyebrow>
       <h2 className="-mt-2 font-heading text-2xl font-semibold tabular-nums">{formatNumber(summary.muscles)} kas çalıştı</h2>
       {summary.topMuscle ? <p className="-mt-1 text-sm text-muted-foreground">En çok: {summary.topMuscle.toLocaleLowerCase('tr-TR')}</p> : null}
-      {worked ? (
-        <TemplateMuscleMap load={summary.load} legendLimit={5} label="Bu antrenmanın kas yükü" bodyClassName="h-60" />
+      {summary.worked.length > 0 ? (
+        <TemplateMuscleMap
+          load={summary.load}
+          legend={summary.worked.map((item) => ({ label: item.label, value: item.sets }))}
+          legendLimit={5}
+          label="Bu antrenmanın kas yükü"
+          bodyClassName="h-60"
+        />
       ) : (
         <p className="text-sm text-muted-foreground">Bu antrenmanda sayılan kas yükü yok.</p>
       )}
-      <p className="text-[0.8125rem] text-muted-foreground">Sayılar kesirli set: hedef kas 1, yardımcı kas 0,5, dengeleyici 0,25.</p>
+      <p className="text-[0.8125rem] text-muted-foreground">
+        Sayılar kesirli set: hedef kas 1, yardımcı kas 0,5, dengeleyici 0,25. Yalnız dengeleyici olarak çalışan kas sayılmaz.
+      </p>
     </>
   );
 }

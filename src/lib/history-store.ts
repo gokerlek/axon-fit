@@ -1,7 +1,7 @@
 import 'server-only';
 import { listDevices } from './devices';
 import { listExercises } from './exercises';
-import { exerciseSetWeights, isBodyMuscle, summarizeMuscles } from './muscles';
+import { exerciseSetWeights, groupMuscles, isBodyMuscle } from './muscles';
 import { readProgramFile } from './programs';
 import { readProposals } from './proposals-store';
 import type { Muscle } from './schemas/exercise';
@@ -91,7 +91,7 @@ export async function loadSummary(clientId: string, id: string, timeZone: string
     timeZone,
     exercises: byId,
     setWeightsOf: exerciseSetWeights,
-    muscleLabels: (muscles) => summarizeMuscles(muscles.filter((muscle): muscle is Muscle => isBodyMuscle(muscle as Muscle)) as Muscle[]),
+    muscleGroups: (muscles) => groupMuscles(muscles.filter((muscle): muscle is Muscle => isBodyMuscle(muscle as Muscle)) as Muscle[]),
     week: summaryWeek(index, doc.date, weekOf(index, program, now, timeZone)),
     changes: await changesOf(clientId, id, program),
     next,

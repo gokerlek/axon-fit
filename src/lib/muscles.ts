@@ -84,21 +84,26 @@ export function works(exercise: Worked, muscle: Muscle): boolean {
  * ("Üst kanat, Orta kanat, Alt kanat" → "Kanat"). Sıra, listedeki ilk görünüşe göre.
  */
 export function summarizeMuscles(muscles: readonly Muscle[]): string[] {
+  return groupMuscles(muscles).map((group) => group.label);
+}
+
+/** `summarizeMuscles`'ın grupları: her adın altındaki kaslar (aile tamamsa bütün parçaları, değilse kasın kendisi). */
+export function groupMuscles(muscles: readonly Muscle[]): { label: string; muscles: Muscle[] }[] {
   const present = new Set(muscles);
-  const labels: string[] = [];
+  const groups: { label: string; muscles: Muscle[] }[] = [];
   const done = new Set<Muscle>();
   for (const muscle of muscles) {
     if (done.has(muscle)) continue;
     const family = MUSCLE_FAMILIES.find((item) => item.muscles.includes(muscle));
     if (family && family.muscles.every((part) => present.has(part))) {
-      labels.push(family.label);
+      groups.push({ label: family.label, muscles: [...family.muscles] });
       for (const part of family.muscles) done.add(part);
     } else {
-      labels.push(MUSCLE_LABELS[muscle]);
+      groups.push({ label: MUSCLE_LABELS[muscle], muscles: [muscle] });
       done.add(muscle);
     }
   }
-  return labels;
+  return groups;
 }
 
 /** Her kası çalıştıran egzersiz sayısı (hedef ya da yardımcı; dengeleyici sayılmaz). Süzgeçle aynı kural. */

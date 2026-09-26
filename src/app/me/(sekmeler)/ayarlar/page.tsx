@@ -32,7 +32,7 @@ export default async function ClientSettingsPage() {
     <main className="flex flex-col gap-6">
       <ClientHeader client={client} appName={config.appName} title="Ayarlar" back={{ href: '/me', label: 'Bugün' }} />
 
-      {program ? <TrainingDaysCard schedule={scheduleOf(program)} /> : null}
+      {program ? <TrainingDaysCard schedule={scheduleOf(program, { client, timeZone: config.timeZone })} /> : null}
 
       {health === 'off' ? (
         <Card size="sm">

@@ -14,7 +14,7 @@ const LEGEND_LIMIT = 12;
  * dengeleyici 0,25). Ton şablonun en çok çalışan kasına göredir (boş kastan hedef rengine sürekli
  * açıklık rampası; en çok çalışan kas boş kastan ≥3:1). `full` altında
  * kas ve set listesi verir (`legendLimit` kasa kadar; antrenman özeti ilk 5'i); `compact` (liste kartı)
- * yalnız haritadır.
+ * yalnız haritadır. `legend` verilirse liste odur (antrenman özeti: aileler tek ad, sayıyla aynı kaslar).
  */
 export function TemplateMuscleMap({
   load,
@@ -22,17 +22,20 @@ export function TemplateMuscleMap({
   bodyClassName,
   label,
   legendLimit = LEGEND_LIMIT,
+  legend,
 }: {
   load: Partial<Record<Muscle, number>>;
   variant?: 'full' | 'compact';
   bodyClassName?: string;
   label?: string;
   legendLimit?: number;
+  legend?: readonly { label: string; value: number }[];
 }) {
   const intensity = loadIntensity(load as Record<string, number>) as MuscleIntensity;
   const worked = BODY_MUSCLES.filter((muscle) => (load[muscle] ?? 0) > 0).sort((a, b) => (load[b] ?? 0) - (load[a] ?? 0));
-  const shown = worked.slice(0, legendLimit);
-  const cardio = load.cardio ?? 0;
+  const rows = legend ?? worked.map((muscle) => ({ label: MUSCLE_LABELS[muscle], value: load[muscle] ?? 0 }));
+  const shown = rows.slice(0, legendLimit);
+  const cardio = legend ? 0 : (load.cardio ?? 0);
   const mapLabel =
     label ??
     (worked.length > 0 ? `Şablonun kas yükü: ${summarizeMuscles(worked.slice(0, 6)).join(', ')}` : 'Şablonda sayılan kas yükü yok');
@@ -52,10 +55,10 @@ export function TemplateMuscleMap({
       {variant === 'full' && (shown.length > 0 || cardio > 0) ? (
         <div className="flex w-full min-w-0 flex-col gap-2 text-sm">
           <dl className="grid w-full grid-cols-2 gap-x-6 gap-y-1 md:grid-cols-2 lg:grid-cols-3">
-            {shown.map((muscle) => (
-              <div key={muscle} className="flex items-baseline justify-between gap-2">
-                <dt className="truncate text-muted-foreground">{MUSCLE_LABELS[muscle]}</dt>
-                <dd className="tabular-nums">{formatNumber(load[muscle] ?? 0)}</dd>
+            {shown.map((row) => (
+              <div key={row.label} className="flex items-baseline justify-between gap-2">
+                <dt className="truncate text-muted-foreground">{row.label}</dt>
+                <dd className="tabular-nums">{formatNumber(row.value)}</dd>
               </div>
             ))}
             {cardio > 0 ? (
@@ -65,8 +68,8 @@ export function TemplateMuscleMap({
               </div>
             ) : null}
           </dl>
-          {worked.length > shown.length ? (
-            <p className="text-muted-foreground">+{worked.length - shown.length} kas daha</p>
+          {rows.length > shown.length ? (
+            <p className="text-muted-foreground">+{rows.length - shown.length} kas daha</p>
           ) : null}
         </div>
       ) : null}

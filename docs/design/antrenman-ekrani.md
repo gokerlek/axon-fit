@@ -363,7 +363,7 @@ Su düzeltmesi (±1) karttan kalktı; geçmiş detayındaki "3 su" satırında d
 
 Hesaplar (`workout-summary.ts`, saf):
 - **Toplam ağırlık (tonaj):** ısınma hariç çalışma setlerinde Σ kg × tekrar (ACSM 2009 hacim tanımı). Vücut ağırlığında ek yük sayılır, yoksa 0 kg; süreli hareket tonaja girmez, süresi karta yazılır. v1 başarısız setleri dışlıyordu; v2 yapılan tekrarı sayar (açık soru 5).
-- **Çalışan kaslar:** set başına hedef 1, yardımcı 0,5, dengeleyici 0,25 (`ROLE_SET_WEIGHT`, SPEC §6). Kas sayısında dengeleyici sayılmaz, aileler tek ad (`summarizeMuscles`).
+- **Çalışan kaslar:** set başına hedef 1, yardımcı 0,5, dengeleyici 0,25 (`ROLE_SET_WEIGHT`, SPEC §6). Kas sayısında dengeleyici sayılmaz, aileler tek ad (`summarizeMuscles`). Sayı, harita ve liste tek tanımdan (`workedList`): yalnız dengeleyici olan kas ne sayılır ne listelenir ne boyanır; ailenin seti en çok çalışan parçasınınki.
 - **Rekorlar** (v1 `pr.ts`): e1RM (Epley, 1–12 tekrar), en ağır set, o ağırlıkta en çok tekrar; kesin büyük olmalı. Hareketin ilk kaydı referanstır, rekor sayılmaz. Hareket başına bir kutlama.
 
 ### 2.9 Yoklama sonrası: seans zorluğu
@@ -373,7 +373,7 @@ SPEC §4'e göre seans RPE'si bitişten ~10 dk sonra sorulur. Bugün'de 10 dk �
 
 - **Veri.** PT'nin seçtiği günler programda: `schedule.weekdays` (ISO hafta günü, 1 = Pazartesi … 7 = Pazar; boş = seçilmemiş). Danışanın değişikliği PT'nin düzenleyicisini 412'ye düşürmesin diye `clientTargets` gibi ayrı bir katmanda durur (`clientSchedule: { weekdays, at }`); **geçerli günler = danışanınki ?? PT'ninki**. PT günleri değiştirirse danışanın katmanı temizlenir (son söz PT'nin). Seçilen gün sayısı haftalık sıklıktan farklıysa iki tarafta da küçük uyarı; engel değil.
 - **PT.** Program düzenleyicide "Haftada kaç gün" seçicisinin altında 7 günlük `ToggleGroup` (çoklu, 44 px). Danışan değiştirdiyse yanında "Danışan değiştirdi · Sal, Per, Cmt" rozeti ve [PT'nin günlerine dön].
-- **Danışan.** Bugün kartında haftanın 7 günü nokta şeridi (seçili günler halkalı, yapılanlar dolu, kaçanlar soluk) ve "Günlerini değiştir" (sheet: 7 gün çoklu seçim, sıklık uyarısı, Kaydet). Ayarlar'da da aynı satır. Kaydedince program geçmişine `client` türünde "Antrenman günleri: Pzt, Çar, Cum → Sal, Per, Cmt" yazılır, PT'ye bildirim gider.
+- **Danışan.** Bugün kartında haftanın 7 günü nokta şeridi (seçili günler halkalı, yapılanlar dolu, kaçanlar soluk; kaçan gün penceresi PT'nin "Kaçırdı"sıyla aynı: programın kurulduğu, günlerin son değiştiği, danışanın ilk girdiği ve durumunun son değiştiği andan sonra, `scheduleSince`) ve "Günlerini değiştir" (sheet: 7 gün çoklu seçim, sıklık uyarısı, Kaydet). Ayarlar'da da aynı satır. Kaydedince program geçmişine `client` türünde "Antrenman günleri: Pzt, Çar, Cum → Sal, Per, Cmt" yazılır, PT'ye bildirim gider.
 - **Sıra (rotasyon) değişmez.** Sıradaki antrenman gününün içeriği bugünkü gibi `nextDayId`'den gelir; günler yalnız **ne zaman** sorusunu cevaplar. Bugün seçili günse "Bugün antrenman günün · Gün B"; değilse "Dinlenme günü · sıradaki antrenman Çarşamba (Gün B)". Dinlenme gününde de başlatılabilir (sayılır). Kaçan gün içeriği atlatmaz: Gün A bir sonraki seçili güne kayar.
 - **Hafta sayımı.** "Bu hafta x/y": y = seçili gün sayısı (yoksa `daysPerWeek`); hafta Pazartesi başlar, danışanın saat dilimiyle (uygulama ayarı).
 - **PT tarafı.** Genel bakış'ta "Bugün antrenman günü olanlar" ve "Kaçırdı" (seçili gün geçti, o gün antrenman yok) — "Dikkat gerektirenler"e girer (faz 12).
