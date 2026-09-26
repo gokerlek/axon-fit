@@ -132,7 +132,7 @@ export function ExerciseProgress({
 
   return (
     <ProgressCard viewer={viewer} title="Hareketler" titleId="hareketler" description={copy.exerciseIntro} contentClassName="@container">
-      <div className="grid gap-4 @3xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] @3xl:gap-x-8">
+      <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] @3xl:gap-x-8">
         <div className="flex min-w-0 flex-col gap-4">
           <button
             type="button"

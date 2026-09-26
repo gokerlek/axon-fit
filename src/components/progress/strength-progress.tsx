@@ -111,6 +111,8 @@ export function StrengthProgress({
   const [openId, setOpenId] = useState<string | null>(null);
   const [shownId, setShownId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState<{ up: boolean; flat: boolean }>({ up: false, flat: false });
+  // Haritadaki kas bir SVG `g`; Base UI odağı yalnız HTML öğesine geri verir, kapanınca açan kasa biz döndürürüz.
+  const opener = useRef<Element | null>(null);
 
   const { strengths, groups } = useMemo(() => {
     const strengths = exercises.map((source) => exerciseStrength(source, { today, window: range }));
@@ -143,8 +145,18 @@ export function StrengthProgress({
   const periodIn = all ? 'Tüm kayıtlarda' : `Son ${STRENGTH_WINDOWS[range].label}da`;
 
   function openGroup(group: MuscleGroup) {
+    opener.current = document.activeElement;
     setOpenId(groupId(group));
     setShownId(groupId(group));
+  }
+
+  function sheetFinalFocus() {
+    const element = opener.current;
+    if (element instanceof SVGElement && element.isConnected) {
+      element.focus({ preventScroll: true });
+      return false;
+    }
+    return true; // Liste düğmeleri (HTML): Base UI'ın varsayılanı.
   }
 
   function pickWindow(next: StrengthWindow) {
@@ -183,7 +195,8 @@ export function StrengthProgress({
         <p className="rounded-lg bg-muted px-3 py-2.5 text-sm text-muted-foreground">{copy.strengthNoData(periodIn)}</p>
       ) : (
         // Dar kapta alt alta (sayılar, harita, listeler); genişte harita solda iki satır boyu, sağda sayılar ve listeler.
-        <div className="grid gap-5 @3xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] @3xl:grid-rows-[auto_1fr] @3xl:gap-x-8">
+        // Dar kapta da sütun açıkça `grid-cols-1` (minmax(0, 1fr)): kısaltılan hareket adları sütunu kabın dışına itmesin.
+        <div className="grid grid-cols-1 gap-5 @3xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] @3xl:grid-rows-[auto_1fr] @3xl:gap-x-8">
           <dl className="grid grid-cols-3 divide-x text-center @3xl:col-start-2 @3xl:row-start-1" aria-label={`${period}: kaslar`}>
             {[
               { value: count(up), label: 'gelişen kas' },
@@ -275,6 +288,7 @@ export function StrengthProgress({
         measurementsUnavailable={copy.measurementsUnavailable}
         methodNote={copy.methodNote}
         onOpenChange={(next) => (next ? undefined : setOpenId(null))}
+        finalFocus={sheetFinalFocus}
       />
     </ProgressCard>
   );
@@ -360,6 +374,7 @@ function MuscleSheet({
   measurementsUnavailable,
   methodNote,
   onOpenChange,
+  finalFocus,
 }: {
   viewer: ProgressViewer;
   open: boolean;
@@ -370,6 +385,7 @@ function MuscleSheet({
   measurementsUnavailable: string;
   methodNote: readonly string[];
   onOpenChange: (open: boolean) => void;
+  finalFocus: () => boolean;
 }) {
   const title = useRef<HTMLHeadingElement>(null);
   const related = shown ? measurementsFor(shown.muscles) : [];
@@ -377,7 +393,7 @@ function MuscleSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <ProgressSheetContent viewer={viewer} initialFocus={title}>
+      <ProgressSheetContent viewer={viewer} initialFocus={title} finalFocus={finalFocus}>
         {shown ? (
           <>
             <SheetHeader className="gap-1 pt-5 pb-3 pr-14">
