@@ -55,6 +55,15 @@ export type Readiness = v.InferOutput<typeof readinessSchema>;
  */
 export const healthCheckInSchema = v.object({
   date: isoDate,
+  /**
+   * Antrenmana bağlı sağlık ayrıntısı (tasarım §4.2): seans dosyası nötr kalır (`skip.reason: "other"`,
+   * `adjust: "lighter"`), nedeni burada, seansın kimliğiyle. Yalnız onay sürdükçe okunur ve yazılır.
+   */
+  sessionId: v.optional(v.pipe(v.string(), v.regex(/^s_[a-z0-9]{8}$/))),
+  /** Ağrı nedeniyle geçilen satırlar. */
+  skippedRows: v.optional(v.array(v.object({ rowId: v.pipe(v.string(), v.regex(/^r_[a-z0-9]{6}$/)), reason: v.literal('pain') }))),
+  /** Hafifletmenin nedeni. */
+  adjustReason: v.optional(v.picklist(['readiness', 'pain'] as const)),
   readiness: v.optional(readinessSchema),
   painBaseline: v.optional(nprs),
   painPeak: v.optional(nprs),

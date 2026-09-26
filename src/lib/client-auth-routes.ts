@@ -30,13 +30,22 @@ function refererOrigin(referer: string | null): string | null {
 }
 
 /**
+ * Yalnız bu siteden: köken başlığı yoksa Referer'ın kökeni; ikisi de yoksa ya da başka bir kökense 403.
+ * Gövdesiz durum değiştiren istekler (DELETE) yalnız buna bakar.
+ */
+export function originGuard(headers: Headers, expectedOrigin: string): RouteResult | null {
+  const source = headers.get('origin') ?? refererOrigin(headers.get('referer'));
+  return source === expectedOrigin ? null : { status: 403, body: { error: 'Bu istek bu siteden gelmedi.' } };
+}
+
+/**
  * Durum değiştiren danışan POST'ları yalnız bu siteden ve JSON'la (giriş CSRF'sine karşı; çerezin
  * SameSite=Lax'ı tek savunma kalmasın). Köken başlığı yoksa Referer'ın kökeni; ikisi de yoksa ya da
  * başka bir kökense 403. JSON değilse 415: `text/plain` form gönderimi de ayrıştırılmasın.
  */
 export function postGuard(headers: Headers, expectedOrigin: string): RouteResult | null {
-  const source = headers.get('origin') ?? refererOrigin(headers.get('referer'));
-  if (source !== expectedOrigin) return { status: 403, body: { error: 'Bu istek bu siteden gelmedi.' } };
+  const blocked = originGuard(headers, expectedOrigin);
+  if (blocked) return blocked;
   const type = headers.get('content-type')?.trim().toLowerCase() ?? '';
   if (type !== 'application/json' && !type.startsWith('application/json;')) {
     return { status: 415, body: { error: 'İstek JSON olmalı.' } };

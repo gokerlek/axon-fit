@@ -1,4 +1,6 @@
 import 'server-only';
+import type { Octokit } from 'octokit';
+import { jsonText } from './blob';
 import { assertRepoAllowed, gh, GithubError, owner, toGithubError } from './client';
 import { BrokenJsonError } from './errors';
 
@@ -24,11 +26,20 @@ function encode(text: string): string {
  * Dosya yoksa null. İçerik JSON değilse `BrokenJsonError` (500): üzerine boş kayıt yazılıp veri
  * kaybolmasın; hata aynı okumanın `sha`'sını taşır, onarmak isteyen (ayar sihirbazı) onunla yazar.
  */
-export async function readJson<T>(repo: string, path: string): Promise<StoredFile<T> | null> {
+export async function readJson<T>(
+  repo: string,
+  path: string,
+  options: { ref?: string | undefined; api?: Octokit } = {},
+): Promise<StoredFile<T> | null> {
   assertRepoAllowed(repo);
   let sha = '';
   try {
-    const response = await gh().rest.repos.getContent({ owner: owner(), repo, path });
+    const response = await (options.api ?? gh()).rest.repos.getContent({
+      owner: owner(),
+      repo,
+      path,
+      ...(options.ref ? { ref: options.ref } : {}),
+    });
     const data = response.data;
     if (Array.isArray(data) || data.type !== 'file' || !('content' in data)) {
       throw new GithubError(`${path} bir dosya değil.`, 400);
@@ -72,24 +83,34 @@ export async function readBinary(repo: string, path: string): Promise<{ bytes: U
   }
 }
 
+/** Yanıttaki `x-ratelimit-remaining`: saatlik kotadan kalan (başlık yoksa null). */
+function remainingOf(headers: Record<string, unknown> | undefined): number | null {
+  const value = Number(headers?.['x-ratelimit-remaining']);
+  return Number.isFinite(value) ? value : null;
+}
+
+/**
+ * JSON yazar (`sha` kilidiyle). Yanıtın kota başlığı da döner (`remaining`): seans yazıcısı kota
+ * azalınca telefona birleştirme penceresini büyütmesini söyler.
+ */
 export async function writeJson(
   repo: string,
   path: string,
   content: unknown,
-  options: { sha?: string | undefined; message: string },
-): Promise<{ sha: string }> {
+  options: { sha?: string | undefined; message: string; api?: Octokit },
+): Promise<{ sha: string; remaining: number | null }> {
   assertRepoAllowed(repo);
   try {
-    const response = await gh().rest.repos.createOrUpdateFileContents({
+    const response = await (options.api ?? gh()).rest.repos.createOrUpdateFileContents({
       owner: owner(),
       repo,
       path,
       message: options.message,
-      // Sonda satır sonu: dosyalar git'te düzgün fark verir.
-      content: encode(`${JSON.stringify(content, null, 2)}\n`),
+      // Sonda satır sonu: dosyalar git'te düzgün fark verir (`jsonText`; tek commit'le yazılan da aynı metin).
+      content: encode(jsonText(content)),
       ...(options.sha ? { sha: options.sha } : {}),
     });
-    return { sha: response.data.content?.sha ?? '' };
+    return { sha: response.data.content?.sha ?? '', remaining: remainingOf(response.headers) };
   } catch (error) {
     throw toGithubError(error, path);
   }
@@ -155,5 +176,142 @@ export async function listDir(repo: string, path: string): Promise<DirEntry[]> {
   } catch (error) {
     if (typeof error === 'object' && error && 'status' in error && error.status === 404) return [];
     throw toGithubError(error, path);
+  }
+}
+
+/* --- Git Data API: ağaç okuma ve tek commit'te birden çok dosya --- */
+
+export type RepoHead = { branch: string; commit: string; tree: string };
+
+/** Varsayılan dal adı süreç boyunca saklanır; okuma düşerse silinir, bir sonraki istek yeniden sorar. */
+const defaultBranches = new Map<string, string>();
+
+/** Varsayılan dalın ucu: son commit ve kök ağacı (`getBranch` tek istekte ikisini verir). */
+export async function repoHead(repo: string, api: Octokit = gh()): Promise<RepoHead> {
+  assertRepoAllowed(repo);
+  try {
+    let branch = defaultBranches.get(repo);
+    if (!branch) {
+      const { data } = await api.rest.repos.get({ owner: owner(), repo });
+      branch = data.default_branch;
+      defaultBranches.set(repo, branch);
+    }
+    const { data } = await api.rest.repos.getBranch({ owner: owner(), repo, branch });
+    return { branch, commit: data.commit.sha, tree: data.commit.commit.tree.sha };
+  } catch (error) {
+    defaultBranches.delete(repo);
+    throw toGithubError(error, repo);
+  }
+}
+
+export type TreeEntry = { path: string; sha: string; type: 'blob' | 'tree' };
+
+/**
+ * Git nesneleri kimlikleriyle değişmez: ağaç ve blob içeriği `sha`'ya göre süreç belleğinde saklanabilir,
+ * hiç bayatlamaz. Sınır aşılınca en eskisi atılır. (Sunucusuzda örnek başına; en iyi çaba.)
+ */
+function boundedCache<T>(max: number) {
+  const map = new Map<string, T>();
+  return {
+    get: (key: string) => map.get(key),
+    set(key: string, value: T) {
+      map.set(key, value);
+      if (map.size > max) map.delete(map.keys().next().value as string);
+    },
+  };
+}
+
+const trees = boundedCache<TreeEntry[]>(200);
+const blobs = boundedCache<string>(100);
+
+/** Ağacın doğrudan girdileri (özyinelemesiz). Contents API'nin 1.000 girdilik sınırı burada yok. */
+export async function listTree(repo: string, treeSha: string, api: Octokit = gh()): Promise<TreeEntry[]> {
+  assertRepoAllowed(repo);
+  const key = `${repo}@${treeSha}`;
+  const cached = trees.get(key);
+  if (cached) return cached;
+  try {
+    const { data } = await api.rest.git.getTree({ owner: owner(), repo, tree_sha: treeSha });
+    if (data.truncated) throw new GithubError(`${repo}: klasör listesi GitHub'da kesildi.`, 502);
+    const entries = data.tree.flatMap((item): TreeEntry[] =>
+      (item.type === 'blob' || item.type === 'tree') && item.path && item.sha ? [{ path: item.path, sha: item.sha, type: item.type }] : [],
+    );
+    trees.set(key, entries);
+    return entries;
+  } catch (error) {
+    if (error instanceof GithubError) throw error;
+    throw toGithubError(error, repo);
+  }
+}
+
+/** Kök ağaçtaki bir klasörün dosyaları (`klasör/ad`, blob `sha`); klasör yoksa boş. */
+export async function listFolder(repo: string, rootTree: string, folder: string, api: Octokit = gh()): Promise<{ path: string; sha: string }[]> {
+  const root = await listTree(repo, rootTree, api);
+  const dir = root.find((entry) => entry.type === 'tree' && entry.path === folder);
+  if (!dir) return [];
+  const entries = await listTree(repo, dir.sha, api);
+  return entries.filter((entry) => entry.type === 'blob').map((entry) => ({ path: `${folder}/${entry.path}`, sha: entry.sha }));
+}
+
+/** Blob'u JSON olarak okur (kimliğiyle; önbellekli). Bozuk JSON `BrokenJsonError`. */
+export async function readBlobJson(repo: string, sha: string, api: Octokit = gh()): Promise<unknown> {
+  assertRepoAllowed(repo);
+  const key = `${repo}@${sha}`;
+  let text = blobs.get(key);
+  if (text === undefined) {
+    try {
+      const { data } = await api.rest.git.getBlob({ owner: owner(), repo, file_sha: sha });
+      text = data.encoding === 'base64' ? decode(data.content) : data.content;
+    } catch (error) {
+      throw toGithubError(error, sha);
+    }
+    blobs.set(key, text);
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new BrokenJsonError(sha, sha);
+  }
+}
+
+export type CommitFile = { path: string; content: unknown };
+
+/**
+ * Birden çok dosyayı TEK commit'le yazar (tasarım §4.7): ağaç (`base_tree` + satır içi içerik) → commit
+ * → dalın ref'i ileri sarılır (`force: false`). Arada dal ilerlediyse (başka bir yazma oldu) GitHub 422
+ * verir, burada 409 olur: dosyaların hiçbiri yazılmamıştır; çağıran taze okuyup yeniden hesaplar. Yazma
+ * sayısı dosya sayısından bağımsız 3'tür. Metin `writeJson`'la aynı (`jsonText`), blob kimlikleri önceden
+ * hesaplanabilir.
+ */
+export async function commitFiles(
+  repo: string,
+  input: { head: RepoHead; files: readonly CommitFile[]; message: string },
+  api: Octokit = gh(),
+): Promise<{ commit: string; remaining: number | null }> {
+  assertRepoAllowed(repo);
+  try {
+    const tree = await api.rest.git.createTree({
+      owner: owner(),
+      repo,
+      base_tree: input.head.tree,
+      tree: input.files.map((file) => ({ path: file.path, mode: '100644' as const, type: 'blob' as const, content: jsonText(file.content) })),
+    });
+    const commit = await api.rest.git.createCommit({
+      owner: owner(),
+      repo,
+      message: input.message,
+      tree: tree.data.sha,
+      parents: [input.head.commit],
+    });
+    const ref = await api.rest.git.updateRef({
+      owner: owner(),
+      repo,
+      ref: `heads/${input.head.branch}`,
+      sha: commit.data.sha,
+      force: false,
+    });
+    return { commit: commit.data.sha, remaining: remainingOf(ref.headers) };
+  } catch (error) {
+    throw toGithubError(error, 'commit');
   }
 }

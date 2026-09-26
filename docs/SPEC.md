@@ -83,7 +83,10 @@ invite.json                    davet kodunun anahtarlı özeti, süresi, kullan�
 auth.json                      danışan şifresinin tuzlu scrypt özeti ve sürümü, belirlendiği an ve oturum kuşağı, yanlış
                                deneme ve kilit sayacı, kilit (§5); şifrenin kendisi yok. Kare kod kullanılınca silinir.
                                Uygulama repo'suna hiç yazılmaz
-sessions/<tarih>-<id>.json     tamamlanmış antrenman (her biri yeni dosya)
+sessions/<id>.json             bir antrenman = bir dosya: ilk sette oluşur (etkin), bitişte "bitti"; silinince
+                               değersiz iz dosyası. Yol yalnız kimlikten (tarih dosyanın içinde)
+sessions-index.json            antrenmanların özet satırları + silinenlerin kimlikleri (türetilmiş; her okumada
+                               `sessions/` ağacıyla onarılır)
 health.json                    yalnız sağlık modülü açık ve onaylıysa oluşur
 ```
 
@@ -91,7 +94,7 @@ health.json                    yalnız sağlık modülü açık ve onaylıysa ol
 
 **Neden ayrı repo:** danışan "verilerimi sil" dediğinde repo silinir; 90 gün geri alma penceresinden sonra tamamen gider. Başka hiçbir verinin geçmişine dokunulmaz.
 
-**Neden her antrenman ayrı dosya:** aynı dosyaya eşzamanlı yazma olmaz, çakışma riski sıfıra iner, geçmiş doğal olarak birikir.
+**Neden her antrenman ayrı dosya:** aynı dosyaya eşzamanlı yazma az olur, olduğunda da belge sıradan bağımsız birleşir (§7); geçmiş doğal olarak birikir.
 
 **Neden program danışanın repo'sunda:** program kişiye özeldir, şikâyet ve isteklere göre değişir; uygulama repo'sundaki şablon yalnız başlangıç noktasıdır. Program değişikliklerinin tam kaydı bu repo'nun git geçmişidir.
 
@@ -157,21 +160,36 @@ health.json                    yalnız sağlık modülü açık ve onaylıysa ol
 ```
 Sürüm 1 dosyalar okunurken çevrilir (tek süresiz evre → evresiz; satırın tek hedefi × blok set sayısı → setler); kayıt yeni biçimi yazar. Çeviri yalnız yapıyı değiştirir, bozuk değeri onarmaz.
 
-**`client-<id>` içinde `sessions/2026-09-20-s_91.json`**
+**`client-<id>` içinde `sessions/s_k2m9x4qa.json`** — şema `src/lib/schemas/session.ts`, ayrıntı `docs/design/antrenman-ekrani.md` §4.
 ```jsonc
 {
-  "id": "s_91", "date": "2026-09-20", "templateId": "t_altvucut",
-  "startedAt": "...", "finishedAt": "...",
+  "version": 1, "id": "s_k2m9x4qa",                   // s_ + 8; telefonda üretilir, idempotent anahtar; yol yalnız buradan
+  "status": "active",                                  // active | finished | deleted (iz dosyası)
+  "date": "2026-09-20",                                // sunucu ilk yazımda koyar (uygulamanın saat dilimi, başlangıç günü)
+  "startedAt": "...", "finishedAt": "...",             // finishedAt yalnız bitmişte
+  "program": { "revision": 7, "phaseId": "p_…", "dayId": "d_…", "dayName": "Gün A", "plannedDayId": "d_…" },
+  "rotation": { "value": "advance", "updatedAt": "...", "by": "w_ab12cd" },   // advance | keep
+  "adjust": "lighter",                                 // nötr; nedeni health.json'da
+  "writer": "w_ab12cd",                                // son yazan cihaz
+  "order": { "value": ["e_…"], "updatedAt": "...", "by": "w_…" },
   "entries": [
-    { "exerciseId": "squat", "sets": [
-      { "type": "warmup",  "kg": 20, "reps": 10 },
-      { "type": "working", "kg": 80, "reps": 8, "effort": "good" }   // effort: easy | good | hard | fail
-    ] }                                                              // süreli harekette "reps" yerine "seconds"
+    { "id": "e_q2m8xk", "rowId": "r_…", "exerciseId": "squat", "title": "Squat", "deviceId": "olympic-bar",
+      "status": "done", "updatedAt": "...", "by": "w_…",           // pending | done | partial | skipped
+      "sets": [
+        { "id": "st_…", "type": "warmup",  "kg": 20, "reps": 10, "at": "..." },
+        { "id": "st_…", "type": "working", "setIndex": 0, "kg": 80, "reps": 8, "effort": "good",
+          "target": { "min": 6, "max": 8 }, "topWeightKg": 80, "plannedSetCount": 3, "at": "...", "editedAt": "...", "by": "w_…" }
+      ] }                                                            // süreli harekette "reps" yerine "seconds"
   ],
-  "notes": "", "water": 3,
-  "effort": { "sessionRpe": 6, "durationMin": 55 }   // CR-10, bitişten ~10 dk sonra; antrenman verisi
+  "deletedSetIds": ["st_…"], "deletedEntryIds": [],   // kalıcı iz: silinen geri gelmez
+  "waterTaps": [ { "id": "wt_…", "d": 1, "at": "..." } ],             // su = Σ d (en az 0); "Geri al" bir −1 dokunuşu
+  "notices": [ { "kind": "other_day", "at": "..." } ],
+  "effort": { "sessionRpe": 6, "durationMin": 55, "updatedAt": "..." }   // CR-10, bitişten ~10 dk sonra; antrenman verisi
 }
 ```
+Silinen antrenmanın dosyası iz dosyasına döner: `{ "version": 1, "id": "s_…", "status": "deleted", "deletedAt": "..." }` (değer yok). `sessions-index.json` her antrenmanın özet satırını (tarih, gün, süre, tonaj, set, su, hareketler, bildirimler, dosyanın `sha`'sı) ve silinenlerin kimliklerini tutar; türetilmiş veridir, her okumada `sessions/` ağacıyla onarılır.
+
+**Sağlık verisi seans dosyasına girmez:** ağrıyla geçilen hareket `skip.reason: "other"`, hafifletme yalnız `adjust: "lighter"` olarak yazılır. Nedeni (ağrı, hazır oluşluk) `health.json` → `checkIns[]` kaydında seansın kimliğiyle durur (`sessionId`, `skippedRows`, `adjustReason`) ve yalnız onay varken yazılır ve okunur; sunucu onay yoksa bu ayrıntıyı atar.
 
 Sağlık modülünün parçaları (PT seçer, hepsi isteğe bağlı; ilk açılışta kısıtlar + hazır oluşluk seçili gelir): **kısıtlar** (süzgecin girdisi) · **hazır oluşluk** (antrenman öncesi uyku, enerji, kas ağrısı, stres; 1–5, serbest metin yok) · **ağrı takibi** (ağrı, belirtinin yönü, kırmızı bayrak) · **ölçümler** · **hareket taraması**. Hazır oluşluk da sağlık verisi sayılır (uyku, stres, yorgunluk); bu yüzden ayrı parçadır ve onaysız tutulmaz. Danışan onay ekranında tam olarak bu listeyi görür; onay isteği gördüğü listeyi ve metin sürümünü taşır, sunucu güncel listeyle birebir eşleşmeyen onayı reddeder.
 
@@ -289,12 +307,13 @@ Oluşturma işi (şablon kurmak, program atamak, birkaç danışanı yan yana g�
 
 **Her set bitince bir commit.** Danışan başına ayrı repo olduğu için o repo'nun commit geçmişi doğrudan antrenman günlüğüdür: `Set 3/4 · Bench Press · 80 kg × 8`, dakikası dakikasına.
 
-- **Ekran beklemez:** set kaydı önce telefonda tutulur, yazma arka planda kuyruğa girer.
-- **Çevrimdışı güvenli:** salonda çekim yoksa kuyruk birikir, bağlantı gelince sırayla gönderilir. Telefon kapansa da kayıt kaybolmaz.
-- **Tek dosya, sırayla:** her antrenman tek bir oturum dosyasıdır (`sessions/<tarih>-<id>.json`); yalnız o danışanın kuyruğu yazar, sırayla — çakışma olmaz.
+- **Ekran beklemez:** set kaydı önce telefonda tutulur, yazma arka planda gider (uçta aynı anda tek istek; dönünce belge yine değiştiyse son hâli).
+- **Çevrimdışı güvenli:** salonda çekim yoksa değişiklikler telefonda birikir, bağlantı gelince **tek yazma** olur. Telefon kapansa da kayıt kaybolmaz.
+- **Tek dosya, sıradan bağımsız:** her antrenman tek dosyadır (`sessions/<id>.json`, yol yalnız kimlikten). Telefon belgenin son hâlini gönderir (`PUT /api/me/sessions/[id]`); sunucu kayıttakiyle **alan başına, sıradan bağımsız** birleştirir (`src/lib/session-merge.ts`: setler ve hareketler kimlikle, düzeltmede son yazan, silinenler kalıcı izle), sonuç aynıysa yazmaz, değilse `sha`'yla yazar, çakışmada taze okuyup bir kez daha birleştirir. Geç gelen eski bir anlık görüntü yeniyi ezemez, silineni geri getiremez. Silinmiş antrenmana yazma 410, başka cihazda bitirilmişe 409.
+- **Bitiş tek commit:** seans "bitti" + index satırı + rotasyon (`program.json`, revision artmaz) + onaylıysa sağlık ayrıntısı (`health.json`) Git Data API ile tek commit'te yazılır: ya hepsi ya hiçbiri. Arada dal ilerlediyse bir kez baştan hesaplanır. Rotasyon zamanla korunur: seansın başlangıcı programdaki son tamamlanmadan eskiyse (çevrimdışı kuyrukta bekleyen bitiş) sıra değişmez. Geçmişte silme de tek commit'tir, mesajı geneldir ("Kayıt silindi").
 - **PT canlı görür:** PT ekranında açık olan antrenman 10 sn'de bir tazelenir; genel görünüm (şu an kimler çalışıyor) daha seyrek. Yalnız ekrandaki veri çekilir.
 
-**Sınır (GitHub):** içerik yazan istekler için dakikada 80, saatte 500 üst sınırı var. Set başına bir yazmayla bu, **aynı saat içinde ~20 tam antrenman** demek. 10-30 danışanlı bir antrenörde aynı saatte 3-8 kişi çalışır; pay rahat ama izlenecek sayı budur.
+**Sınır (GitHub):** içerik yazan istekler için dakikada 80, saatte 500 üst sınırı var. Set başına ~1 yazma (süperset turları tek yazmada birleşir) + bitişte 3 (tek commit: ağaç, commit, ref) ile bir antrenman ~20–22 yazmadır: **aynı saat içinde ~20 tam antrenman**. 10-30 danışanlı bir antrenörde aynı saatte 3-8 kişi çalışır; pay rahat ama izlenecek sayı budur. Seans yazımları ayrı bir GitHub istemcisiyle gider (`sessionWriter`): 409 ve 429'da yeniden denemez, sınırda Route Handler'ın içinde beklemez; uç 429 + `Retry-After` döner, telefon veriyi tutup üstel bekler. Kota 500'ün altına inince yanıt `slow: true` der.
 
 ### 7.1 İlerleme ve öneriler (progressive overload)
 

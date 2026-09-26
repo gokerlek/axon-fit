@@ -1,0 +1,96 @@
+import { describe, test } from 'node:test';
+import assert from 'node:assert/strict';
+import { planSession, type LoadSpec } from './progression.ts';
+import { exerciseHistory, toSetResults } from './session-results.ts';
+import { at, sessionDoc, sessionEntry, workingSet } from './testing/session-fixtures.ts';
+
+const barbell: LoadSpec = { trackingType: 'weight_reps', loadStepKg: 2.5, minLoadKg: 20 };
+const target = { min: 8, max: 10 };
+
+describe('toSetResults', () => {
+  test('çalışma setleri motorun biçimine; satır ve cihaz her sete; zorluk yoksa iyi', () => {
+    const entry = sessionEntry('e_aaaaaa', {
+      rowId: 'r_aaaaaa',
+      deviceId: 'olympic-bar',
+      sets: [
+        { id: 'st_warmup01', type: 'warmup', kg: 20, reps: 10, at: at(1) },
+        workingSet('st_aaaaaaaa', 2, { setIndex: 0, target, topWeightKg: 60, plannedSetCount: 3, effort: 'hard' }),
+        workingSet('st_bbbbbbbb', 4, { setIndex: 1, target, reps: 9 }),
+        workingSet('st_extra001', 6, { setIndex: 3, extra: true }),
+      ],
+    });
+    assert.deepEqual(toSetResults(entry), [
+      { weightKg: 60, value: 10, effort: 'hard', setIndex: 0, target, topWeightKg: 60, rowId: 'r_aaaaaa', plannedSetCount: 3, deviceId: 'olympic-bar' },
+      { weightKg: 60, value: 9, effort: 'good', setIndex: 1, target, rowId: 'r_aaaaaa', deviceId: 'olympic-bar' },
+    ]);
+  });
+
+  test('süreli set saniyesiyle; vücut ağırlığında yük 0', () => {
+    const entry = sessionEntry('e_aaaaaa', { sets: [workingSet('st_aaaaaaaa', 2, { kg: undefined, reps: undefined, seconds: 45 })] });
+    assert.deepEqual(toSetResults(entry), [{ weightKg: 0, value: 45, effort: 'good' }]);
+  });
+
+  test('"bir defalık" hareket karara hiç girmez', () => {
+    assert.deepEqual(toSetResults(sessionEntry('e_aaaaaa', { oneOff: true, sets: [workingSet('st_aaaaaaaa', 2)] })), []);
+  });
+});
+
+describe('hareket geçmişi → planSession', () => {
+  const finished = (id: string, minute: number, reps: number[], extra: Partial<Parameters<typeof sessionEntry>[1]> = {}) =>
+    sessionDoc({
+      id,
+      status: 'finished',
+      startedAt: at(minute),
+      finishedAt: at(minute + 50),
+      entries: [
+        sessionEntry('e_aaaaaa', {
+          rowId: 'r_aaaaaa',
+          deviceId: 'olympic-bar',
+          ...extra,
+          sets: reps.map((value, index) =>
+            workingSet(`st_${id.slice(2, 9)}${index}`, minute + index, { setIndex: index, reps: value, target, plannedSetCount: 3 }),
+          ),
+        }),
+      ],
+    });
+
+  test('bitmişler eskiden yeniye; etkin antrenman ve başka cihaz girmez', () => {
+    const history = exerciseHistory(
+      [finished('s_bbbbbbbb', 3000, [10, 10, 10]), finished('s_aaaaaaaa', 0, [9, 9, 8]), sessionDoc({ id: 's_cccccccc', startedAt: at(6000) })],
+      { exerciseId: 'bench-press', deviceId: 'olympic-bar' },
+    );
+    assert.deepEqual(history.map((session) => session.map((set) => set.value)), [[9, 9, 8], [10, 10, 10]]);
+    assert.deepEqual(exerciseHistory([finished('s_aaaaaaaa', 0, [9, 9, 8])], { exerciseId: 'bench-press', deviceId: 'smith' }), []);
+  });
+
+  test('bütün setler tepede → planSession artış verir; bir set altında → aynı ağırlık', () => {
+    const sets = [target, target, target];
+    const up = planSession({
+      spec: barbell,
+      rule: { scheme: 'double', targetRir: 2 },
+      sets,
+      rowId: 'r_aaaaaa',
+      history: exerciseHistory([finished('s_aaaaaaaa', 0, [10, 10, 10])], { exerciseId: 'bench-press' }),
+    });
+    assert.deepEqual([up.reason, up.topWeightKg], ['increase', 62.5]);
+    const hold = planSession({
+      spec: barbell,
+      rule: { scheme: 'double', targetRir: 2 },
+      sets,
+      rowId: 'r_aaaaaa',
+      history: exerciseHistory([finished('s_aaaaaaaa', 0, [10, 10, 7])], { exerciseId: 'bench-press' }),
+    });
+    assert.deepEqual([hold.reason, hold.topWeightKg], ['hold', 60]);
+  });
+
+  test('yarım bırakılan (2/3 set) antrenman artış getirmez', () => {
+    const plan = planSession({
+      spec: barbell,
+      rule: { scheme: 'double', targetRir: 2 },
+      sets: [target, target, target],
+      rowId: 'r_aaaaaa',
+      history: exerciseHistory([finished('s_aaaaaaaa', 0, [10, 10])], { exerciseId: 'bench-press' }),
+    });
+    assert.equal(plan.reason, 'incomplete');
+  });
+});
