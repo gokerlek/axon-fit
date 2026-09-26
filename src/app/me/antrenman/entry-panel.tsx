@@ -69,6 +69,8 @@ function TimerBox({ view, target }: { view: TimerView; target: NextSet['target']
  * - Devrede istasyon geçişi panelin üst kenarında ince çubuk olarak sayar.
  * - "Hareketi geç ›" üst satırın sağında (§2.6): başparmak erişiminde, başlıktaki "Değiştir"den uzakta;
  *   tek dokunuş, hareket sona alınır.
+ * - "+ Set ekle" ile istenen fazladan sette üst satırda "Fazladan" rozeti; "Hareketi geç"in yerinde "Kaldır"
+ *   (planın setleri yapıldı, geçilecek bir şey yok; fazladan set bırakılır).
  */
 export function EntryPanel({
   row,
@@ -86,6 +88,7 @@ export function EntryPanel({
   onStopTimer,
   onCancelTimer,
   onSkip,
+  onDropExtra,
   onFinish,
 }: {
   row: WorkoutRow | null;
@@ -108,6 +111,8 @@ export function EntryPanel({
   onCancelTimer: () => void;
   /** "Hareketi geç ›": şu anki hareket (grupta bütün grup) sona alınır. */
   onSkip: () => void;
+  /** Fazladan sette "Kaldır": istenen fazladan set (grupta tur) bırakılır. */
+  onDropExtra: () => void;
   onFinish: () => void;
 }) {
   if (!next || !row) {
@@ -174,6 +179,7 @@ export function EntryPanel({
           Set {next.position + 1}/{next.total}
         </span>
         {next.target.amrap ? <Badge className="shrink-0 bg-primary/15 text-primary">AMRAP</Badge> : null}
+        {next.extra ? <Badge variant="secondary" className="shrink-0">Fazladan</Badge> : null}
         <span className="text-muted-foreground" aria-hidden>
           ·
         </span>
@@ -183,6 +189,10 @@ export function EntryPanel({
         ) : running ? (
           <Button variant="ghost" className="-mr-2 h-11 shrink-0 px-3 text-muted-foreground" onClick={onCancelTimer}>
             Vazgeç
+          </Button>
+        ) : next.extra && !frozen ? (
+          <Button variant="ghost" className="-mr-2 h-11 shrink-0 px-3 text-muted-foreground" aria-label="Fazladan seti kaldır" onClick={onDropExtra}>
+            Kaldır
           </Button>
         ) : !frozen ? (
           <Button variant="ghost" className="-mr-2 h-11 shrink-0 gap-0.5 px-2.5 text-primary hover:text-primary" onClick={onSkip}>

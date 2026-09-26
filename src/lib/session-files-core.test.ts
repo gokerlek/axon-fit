@@ -231,6 +231,50 @@ describe('bitiş', () => {
     assert.deepEqual(proposals.items.map((item) => [item.kind, item.text, item.status]), [['sets', 'Leg Press 2 → 3 set', 'pending']]);
   });
 
+  test('algoritmik set önerisi (§5.6) PT\'ye gider, programa yazılmaz; hazır oluşluk düşükse (onaylı) gitmez', async () => {
+    const algo = (): FinishFeedback => ({
+      answer: 'yes',
+      items: [
+        {
+          kind: 'algo_sets',
+          apply: true,
+          entryId: 'e_aaaaaa',
+          rowId: 'r_aaaaaa',
+          dayId: DAY_A,
+          exerciseId: 'bench-press',
+          title: 'Bench Press',
+          trackingType: 'weight_reps',
+          count: { from: 3, to: 4 },
+          why: '6 haftadır bu harekette; son 2 haftada ilerliyor.',
+        },
+      ],
+    });
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
+    const result = await finishSession(gh.repo, { ...ctx, client }, { doc: doc([s1, s2, s3], [l1, l2]), feedback: algo() });
+    if (result.status === 'finished') assert.deepEqual(result.plan.feedback, { direct: 0, proposals: 1, converted: 0 });
+    // Program yalnız rotasyon için değişir: danışan kaydı yok, setler aynı.
+    assert.deepEqual(gh.lastChanged(), [PATH, 'program.json', 'proposals.json', INDEX].sort());
+    assert.deepEqual((gh.get('program.json') as { log: unknown[] }).log, []);
+    const proposals = gh.get('proposals.json') as { items: { kind: string; text: string; why: string; from: number; to: number }[] };
+    assert.deepEqual(proposals.items.map((item) => [item.kind, item.text, item.from, item.to, item.why]), [
+      ['algo_sets', 'Bench Press 3 → 4 set', 3, 4, '6 haftadır bu harekette; son 2 haftada ilerliyor.'],
+    ]);
+    assert.deepEqual((gh.get(PATH) as SessionDoc).notices.map((notice) => notice.kind), ['proposal']);
+
+    const consenting: Pick<Client, 'modules' | 'consents'> = {
+      modules: { health: { enabled: true, fields: ['readiness'] } },
+      consents: { health: { granted: true, version: HEALTH_CONSENT_VERSION, fields: ['readiness'], at: at(-100) } },
+    };
+    const low = fakeSessionRepo({
+      'program.json': programFile(),
+      'health.json': { conditions: [], measurements: [], movementScreens: [], checkIns: [{ date: '2026-09-26', sessionId: 's_k2m9x4qa', readiness: { sleep: 2, energy: 2, soreness: 3, stress: 3 } }] },
+    });
+    const dropped = await finishSession(low.repo, { ...ctx, client: consenting }, { doc: doc([s1, s2, s3], [l1, l2]), feedback: algo() });
+    if (dropped.status === 'finished') assert.deepEqual(dropped.plan.feedback, { direct: 0, proposals: 0, converted: 0 });
+    assert.equal(low.get('proposals.json'), undefined);
+    assert.deepEqual(low.lastChanged(), [PATH, 'program.json', INDEX].sort());
+  });
+
   test('bozuk proposals.json ezilmez: öneri yazılmaz, danışan kaydı yine yazılır', async () => {
     const gh = fakeSessionRepo({ 'program.json': programFile() });
     gh.putText('proposals.json', '{"items":[');

@@ -3,9 +3,9 @@ import type { EntryStatus, RotationChoice, SessionDoc, SessionEntry, SkipReason 
 import { normalizeSession, withDeletions } from './session-merge.ts';
 import { isStraight } from './set-plan.ts';
 import { BLOCK_KIND_LABELS, FALLBACK_REST_SECONDS, ROW_ID_PATTERN, type BlockKind, type TemplateBlock } from './template-plan.ts';
-import { defaultRotation, doNow, dropUnit, entryForRow, entryStatusOf, restoreUnit, skipUnit, type CursorUnit, type Stamp } from './workout-cursor.ts';
+import { defaultRotation, doNow, dropUnit, entryForRow, entryStatusOf, remaining, restoreUnit, skipUnit, type CursorUnit, type Stamp } from './workout-cursor.ts';
 import { dayBody, entryPlanOf, extraKey, type ExtraRow, type ExtraRows, type WorkoutDay, type WorkoutRow } from './workout-plan.ts';
-import { cursorOf, ensureEntries, newRowEntryId, plannedSetCounts } from './workout-session.ts';
+import { cursorOf, cursorOverrides, ensureEntries, newRowEntryId } from './workout-session.ts';
 
 /**
  * Antrenman akışı ve geçme (tasarım §2.6) — saf: ☰ akış sheet'inin listesi, "Hareketi geç ›" (sona al,
@@ -74,6 +74,21 @@ export function effectiveDay(day: WorkoutDay, doc: Pick<SessionDoc, 'entries'>, 
   return { ...day, blocks: [...blocks, ...added], rows };
 }
 
+/**
+ * Günün etkin hâline "+ Set ekle"nin istenen fazladan turları (telefondaki antrenmandan, `LocalWorkout.extraRounds`).
+ * Günde olmayan birimin ya da sıfır turun kaydı düşer; bir şey yoksa aynı gün.
+ */
+export function withExtraRounds(day: WorkoutDay, rounds: Readonly<Record<string, number>> | undefined): WorkoutDay {
+  const keys = new Set(day.blocks.map((block) => block.id));
+  const kept = Object.entries(rounds ?? {}).filter(([key, count]) => count > 0 && keys.has(key));
+  if (kept.length === 0) {
+    if (!day.extraRounds) return day;
+    const { extraRounds: _dropped, ...rest } = day;
+    return rest;
+  }
+  return { ...day, extraRounds: Object.fromEntries(kept) };
+}
+
 /* --- akış sheet'i --- */
 
 export type FlowState =
@@ -108,8 +123,9 @@ function isSkipped(unit: CursorUnit): boolean {
   return unit.members.length > 0 && unit.members.every((member) => member.skipped);
 }
 
+/** Planın bütün setleri yapıldı (bekleyen fazladan set birimi "şimdi"de tutmaz). */
 function isFinished(unit: CursorUnit): boolean {
-  return unit.slots.every((slot) => (unit.members[slot.member]?.done ?? 0) > slot.round);
+  return !remaining(unit);
 }
 
 function entryIdsOf(unit: CursorUnit): string[] {
@@ -168,7 +184,7 @@ export function flowView(day: WorkoutDay, doc: Pick<SessionDoc, 'entries' | 'ord
 /* --- geç, bugün yapma, geri al, şimdi yap --- */
 
 function overrides(day: WorkoutDay) {
-  return { plannedSets: plannedSetCounts(day) };
+  return cursorOverrides(day);
 }
 
 /** Birimin kaydı açılmış belge ve birimin bir kaydı (imlecin işleri kayıt kimliğiyle çalışır). */

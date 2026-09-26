@@ -61,7 +61,8 @@ export const PROPOSAL_KIND_LABELS: Record<ProposalKind, string> = {
   swap: 'Hareket değişimi',
   remove: 'Çıkarma',
   add: 'Ekleme',
-  algo_sets: 'Set artışı',
+  /** Öneri katmanının adayı (§5.6): danışanın bitişinde "Antrenörüne öner" ile gelir, gerekçesi `why`'da. */
+  algo_sets: 'Set artışı · öneri motoru',
 };
 
 const DAY_MS = 86_400_000;

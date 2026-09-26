@@ -6,6 +6,7 @@ import { at, DAY_A, DAY_B, PHASE, programFile, sessionDoc, sessionEntry, singleB
 import { BENCH, DEVICES, EXERCISES, GOBLET, parsedProgram, workoutDay } from './testing/workout-fixtures.ts';
 import {
   activeRow,
+  afterFinish,
   buildWorkoutDay,
   dayExerciseIds,
   entryPlanOf,
@@ -305,5 +306,23 @@ describe('Bugün: index\'ten', () => {
   test('bugünkü su: yalnız bitmiş antrenmanlar (etkinin suyu telefondaki belgeden)', () => {
     assert.equal(sessionWaterOn(index(), '2026-09-26'), 2);
     assert.equal(sessionWaterOn(index(), '2026-09-22'), 0);
+  });
+
+  test('bitişten hemen sonra (iyimser): "bu hafta" günü bir kez sayar, su bitmişlere geçer, yarım kart düşer', () => {
+    const data: Parameters<typeof afterFinish>[0] = {
+      today: '2026-09-25',
+      week: { done: 1, target: 3, days: ['2026-09-22'], start: '2026-09-21' },
+      water: { file: 1, sessions: 0 },
+      active: { id: 's_dddddddd' },
+    };
+    const taps = [
+      { id: 'wt_00000001', d: 1 as const, at: at(1) },
+      { id: 'wt_00000002', d: 1 as const, at: at(2) },
+    ];
+    const next = afterFinish(data, { id: 's_dddddddd', date: '2026-09-25', waterTaps: taps });
+    assert.deepEqual(next, { today: '2026-09-25', week: { done: 2, target: 3, days: ['2026-09-22', '2026-09-25'], start: '2026-09-21' }, water: { file: 1, sessions: 2 }, active: null });
+    // Aynı gün ikinci antrenman sayıyı değiştirmez; başka haftanın antrenmanı (geç gelen bitiş) sayılmaz.
+    assert.deepEqual(afterFinish(next, { id: 's_eeeeeeee', date: '2026-09-25', waterTaps: [] }).week, next.week);
+    assert.deepEqual(afterFinish(data, { id: 's_eeeeeeee', date: '2026-09-18', waterTaps: taps }), { ...data });
   });
 });

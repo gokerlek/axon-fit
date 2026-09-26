@@ -129,4 +129,13 @@ describe('kuyruk: telefondaki kayıt', () => {
     const legacy = parseLocalWorkout(JSON.stringify(old));
     assert.deepEqual([legacy?.extras, legacy?.pain], [{}, false]);
   });
+
+  test('"+ Set ekle"nin istenen turları korunur; bozuk sayı atlanır, eski kayıtta boş', () => {
+    const local = { ...createLocalWorkout(docWith([]), workoutDay()), extraRounds: { b_aaaaaa: 2 } };
+    assert.deepEqual(parseLocalWorkout(JSON.stringify(local))?.extraRounds, { b_aaaaaa: 2 });
+    const broken = parseLocalWorkout(JSON.stringify({ ...local, extraRounds: { b_aaaaaa: 1, b_bbbbbb: -1, b_cccccc: 1.5, b_dddddd: 'x' } }));
+    assert.deepEqual(broken?.extraRounds, { b_aaaaaa: 1 });
+    const { extraRounds: _rounds, ...old } = local;
+    assert.deepEqual(parseLocalWorkout(JSON.stringify(old))?.extraRounds, {});
+  });
 });

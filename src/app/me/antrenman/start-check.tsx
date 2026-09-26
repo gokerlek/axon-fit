@@ -122,7 +122,8 @@ export function StartCheck({
     if (!context) return finish();
     const current = latest.current;
     const adjusted = adjustDay(current.plan, { outcome: result, lighten, mode: context.mode });
-    if (adjusted.changed.length > 0) {
+    // Plan satır değişmese de değişebilir: hazır oluşluk düşükse set artışı önerisi düşer (§5.6).
+    if (adjusted.changed.length > 0 || adjusted.day !== current.plan) {
       // Yalnız telefonda: belge ilk set yazımıyla gider (boş antrenman dosyası açılmasın).
       const doc = adjusted.lighter ? withLighter(current.doc, new Date().toISOString()) : current.doc;
       onApply({ ...current, doc, plan: adjusted.day });

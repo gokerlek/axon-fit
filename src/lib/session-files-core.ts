@@ -1,3 +1,4 @@
+import { canRecordHealth } from './client-status.ts';
 import { GithubError } from './github/errors.ts';
 import type { Client } from './schemas/client.ts';
 import {
@@ -17,6 +18,7 @@ import { allowedHealth, applyPatch, BROKEN_HEALTH, BROKEN_PROPOSALS, planFinish,
 import { indexRowOf, isDeletedInIndex, removeIndexRow, repairIndex, upsertIndexRow, type RepairResult } from './session-index.ts';
 import { tombstoneOf } from './session-merge.ts';
 import { DELETE_MESSAGE } from './session-messages.ts';
+import { readinessFromHealth } from './set-suggestions.ts';
 
 /**
  * Antrenman dosyalarının okuma ve yazma akışları (tasarım §4.3–§4.7) — saf çekirdek. GitHub işleri
@@ -201,9 +203,11 @@ export async function finishSession(
     const { index } = await repairedIndexAt(repo, head, known);
     if (!stored && isDeletedInIndex(index, id)) return { status: 'deleted' };
 
-    // Sağlık dosyası yalnız yazılacak onaylı bir ayrıntı varken okunur. Yoksa boş kayıt; bozuksa hiç yazılmaz.
+    // Sağlık dosyası yalnız yazılacak onaylı bir ayrıntı varken ya da algoritmik set önerisinin hazır oluşluk
+    // koşulu denetlenecekken (onay varken) okunur. Yoksa boş kayıt; bozuksa hiç yazılmaz.
+    const readiness = canRecordHealth(ctx.client, 'readiness') && (body.feedback?.items.some((item) => item.kind === 'algo_sets' && item.apply) ?? false);
     let healthFile: unknown = null;
-    if (allowedHealth(ctx.client, body.health)) {
+    if (allowedHealth(ctx.client, body.health) || readiness) {
       try {
         healthFile = (await repo.read('health.json', head.commit))?.content ?? null;
       } catch (error) {
@@ -231,6 +235,7 @@ export async function finishSession(
       program: program?.content ?? null,
       proposalsFile,
       healthFile,
+      readinessScore: readiness && healthFile !== BROKEN_HEALTH ? readinessFromHealth(healthFile) : undefined,
       client: ctx.client,
       now: ctx.now,
       timeZone: ctx.timeZone,

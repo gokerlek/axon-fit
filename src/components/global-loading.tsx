@@ -78,15 +78,19 @@ export function GlobalLoading() {
   const busy = useIsFetching() + useIsMutating() > 0;
   const [navigating, setNavigating] = useState(false);
   const [visible, setVisible] = useState(false);
+  const active = busy || navigating;
+  // İş bitince çubuk hemen çekilir (çizim sırasında; bir sonraki iş yine eşiği bekler).
+  const [wasActive, setWasActive] = useState(active);
+  if (active !== wasActive) {
+    setWasActive(active);
+    if (!active) setVisible(false);
+  }
 
   useEffect(() => {
-    if (!busy && !navigating) {
-      setVisible(false);
-      return;
-    }
+    if (!active) return;
     const timer = setTimeout(() => setVisible(true), navigating ? NAVIGATION_DELAY_MS : DELAY_MS);
     return () => clearTimeout(timer);
-  }, [busy, navigating]);
+  }, [active, navigating]);
 
   return (
     <>

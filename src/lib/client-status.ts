@@ -191,15 +191,15 @@ export function nextHealthModule(
 }
 
 export function healthConsentState(client: Pick<Client, 'modules' | 'consents'>): HealthConsentState {
-  const module = client.modules.health;
-  if (!module.enabled) return 'off';
+  const healthModule = client.modules.health;
+  if (!healthModule.enabled) return 'off';
   const consent = client.consents.health;
   if (!consent) return 'pending';
   if (!consent.granted) return 'declined';
   const covers = (field: HealthField) => consent.fields.includes(field);
-  if (consent.version !== HEALTH_CONSENT_VERSION || !module.fields.every(covers)) return 'outdated';
+  if (consent.version !== HEALTH_CONSENT_VERSION || !healthModule.fields.every(covers)) return 'outdated';
   // Modül yeniden açıldı ya da kapsamı genişledi: ondan önceki onay yetmez (SPEC §9.4).
-  if (module.enabledAt && Date.parse(consent.at) < Date.parse(module.enabledAt)) return 'outdated';
+  if (healthModule.enabledAt && Date.parse(consent.at) < Date.parse(healthModule.enabledAt)) return 'outdated';
   return 'granted';
 }
 

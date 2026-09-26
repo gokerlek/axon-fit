@@ -94,7 +94,7 @@ export function ClientActions({ id, name }: { id: string; name: string | null })
           <AlertDialogHeader>
             <AlertDialogTitle>{label} kalıcı olarak silinsin mi?</AlertDialogTitle>
             <AlertDialogDescription>
-              Danışanın repo'su ve içindeki her şey (kayıt, antrenmanlar, sağlık verisi) silinir. GitHub silinen repo'yu
+              Danışanın repo&apos;su ve içindeki her şey (kayıt, antrenmanlar, sağlık verisi) silinir. GitHub silinen repo&apos;yu
               90 gün boyunca yalnız hesap sahibine geri alma imkânı verir; sonra tamamen gider.
             </AlertDialogDescription>
           </AlertDialogHeader>
