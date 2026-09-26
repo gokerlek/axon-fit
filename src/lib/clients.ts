@@ -66,8 +66,16 @@ function store(): ClientStore {
       dropNotices(client.id);
     },
     readInvite: (id) => readJson<unknown>(clientRepoName(id), INVITE_PATH),
-    writeInvite: (id, invite, sha, message) => writeJson(clientRepoName(id), INVITE_PATH, invite, { sha, message }),
-    deleteInvite: (id, sha, message) => deleteFile(clientRepoName(id), INVITE_PATH, { sha, message }),
+    writeInvite: async (id, invite, sha, message) => {
+      const written = await writeJson(clientRepoName(id), INVITE_PATH, invite, { sha, message });
+      // "Dikkat gerektirenler"deki davet maddesi.
+      dropNotices(id);
+      return written;
+    },
+    deleteInvite: async (id, sha, message) => {
+      await deleteFile(clientRepoName(id), INVITE_PATH, { sha, message });
+      dropNotices(id);
+    },
     readAuth: (id) => readJson<unknown>(clientRepoName(id), AUTH_PATH),
     writeAuth: async (id, auth, sha, message) => {
       const written = await writeJson(clientRepoName(id), AUTH_PATH, auth, { sha, message });

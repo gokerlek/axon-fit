@@ -2,7 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { emptySessionIndex, type SessionDoc } from './schemas/session.ts';
 import { indexRowOf, upsertIndexRow } from './session-index.ts';
-import { deleteCopy, deletePatch, historyList, sessionDetail, DELETE_BODY, DELETE_DETAIL } from './session-history.ts';
+import { deleteCopy, deletePatch, firstHistoryRows, historyList, sessionDetail, DELETE_BODY, DELETE_DETAIL, type HistoryMonth } from './session-history.ts';
 import { at, DAY_A, DAY_B, sessionDoc, sessionEntry, workingSet } from './testing/session-fixtures.ts';
 
 const TZ = 'Europe/Istanbul';
@@ -54,6 +54,25 @@ describe('geçmiş listesi', () => {
   test('son 30 günün özeti; eski antrenman girmez', () => {
     assert.equal(historyList(index, new Date(at(4100)), TZ).recent, 'Son 30 gün · 2 antrenman · 1 sa 44 dk · 2 rekor');
     assert.equal(historyList(emptySessionIndex(), new Date(at(0)), TZ).recent, null);
+  });
+});
+
+describe('"Daha fazla göster"', () => {
+  test('ilk n satır aylara bölünmüş kalır; boş kalan ay düşer', () => {
+    const month = (key: string, ids: string[]): HistoryMonth => ({
+      key,
+      label: key,
+      rows: ids.map((id) => ({ id, dayOfMonth: '1', weekday: 'Pzt', title: 'Gün A', meta: '', otherDay: false, unfinished: false, prs: 0 })),
+    });
+    const months = [month('2026-09', ['a', 'b']), month('2026-08', ['c', 'd']), month('2026-07', ['e'])];
+    assert.deepEqual(
+      firstHistoryRows(months, 3).map((item) => [item.key, item.rows.map((row) => row.id)]),
+      [
+        ['2026-09', ['a', 'b']],
+        ['2026-08', ['c']],
+      ],
+    );
+    assert.equal(firstHistoryRows(months, 10).length, 3);
   });
 });
 

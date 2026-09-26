@@ -47,11 +47,17 @@ async function programOf(clientId: string): Promise<Program | null> {
   return (await readProgramFile(clientId).catch(() => null))?.program ?? null;
 }
 
-/** Geçmiş detayı: belge ve program değişiklikleri (düzenleme telefonda belgeden yeniden çizilir). */
-export async function loadDetail(clientId: string, id: string): Promise<SessionLoad<{ doc: SessionDoc; changes: ChangeLine[] }>> {
+/**
+ * Geçmiş detayı: belge ve program değişiklikleri (düzenleme telefonda belgeden yeniden çizilir). Program da döner
+ * (okunamazsa null): PT'nin detayı muadilin yerini aldığı hareketin adını ondan okur.
+ */
+export async function loadDetail(
+  clientId: string,
+  id: string,
+): Promise<SessionLoad<{ doc: SessionDoc; changes: ChangeLine[]; program: Program | null }>> {
   const [loaded, program] = await Promise.all([readFinished(clientId, id), programOf(clientId)]);
   if (loaded.status !== 'ok') return loaded;
-  return { status: 'ok', value: { doc: loaded.value, changes: await changesOf(clientId, id, program) } };
+  return { status: 'ok', value: { doc: loaded.value, changes: await changesOf(clientId, id, program), program } };
 }
 
 /**

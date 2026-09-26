@@ -1,23 +1,29 @@
 import 'server-only';
 import { revalidateTag, unstable_cache } from 'next/cache';
 import * as v from 'valibot';
+import { attentionFactsOf, type AttentionFacts } from './attention';
 import { readClient } from './client-record';
 import { canRecordHealth } from './client-status';
 import { clientRepoName, GithubError } from './github/client';
 import { readJson } from './github/files';
 import { clientNotices, sessionHealthOf, type ClientDigest } from './notices';
+import { inviteSchema, type Client } from './schemas/client';
+import { healthRecordSchema } from './schemas/health';
 import { programSchema } from './schemas/program';
 import { parseSessionIndex, SESSIONS_INDEX_PATH } from './schemas/session';
 
 /**
- * PT'nin bildirimleri — GitHub'a ve Next'e bağlama. Türetme `notices.ts`'te (saf, test edilir).
+ * PT'nin Genel bakış'ı (bildirimler ve "Dikkat gerektirenler") — GitHub'a ve Next'e bağlama. Türetme
+ * `notices.ts` ve `attention.ts`'te (saf, test edilir).
  *
  * Genel bakış her açılışta danışan başına dosya okumasın diye danışanın özeti (ad, `inbox.seenAt`,
- * bildirimler) Next'in veri önbelleğindedir (sunucu örnekleri arasında ortak): danışanın bildirim
- * doğuran her yazımında düşer (bitiş, geçmişte düzeltme ve silme: `session-files.ts`; antrenman günleri:
- * `/api/me/schedule`; PT'nin okundu yazımı ve danışan kaydı: `clients.ts`). Elle yapılan değişiklikler
- * için 5 dk üst sınır. Önbellek boşken danışan başına `client.json`, `sessions-index.json`,
- * `program.json`, `proposals.json` ve (onay varsa) `health.json` okunur.
+ * bildirimler, dikkat özeti) Next'in veri önbelleğindedir (sunucu örnekleri arasında ortak): danışanın
+ * bildirim ya da dikkat doğuran her yazımında düşer (bitiş, geçmişte düzeltme ve silme: `session-files.ts`;
+ * antrenman günleri: `/api/me/schedule`; PT'nin programı: `programs.ts`; öneri kararları: `proposals-store.ts`;
+ * ölçümler: `health.ts`; PT'nin okundu yazımı, danışan kaydı ve davet: `clients.ts`). Elle yapılan
+ * değişiklikler için 5 dk üst sınır. Önbellek boşken danışan başına `client.json`, `sessions-index.json`,
+ * `program.json`, `proposals.json`, (onay varsa) `health.json` ve (henüz girmemişse) `invite.json` okunur.
+ * Zamana bağlı kararlar (kaçan gün, evrenin bitişi) önbellekte değil, sayfa açılınca verilir.
  */
 
 export const noticesTag = (id: string) => `notices-${id}`;
@@ -37,31 +43,58 @@ async function readTolerant(repo: string, path: string): Promise<unknown> {
   }
 }
 
-async function buildDigest(id: string): Promise<ClientDigest | null> {
+/** Giriş yapmış (ve erişimi sonradan kapatılmamış) danışanın davet dosyası okunmaz. */
+function joined(client: Pick<Client, 'access'>): boolean {
+  const { lastJoinAt, revokedAt } = client.access;
+  return Boolean(lastJoinAt && !(revokedAt && revokedAt > lastJoinAt));
+}
+
+export type ClientOverview = ClientDigest & { attention: AttentionFacts };
+
+async function buildDigest(id: string): Promise<ClientOverview | null> {
   const stored = await readClient(id);
   if (!stored) return null;
   const { client } = stored;
   const repo = clientRepoName(id);
-  // Sağlık ayrıntısı yalnız onay sürdükçe: onay yoksa dosya hiç okunmaz.
-  const consent = { pain: canRecordHealth(client, 'check_in'), readiness: canRecordHealth(client, 'readiness') };
-  const [indexRaw, programRaw, proposals, healthRaw] = await Promise.all([
+  // Sağlık ayrıntısı ve ölçümler yalnız onay sürdükçe: onay yoksa dosya hiç okunmaz.
+  const consent = {
+    pain: canRecordHealth(client, 'check_in'),
+    readiness: canRecordHealth(client, 'readiness'),
+    measurements: canRecordHealth(client, 'measurements'),
+  };
+  const [indexRaw, programRaw, proposals, healthRaw, inviteRaw] = await Promise.all([
     readTolerant(repo, SESSIONS_INDEX_PATH),
     readTolerant(repo, 'program.json'),
     readTolerant(repo, 'proposals.json'),
-    consent.pain || consent.readiness ? readTolerant(repo, 'health.json') : Promise.resolve(null),
+    consent.pain || consent.readiness || consent.measurements ? readTolerant(repo, 'health.json') : Promise.resolve(null),
+    joined(client) ? Promise.resolve(null) : readTolerant(repo, 'invite.json'),
   ]);
   const program = programRaw === null ? null : v.safeParse(programSchema, programRaw);
+  const index = indexRaw === null ? null : parseSessionIndex(indexRaw).index;
+  const now = new Date();
   const notices = clientNotices({
-    index: indexRaw === null ? null : parseSessionIndex(indexRaw).index,
+    index,
     log: program?.success ? program.output.log : [],
     proposals,
     health: sessionHealthOf(healthRaw, consent),
-    now: new Date(),
+    now,
   });
-  return { id, name: client.name, ...(client.inbox?.seenAt ? { seenAt: client.inbox.seenAt } : {}), notices };
+  const health = consent.measurements && healthRaw !== null ? v.safeParse(healthRecordSchema, healthRaw) : null;
+  const invite = inviteRaw === null ? null : v.safeParse(inviteSchema, inviteRaw);
+  const attention = attentionFactsOf({
+    client,
+    invite: invite?.success ? invite.output : null,
+    index,
+    program: program?.success ? program.output : null,
+    proposals,
+    // Onay yoksa ya da dosya okunamıyorsa ölçüm maddesi yok.
+    measurements: health?.success ? health.output.measurements : null,
+    now,
+  });
+  return { id, name: client.name, ...(client.inbox?.seenAt ? { seenAt: client.inbox.seenAt } : {}), notices, attention };
 }
 
-/** Danışanın bildirim özeti (önbellekli); kaydı yoksa null. */
-export function readClientDigest(id: string): Promise<ClientDigest | null> {
-  return unstable_cache(() => buildDigest(id), ['client-notices', id], { tags: [noticesTag(id)], revalidate: 300 })();
+/** Danışanın Genel bakış özeti (önbellekli): bildirimler ve dikkat özeti; kaydı yoksa null. */
+export function readClientDigest(id: string): Promise<ClientOverview | null> {
+  return unstable_cache(() => buildDigest(id), ['client-overview', id], { tags: [noticesTag(id)], revalidate: 300 })();
 }

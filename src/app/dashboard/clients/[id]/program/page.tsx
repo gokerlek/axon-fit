@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { ListChecks, Plus, WarningCircle } from '@phosphor-icons/react/dist/ssr';
+import { Lightning, ListChecks, Plus, WarningCircle } from '@phosphor-icons/react/dist/ssr';
 import { EditButton } from '@/components/edit-button';
 import { SectionHeader } from '@/components/section-header';
 import { ChangeLog } from '@/components/program/change-log';
 import { DayPlan } from '@/components/program/day-plan';
-import { PhaseLoad } from '@/components/program/phase-load';
+import { PhaseLoad, type DoneLoad } from '@/components/program/phase-load';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -35,10 +35,14 @@ import {
   sourceNames,
   type ProgramPhase,
 } from '@/lib/program-plan';
+import { deloadHints, loadComparison, thisWeekLoad } from '@/lib/program-insights';
 import { readProgramFile } from '@/lib/programs';
+import { weekLabel } from '@/lib/progress-text';
 import { isFaded, pendingProposals, PROPOSAL_KIND_LABELS } from '@/lib/proposals';
 import { readProposals } from '@/lib/proposals-store';
 import { CLIENT_ID_PATTERN } from '@/lib/schemas/client';
+import { readIndex } from '@/lib/session-files-core';
+import { sessionRepo } from '@/lib/session-files';
 import { templateSummary } from '@/lib/template-plan';
 import { templateChoices } from '@/lib/templates';
 import { effectiveSchedule, weekdaysText } from '@/lib/training-days';
@@ -55,7 +59,8 @@ export const metadata: Metadata = { title: 'Program' };
  * evrenin süresi dolunca sonraki evreye geçiş önerisi burada onaylanır (SPEC §7.4); danışan antrenman
  * günlerini değiştirdiyse "Danışan değiştirdi" ve [PT'nin günlerine dön] (tasarım §2.11); en üstte
  * "Danışandan öneriler (n)" [Uygula] [Reddet] (tasarım §6.4); danışanın tekrar hedefi olan satırda
- * "Danışan güncelledi" rozeti (§6.2).
+ * "Danışan güncelledi" rozeti (§6.2). Kas yükünde planlanan haftalığın yanında bu hafta yapılan (SPEC §7.4);
+ * İleri aşamadaki harekette hafifletme ipucu (tasarım §5.3, `deloadHintDue`).
  * Evresiz programda evreden söz edilmez: "Döngü" kartı (sıradaki gün, sıklık, planlanan
  * haftalık yük) ve sırayla dönen günler.
  */
@@ -69,13 +74,15 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
   if (!loaded.ok) redirect(`/dashboard/clients/${id}`);
   const { client } = loaded;
 
-  const [file, exercises, config, templates, proposals] = await Promise.all([
+  const [file, exercises, config, templates, proposals, sessions] = await Promise.all([
     readProgramFile(id),
     listExercises(),
     readAppConfig(),
     templateChoices().catch(() => []),
     // Öneriler okunamasa da program görünür.
     readProposals(id).catch(() => null),
+    // Antrenmanlar (bu haftanın yükü, hafifletme ipucu) okunamasa da program görünür.
+    readIndex(sessionRepo(id)).catch(() => null),
   ]);
   const detailHref = `/dashboard/clients/${id}`;
   const editHref = `${detailHref}/program/edit`;
@@ -138,6 +145,17 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
   const description = phased
     ? `${program.phases.length} evre · ${countDays(program.phases)} gün · ${created}`
     : [`${countDays(program.phases)} gün`, perWeek(current?.phase.daysPerWeek), created].filter(Boolean).join(' · ');
+  // Bu hafta yapılan (İlerleme sekmesiyle aynı hesap), planlanan haftalığın yanında.
+  const week = sessions ? thisWeekLoad({ index: sessions.index, today: todayIn(timeZone, now), exercises: byId, setWeightsOf: exerciseSetWeights }) : null;
+  const done: DoneLoad | null = week
+    ? {
+        load: week.muscles,
+        sessions: week.sessions,
+        sets: week.sets,
+        range: weekLabel(week.weekStart, week.weekEnd),
+        versus: load?.weekly ? loadComparison(load.weekly, week.muscles) : null,
+      }
+    : null;
   const phaseLoad =
     current && load ? (
       <PhaseLoad
@@ -147,8 +165,19 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
         daysPerWeek={current.phase.daysPerWeek}
         dayCount={current.phase.days.length}
         label={phased ? 'Şu anki evrenin kas yükü' : 'Programın kas yükü'}
+        done={done}
       />
     ) : null;
+  // İleri aşamadaki hareketlerde hafifletme ipucu (tasarım §5.3): şu anki evrenin hareketleri.
+  const hints =
+    sessions && current
+      ? deloadHints({
+          exerciseIds: current.phase.days.flatMap((day) => day.blocks.flatMap((block) => block.rows.map((row) => row.exerciseId))),
+          index: sessions.index,
+          now,
+          experience: client.training?.experience,
+        })
+      : [];
   const nextSummary = nextDay ? templateSummary({ blocks: nextDay.blocks }, byId) : null;
   // Danışanın geçerli tekrar hedefleri (§6.2): satırda "Danışan güncelledi · hedef 10–14 · 26 Eyl".
   const targetNotes = Object.fromEntries(
@@ -241,6 +270,27 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
           <WarningCircle weight="fill" />
           <AlertTitle>Danışanın önerileri okunamadı</AlertTitle>
           <AlertDescription>proposals.json bozuk görünüyor; danışanın yeni önerileri o düzelene kadar kaydedilmez.</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {hints.length > 0 ? (
+        <Alert>
+          <Lightning weight="fill" />
+          <AlertTitle>Hafifletme haftası planlanabilir</AlertTitle>
+          <AlertDescription>
+            <p>
+              İleri aşamadaki hareketlerde 4–6 haftada bir hafifletme önerilir (ortalama 5,6 hafta). Öneri motoru takvime göre
+              kendiliğinden hafifletmez; karar programda verilir.
+            </p>
+            <ul className="list-disc pl-5">
+              {hints.map((hint) => (
+                <li key={hint.exerciseId}>
+                  {byId.get(hint.exerciseId)?.title ?? hint.exerciseId}:{' '}
+                  {hint.since === 'deload' ? `son hafifletmeden bu yana ${hint.weeks} hafta` : `${hint.weeks} haftadır hafifletme yok`}
+                </li>
+              ))}
+            </ul>
+          </AlertDescription>
         </Alert>
       ) : null}
 
@@ -442,7 +492,10 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
           <Card className={cn('lg:order-5', !phased && 'lg:col-span-2')}>
             <CardHeader>
               <CardTitle>Kas yükü</CardTitle>
-              <CardDescription>{phased ? 'Şu anki evrenin planlanan kas yükü.' : 'Programın planlanan kas yükü.'}</CardDescription>
+              <CardDescription>
+                {phased ? 'Şu anki evrenin planlanan kas yükü' : 'Programın planlanan kas yükü'}
+                {done ? ' ve bu hafta yapılan.' : '.'}
+              </CardDescription>
             </CardHeader>
             <CardContent>{phaseLoad}</CardContent>
           </Card>

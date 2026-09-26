@@ -6,19 +6,7 @@ import { CaretRight, Trophy } from '@phosphor-icons/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatNumber } from '@/lib/format';
-import { HISTORY_PAGE, type HistoryMonth, type HistoryRow } from '@/lib/session-history';
-
-/** Ayların satırları ilk `count` satıra kadar (boş kalan ay düşer). */
-function firstRows(months: readonly HistoryMonth[], count: number): HistoryMonth[] {
-  const shown: HistoryMonth[] = [];
-  let left = count;
-  for (const month of months) {
-    if (left <= 0) break;
-    shown.push({ ...month, rows: month.rows.slice(0, left) });
-    left -= month.rows.length;
-  }
-  return shown;
-}
+import { firstHistoryRows, HISTORY_PAGE, type HistoryMonth, type HistoryRow } from '@/lib/session-history';
 
 /**
  * Geçmiş listesi (tasarım §2.10): aylara bölünmüş kartlar; ilk 20 antrenman, altında "Daha fazla göster (n)".
@@ -27,7 +15,7 @@ function firstRows(months: readonly HistoryMonth[], count: number): HistoryMonth
 export function HistoryList({ months }: { months: HistoryMonth[] }) {
   const [count, setCount] = useState(HISTORY_PAGE);
   const total = months.reduce((sum, month) => sum + month.rows.length, 0);
-  const shown = firstRows(months, count);
+  const shown = firstHistoryRows(months, count);
   return (
     <div className="flex flex-col gap-5">
       {shown.map((month) => (

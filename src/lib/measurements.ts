@@ -80,6 +80,9 @@ export function measurementDef(id: MeasurementId): MeasurementDef {
   return MEASUREMENTS[id];
 }
 
+/** Katalog birimi → ekranda görünen ("s" Türkçede "sn"): ölçüm ekranları ve Genel bakış ortak. */
+export const MEASUREMENT_UNIT_LABELS: Record<MeasurementDef['unit'], string> = { kg: 'kg', cm: 'cm', s: 'sn', '%': '%', puan: 'puan' };
+
 export type Sex = 'female' | 'male';
 
 /* --- Yorumlayıcılar --- */

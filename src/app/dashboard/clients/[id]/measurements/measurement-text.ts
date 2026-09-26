@@ -10,13 +10,13 @@ import type {
   WaistHipIndicator,
 } from '@/lib/measurement-trends';
 import { MEASUREMENT_SLOTS, SIDE_LABELS } from '../../../../../lib/measurement-log.ts';
-import { MEASUREMENTS, type MeasurementDef } from '../../../../../lib/measurements.ts';
+import { MEASUREMENT_UNIT_LABELS, MEASUREMENTS, type MeasurementDef } from '../../../../../lib/measurements.ts';
 import { forecastAsOf, type Forecast } from '../../../../../lib/trend.ts';
 
 /** Ölçüm ekranlarının ortak metinleri (PT tarafı). */
 
-/** Katalog birimi → ekranda görünen ("s" Türkçede "sn"). */
-export const UNIT_LABELS: Record<MeasurementDef['unit'], string> = { kg: 'kg', cm: 'cm', s: 'sn', '%': '%', puan: 'puan' };
+/** Katalog birimi → ekranda görünen ("s" Türkçede "sn"); tek yer `measurements.ts`. */
+export const UNIT_LABELS: Record<MeasurementDef['unit'], string> = MEASUREMENT_UNIT_LABELS;
 
 export const GROUP_INFO: Record<MeasurementDef['group'], { title: string; description: string }> = {
   anthropometry: {

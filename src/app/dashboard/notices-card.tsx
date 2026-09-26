@@ -4,11 +4,10 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item';
-import { cachedClientIndex } from '@/lib/clients';
 import { formatNumber, formatRecent } from '@/lib/format';
-import { NOTICE_WINDOW_DAYS, noticeFeed, PT_NOTICE_LABELS, type ClientDigest } from '@/lib/notices';
-import { readClientDigest } from '@/lib/notices-store';
+import { NOTICE_WINDOW_DAYS, noticeFeed, PT_NOTICE_LABELS } from '@/lib/notices';
 import { cn } from '@/lib/utils';
+import { clientOverviews } from './client-overviews';
 import { MarkSeenButton } from './mark-seen-button';
 
 /**
@@ -18,17 +17,12 @@ import { MarkSeenButton } from './mark-seen-button';
  * danışana ya da programına götürür. Okunmamışlar noktalı; "Tümünü okundu say" danışanların
  * `inbox.seenAt`'ini yazar (açık soru 7). Arşivdeki danışan listede yok.
  *
- * Maliyet: danışan başına özet Next'in veri önbelleğinden (`notices-store.ts`); yalnız danışanın bildirim
- * doğuran yazımından sonra (ya da 5 dk'da bir) o danışanın dosyaları yeniden okunur.
+ * Maliyet: danışan başına özet Next'in veri önbelleğinden (`notices-store.ts`, "Dikkat gerektirenler"le ortak);
+ * yalnız danışanın bildirim doğuran yazımından sonra (ya da 5 dk'da bir) o danışanın dosyaları yeniden okunur.
  */
 export async function NoticesCard({ timeZone }: { timeZone: string }) {
-  const index = await cachedClientIndex().catch(() => []);
-  const digests = await Promise.all(
-    index.filter((entry) => entry.status !== 'archived').map((entry) => readClientDigest(entry.id).catch(() => null)),
-  );
-  const loaded = digests.filter((digest): digest is ClientDigest => digest !== null);
-  const failed = digests.length - loaded.length;
-  const feed = noticeFeed(loaded);
+  const { overviews, failed } = await clientOverviews();
+  const feed = noticeFeed(overviews);
 
   return (
     <Card>

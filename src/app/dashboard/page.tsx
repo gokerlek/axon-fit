@@ -3,7 +3,6 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { CaretRight } from '@phosphor-icons/react/dist/ssr';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { readAppConfig } from '@/lib/config';
@@ -11,14 +10,17 @@ import { formatNumber } from '@/lib/format';
 import { listExercises } from '@/lib/exercises';
 import { listClientIds } from '@/lib/github/repos';
 import { requirePt } from '@/lib/guards';
+import { readLiveOverview } from '@/lib/live-store';
+import { AttentionCard } from './attention-card';
+import { LiveNow } from './live-now';
 import { NoticesCard } from './notices-card';
 
 export const metadata: Metadata = { title: 'Genel bakış' };
 
 /**
- * Genel bakış: sayılar (her sayı kartı kendi listesine götürür) ve danışanların bildirimleri (başka
- * gün, yarım antrenman, aşırı yük, program değişikliği; tasarım §4.6). "Şu an antrenmanda olanlar"
- * (canlı) ve "bugün antrenman günü olanlar" sonraki fazda.
+ * Genel bakış: sayılar (her sayı kartı kendi listesine götürür), şu an antrenmanda olanlar (canlı, tasarım
+ * §4.6), "Dikkat gerektirenler" (kaçan gün, ilerlemeyen hareket, evre, öneri, ölçüm, davet; §2.11, §8 satır 12)
+ * ve danışanların bildirimleri (başka gün, yarım antrenman, aşırı yük, program değişikliği; §4.6).
  */
 export default async function DashboardPage() {
   await requirePt();
@@ -42,33 +44,53 @@ export default async function DashboardPage() {
           hint={`${formatNumber(custom)} tanesi senin · kütüphaneyi aç`}
         />
 
-        <Card>
-          <CardHeader>
-            <CardDescription>Şu an antrenmanda</CardDescription>
-            <CardTitle className="tabular-nums text-4xl text-muted-foreground">—</CardTitle>
-            <CardAction>
-              <Badge variant="secondary">yakında</Badge>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Danışanın antrenman ekranı gelince kimin çalıştığı burada canlı görünür.
-          </CardContent>
-        </Card>
+        {/* Danışan başına bir koşullu okuma; sayfanın geri kalanı beklemesin. */}
+        <Suspense fallback={<LiveSkeleton />}>
+          <LiveNowCard />
+        </Suspense>
       </div>
 
-      {/* Danışan başına özet önbellekten; önbellek boşken sayfanın geri kalanı beklemesin. */}
-      <Suspense fallback={<NoticesSkeleton />}>
-        <NoticesCard timeZone={config.timeZone} />
-      </Suspense>
+      {/* Danışan başına özet önbellekten (iki kart ortak); önbellek boşken sayfanın geri kalanı beklemesin. */}
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+        <Suspense fallback={<ListSkeleton title="Dikkat gerektirenler" />}>
+          <AttentionCard timeZone={config.timeZone} titles={new Map(exercises.map((exercise) => [exercise.id, exercise.title]))} />
+        </Suspense>
+        <Suspense fallback={<ListSkeleton title="Bildirimler" />}>
+          <NoticesCard timeZone={config.timeZone} />
+        </Suspense>
+      </div>
     </div>
   );
 }
 
-function NoticesSkeleton() {
+/** "Şu an antrenmanda": ilk değer sunucudan, sonra tarayıcı tazeler. */
+async function LiveNowCard() {
+  const now = new Date();
+  const initial = await readLiveOverview(now)
+    .then((overview) => ({ ...overview, checkedAt: now.toISOString() }))
+    .catch(() => null);
+  return <LiveNow initial={initial} />;
+}
+
+function LiveSkeleton() {
   return (
     <Card aria-busy="true">
       <CardHeader>
-        <CardTitle>Bildirimler</CardTitle>
+        <CardDescription>Şu an antrenmanda</CardDescription>
+        <Skeleton className="h-10 w-12" />
+      </CardHeader>
+      <CardContent>
+        <Skeleton className="h-4 w-full" />
+      </CardContent>
+    </Card>
+  );
+}
+
+function ListSkeleton({ title }: { title: string }) {
+  return (
+    <Card aria-busy="true">
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
         <CardDescription>Danışanların kayıtları okunuyor…</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">

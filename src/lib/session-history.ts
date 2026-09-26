@@ -89,6 +89,21 @@ export function historyList(index: SessionIndex, now: Date, timeZone: string): H
   return { recent: summary, months, count: rows.length };
 }
 
+/**
+ * "Daha fazla göster": ayların satırları ilk `count` satıra kadar (boş kalan ay düşer). Danışanın Geçmiş'i ve
+ * PT'nin Antrenmanlar sekmesi ortak.
+ */
+export function firstHistoryRows(months: readonly HistoryMonth[], count: number): HistoryMonth[] {
+  const shown: HistoryMonth[] = [];
+  let left = count;
+  for (const month of months) {
+    if (left <= 0) break;
+    shown.push({ ...month, rows: month.rows.slice(0, left) });
+    left -= month.rows.length;
+  }
+  return shown;
+}
+
 /* --- detay --- */
 
 export type DetailSet = {

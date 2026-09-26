@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowSquareOut, Barbell, ListChecks, Plus, QrCode } from '@phosphor-icons/react/dist/ssr';
+import { ArrowSquareOut, Barbell, CaretRight, ListChecks, Plus, QrCode } from '@phosphor-icons/react/dist/ssr';
 import { EditButton } from '@/components/edit-button';
 import { SectionHeader } from '@/components/section-header';
 import { Badge } from '@/components/ui/badge';
@@ -18,13 +18,73 @@ import { formatDate, formatNumber, todayIn } from '@/lib/format';
 import { clientRepoName } from '@/lib/github/client';
 import { countDays, currentPhaseOf, frequencyLabel, nextDayId, phaseStatus, phaseStatusLabel } from '@/lib/program-plan';
 import { readProgramFile, type ProgramFile } from '@/lib/programs';
-import { CLIENT_ID_PATTERN, CLIENT_STATUS_LABELS, HEALTH_FIELD_INFO } from '@/lib/schemas/client';
+import { CLIENT_ID_PATTERN, CLIENT_STATUS_LABELS, HEALTH_FIELD_INFO, TRAINING_EXPERIENCE_LABELS } from '@/lib/schemas/client';
 import { templateSummary } from '@/lib/template-plan';
 import { HEALTH_STATE_DETAILS, HEALTH_STATE_LABELS } from '../health-state';
 import { AccessBadge, accessDetail, accessOf, passwordOf } from '../invite-state';
 import { requirePt } from '@/lib/guards';
 import { loadMeasurements } from '@/lib/health';
+import { loadHistory } from '@/lib/history-store';
+import { readLiveResponse } from '@/lib/live-store';
+import type { HistoryList } from '@/lib/session-history';
+import { LiveSession } from './live-session';
 import { MeasurementsCard } from './measurements-card';
+import { SessionRow } from './sessions/session-list';
+
+/** Genel'in Antrenmanlar kartında en çok bu kadar son antrenman; gerisi sekmesinde. */
+const RECENT_SESSIONS = 3;
+
+/**
+ * Genel'in Antrenmanlar kartı: son antrenmanlar ve Antrenmanlar sekmesine geçiş (açık antrenman sayfanın
+ * başında canlı). `null`: antrenmanlar okunamadı.
+ */
+function SessionsCard({ clientId, list }: { clientId: string; list: HistoryList | null }) {
+  const href = `/dashboard/clients/${clientId}/sessions`;
+  const recent = (list?.months ?? []).flatMap((month) => month.rows).slice(0, RECENT_SESSIONS);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Antrenmanlar</CardTitle>
+        <CardDescription className="tabular-nums">
+          {list === null
+            ? 'Antrenmanlar şu an okunamadı. Sayfayı yenile.'
+            : (list.recent ?? 'Danışanın bitirdiği antrenmanlar, en yenisi üstte.')}
+        </CardDescription>
+      </CardHeader>
+      {list !== null && list.count === 0 ? (
+        <CardContent>
+          <Empty className="border">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <Barbell weight="fill" />
+              </EmptyMedia>
+              <EmptyTitle>Henüz bitmiş antrenman yok</EmptyTitle>
+              <EmptyDescription>Danışan antrenmanı bitirince burada görünür; sürerken sayfanın başında canlı izlenir.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        </CardContent>
+      ) : recent.length > 0 ? (
+        <CardContent>
+          <ul className="grid gap-2 lg:grid-cols-3" aria-label="Son antrenmanlar">
+            {recent.map((row) => (
+              <li key={row.id}>
+                <SessionRow clientId={clientId} row={row} />
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      ) : null}
+      {list !== null && list.count > 0 ? (
+        <CardFooter>
+          <Button variant="outline" nativeButton={false} render={<Link href={href} />}>
+            Bütün antrenmanlar ({formatNumber(list.count)})
+            <CaretRight data-icon="inline-end" weight="bold" />
+          </Button>
+        </CardFooter>
+      ) : null}
+    </Card>
+  );
+}
 
 /**
  * Programın özeti: şu anki evre, günleri (sıradaki işaretli), son değişiklik. Program
@@ -171,12 +231,14 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   }
 
   const { client } = loaded;
-  const [invite, programFile, exercises, measurements] = await Promise.all([
+  const [invite, programFile, exercises, measurements, history, live] = await Promise.all([
     readInvite(id),
     // undefined: GitHub'dan okunamadı; sayfa yine açılır.
     readProgramFile(id).catch(() => undefined),
     listExercises(),
     loadMeasurements(client).catch(() => undefined),
+    loadHistory(id, config.timeZone).catch(() => null),
+    readLiveResponse(id),
   ]);
   const exerciseById = new Map(exercises.map((exercise) => [exercise.id, exercise]));
   const repo = clientRepoName(id);
@@ -193,6 +255,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         description="Profil, giriş, sağlık modülü ve özetler. Ayrıntılar kendi sekmelerinde."
         actions={<EditButton href={`/dashboard/clients/${id}/edit`} />}
       />
+
+      {/* Açık antrenman canlı (tasarım §4.6); kimse çalışmıyorken satır yok. */}
+      <LiveSession clientId={id} initial={live} />
 
       {/* Kartlar kendi boyunda: soldaki profil sağ sütunun boyuna uzayıp alt bölümü ortada bırakmasın. */}
       <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
@@ -214,6 +279,11 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 <TableRow>
                   <TableCell className="text-muted-foreground">Eklendi</TableCell>
                   <TableCell>{formatDate(client.createdAt, config.timeZone)}</TableCell>
+                </TableRow>
+                {/* Öneri motorunun aşama tabanı (tasarım §5.2): her hareketin Tanışma'sı ve en düşük aşaması. */}
+                <TableRow>
+                  <TableCell className="text-muted-foreground">Antrenman geçmişi</TableCell>
+                  <TableCell>{client.training ? TRAINING_EXPERIENCE_LABELS[client.training.experience] : 'Girilmedi'}</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="align-top text-muted-foreground">Not</TableCell>
@@ -299,23 +369,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
       <ProgramCard clientId={id} file={programFile} exercises={exerciseById} timeZone={config.timeZone} />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Antrenmanlar</CardTitle>
-          <CardDescription>Danışanın tamamladığı seanslar, en yenisi üstte.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Empty className="border">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <Barbell weight="fill" />
-              </EmptyMedia>
-              <EmptyTitle>Henüz antrenman yok</EmptyTitle>
-              <EmptyDescription>Antrenman ekranı gelince her set canlı olarak buraya yazılır.</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        </CardContent>
-      </Card>
+      <SessionsCard clientId={id} list={history} />
     </div>
   );
 }
