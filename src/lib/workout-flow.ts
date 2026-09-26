@@ -1,9 +1,9 @@
 import { formatKg, formatNumber } from './format.ts';
-import type { EntryStatus, SessionDoc, SessionEntry, SkipReason } from './schemas/session.ts';
+import type { EntryStatus, RotationChoice, SessionDoc, SessionEntry, SkipReason } from './schemas/session.ts';
 import { normalizeSession, withDeletions } from './session-merge.ts';
 import { isStraight } from './set-plan.ts';
 import { BLOCK_KIND_LABELS, FALLBACK_REST_SECONDS, ROW_ID_PATTERN, type BlockKind, type TemplateBlock } from './template-plan.ts';
-import { doNow, dropUnit, entryForRow, entryStatusOf, restoreUnit, skipUnit, type CursorUnit, type Stamp } from './workout-cursor.ts';
+import { defaultRotation, doNow, dropUnit, entryForRow, entryStatusOf, restoreUnit, skipUnit, type CursorUnit, type Stamp } from './workout-cursor.ts';
 import { dayBody, extraKey, type ExtraRow, type ExtraRows, type WorkoutDay, type WorkoutRow } from './workout-plan.ts';
 import { cursorOf, ensureEntries, newRowEntryId, plannedSetCounts } from './workout-session.ts';
 
@@ -382,4 +382,31 @@ export function withFinishReason(
   const skippedRows =
     reason === 'pain' ? undone.flatMap((member) => (member.rowId && ROW_ID_PATTERN.test(member.rowId) ? [{ rowId: member.rowId, reason: 'pain' as const }] : [])) : [];
   return { doc: normalizeSession({ ...ready, entries }), skippedRows };
+}
+
+/* --- bitişte rotasyon (§2.7) --- */
+
+export type FinishRotation = {
+  /** Hazır seçim: planın yarısı yapıldıysa sıradaki gün (`defaultRotation`, sunucuyla aynı kural). */
+  initial: RotationChoice;
+  /** "Gün B · sıradaki": bu günün arkasındaki gün. */
+  advance: string;
+  /** "Gün A yine sırada kalsın": rotasyon ilerlemezse sırada kalan gün (başka gün seçildiyse sıradaki gündü). */
+  keep: string;
+};
+
+/**
+ * Erken bitişin "Sıradaki antrenman: Gün B · Değiştir" satırı. Seçim yoksa null: gün şu anki evrede değil
+ * (rotasyon zaten değişmez), evrede tek gün var ya da iki seçenek aynı güne çıkıyor. Eski anlık
+ * görüntüde gün listesi yoksa da null (sunucu varsayılanı uygular).
+ */
+export function finishRotation(day: Pick<WorkoutDay, 'dayId' | 'dayName' | 'plannedDayId' | 'rotationDays'>, progress: { doneSets: number; plannedSets: number }): FinishRotation | null {
+  const days = day.rotationDays ?? [];
+  const index = days.findIndex((item) => item.id === day.dayId);
+  if (index < 0 || days.length < 2) return null;
+  const advance = days[(index + 1) % days.length]?.name;
+  const keepId = day.plannedDayId ?? day.dayId;
+  const keep = days.find((item) => item.id === keepId)?.name ?? day.dayName;
+  if (!advance || advance === keep) return null;
+  return { initial: defaultRotation(progress.doneSets, progress.plannedSets), advance, keep };
 }

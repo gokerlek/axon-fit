@@ -50,7 +50,7 @@ Danışan yalnız telefondan kullanır (SPEC §6). Gezinme alttaki dock'ta; hesa
 
 - **Avatar menüsü** (var olan `client-menu.tsx`): Programım · Ayarlar · Çıkış yap. Ayarlar (`/me/ayarlar`) sağlık onayını ve şifreyi tutar. Dock'a girmez. Öneri: "Programım" bugün `/me`'yi açıyor, dock'taki Bugün ile aynı yer. Programın bütün günlerini ve geçmişini gösteren `/me/program`'a bağlansın (açık soru 12).
 - **Dock bileşeni:** `src/components/dock/dock.tsx` aynen (PT'de `src/app/dashboard/nav.tsx`). Telefonda (`touch:`) ikonun altında kısa etiket; öğe ≥ 44 px; `aria-current="page"`; `ariaLabel="Ana menü"`. İkonlar Phosphor: `House` Bugün, `ClockCounterClockwise` Geçmiş, `ChartLineUp` İlerleme, ileride `Notebook` Programlar.
-- **Dock nerede görünmez:** etkin antrenman (`/me/antrenman`) tam ekrandır, dock ve avatar menüsü yoktur. Özet (`/me/antrenman/ozet/[id]`) ve ana sayfa dock'la açılır. Önerilen dosya düzeni: `src/app/me/(sekmeler)/layout.tsx` dock'u çizer (Bugün, Geçmiş, İlerleme, özet); `src/app/me/antrenman/page.tsx` bu grubun dışında kalır. Next 16'da route group ve layout davranışı yazmadan önce `node_modules/next/dist/docs/` ile doğrulanır (AGENTS.md).
+- **Dock nerede görünmez:** etkin antrenman (`/me/antrenman`) ve özet karuseli (`/me/antrenman/ozet/[id]`) tam ekrandır, dock ve avatar menüsü yoktur (faz 9'da karusel de tam ekran oldu: "Sonraki ›" ve "Bugün'e dön" dock'un yerinde). Ana sayfa ve Geçmiş (detay dahil) dock'la açılır. Önerilen dosya düzeni: `src/app/me/(sekmeler)/layout.tsx` dock'u çizer (Bugün, Geçmiş, İlerleme, özet); `src/app/me/antrenman/page.tsx` bu grubun dışında kalır. Next 16'da route group ve layout davranışı yazmadan önce `node_modules/next/dist/docs/` ile doğrulanır (AGENTS.md).
 - İçerik dock'un altında kalmasın: sayfa alt boşluğu = dock yüksekliği + `env(safe-area-inset-bottom)`.
 
 ```
@@ -103,7 +103,7 @@ Hareket ekranı ──[Set bitti]──► ✓ satırda ──► Dinlenme (saya
 |---|---|---|
 | `/me` | Bugün | var |
 | `/me/antrenman` | Etkin antrenman (tek sayfa; hareket, dinlenme, sheet'ler) | yok |
-| `/me/antrenman/ozet/[id]` | Özet karuseli (geçmişten de açılır) | var |
+| `/me/antrenman/ozet/[id]` | Özet karuseli (geçmişten de açılır) | yok |
 | `/me/gecmis`, `/me/gecmis/[id]` | Geçmiş listesi, detay | var |
 | `/me/ilerleme` | İlerleme | var |
 

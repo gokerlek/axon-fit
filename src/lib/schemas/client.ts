@@ -110,6 +110,11 @@ export const clientSchema = v.object({
   }),
   /** Faz 7: bağlantı verilen diğer danışanlar (yalnız kimlik). */
   visibleTo: v.array(clientIdSchema),
+  /**
+   * PT'nin bildirimleri (Genel bakış, tasarım §4.6): `seenAt`'ten yeni bildirim okunmamıştır. PT yazar;
+   * bildirimler ayrı dosyada tutulmaz, danışanın kayıtlarından türetilir (`notices.ts`).
+   */
+  inbox: v.optional(v.object({ seenAt: v.optional(timestamp) })),
 });
 export type Client = v.InferOutput<typeof clientSchema>;
 

@@ -2,7 +2,7 @@ import * as v from 'valibot';
 import { EFFORTS } from '../progression.ts';
 import { DAY_ID_PATTERN, PHASE_ID_PATTERN } from '../program-plan.ts';
 import { BLOCK_ID_PATTERN, ROW_ID_PATTERN, TEMPLATE_LIMITS } from '../template-plan.ts';
-import { setSpecSchema } from './template.ts';
+import { rowSetsSchema, setSpecSchema } from './template.ts';
 
 /**
  * Antrenman kaydı (seans) şeması — sunucu ve telefon ortak (SPEC §4, tasarım `docs/design/antrenman-ekrani.md` §4.2).
@@ -172,7 +172,16 @@ export type SessionEntry = v.InferOutput<typeof sessionEntrySchema>;
 export const waterTapSchema = v.object({ id: tapIdSchema, d: v.picklist([1, -1] as const), at: timestamp });
 export type WaterTap = v.InferOutput<typeof waterTapSchema>;
 
-export const sessionNoticeSchema = v.object({ kind: v.picklist(NOTICE_KINDS), at: timestamp });
+/**
+ * PT'ye bildirim. Yarım antrenmanda (`unfinished`) yapılan ve planlanan çalışma seti de yazılır ("Gün A
+ * yarım bırakıldı (12/17 set)"); öteki türlerin ayrıntısı belgenin kendisinden türetilir (`indexRowOf`).
+ */
+export const sessionNoticeSchema = v.object({
+  kind: v.picklist(NOTICE_KINDS),
+  at: timestamp,
+  done: v.optional(int(0, SESSION_LIMITS.entries * SESSION_LIMITS.setsPerEntry)),
+  planned: v.optional(int(0, SESSION_LIMITS.entries * SESSION_LIMITS.setsPerEntry)),
+});
 export type SessionNotice = v.InferOutput<typeof sessionNoticeSchema>;
 
 export const sessionEffortSchema = v.object({
@@ -191,6 +200,8 @@ export const sessionProgramSchema = v.object({
   dayName: v.pipe(v.string(), v.minLength(1), v.maxLength(SESSION_LIMITS.dayName)),
   /** Sıradaki gündü; `dayId`'den farklıysa danışan başka gün seçti (`other_day`). */
   plannedDayId: v.optional(id(DAY_ID_PATTERN, 'Gün kimliği geçersiz.')),
+  /** Sıradaki günün o günkü adı: PT'nin bildirimi ("Gün B yerine Gün C yapıldı"). */
+  plannedDayName: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(SESSION_LIMITS.dayName))),
 });
 export type SessionProgram = v.InferOutput<typeof sessionProgramSchema>;
 
@@ -278,6 +289,16 @@ export const sessionIndexExerciseSchema = v.object({
   stage: v.optional(codeSchema),
   oneOff: v.optional(v.literal(true)),
   lighter: v.optional(v.literal(true)),
+  /**
+   * Rekorların girdisi (`session-records.ts`): ağırlık başına en çok tekrar (ağırlıksızda 0 kg) ve en uzun
+   * süre; ısınma hariç. Bu alan eklenmeden yazılmış bitmiş satır onarımda dosyasından yeniden kurulur.
+   */
+  best: v.optional(
+    v.object({
+      sets: v.optional(v.pipe(v.array(v.object({ kg, reps: int(1, SESSION_LIMITS.reps) })), v.maxLength(SESSION_LIMITS.setsPerEntry))),
+      seconds: v.optional(int(1, SESSION_LIMITS.seconds)),
+    }),
+  ),
 });
 export type SessionIndexExercise = v.InferOutput<typeof sessionIndexExerciseSchema>;
 
@@ -297,11 +318,24 @@ export const sessionIndexRowSchema = v.object({
   durationMin: v.optional(int(0, 24 * 60)),
   volumeKg: v.pipe(v.number(), v.minValue(0)),
   sets: int(0, SESSION_LIMITS.entries * SESSION_LIMITS.setsPerEntry),
-  /** Rekor sayısı (özet hesabı gelince; §2.8). */
+  /** Rekor kıran hareket sayısı (§2.8; `withRecords` index her değiştiğinde baştan hesaplar); sıfırsa yok. */
   prs: v.optional(int(0, 1000)),
   water: int(0, SESSION_LIMITS.waterTaps),
   exercises: v.array(sessionIndexExerciseSchema),
   notices: v.array(v.picklist(NOTICE_KINDS)),
+  /** Başka gün seçildiyse sıradaki günün adı (bildirim metni). */
+  plannedDayName: v.optional(v.pipe(v.string(), v.maxLength(SESSION_LIMITS.dayName))),
+  /** Yarım antrenmanda yapılan ve planlanan çalışma seti (bildirim metni). */
+  progress: v.optional(
+    v.object({ done: int(0, SESSION_LIMITS.entries * SESSION_LIMITS.setsPerEntry), planned: int(0, SESSION_LIMITS.entries * SESSION_LIMITS.setsPerEntry) }),
+  ),
+  /** Onaylanmış aşırı yük: hareket başına en ağır set ve planın ağırlığı ("Bench Press 85 kg (hedef 62,5)"). */
+  overloads: v.optional(
+    v.pipe(
+      v.array(v.object({ title: v.pipe(v.string(), v.maxLength(SESSION_LIMITS.title)), kg, plannedKg: v.optional(kg) })),
+      v.maxLength(SESSION_LIMITS.entries),
+    ),
+  ),
 });
 export type SessionIndexRow = v.InferOutput<typeof sessionIndexRowSchema>;
 
@@ -349,11 +383,60 @@ export const finishHealthSchema = v.object({
 });
 export type FinishHealth = v.InferOutput<typeof finishHealthSchema>;
 
+/**
+ * "Programını güncelleyelim mi?" (tasarım §2.7 c, §6): plan ile yapılanın farkının maddeleri
+ * (`program-feedback.ts`). Kilo ve düz setlerde tekrar/süre hedefi doğrudan, set sayısı ve yapı PT'ye öneri.
+ */
+export const FEEDBACK_KINDS = ['weight_up', 'weight_down', 'target', 'sets', 'swap', 'remove', 'add', 'algo_sets'] as const;
+export type FeedbackKind = (typeof FEEDBACK_KINDS)[number];
+/** Evet, güncelle · Hayır, aynı kalsın · Tek tek seç · cevapsız (sheet kapandı). */
+export const FEEDBACK_ANSWERS = ['yes', 'no', 'pick', 'none'] as const;
+export type FeedbackAnswer = (typeof FEEDBACK_ANSWERS)[number];
+
+const titleSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(SESSION_LIMITS.title));
+
+/**
+ * Bitişte bir madde ve danışanın kararı (`apply`). Sunucu telefona güvenmez: maddeyi seans belgesiyle ve
+ * programla yeniden denetler, doğrudan mı öneri mi olacağına kendisi karar verir; adlar yalnız metin için.
+ */
+export const feedbackDecisionSchema = v.object({
+  kind: v.picklist(FEEDBACK_KINDS),
+  apply: v.boolean(),
+  entryId: entryIdSchema,
+  /** Programın satırı; eklenen harekette yok. */
+  rowId: v.optional(rowIdSchema),
+  dayId: id(DAY_ID_PATTERN, 'Gün kimliği geçersiz.'),
+  /** Satırın (muadilde asıl satırın) hareketi. */
+  exerciseId: slugSchema,
+  title: titleSchema,
+  trackingType: v.picklist(['weight_reps', 'bodyweight_reps', 'duration'] as const),
+  /** Kilo: planın üst ağırlığı ve yapılan; `overload` onaylı aşırı yük ("Bir defalık" hazır). */
+  kg: v.optional(v.object({ from: kg, to: kg, overload: v.optional(v.boolean()) })),
+  /** Tekrar/süre hedefi: danışanın gördüğü setler ve yenisi. */
+  target: v.optional(v.object({ from: rowSetsSchema, to: rowSetsSchema })),
+  /** Set sayısı. */
+  count: v.optional(v.object({ from: int(1, TEMPLATE_LIMITS.sets), to: int(1, TEMPLATE_LIMITS.sets) })),
+  /** "Değiştir" ile gelen hareket; kayıt türü farklıysa setleri. */
+  swap: v.optional(v.object({ exerciseId: slugSchema, title: titleSchema, sets: v.optional(rowSetsSchema) })),
+  /** "Hareket ekle": setleri ve dinlenmesi. */
+  add: v.optional(v.object({ sets: rowSetsSchema, restSeconds: int(0, TEMPLATE_LIMITS.restSeconds) })),
+  why: v.optional(v.pipe(v.string(), v.maxLength(300))),
+});
+export type FeedbackDecision = v.InferOutput<typeof feedbackDecisionSchema>;
+
+export const finishFeedbackSchema = v.object({
+  answer: v.picklist(FEEDBACK_ANSWERS),
+  items: v.pipe(v.array(feedbackDecisionSchema), v.maxLength(SESSION_LIMITS.entries * 3)),
+});
+export type FinishFeedback = v.InferOutput<typeof finishFeedbackSchema>;
+
 export const finishBodySchema = v.object({
   doc: sessionDocSchema,
   /** Hazır seçilen "Sıradaki antrenman" satırı; yoksa planın yarısı yapıldıysa `advance`. */
   rotation: v.optional(v.picklist(ROTATION_CHOICES)),
   health: v.optional(finishHealthSchema),
+  /** "Programını güncelleyelim mi?"nin maddeleri ve kararlar; yoksa programa bir şey yazılmaz. */
+  feedback: v.optional(finishFeedbackSchema),
 });
 export type FinishBody = v.InferOutput<typeof finishBodySchema>;
 

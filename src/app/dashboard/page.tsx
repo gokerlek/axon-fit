@@ -1,25 +1,31 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { CaretRight } from '@phosphor-icons/react/dist/ssr';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { readAppConfig } from '@/lib/config';
 import { formatNumber } from '@/lib/format';
 import { listExercises } from '@/lib/exercises';
 import { listClientIds } from '@/lib/github/repos';
 import { requirePt } from '@/lib/guards';
+import { NoticesCard } from './notices-card';
 
 export const metadata: Metadata = { title: 'Genel bakış' };
 
 /**
- * Genel bakış. Şimdilik sayılar; her sayı kartı kendi listesine götürür. Danışan ve antrenman
- * ekranları geldikçe "şu an antrenmanda olanlar" (canlı) ve "bugün" burada yer alacak.
+ * Genel bakış: sayılar (her sayı kartı kendi listesine götürür) ve danışanların bildirimleri (başka
+ * gün, yarım antrenman, aşırı yük, program değişikliği; tasarım §4.6). "Şu an antrenmanda olanlar"
+ * (canlı) ve "bugün antrenman günü olanlar" sonraki fazda.
  */
 export default async function DashboardPage() {
   await requirePt();
-  const [exercises, clientIds] = await Promise.all([
+  const [exercises, clientIds, config] = await Promise.all([
     listExercises(),
     listClientIds().catch(() => [] as string[]),
+    readAppConfig(),
   ]);
   const custom = exercises.filter((item) => item.source === 'custom').length;
 
@@ -49,7 +55,28 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Danışan başına özet önbellekten; önbellek boşken sayfanın geri kalanı beklemesin. */}
+      <Suspense fallback={<NoticesSkeleton />}>
+        <NoticesCard timeZone={config.timeZone} />
+      </Suspense>
     </div>
+  );
+}
+
+function NoticesSkeleton() {
+  return (
+    <Card aria-busy="true">
+      <CardHeader>
+        <CardTitle>Bildirimler</CardTitle>
+        <CardDescription>Danışanların kayıtları okunuyor…</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
+      </CardContent>
+    </Card>
   );
 }
 

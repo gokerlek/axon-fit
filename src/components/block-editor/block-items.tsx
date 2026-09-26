@@ -2,15 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { getDeepError, setInput, useField, useFieldArray } from '@formisch/react';
-import { ArrowsSplit, Barbell, CaretDown, LinkBreak, NoteBlank, Plus, TrendUp, Trash, WarningCircle } from '@phosphor-icons/react';
+import { ArrowsSplit, Barbell, CaretDown, LinkBreak, NoteBlank, Plus, TrendUp, Trash, UserCircle, WarningCircle } from '@phosphor-icons/react';
 import { ARMED, CardBadge, CardFace, CardGrabber, ExerciseCard, ExerciseCardSection, PLACEHOLDER } from '@/components/exercise-card';
 import { LabeledSelect } from '@/components/labeled-select';
 import { SwipeRow, type SwipeAction } from '@/components/swipe/swipe-row';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { clientTargetState } from '@/lib/client-targets';
 import { DEVICE_KIND_LABELS, DEVICE_KINDS, loadSpecFor } from '@/lib/device-loads';
 import { deviceChangeMessage, dropTargetLabel, groupWorkText, rowWorkText } from '@/lib/edit-messages';
 import { familyOf } from '@/lib/muscles';
@@ -43,7 +45,7 @@ import {
 import { cn } from '@/lib/utils';
 import { DragGroup, DragItem, DropFace, DropLine, DropPill, Grabber } from './drag/drag-node';
 import { useArmedTarget, useDragging } from './drag/drag-store';
-import { blockField, bodyId, faceId, groupTitle, rowTitle, useEditor, type Editor } from './editor-context';
+import { blockField, bodyId, faceId, groupTitle, rowTitle, useEditor, type Editor, type RowClientTarget } from './editor-context';
 import { keepLineEnter } from './enter-key';
 import { BlockSecondsField, RoundsField, SetCountField, SetsSection, SetsSummary, TargetField } from './set-table';
 
@@ -224,12 +226,18 @@ function RowMeta({
   invalid: boolean;
   shortcut?: boolean;
 }) {
-  const { devices } = useEditor();
+  const { devices, clientTargets } = useEditor();
   const device = exercise ? rowDevice(row, exercise, devices) : undefined;
   const text = exercise ? rowWorkText(row.sets, exercise.trackingType, block.kind === 'single' ? block.restSeconds : undefined) : null;
+  const target = clientTargets[row.id];
   return (
     <>
       {text ? <span className="truncate tabular-nums">{text}</span> : <span className="truncate font-mono">{row.exerciseId}</span>}
+      {target && clientTargetState(row.sets, target) === 'active' ? (
+        <Mark label={`Danışan güncelledi: ${target.text}`}>
+          <UserCircle aria-hidden className="text-primary-text" />
+        </Mark>
+      ) : null}
       {row.rule ? (
         <Mark label="Kendi ilerleme kuralı var">
           <TrendUp aria-hidden />
@@ -530,6 +538,8 @@ function RowBody({
         </ExerciseCardSection>
       )}
 
+      {editor.clientTargets[row.id] ? <ClientTargetNote row={row} target={editor.clientTargets[row.id] as RowClientTarget} /> : null}
+
       {exercise ? (
         <SetsSection blockIndex={blockIndex} rowIndex={rowIndex} row={row} exercise={exercise} title={title} open={setsOpen} forced={setError} />
       ) : null}
@@ -553,6 +563,45 @@ function RowBody({
         <RemoveButton itemId={row.id} />
       </BottomRow>
     </div>
+  );
+}
+
+/**
+ * Danışanın bu satırdaki hedefi (programda, tasarım §6.2): "Danışan güncelledi · hedef 10–14 · 26 Eyl".
+ * PT setlere dokunmadıysa hedef geçerli; [Danışanın hedefini al] setleri onunkine çevirir (kaydedince
+ * programa yazılır, danışanın katmanı kalkar). PT setleri başka türlü değiştirdiyse kaydedince danışanın
+ * hedefi kalkar: PT kazanır, program geçmişine yazılır.
+ */
+function ClientTargetNote({ row, target }: { row: TemplateRow; target: RowClientTarget }) {
+  const editor = useEditor();
+  const state = clientTargetState(row.sets, target);
+  const adopt = () =>
+    editor.update(
+      (blocks) =>
+        blocks.map((block) =>
+          block.rows.some((item) => item.id === row.id)
+            ? { ...block, rows: block.rows.map((item) => (item.id === row.id ? { ...item, sets: target.sets.map((set) => ({ ...set })) } : item)) }
+            : block,
+        ),
+      { highlight: row.id, announce: 'Danışanın hedefi alındı; kaydedince programa yazılır.' },
+    );
+  return (
+    <ExerciseCardSection className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm">
+      <Badge variant="secondary">Danışan güncelledi</Badge>
+      <span className="text-muted-foreground tabular-nums">{target.text}</span>
+      <p className="basis-full text-xs text-muted-foreground">
+        {state === 'active'
+          ? 'Danışan bu hedefle çalışıyor. Setleri değiştirip kaydedersen danışanın hedefi kalkar.'
+          : state === 'adopted'
+            ? 'Kaydedince danışanın hedefi programa yazılır.'
+            : 'Kaydedince danışanın hedefi kalkar; senin setlerin geçerli olur.'}
+      </p>
+      {state === 'active' ? (
+        <Button type="button" variant="outline" size="sm" className="touch:h-11" onClick={adopt}>
+          Danışanın hedefini al
+        </Button>
+      ) : null}
+    </ExerciseCardSection>
   );
 }
 

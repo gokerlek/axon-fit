@@ -1,4 +1,5 @@
 import { todayIn } from './format.ts';
+import type { SetSpec } from './set-plan.ts';
 import { prepareForEditing, type IdSource } from './template-edit.ts';
 import {
   normalizeTemplate,
@@ -47,9 +48,15 @@ export const PROGRAM_LIMITS = {
   changeText: 300,
 } as const;
 
-export const LOG_KINDS = ['create', 'edit', 'phase'] as const;
+/** `client`: danışanın kendi değişikliği (antrenman günleri, bitişte kilo ve tekrar hedefi); revision artmaz. */
+export const LOG_KINDS = ['create', 'edit', 'phase', 'client'] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
-export const LOG_KIND_LABELS: Record<LogKind, string> = { create: 'Oluşturuldu', edit: 'Düzenlendi', phase: 'Evre geçişi' };
+export const LOG_KIND_LABELS: Record<LogKind, string> = {
+  create: 'Oluşturuldu',
+  edit: 'Düzenlendi',
+  phase: 'Evre geçişi',
+  client: 'Danışan güncelledi',
+};
 
 export const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 /** Evresiz programın gizli evresinin (ve evreler kaldırılınca tek evrenin) adı. */
@@ -68,16 +75,35 @@ export type ProgramPhase = {
   daysPerWeek?: number;
   days: ProgramDay[];
 };
-/** Düzenleyicinin gönderdiği gövde: evrelere bölündü mü, evreler ve şu anki evre. */
+/** Düzenleyicinin gönderdiği gövde: evrelere bölündü mü, evreler, şu anki evre ve antrenman günleri. */
 export type ProgramBody = {
   /** false: tek, süresiz gün listesi (gizli tek evre); ekranlar evreden söz etmez. */
   phased: boolean;
   currentPhaseId: string;
   phases: ProgramPhase[];
+  /**
+   * PT'nin seçtiği antrenman günleri (ISO hafta günü, 1 = Pazartesi; boş = seçilmedi). Göndermeyen
+   * (eski sekme, eski taslak) kayıttakini değiştirmez (`training-days.ts`).
+   */
+  weekdays?: number[];
 };
 export type ProgramRotation = { lastDayId?: string; lastCompletedAt?: string };
 export type ProgramChange = { scope?: string; text: string };
-export type ProgramLogEntry = { at: string; revision: number; kind: LogKind; changes: ProgramChange[] };
+/**
+ * Geçmiş kaydı. `sessionId`: antrenman bitişinde yazılan danışan kaydının seansı (tasarım §6.3); aynı
+ * seansın kaydı ikinci kez eklenmez (bitişin yeniden denenmesi çoğaltmaz).
+ */
+export type ProgramLogEntry = { at: string; revision: number; kind: LogKind; sessionId?: string; changes: ProgramChange[] };
+/** PT'nin antrenman günleri (tasarım §2.11). */
+export type ProgramSchedule = { weekdays: number[] };
+/** Danışanın kendi günleri: PT'nin düzenleyicisi 412 almasın diye ayrı katman; revision artmaz, PT'nin değişikliği temizler. */
+export type ClientSchedule = { weekdays: number[]; at: string };
+/**
+ * Danışanın tekrar/süre hedefi (tasarım §6.2, `client-targets.ts`): satırın setleri hâlâ `baseSets`'e
+ * (PT'nin o anki setleri) eşitse `sets` geçerlidir; PT satırı değiştirince düşer. Revision artmaz.
+ */
+export type ClientTarget = { sets: SetSpec[]; baseSets: SetSpec[]; sessionId?: string; at: string };
+export type ClientTargets = Record<string, ClientTarget>;
 export type ProgramState = {
   version: 2;
   /** Evrelere bölündü mü (açık karar: tek süresiz evreli ama bölünmüş program da olur). */
@@ -89,6 +115,12 @@ export type ProgramState = {
   phases: ProgramPhase[];
   current: { phaseId: string; startedAt: string };
   rotation: ProgramRotation;
+  /** PT'nin seçtiği antrenman günleri; yoksa seçilmemiş. */
+  schedule?: ProgramSchedule;
+  /** Danışanın değiştirdiği günler; varsa geçerli olan bu (`effectiveSchedule`). */
+  clientSchedule?: ClientSchedule;
+  /** Danışanın satır başına tekrar/süre hedefi (satır kimliğiyle); PT'nin setleri değişince geçersiz. */
+  clientTargets?: ClientTargets;
   /** En yenisi üstte. */
   log: ProgramLogEntry[];
 };
@@ -315,7 +347,7 @@ export function creationChange(body: Pick<ProgramBody, 'phases'>): ProgramChange
   return { text: text(shown) };
 }
 
-/** Yeni program kaydı: sürüm 2, şu anki evre şimdi başlar, geçmişte tek "oluşturuldu". */
+/** Yeni program kaydı: sürüm 2, şu anki evre şimdi başlar, geçmişte tek "oluşturuldu"; seçildiyse antrenman günleri. */
 export function createProgramRecord(body: ProgramBody, now: Date): ProgramState {
   const at = now.toISOString();
   return {
@@ -327,6 +359,7 @@ export function createProgramRecord(body: ProgramBody, now: Date): ProgramState 
     phases: body.phases,
     current: { phaseId: body.currentPhaseId, startedAt: at },
     rotation: {},
+    ...(body.weekdays?.length ? { schedule: { weekdays: [...new Set(body.weekdays)].sort((a, b) => a - b) } } : {}),
     log: appendLog([], { at, revision: 1, kind: 'create', changes: [creationChange(body)] }),
   };
 }
@@ -803,7 +836,7 @@ export function phaseMuscleLoad<E extends PlanExercise>(
 const DAY_MS = 86_400_000;
 
 /** Pazartesi başlayan haftanın ilk günü ("2026-09-21"); `check-in.ts` ile aynı takvim hesabı. */
-function mondayOf(day: string): string {
+export function mondayOf(day: string): string {
   const [y, m, d] = day.split('-').map(Number);
   const index = Math.floor(Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1) / DAY_MS);
   // 1970-01-01 perşembe; pazartesiye göre kaydır.
@@ -813,14 +846,15 @@ function mondayOf(day: string): string {
 /**
  * "Bu hafta 2/3": pazartesi başlayan hafta, uygulamanın saat diliminde; aynı günün
  * antrenmanları bir gün sayılır; gelecek ve bozuk tarihler sayılmaz. Antrenman ekranı
- * tamamlanan antrenmanların bitiş anlarını verir.
+ * tamamlanan antrenmanların bitiş anlarını verir. `days`: antrenman yapılan günler (sıralı;
+ * Bugün'ün gün şeridi).
  */
 export function weekProgress(input: {
   completedAt: readonly string[];
   daysPerWeek?: number;
   now: Date;
   timeZone: string;
-}): { done: number; target: number | null; weekStart: string } {
+}): { done: number; target: number | null; weekStart: string; days: string[] } {
   const today = todayIn(input.timeZone, input.now);
   const weekStart = mondayOf(today);
   const days = new Set<string>();
@@ -830,7 +864,7 @@ export function weekProgress(input: {
     const day = todayIn(input.timeZone, at);
     if (day >= weekStart && day <= today) days.add(day);
   }
-  return { done: days.size, target: input.daysPerWeek ?? null, weekStart };
+  return { done: days.size, target: input.daysPerWeek ?? null, weekStart, days: [...days].sort() };
 }
 
 /* --- eski dosyalar --- */

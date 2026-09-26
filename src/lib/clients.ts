@@ -11,10 +11,11 @@ import { appRepo, clientRepoName, GithubError } from './github/client';
 import { writeToFreshRepo } from './github/errors';
 import { deleteFile, readJson, writeJson } from './github/files';
 import { clientRepoExists, createClientRepo, deleteClientRepo } from './github/repos';
+import { dropNotices } from './notices-store';
 import { commitMessage } from './program-diff';
 import type { ProgramState } from './program-plan';
 import { writeProgramFile } from './programs';
-import type { Client, ClientInput, ClientStatus, HealthField, Invite } from './schemas/client';
+import type { Client, ClientIndexEntry, ClientInput, ClientStatus, HealthField, Invite } from './schemas/client';
 
 /**
  * Danışanlar (SPEC §3, §5) — GitHub'a ve Next'e bağlama. Akışlar (düzenleme, davet, erişim, onay)
@@ -61,6 +62,8 @@ function store(): ClientStore {
     writeClient: async (client, sha, message) => {
       await writeClient(client, sha, message);
       dropLoginGate(client.id);
+      // Bildirim özetinde ad ve okundu bilgisi var (Genel bakış).
+      dropNotices(client.id);
     },
     readInvite: (id) => readJson<unknown>(clientRepoName(id), INVITE_PATH),
     writeInvite: (id, invite, sha, message) => writeJson(clientRepoName(id), INVITE_PATH, invite, { sha, message }),
@@ -104,6 +107,12 @@ const knownIds = unstable_cache(async () => (await core.readIndex(store())).item
 export async function isKnownClient(id: string): Promise<boolean> {
   return (await knownIds()).includes(id);
 }
+
+/** Listedeki kimlikler ve durumları, önbellekli (Genel bakış'ın bildirimleri; liste her yazıldığında düşer). */
+export const cachedClientIndex: () => Promise<ClientIndexEntry[]> = unstable_cache(async () => (await core.readIndex(store())).items, ['client-index-items'], {
+  tags: [CLIENT_INDEX_TAG],
+  revalidate: 300,
+});
 
 /* --- danışanın kendi repo'su --- */
 
@@ -235,6 +244,11 @@ export async function setClientPassword(
 /** Şifreyle giriş (deneme sayılır, sonra karşılaştırılır); bkz. `clients-core.ts`. */
 export async function loginWithPassword(id: string, password: string): ReturnType<typeof core.loginWithPassword> {
   return core.loginWithPassword(store(), id, password);
+}
+
+/** PT bildirimleri okudu: `inbox.seenAt` (Genel bakış, "Tümünü okundu say"). Kayıt yoksa false. */
+export async function markNoticesSeen(id: string, at: Date): Promise<boolean> {
+  return core.markNoticesSeen(store(), id, at);
 }
 
 /** Danışanın sağlık onayı ya da onayı geri çekmesi. */

@@ -27,6 +27,7 @@ export function fakeSessionRepo(initial: Record<string, unknown> = {}) {
   const calls: string[] = [];
   const logs: string[] = [];
   const invalidated: string[] = [];
+  let noticeDrops = 0;
   const hooks: { op: Op; path: string | undefined; run: () => Promise<void> | void }[] = [];
   let remaining: number | null = 4000;
 
@@ -114,6 +115,9 @@ export function fakeSessionRepo(initial: Record<string, unknown> = {}) {
     invalidate(id) {
       invalidated.push(id);
     },
+    noticesChanged() {
+      noticeDrops += 1;
+    },
     log(message) {
       logs.push(message);
     },
@@ -124,6 +128,8 @@ export function fakeSessionRepo(initial: Record<string, unknown> = {}) {
     calls,
     logs,
     invalidated,
+    /** PT'nin bildirim özeti kaç kez düşürüldü. */
+    noticeDrops: () => noticeDrops,
     /** Dalın ucundaki içerik (yoksa `undefined`). */
     get(path: string): unknown {
       const file = snapshot().get(path);

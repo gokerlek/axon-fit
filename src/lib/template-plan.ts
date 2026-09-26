@@ -298,6 +298,11 @@ export function setSlots(template: TemplateBody): SetSlot[] {
 
 const NO_LOAD_CATEGORIES = new Set<Category>(['warmup', 'cooldown']);
 
+/** Kas yüküne girer mi: ısınma ve soğuma türündeki hareketler sayılmaz (şablon, program ve antrenman özeti). */
+export function countsForLoad(category: Category): boolean {
+  return !NO_LOAD_CATEGORIES.has(category);
+}
+
 function clean(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
@@ -580,11 +585,11 @@ const MAX_ATTEMPTS = 20;
 
 /**
  * Rastgele kimlik (`t_k3m9x2qa`, `r_q2m8xk`; programda evre `p_`, gün `d_`; antrenman kaydında seans `s_`, hareket `e_`,
- * set `st_`, su `wt_`, cihaz `w_`): a-z ve 0-9, eşit dağılımlı. Alınmış kimliklerle çakışırsa yeniden dener; 20 denemede
+ * set `st_`, su `wt_`, cihaz `w_`; danışanın önerisi `pr_`): a-z ve 0-9, eşit dağılımlı. Alınmış kimliklerle çakışırsa yeniden dener; 20 denemede
  * bulamazsa hata fırlatır.
  */
 export function randomId(
-  prefix: 't' | 'b' | 'r' | 'p' | 'd' | 's' | 'e' | 'st' | 'wt' | 'w',
+  prefix: 't' | 'b' | 'r' | 'p' | 'd' | 's' | 'e' | 'st' | 'wt' | 'w' | 'pr',
   length: number,
   taken: ReadonlySet<string>,
   random: (n: number) => Uint8Array = (n) => crypto.getRandomValues(new Uint8Array(n)),

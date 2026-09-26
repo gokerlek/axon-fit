@@ -1,4 +1,4 @@
-import type { EntryStatus, SessionDoc, SessionEntry, SessionSet } from './schemas/session.ts';
+import type { EntryStatus, RotationChoice, SessionDoc, SessionEntry, SessionSet } from './schemas/session.ts';
 import { DEFAULT_TRANSITION_SECONDS, type BlockKind, type TemplateBody } from './template-plan.ts';
 
 /**
@@ -324,4 +324,12 @@ export function prefillSet(input: {
   const ceiling = input.target.max > input.target.min ? input.target.max - 1 : input.target.min;
   const value = same ? Math.max(0, Math.min(same.value, ceiling)) : input.target.min;
   return { kg, value };
+}
+
+/**
+ * Bitişteki hazır rotasyon seçimi (tasarım §2.7): planın yarısı (çalışma seti) yapıldıysa sıradaki gün,
+ * değilse aynı gün sırada kalır. Telefonun "Sıradaki antrenman" satırı ve sunucunun varsayılanı aynı kural.
+ */
+export function defaultRotation(done: number, planned: number): RotationChoice {
+  return planned === 0 || done * 2 >= planned ? 'advance' : 'keep';
 }

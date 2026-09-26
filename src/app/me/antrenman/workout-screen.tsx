@@ -15,7 +15,8 @@ import { formatKg } from '@/lib/format';
 import { DRAG, DURATION, EASE, tween, WORKOUT } from '@/lib/motion';
 import { EFFORT_LABELS } from '@/lib/progression';
 import { ApiError, fetchJson } from '@/lib/query/errors';
-import type { FinishHealth, SessionDoc } from '@/lib/schemas/session';
+import { feedbackItems, feedbackMessage, resolveFeedback, withFeedbackFlags, type FeedbackItem, type FeedbackOutcome } from '@/lib/program-feedback';
+import type { FinishFeedback, FinishHealth, RotationChoice, SessionDoc } from '@/lib/schemas/session';
 import { waterOf } from '@/lib/session-index';
 import { cn } from '@/lib/utils';
 import { rowKeyOf } from '@/lib/workout-cursor';
@@ -25,6 +26,7 @@ import {
   doNowAt,
   dropAt,
   effectiveDay,
+  finishRotation,
   firstSkippedKey,
   flowView,
   restoreAt,
@@ -76,18 +78,26 @@ import { clearLocalWorkout, clearWorkoutCache, readLocalWorkout, readWorkoutCach
 import { EntryPanel, type TimerView, type TransitionView } from './entry-panel';
 import { ExerciseCard } from './exercise-card';
 import { AddExerciseSheet, FlowSheet, SwapSheet, type SwapTarget } from './flow-sheets';
+import { ProgramUpdateSheet, type ProgramAnswer } from './program-update-sheet';
 import { RestPanel, RestStrip, type EffortPromptView, type RestView } from './rest-panel';
 import { useWorkoutOutbox } from './use-workout-outbox';
 import { beep, isIOS, unlockAudio, useWakeLock, vibrate } from './workout-feedback';
 import { DeleteSetDialog, EditSetSheet, FinishedElsewhereDialog, FinishSheet, type EditTarget, type EditValues } from './workout-sheets';
 
-/** Bugün'de çekilen plan bu kadar tazeyse başlangıç ağ beklemez. */
-const CACHE_FRESH_MS = 5 * 60_000;
+/**
+ * Bugün'de çekilen plan bu kadar tazeyse başlangıç ağ beklemez; yine de arka planda taze plan istenir ve
+ * henüz hiçbir şey kaydedilmediyse (PT o arada programı değiştirdiyse) antrenman güncel planla yeniden
+ * kurulur. Bugün de sunucudaki programın damgası tutmayan planı atar (`WorkoutFreshness`).
+ */
+const CACHE_FRESH_MS = 60_000;
 /** Hareket bitince: eski kart çıkar, yenisi gelir; dinlenme onun üstünde açılır (tasarım §2.4, prototip). */
 const NEXT_SLIDE_MS = 260;
 const NEXT_REST_MS = 700;
 
 type LoadState = { phase: 'loading' } | { phase: 'ready' } | { phase: 'empty'; problem?: string | undefined } | { phase: 'error'; message: string };
+
+/** Bitiş sorusu cevaplandı, "Programını güncelleyelim mi?" bekliyor: maddeler ve bitişin öteki seçimleri. */
+type PendingUpdate = { items: FeedbackItem[]; rotation: RotationChoice | null; health: FinishHealth | undefined };
 
 /** Az önce kaydedilen set: panel değişene kadar gösterilir. */
 type Saving = { next: NextSet };
@@ -103,6 +113,20 @@ function useNow(intervalMs: number): number {
 
 function stampOf(local: LocalWorkout) {
   return { at: new Date().toISOString(), by: local.doc.writer };
+}
+
+/** Telefondaki antrenmanda henüz hiçbir şey yok: plan değişirse sessizce yeniden kurulabilir. */
+function untouched(local: LocalWorkout): boolean {
+  return local.acked === null && local.lastSentAt === null && local.doc.entries.length === 0 && local.doc.waterTaps.length === 0;
+}
+
+/**
+ * Taze yanıt telefondaki boş antrenmanı değiştirir mi: sunucuda aynı günün yarım antrenmanı var (başka
+ * cihaz) ya da gün planı farklı (PT programı kaydetti). Başka günün yarım antrenmanı buradan devralınmaz.
+ */
+function planChanged(local: LocalWorkout, fresh: WorkoutResponse): boolean {
+  if (fresh.active) return fresh.active.program?.dayId === local.plan.dayId;
+  return fresh.day !== null && JSON.stringify(fresh.day) !== JSON.stringify(local.plan);
 }
 
 /** Sona alma ve geçme toast'ının düğmeleri: dokunmatikte 44 px (`undo-toast.ts` gibi). */
@@ -149,7 +173,14 @@ function lastWorkingSetId(doc: SessionDoc): string | null {
  *
  * Başlangıç ağ beklemez: Bugün'de çekilen plan tazeyse o, değilse `GET /api/me/workout`; çevrimdışıysa
  * son okunan plan. Telefonda yarım antrenman varsa o; yoksa sunucudaki yarım antrenman; o da yoksa yeni
- * belge (dosya ilk setle oluşur).
+ * belge (dosya ilk setle oluşur). Saklanan planla açılan boş antrenman arka planda taze planla
+ * karşılaştırılır; PT o arada programı değiştirdiyse güncel planla yeniden kurulur. Başka gün seçildiyse
+ * (`?day=`) "Gün C seçildi · Antrenörüne bildirilecek".
+ *
+ * Bitiş (§2.7): "Antrenman tamamlandı, bitirelim mi?" ya da erken bitişte yapılmayanlar, hazır seçilmiş
+ * "Sıradaki antrenman: Gün B · Değiştir" (`finishRotation`) ve bir kez sorulan isteğe bağlı neden; plandan
+ * sapma ya da öneri varsa ardından "Programını güncelleyelim mi?" (`program-feedback.ts`), kararlar bitişin
+ * tek commit'ine biner. Bitince özet karuseli açılır (§2.8, `/me/antrenman/ozet/[id]`).
  *
  * "Set bitti": önce ✓ satıra düşer ve düğme "Kaydedildi" der; 220 ms sonra panel dinlenmeye döner.
  * Hareket bittiyse kart sola çıkar, sıradaki sağdan gelir, dinlenme onun üstünde açılır; son setten sonra
@@ -184,6 +215,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
   const [undoWater, setUndoWater] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [update, setUpdate] = useState<PendingUpdate | null>(null);
   const [editing, setEditing] = useState<EditTarget | null>(null);
   const [deleting, setDeleting] = useState<(EditTarget & { text: string }) | null>(null);
   const [elsewhere, setElsewhere] = useState<{ server: SessionDoc; count: number } | null>(null);
@@ -217,17 +249,22 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
     [clientId],
   );
 
+  /** Telefondaki antrenman sunucuda bitti ya da silindi: yerel kopya ve saklanan plan düşer, Bugün tazelenir. */
+  const release = useCallback(() => {
+    localRef.current = null;
+    clearLocalWorkout(clientId);
+    clearWorkoutCache(clientId);
+    void queryClient.invalidateQueries({ queryKey: ['me', 'workout'] });
+  }, [clientId, queryClient]);
+
   const leave = useCallback(
     (message: string, kind: 'success' | 'info' = 'success') => {
-      localRef.current = null;
-      clearLocalWorkout(clientId);
-      clearWorkoutCache(clientId);
-      void queryClient.invalidateQueries({ queryKey: ['me', 'workout'] });
+      release();
       router.replace('/me');
       if (kind === 'success') toast.success(message);
       else toast(message);
     },
-    [clientId, queryClient, router],
+    [release, router],
   );
 
   const { outbox, problem, online } = useWorkoutOutbox({
@@ -280,6 +317,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
 
   useEffect(() => {
     let cancelled = false;
+    let announced = false;
     const adopt = (next: LocalWorkout) => {
       commit(next);
       setLoad({ phase: 'ready' });
@@ -293,20 +331,51 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
       if (!data.day) return setLoad({ phase: 'empty', problem: data.problem });
       const doc = newSessionDoc(data.day, { today: data.today, now: new Date(), writer: writerId() });
       adopt(createLocalWorkout(doc, data.day, null, options));
+      // Başka gün seçildi (§2.3): antrenöre bitişte bildirilir (`other_day`).
+      if (!announced && data.day.plannedDayId && data.day.plannedDayId !== data.day.dayId) {
+        announced = true;
+        toast(`${data.day.dayName} seçildi`, { description: 'Antrenörüne bildirilecek' });
+      }
+    };
+    const url = `/api/me/workout${dayParam ? `?day=${encodeURIComponent(dayParam)}` : ''}`;
+    /**
+     * Saklanan planla açılan ve henüz hiçbir şey kaydedilmemiş antrenman arka planda aynı günün taze planıyla
+     * karşılaştırılır: PT o arada programı kaydettiyse (ya da başka cihazda yarım antrenman varsa) güncel
+     * hâliyle yeniden kurulur. Bir şey kaydedildiyse antrenman başladığı günün anlık görüntüsüyle sürer.
+     */
+    const revalidate = () => {
+      const current = localRef.current;
+      if (!current || !untouched(current)) return;
+      fetchJson<WorkoutResponse>(`/api/me/workout?day=${encodeURIComponent(current.plan.dayId)}`)
+        .then((data) => {
+          const latest = localRef.current;
+          if (cancelled || !latest || latest.doc.id !== current.doc.id || !untouched(latest) || !planChanged(latest, data)) return;
+          begin(data);
+        })
+        .catch(() => undefined);
+    };
+    const cleanup = () => {
+      cancelled = true;
     };
 
     const existing = readLocalWorkout(clientId);
     if (existing) {
       adopt(existing);
-      return;
+      revalidate();
+      return cleanup;
     }
     const cached = readWorkoutCache(clientId);
-    const usable = cached && (!dayParam || cached.data.day?.dayId === dayParam) ? cached : null;
+    // Saklanan yanıt bu açılışın günü mü: istenen gün ya da (gün istenmediyse) rotasyonda sıradaki gün;
+    // "Başka gün seç"le çekilmiş bir gün sonraki olağan başlangıçta kullanılmaz.
+    const matches = (data: WorkoutResponse) =>
+      dayParam ? data.day?.dayId === dayParam : data.active !== null || !data.day || data.day.dayId === (data.program?.nextDayId ?? data.day.dayId);
+    const usable = cached && matches(cached.data) ? cached : null;
     if (usable && Date.now() - usable.at < CACHE_FRESH_MS) {
       begin(usable.data);
-      return;
+      revalidate();
+      return cleanup;
     }
-    fetchJson<WorkoutResponse>(`/api/me/workout${dayParam ? `?day=${encodeURIComponent(dayParam)}` : ''}`)
+    fetchJson<WorkoutResponse>(url)
       .then((data) => {
         if (cancelled) return;
         saveWorkoutCache(clientId, data);
@@ -318,9 +387,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
         if (usable) begin(usable.data);
         else setLoad({ phase: 'error', message: error instanceof ApiError ? error.message : 'Antrenman açılamadı.' });
       });
-    return () => {
-      cancelled = true;
-    };
+    return cleanup;
     // `finishOnOpen` ve `outbox` açılışta bir kez okunur.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, dayParam, attempt]);
@@ -751,39 +818,94 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
     guard();
   }, [commit, deleting, outbox, announce, guard]);
 
-  /** Bitir; `reason`: yapılmayanların isteğe bağlı nedeni (ağrı yalnız onayla, ayrıntısı `health.json`'a). */
-  const onFinish = useCallback(async (reason: FinishReason | null) => {
-    let current = localRef.current;
-    if (!current) return;
-    let health: FinishHealth | undefined;
-    if (reason) {
-      const result = withFinishReason(planOf(current), current.doc, reason, stampOf(current));
-      if (result.skippedRows.length > 0) health = { skippedRows: result.skippedRows };
-      current = withChange(current, result.doc, { send: false });
-      commit(current);
-    }
-    setFinishing(true);
-    outbox.stop();
-    const doc: SessionDoc = { ...current.doc, status: 'finished', finishedAt: new Date().toISOString() };
-    try {
-      await fetchJson(`/api/me/sessions/${current.doc.id}/finish`, { method: 'POST', body: JSON.stringify({ doc, ...(health ? { health } : {}) }) });
-      leave('Antrenman kaydedildi. Antrenörün görecek.');
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 410) {
-        leave('Bu antrenman silinmiş.', 'info');
+  /**
+   * Bitişi gönderir (tek commit): `feedback` "Programını güncelleyelim mi?"nin kararları; uygulanmayan ağırlık
+   * önce seansa işlenir (`oneOff` / `lighter`). Başarılıysa özet karuseli açılır (§2.8, dock yok); program
+   * güncellemesi bir an sonra bildirimle söylenir.
+   */
+  const submitFinish = useCallback(
+    async (rotation: RotationChoice | null, health: FinishHealth | undefined, feedback: FinishFeedback | undefined) => {
+      let current = localRef.current;
+      if (!current) return;
+      if (feedback) {
+        const flagged = withFeedbackFlags(current.doc, feedback.items, stampOf(current));
+        if (flagged !== current.doc) {
+          current = withChange(current, flagged, { send: false });
+          commit(current);
+        }
+      }
+      setFinishing(true);
+      outbox.stop();
+      const doc: SessionDoc = { ...current.doc, status: 'finished', finishedAt: new Date().toISOString() };
+      try {
+        const result = await fetchJson<{ feedback?: FeedbackOutcome }>(`/api/me/sessions/${current.doc.id}/finish`, {
+          method: 'POST',
+          body: JSON.stringify({ doc, ...(rotation ? { rotation } : {}), ...(health ? { health } : {}), ...(feedback ? { feedback } : {}) }),
+        });
+        release();
+        router.replace(`/me/antrenman/ozet/${current.doc.id}`);
+        const message = result.feedback ? feedbackMessage(result.feedback) : null;
+        // Özet açılırken bir an sonra (prototip): önce özetin ilk kartı görünsün.
+        if (message) window.setTimeout(() => toast(message.title, { description: message.description }), 450);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 410) {
+          leave('Bu antrenman silinmiş.', 'info');
+          return;
+        }
+        outbox.resume();
+        setFinishing(false);
+        setUpdate(null);
+        toast.error(
+          error instanceof ApiError && error.status === 0
+            ? 'Bağlantı yok; antrenmanın bu telefonda duruyor. Bağlantı gelince yeniden bitir.'
+            : error instanceof ApiError
+              ? error.message
+              : 'Antrenman bitirilemedi. Biraz sonra tekrar dene.',
+        );
+      }
+    },
+    [outbox, leave, release, router, commit],
+  );
+
+  /**
+   * Bitir; `reason`: yapılmayanların isteğe bağlı nedeni (ağrı yalnız onayla, ayrıntısı `health.json`'a);
+   * `rotation`: "Sıradaki antrenman" satırındaki seçim (gösterilmediyse sunucunun hazır seçimi). Plandan
+   * sapma ya da öneri varsa önce "Programını güncelleyelim mi?" (§2.7 c), özetten önce.
+   */
+  const onFinish = useCallback(
+    (reason: FinishReason | null, rotation: RotationChoice | null) => {
+      let current = localRef.current;
+      if (!current) return;
+      let health: FinishHealth | undefined;
+      if (reason) {
+        const result = withFinishReason(planOf(current), current.doc, reason, stampOf(current));
+        if (result.skippedRows.length > 0) health = { skippedRows: result.skippedRows };
+        current = withChange(current, result.doc, { send: false });
+        commit(current);
+      }
+      const items = feedbackItems({ day: current.plan, doc: current.doc, extras: current.extras });
+      if (items.length === 0) {
+        void submitFinish(rotation, health, undefined);
         return;
       }
-      outbox.resume();
-      setFinishing(false);
-      toast.error(
-        error instanceof ApiError && error.status === 0
-          ? 'Bağlantı yok; antrenmanın bu telefonda duruyor. Bağlantı gelince yeniden bitir.'
-          : error instanceof ApiError
-            ? error.message
-            : 'Antrenman bitirilemedi. Biraz sonra tekrar dene.',
-      );
-    }
-  }, [outbox, leave, commit]);
+      setFinishOpen(false);
+      setUpdate({ items, rotation, health });
+    },
+    [commit, submitFinish],
+  );
+
+  /** "Programını güncelleyelim mi?"nin cevabı; sheet kararsız kapandıysa cevapsız (`none`). */
+  const onProgramAnswer = useCallback(
+    (answer: ProgramAnswer | null) => {
+      const pending = update;
+      if (!pending) return;
+      // Kararsız kapandı: sheet kapanır, bitiş arkada gider; cevapta sheet düğmesinde bekler.
+      if (!answer) setUpdate(null);
+      const feedback = resolveFeedback(pending.items, answer?.answer ?? 'none', answer?.picked);
+      void submitFinish(pending.rotation, pending.health, feedback);
+    },
+    [update, submitFinish],
+  );
 
   /* --- akış: geç, sona al, şimdi yap, değiştir, hareket ekle (§2.6) --- */
 
@@ -1055,6 +1177,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
   const shown = saving?.next ?? next;
   const shownRow = shown ? (plan.rows[shown.rowId] ?? null) : null;
   const summary = workoutSummary(plan, doc, new Date(now));
+  const rotation = finishRotation(plan, summary);
   const flow = flowView(plan, doc);
   const todayIds = new Set(Object.values(plan.rows).map((item) => item.exerciseId));
   const progress = cursor.progress;
@@ -1275,10 +1398,11 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
         effort={finishEffort}
         amrap={lastSet?.target?.amrap ? { reps: lastSet.reps ?? 0 } : null}
         pain={local.pain}
+        rotation={rotation}
         onEffort={onEffort}
         onAmrap={(reps) => (lastSetId ? onAmrapReps(lastSetId, reps) : undefined)}
         onDoSkipped={onDoSkipped}
-        onFinish={(reason) => void onFinish(reason)}
+        onFinish={(reason, choice) => void onFinish(reason, choice)}
         onCancelWorkout={onCancelWorkout}
       />
       <FlowSheet
@@ -1298,6 +1422,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
       <AddExerciseSheet open={addOpen} onOpenChange={setAddOpen} todayIds={todayIds} busyId={addBusy} onPick={(item) => void onPickAdd(item)} />
       <EditSetSheet target={editing} onClose={() => setEditing(null)} onSave={onSaveEdit} onDelete={onAskDelete} />
       <DeleteSetDialog target={deleting} onCancel={() => setDeleting(null)} onConfirm={onConfirmDelete} />
+      <ProgramUpdateSheet items={update?.items ?? null} busy={finishing} onAnswer={onProgramAnswer} onDismiss={() => onProgramAnswer(null)} />
       <FinishedElsewhereDialog count={elsewhere?.count ?? null} busy={elsewhereBusy} onAdd={onAddElsewhere} onSkip={() => leave('Bu antrenman başka bir cihazda bitirildi.', 'info')} />
       <p aria-live="polite" className="sr-only">
         {announcement}

@@ -6,29 +6,32 @@ import { MUSCLE_LABELS, type Muscle } from '@/lib/schemas/exercise';
 import { loadIntensity } from '@/lib/template-plan';
 import { MuscleMap } from './muscle-map';
 
-/** Açıklama listesinde en çok bu kadar kas; gerisi "+n kas daha". */
+/** Açıklama listesinde varsayılan olarak en çok bu kadar kas; gerisi "+n kas daha". */
 const LEGEND_LIMIT = 12;
 
 /**
  * Şablon kas haritası: kas başına kesirli set toplamı (hedef 1, yardımcı 0,5,
  * dengeleyici 0,25). Ton şablonun en çok çalışan kasına göredir (boş kastan hedef rengine sürekli
  * açıklık rampası; en çok çalışan kas boş kastan ≥3:1). `full` altında
- * kas ve set listesi verir; `compact` (liste kartı) yalnız haritadır.
+ * kas ve set listesi verir (`legendLimit` kasa kadar; antrenman özeti ilk 5'i); `compact` (liste kartı)
+ * yalnız haritadır.
  */
 export function TemplateMuscleMap({
   load,
   variant = 'full',
   bodyClassName,
   label,
+  legendLimit = LEGEND_LIMIT,
 }: {
   load: Partial<Record<Muscle, number>>;
   variant?: 'full' | 'compact';
   bodyClassName?: string;
   label?: string;
+  legendLimit?: number;
 }) {
   const intensity = loadIntensity(load as Record<string, number>) as MuscleIntensity;
   const worked = BODY_MUSCLES.filter((muscle) => (load[muscle] ?? 0) > 0).sort((a, b) => (load[b] ?? 0) - (load[a] ?? 0));
-  const shown = worked.slice(0, LEGEND_LIMIT);
+  const shown = worked.slice(0, legendLimit);
   const cardio = load.cardio ?? 0;
   const mapLabel =
     label ??

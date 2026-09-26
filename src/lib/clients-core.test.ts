@@ -17,6 +17,7 @@ import {
   issueInvite,
   loginGateReason,
   loginWithPassword,
+  markNoticesSeen,
   parseInvite,
   redeemInvite,
   revokeAccess,
@@ -736,5 +737,31 @@ describe('sayacı yazamayan deneme özet hesaplamaz (M01: CPU ve bellek harcatı
     assert.equal((await loginWithPassword(current.store, client.id, 'yanlis-sifre-1')).ok, false);
     const full = performance.now() - fullStart;
     assert.ok(lost < full / 3, `çakışan ${lost.toFixed(0)} ms, tam ${full.toFixed(0)} ms`);
+  });
+});
+
+describe('bildirimler okundu (Genel bakış, tasarım §4.6)', () => {
+  test('inbox.seenAt yazılır, yalnız ileri gider; öteki alanlar değişmez; kayıt yoksa false', async () => {
+    const w = world();
+    const client = seedClient(w.gh, w.clock);
+    const first = new Date('2026-09-26T10:00:00.000Z');
+    assert.equal(await markNoticesSeen(w.store, client.id, first), true);
+    const seen = await w.record(client.id);
+    assert.deepEqual(seen.inbox, { seenAt: first.toISOString() });
+    assert.deepEqual({ ...seen, inbox: undefined }, { ...client, inbox: undefined });
+    const writes = w.gh.count(`write ${clientRepo(client.id)}/client.json`);
+    // Eski sekmeden gelen daha eski an okunmamış yapmaz, yazmaz da.
+    assert.equal(await markNoticesSeen(w.store, client.id, new Date('2026-09-25T10:00:00.000Z')), true);
+    assert.equal(w.gh.count(`write ${clientRepo(client.id)}/client.json`), writes);
+    assert.deepEqual((await w.record(client.id)).inbox, { seenAt: first.toISOString() });
+    assert.equal(await markNoticesSeen(w.store, 'c_yokyokyok', first), false);
+  });
+
+  test('aynı anda başka yazma (danışanın onayı) çakışırsa taze okuyup bir kez daha', async () => {
+    const w = world();
+    const client = seedClient(w.gh, w.clock);
+    w.gh.failNext('write', 'client.json', 409, 'Bildirimler okundu');
+    assert.equal(await markNoticesSeen(w.store, client.id, new Date('2026-09-26T10:00:00.000Z')), true);
+    assert.equal((await w.record(client.id)).inbox?.seenAt, '2026-09-26T10:00:00.000Z');
   });
 });

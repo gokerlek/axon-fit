@@ -4,6 +4,7 @@ import { createContext, useContext } from 'react';
 import type { FormStore } from '@formisch/react';
 import type { ReorderTarget } from '@/lib/reorder';
 import type { blocksHostSchema } from '@/lib/schemas/template';
+import type { SetSpec } from '@/lib/set-plan';
 import type { EditorDevice, IdSource, PickerExercise } from '@/lib/template-edit';
 import { BLOCK_KIND_LABELS, type TemplateBlock, type TemplateRow } from '@/lib/template-plan';
 
@@ -64,6 +65,12 @@ export type UndoOptions = {
   /** Çizimden sonra yüzüne odaklanılacak öğe. */
   focus?: string;
 };
+
+/**
+ * Satırın danışan hedefi (programda, tasarım §6.2): metin ("hedef 10–14 · 26 Eyl"), danışanın setleri ve
+ * dayandığı (PT'nin) setler. Satırın bugünkü setleri dayandığı setlere eşitken hedef geçerlidir.
+ */
+export type RowClientTarget = { text: string; sets: SetSpec[]; baseSets: SetSpec[] };
 
 /** Kartın işlemleri (kaydırma panelleri, açık gövdedeki düğmeler, yüzdeki klavye kısayolları). */
 export type ItemActions = {
@@ -144,6 +151,8 @@ export type Editor = {
   /** İlk kullanımda bir kez sola "göz kırpacak" kart (öğe kimliği; dokunmatikte). */
   nudgeId: string | null;
   onNudged: () => void;
+  /** Danışanın satır hedefleri (yalnız programda; satır kimliğiyle). */
+  clientTargets: Readonly<Record<string, RowClientTarget>>;
 };
 
 export const EditorContext = createContext<Editor | null>(null);

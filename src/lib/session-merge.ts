@@ -194,9 +194,27 @@ function mergeTaps(docs: readonly SessionDoc[]): WaterTap[] {
     .sort((a, b) => time(a.at) - time(b.at) || (a.at < b.at ? -1 : a.at > b.at ? 1 : 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
+/**
+ * Bildirimler türü ve anıyla birleşir. Aynı bildirimin iki hâli varsa ayrıntısı çok olan, eşitse kanonik
+ * büyük olan kalır (sıradan bağımsız; ayrıntısız eski kopya ayrıntıyı silmez).
+ */
 function mergeNotices(docs: readonly SessionDoc[]): SessionNotice[] {
   const byKey = new Map<string, SessionNotice>();
-  for (const doc of docs) for (const notice of doc.notices) byKey.set(`${notice.kind}@${notice.at}`, { kind: notice.kind, at: notice.at });
+  const rank = (notice: SessionNotice) => [Object.keys(notice).length, canonicalJson(notice)] as const;
+  for (const doc of docs) {
+    for (const notice of doc.notices) {
+      const next = compact({ kind: notice.kind, at: notice.at, done: notice.done, planned: notice.planned });
+      const key = `${notice.kind}@${notice.at}`;
+      const known = byKey.get(key);
+      if (!known) {
+        byKey.set(key, next);
+        continue;
+      }
+      const [size, body] = rank(next);
+      const [knownSize, knownBody] = rank(known);
+      if (size > knownSize || (size === knownSize && body > knownBody)) byKey.set(key, next);
+    }
+  }
   return [...byKey.values()].sort(
     (a, b) => time(a.at) - time(b.at) || (a.at < b.at ? -1 : a.at > b.at ? 1 : 0) || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0),
   );

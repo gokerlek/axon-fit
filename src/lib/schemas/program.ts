@@ -10,8 +10,9 @@ import {
   upgradeProgram,
   upgradeProgramBody,
 } from '../program-plan.ts';
-import { TEMPLATE_ID_PATTERN, TEMPLATE_LIMITS, countRows } from '../template-plan.ts';
-import { templateBlockSchema } from './template.ts';
+import { ROW_ID_PATTERN, TEMPLATE_ID_PATTERN, TEMPLATE_LIMITS, countRows } from '../template-plan.ts';
+import { SESSION_ID_PATTERN } from './session.ts';
+import { rowSetsSchema, templateBlockSchema } from './template.ts';
 
 /**
  * Danışana özel program şeması — sunucu ve istemci ortak (SPEC §4, §7.4).
@@ -91,7 +92,25 @@ export const programPhasesSchema = v.pipe(
   v.check((phases) => duplicateProgramIds(phases).length === 0, 'Evre, gün, blok ve satır kimlikleri benzersiz olmalı.'),
 );
 
-const bodyFields = { phased: v.boolean('Evre seçimi okunamadı.'), currentPhaseId: phaseIdSchema, phases: programPhasesSchema };
+/**
+ * Antrenman günleri (tasarım §2.11): ISO hafta günü, 1 = Pazartesi … 7 = Pazar; her gün bir kez.
+ * Boş dizi = seçilmedi. Program günlere çakılmaz: A → B → C sırası seçilen günlere dağılır.
+ */
+export const weekdaysSchema = v.pipe(
+  v.array(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(7)), 'Günleri seç.'),
+  v.maxLength(7),
+  v.check((days) => new Set(days).size === days.length, 'Bir gün iki kez seçilmiş.'),
+);
+/** Danışanın seçimi: en az bir gün (hiç gün seçmemek "antrenman yok" olurdu). */
+export const clientWeekdaysSchema = v.pipe(weekdaysSchema, v.minLength(1, 'En az bir gün seç.'));
+
+const bodyFields = {
+  phased: v.boolean('Evre seçimi okunamadı.'),
+  currentPhaseId: phaseIdSchema,
+  phases: programPhasesSchema,
+  /** Göndermeyen eski sekme ve taslak kayıttaki günleri değiştirmez. */
+  weekdays: v.optional(weekdaysSchema),
+};
 const CURRENT_MISSING = 'Şu anki evre programda yok.';
 const UNPHASED_PROBLEM = 'Evresiz programda tek, süresiz gün listesi olur.';
 
@@ -124,6 +143,12 @@ export const programSaveSchema = v.pipe(
   v.forward(v.partialCheck([['phased'], ['phases']], unphasedOk, UNPHASED_PROBLEM), ['phases']),
 );
 
+/** Danışanın "Günlerini değiştir"i (Bugün ya da Ayarlar). */
+export const clientScheduleBodySchema = v.object({ weekdays: clientWeekdaysSchema });
+
+/** PT: "PT'nin günlerine dön" (danışanın katmanını siler; revision artmaz, düzenleyici 412 almaz). */
+export const programScheduleActionSchema = v.object({ action: v.literal('reset') });
+
 /** Evre geçişi (program sayfasındaki öneri): sürüm kayıttaki gibi (`baseRevision`, `baseCreatedAt`). */
 export const programPhaseSwitchSchema = v.object({ phaseId: phaseIdSchema, baseRevision: positive, baseCreatedAt: v.optional(timestamp) });
 
@@ -136,8 +161,35 @@ export const programLogEntrySchema = v.object({
   at: timestamp,
   revision: positive,
   kind: v.picklist(LOG_KINDS),
+  /** Bitişte yazılan danışan kaydının seansı: aynı seansın kaydı ikinci kez eklenmez. */
+  sessionId: v.optional(v.pipe(v.string(), v.regex(SESSION_ID_PATTERN))),
   changes: v.pipe(v.array(programChangeSchema), v.minLength(1), v.maxLength(L.changesPerEntry)),
 });
+
+/** Danışanın satır hedefi (tasarım §6.2): `baseSets` PT'nin o anki setleri; satır onlara eşitken `sets` geçerli. */
+export const clientTargetSchema = v.object({
+  sets: rowSetsSchema,
+  baseSets: rowSetsSchema,
+  sessionId: v.optional(v.pipe(v.string(), v.regex(SESSION_ID_PATTERN))),
+  at: timestamp,
+});
+
+/**
+ * `clientTargets` hoşgörüyle okunur: satır kimliği ya da içeriği bozuk hedef düşer, program yine okunur
+ * (danışanın tek bozuk hedefi PT'nin programını ve antrenmanı kilitlemesin). Boşsa alan yok.
+ */
+const clientTargetsSchema = v.pipe(
+  v.unknown(),
+  v.transform((raw): Record<string, v.InferOutput<typeof clientTargetSchema>> | undefined => {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
+    const targets: Record<string, v.InferOutput<typeof clientTargetSchema>> = {};
+    for (const [rowId, value] of Object.entries(raw)) {
+      const parsed = v.safeParse(clientTargetSchema, value);
+      if (ROW_ID_PATTERN.test(rowId) && parsed.success) targets[rowId] = parsed.output;
+    }
+    return Object.keys(targets).length > 0 ? targets : undefined;
+  }),
+);
 
 /** Repo'daki dosya: sürüm 1 önce çevrilir. Bilinmeyen alanlar atılır (`v.object`). */
 export const programSchema = v.pipe(
@@ -155,6 +207,12 @@ export const programSchema = v.pipe(
     current: v.object({ phaseId: phaseIdSchema, startedAt: timestamp }),
     /** Antrenman ekranı yazar (revision artmaz). */
     rotation: v.object({ lastDayId: v.optional(dayIdSchema), lastCompletedAt: v.optional(timestamp) }),
+    /** PT'nin antrenman günleri; yoksa seçilmemiş. */
+    schedule: v.optional(v.object({ weekdays: weekdaysSchema })),
+    /** Danışanın değiştirdiği günler: revision artmaz, PT günleri değiştirince silinir. Geçerli = bu ?? PT'ninki. */
+    clientSchedule: v.optional(v.object({ weekdays: clientWeekdaysSchema, at: timestamp })),
+    /** Danışanın satır hedefleri (bitişte "Evet, güncelle"): revision artmaz, PT satırı değiştirince düşer. */
+    clientTargets: v.optional(clientTargetsSchema),
     /** En yenisi üstte. */
     log: v.pipe(v.array(programLogEntrySchema), v.maxLength(L.log)),
   }),

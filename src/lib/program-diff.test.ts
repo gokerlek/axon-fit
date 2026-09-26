@@ -424,6 +424,28 @@ describe('kaydın uygulanması', () => {
     assert.deepEqual(result?.program.rotation, { lastDayId: 'd_aaaaaa', lastCompletedAt: '2026-09-20T10:00:00.000Z' });
   });
 
+  test('antrenman günleri: PT değiştirince yazılır, danışanın günleri silinir; göndermeyen eski sekme dokunmaz', () => {
+    const clientSchedule = { weekdays: [2, 4, 6], at: '2026-09-23T10:00:00.000Z' };
+    const withDays: ProgramState = { ...stored, schedule: { weekdays: [1, 3, 5] }, clientSchedule };
+    const same = { phased: true, currentPhaseId: uyum.id, phases: stored.phases };
+    // Eski sekme (günler yok) ve aynı günler: değişiklik yok, danışanın günleri kalır.
+    assert.equal(applyProgramEdit(withDays, same, ctx, simdi), null);
+    assert.equal(applyProgramEdit(withDays, { ...same, weekdays: [5, 1, 3] }, ctx, simdi), null);
+    const changed = applyProgramEdit(withDays, { ...same, weekdays: [1, 4] }, ctx, simdi);
+    assert.ok(changed);
+    assert.deepEqual(changed.program.schedule, { weekdays: [1, 4] });
+    assert.equal('clientSchedule' in changed.program, false);
+    assert.equal(changed.program.revision, 6);
+    assert.deepEqual(texts(changed.changes), ['Antrenman günleri: Pzt, Çar, Cum → Pzt, Per', 'Danışanın günleri kaldırıldı (Sal, Per, Cmt)']);
+    // Başka bir değişiklikle kaydedilen program danışanın günlerini korur.
+    const renamed = applyProgramEdit(withDays, { ...same, phases: [{ ...uyum, name: 'Uyum 2' }, guc] }, ctx, simdi);
+    assert.deepEqual(renamed?.program.clientSchedule, clientSchedule);
+    assert.deepEqual(renamed?.program.schedule, { weekdays: [1, 3, 5] });
+    // Günler kaldırılabilir.
+    const cleared = applyProgramEdit(withDays, { ...same, weekdays: [] }, ctx, simdi);
+    assert.equal(cleared && 'schedule' in cleared.program, false);
+  });
+
   test('düzenleyici göndermediyse kayıttaki kaynak korunur', () => {
     const { source: _source, ...withoutSource } = uyum.days[0] as ProgramDay;
     const phases = [{ ...uyum, name: 'Uyum 2', days: [withoutSource, B, C] }, guc];
@@ -756,5 +778,58 @@ describe('egzersizin varsayılanına eşit kural ve cihaz', () => {
     assert.ok(result);
     assert.deepEqual(result.changes, [{ scope: 'Gün A', text: 'Goblet Squat egzersizin kuralına döndü' }]);
     assert.equal('rule' in (result.program.phases[0]?.days[0]?.blocks[0]?.rows[0] ?? {}), false);
+  });
+});
+
+describe('danışanın hedefleri: PT kazanır', () => {
+  const at = '2026-09-01T00:00:00.000Z';
+  const simdi = new Date('2026-09-26T09:00:00.000Z');
+  const day = gun('d_aaaaaa', 'Gün A', [single('b_goblet', goblet), single('b_press1', press)]);
+  const target = { sets: uniformSets({ min: 10, max: 14 }, 3), baseSets: uniformSets({ min: 8, max: 12 }, 3), sessionId: 's_k2m9x4qa', at };
+  const stored: ProgramState = {
+    version: 2,
+    phased: false,
+    revision: 3,
+    createdAt: at,
+    updatedAt: at,
+    phases: [evre1([day])],
+    current: { phaseId: 'p_evre01', startedAt: at },
+    rotation: {},
+    clientTargets: { r_goblet: target },
+    log: [],
+  };
+
+  test('başka bir şey değişince hedef korunur (sessizce silinmez)', () => {
+    const phases = [evre1([gun('d_aaaaaa', 'Gün A', [single('b_goblet', goblet), single('b_press1', press, 4)])])];
+    const result = applyProgramEdit(stored, body(phases, 'p_evre01', false), ctx, simdi);
+    assert.ok(result);
+    assert.deepEqual(result.program.clientTargets, { r_goblet: target });
+    assert.deepEqual(texts(result.changes), ['Leg Press 3×10–15 → 4×10–15']);
+  });
+
+  test('PT satırın setlerini değiştirdi: hedef silinir, kayda yazılır', () => {
+    const phases = [evre1([gun('d_aaaaaa', 'Gün A', [single('b_goblet', goblet, 4), single('b_press1', press)])])];
+    const result = applyProgramEdit(stored, body(phases, 'p_evre01', false), ctx, simdi);
+    assert.ok(result);
+    assert.equal(result.program.clientTargets, undefined);
+    assert.deepEqual(result.program.log[0]?.changes, [
+      { scope: 'Gün A', text: 'Goblet Squat 3×8–12 → 4×8–12' },
+      { scope: 'Gün A', text: 'Goblet Squat: danışanın hedefi (10–14) kaldırıldı' },
+    ]);
+  });
+
+  test('PT danışanın hedefini aldı: "programa alındı"; değişiklik yoksa hiçbir şey yazılmaz', () => {
+    const adopted = [evre1([gun('d_aaaaaa', 'Gün A', [single('b_goblet', { ...goblet, sets: uniformSets({ min: 10, max: 14 }, 3) }), single('b_press1', press)])])];
+    const result = applyProgramEdit(stored, body(adopted, 'p_evre01', false), ctx, simdi);
+    assert.ok(result);
+    assert.equal(result.program.clientTargets, undefined);
+    assert.deepEqual(texts(result.changes), ['Goblet Squat 3×8–12 → 3×10–14', 'Goblet Squat: danışanın hedefi programa alındı']);
+    assert.equal(applyProgramEdit(stored, body(stored.phases, 'p_evre01', false), ctx, simdi), null);
+  });
+
+  test('onaylanan önerinin notu kaydın sonuna', () => {
+    const phases = [evre1([gun('d_aaaaaa', 'Gün A', [single('b_goblet', goblet), single('b_press1', press, 4)])])];
+    const result = applyProgramEdit(stored, body(phases, 'p_evre01', false), ctx, simdi, [{ text: 'Danışanın önerisi: Leg Press 3 → 4 set' }]);
+    assert.deepEqual(texts(result?.program.log[0]?.changes ?? []), ['Leg Press 3×10–15 → 4×10–15', 'Danışanın önerisi: Leg Press 3 → 4 set']);
   });
 });

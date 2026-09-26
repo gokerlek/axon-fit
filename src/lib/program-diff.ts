@@ -11,7 +11,9 @@ import {
   type ProgramPhase,
   type ProgramState,
 } from './program-plan.ts';
+import { ptTargetsEdit } from './client-targets.ts';
 import { PROGRESSION_LABELS, RIR_LABELS, type TrackingType } from './progression.ts';
+import { ptScheduleEdit } from './training-days.ts';
 import { amrapIndexes, resizeSets, setShape, setsText, type SetSpec } from './set-plan.ts';
 import {
   BLOCK_KIND_LABELS,
@@ -433,13 +435,18 @@ export function commitMessage(kind: LogKind, changes: readonly ProgramChange[]):
  * şimdi başlar ve rotasyon onun ilk gününden; değişmediyse silinen ya da başka evreye
  * taşınan son gün uzlaştırılır. Evrelere bölme/kaldırma "Düzenlendi" kaydıdır. Evresiz program
  * evresiz kalırsa gizli evre kayıttakidir (`keepHiddenPhase`): fark gün düzeyinde, rotasyon sürer.
- * Dönen `changes` kırpılmamıştır (commit mesajı için).
+ * Antrenman günleri değiştiyse PT'nin günleri yazılır ve danışanın katmanı silinir (`ptScheduleEdit`);
+ * göndermeyen eski sekme kayıttakine dokunmaz. Danışanın satır hedefleri (`clientTargets`) rotasyon gibi
+ * korunur; PT satırın setlerini ya da hareketini değiştirdiyse o satırın hedefi düşer ve kayda yazılır
+ * (`ptTargetsEdit`: PT kazanır). `note`: kaydın sonuna eklenen cümleler (onaylanan danışan önerisi); fark
+ * yoksa kayıt yine yazılmaz. Dönen `changes` kırpılmamıştır (commit mesajı için).
  */
 export function applyProgramEdit(
   stored: ProgramState,
   input: ProgramBody,
   ctx: DiffContext,
   now: Date,
+  note: readonly ProgramChange[] = [],
 ): { program: ProgramState; changes: ProgramChange[] } | null {
   const body = keepHiddenPhase(stored, input);
   const storedDays = new Map(stored.phases.flatMap((phase) => phase.days.map((day) => [day.id, day] as const)));
@@ -452,23 +459,39 @@ export function applyProgramEdit(
     }),
   }));
 
-  const changes = diffProgram(
-    { phased: stored.phased, currentPhaseId: stored.current.phaseId, phases: stored.phases },
-    { phased: body.phased, currentPhaseId: body.currentPhaseId, phases },
-    ctx,
-  );
-  if (changes.length === 0) return null;
+  // Antrenman günleri: göndermeyen eski sekme kayıttakini değiştirmez; değişince danışanın katmanı silinir.
+  const schedule = ptScheduleEdit(stored, input.weekdays);
+  const diff = [
+    ...diffProgram(
+      { phased: stored.phased, currentPhaseId: stored.current.phaseId, phases: stored.phases },
+      { phased: body.phased, currentPhaseId: body.currentPhaseId, phases },
+      ctx,
+    ),
+    ...schedule.changes.map((text): ProgramChange => ({ text })),
+  ];
+  if (diff.length === 0) return null;
+  // Danışanın satır hedefleri: değişmeyen satırda kalır, PT'nin değiştirdiği satırda düşer (kayda yazılır).
+  const targets = ptTargetsEdit(stored.phases, phases, stored.clientTargets, {
+    titleOf: (exerciseId) => ctx.exercises.get(exerciseId)?.title ?? exerciseId,
+    trackingOf: (exerciseId) => ctx.exercises.get(exerciseId)?.trackingType ?? 'weight_reps',
+    multiPhase: phases.length > 1,
+  });
+  const changes = [...diff, ...targets.changes, ...note];
 
   const at = now.toISOString();
   const revision = stored.revision + 1;
   const currentChanged = body.currentPhaseId !== stored.current.phaseId;
   const toggled = stored.phased !== body.phased;
-  const kind: LogKind = currentChanged && changes.length === 1 && !toggled ? 'phase' : 'edit';
+  const kind: LogKind = currentChanged && diff.length === 1 && !toggled ? 'phase' : 'edit';
   const { lastDayId: _dropped, ...withoutDay } = stored.rotation;
+  const { schedule: _schedule, clientSchedule: _clientSchedule, clientTargets: _clientTargets, ...rest } = stored;
 
   return {
     program: {
-      ...stored,
+      ...rest,
+      ...(schedule.schedule ? { schedule: schedule.schedule } : {}),
+      ...(schedule.clientSchedule ? { clientSchedule: schedule.clientSchedule } : {}),
+      ...(targets.clientTargets ? { clientTargets: targets.clientTargets } : {}),
       phased: body.phased,
       revision,
       updatedAt: at,

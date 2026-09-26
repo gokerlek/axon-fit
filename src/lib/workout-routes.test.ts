@@ -10,6 +10,7 @@ import { DEVICES, EXERCISES } from './testing/workout-fixtures.ts';
 import {
   alternativesRoute,
   exercisesRoute,
+  scheduleRoute,
   waterRoute,
   workoutRoute,
   type AddedRowResponse,
@@ -83,11 +84,45 @@ describe('GET /api/me/workout', () => {
     assert.equal(data.today, '2026-09-26');
     assert.equal(data.day?.dayId, DAY_A);
     assert.equal(data.day?.rows.r_aaaaaa?.plan.reason, 'first_time');
-    assert.deepEqual(data.week, { done: 0, target: null });
+    assert.deepEqual(data.week, { done: 0, target: null, days: [], start: '2026-09-21' });
     assert.deepEqual(data.water, { file: 0, sessions: 0 });
     assert.equal(data.active, null);
     assert.deepEqual(data.program?.days.map((day) => day.id), [DAY_A, DAY_B]);
     assert.equal(data.program?.nextDayId, DAY_A);
+    assert.deepEqual(data.schedule, { weekdays: [], pt: [], client: null, source: null, daysPerWeek: null });
+    // Bitişteki "Sıradaki antrenman" satırı için evrenin günleri planda.
+    assert.deepEqual(data.day?.rotationDays, [
+      { id: DAY_A, name: 'Gün A' },
+      { id: DAY_B, name: 'Gün B' },
+    ]);
+  });
+
+  test('antrenman günleri: "bu hafta x/y" seçili gün sayısıyla; danışanın günleri geçerli; damga değişir', async () => {
+    const days = { schedule: { weekdays: [1, 3, 5] }, clientSchedule: { weekdays: [2, 4, 6, 7], at: '2026-09-25T10:00:00.000Z' } };
+    const { deps } = setup({ 'program.json': programFile({}, days) });
+    const data = body(await workoutRoute(deps, null));
+    assert.deepEqual(data.schedule, { weekdays: [2, 4, 6, 7], pt: [1, 3, 5], client: { weekdays: [2, 4, 6, 7], at: '2026-09-25T10:00:00.000Z' }, source: 'client', daysPerWeek: null });
+    assert.equal(data.week.target, 4);
+    const other = body(await workoutRoute(setup({ 'program.json': programFile({}, { schedule: { weekdays: [1, 3, 5] } }) }).deps, null));
+    assert.equal(other.week.target, 3);
+    assert.notEqual(other.program?.stamp, data.program?.stamp, 'danışanın günleri damgaya girer');
+    const rotated = body(await workoutRoute(setup({ 'program.json': programFile({ lastDayId: DAY_A, lastCompletedAt: '2026-09-25T10:00:00.000Z' }, { schedule: { weekdays: [1, 3, 5] } }) }).deps, null));
+    assert.notEqual(rotated.program?.stamp, other.program?.stamp, 'rotasyon damgaya girer');
+  });
+
+  test('başka gün seçildiyse planda sıradaki günün adı; günlerin son yapıldığı gün', async () => {
+    const { deps } = setup({
+      'program.json': programFile(),
+      'sessions/s_aaaaaaaa.json': finished('s_aaaaaaaa', '2026-09-22T15:00:00.000Z', 9),
+    });
+    const data = body(await workoutRoute(deps, DAY_B));
+    assert.equal(data.day?.dayId, DAY_B);
+    assert.equal(data.day?.plannedDayId, DAY_A);
+    assert.equal(data.day?.plannedDayName, 'Gün A');
+    assert.deepEqual(data.program?.days, [
+      { id: DAY_A, name: 'Gün A', lastDate: '2026-09-22' },
+      { id: DAY_B, name: 'Gün B' },
+    ]);
   });
 
   test('bitmiş antrenmanlardan: plan, "Önceki", bu hafta, bugünkü su (index dosyasız da onarılır)', async () => {
@@ -102,7 +137,7 @@ describe('GET /api/me/workout', () => {
     assert.equal(row?.plan.reason, 'increase');
     assert.equal(row?.plan.topWeightKg, 62.5);
     assert.deepEqual(row?.lastTime.map((item) => item.value), [10, 10, 10]);
-    assert.deepEqual(data.week, { done: 2, target: null });
+    assert.deepEqual(data.week, { done: 2, target: null, days: ['2026-09-22', '2026-09-26'], start: '2026-09-21' });
     assert.deepEqual(data.water, { file: 1, sessions: 2 });
   });
 
@@ -242,6 +277,66 @@ describe('POST /api/me/water', () => {
     const { deps } = setup({}, { gh });
     const result = await waterRoute(deps, headers(), ORIGIN, { taps: [tap('wt_aaaaaaaa', '2026-09-26T09:00:00.000Z')] });
     assert.equal(result.status, 500);
+    assert.equal(gh.commitCount(), 1);
+  });
+});
+
+describe('POST /api/me/schedule', () => {
+  const headers = (origin = ORIGIN, type = 'application/json') => new Headers({ origin, 'content-type': type });
+  type RawProgram = ReturnType<typeof programFile> & { clientSchedule?: unknown; schedule?: unknown; log: { kind: string; revision: number; changes: { text: string }[] }[] };
+
+  test('yalnız bu siteden ve JSON\'la; en az bir gün; oturum yoksa 401', async () => {
+    const { deps, gh } = setup();
+    assert.equal((await scheduleRoute(deps, headers('https://kotu.example'), ORIGIN, { weekdays: [1] })).status, 403);
+    assert.equal((await scheduleRoute(deps, headers(ORIGIN, 'text/plain'), ORIGIN, { weekdays: [1] })).status, 415);
+    assert.equal((await scheduleRoute(deps, headers(), ORIGIN, { weekdays: [] })).status, 400);
+    assert.equal((await scheduleRoute(deps, headers(), ORIGIN, { weekdays: [0, 8] })).status, 400);
+    assert.equal((await scheduleRoute(deps, headers(), ORIGIN, { weekdays: [1, 1] })).status, 400);
+    assert.equal((await scheduleRoute(setup(undefined, { session: null }).deps, headers(), ORIGIN, { weekdays: [1] })).status, 401);
+    assert.equal(gh.commitCount(), 0);
+  });
+
+  test('danışanın günleri katmana; geçmişe "client"; revision artmaz; bilinmeyen alanlar düşmez; PT\'nin bildirimi düşer', async () => {
+    const { deps, gh } = setup({ 'program.json': programFile({}, { schedule: { weekdays: [1, 3, 5] }, clientTargets: { r_aaaaaa: { at: 'x' } } }) });
+    const result = await scheduleRoute(deps, headers(), ORIGIN, { weekdays: [6, 2, 4] });
+    assert.equal(result.status, 200);
+    assert.deepEqual((result.body as { schedule: { weekdays: number[]; source: string } }).schedule.weekdays, [2, 4, 6]);
+    const stored = gh.get('program.json') as RawProgram & { clientTargets?: unknown };
+    assert.deepEqual(stored.clientSchedule, { weekdays: [2, 4, 6], at: NOW.toISOString() });
+    assert.deepEqual(stored.schedule, { weekdays: [1, 3, 5] });
+    assert.equal(stored.revision, 7);
+    assert.deepEqual(stored.clientTargets, { r_aaaaaa: { at: 'x' } }, 'bilinmeyen alan korunur');
+    assert.deepEqual(stored.log[0], { at: NOW.toISOString(), revision: 7, kind: 'client', changes: [{ text: 'Antrenman günleri: Pzt, Çar, Cum → Sal, Per, Cmt' }] });
+    assert.deepEqual(gh.messages(), ['Program (danışan): Antrenman günleri: Pzt, Çar, Cum → Sal, Per, Cmt']);
+    assert.equal(gh.noticeDrops(), 1);
+
+    // Aynı günler: yazılmaz.
+    const again = await scheduleRoute(deps, headers(), ORIGIN, { weekdays: [2, 4, 6] });
+    assert.deepEqual([again.status, again.body.unchanged], [200, true]);
+    assert.equal(gh.commitCount(), 1);
+
+    // PT'nin günlerine dönen seçim katmanı kaldırır.
+    await scheduleRoute(deps, headers(), ORIGIN, { weekdays: [1, 3, 5] });
+    assert.equal('clientSchedule' in (gh.get('program.json') as RawProgram), false);
+  });
+
+  test('çakışmada taze okuyup bir kez daha: arada yazılan rotasyon kaybolmaz', async () => {
+    const { deps, gh } = setup();
+    gh.onNext('write', () => gh.put('program.json', programFile({ lastDayId: DAY_A, lastCompletedAt: '2026-09-26T10:00:00.000Z' })), 'program.json');
+    const result = await scheduleRoute(deps, headers(), ORIGIN, { weekdays: [2] });
+    assert.equal(result.status, 200);
+    const stored = gh.get('program.json') as RawProgram;
+    assert.equal(stored.rotation.lastDayId, DAY_A);
+    assert.deepEqual(stored.clientSchedule, { weekdays: [2], at: NOW.toISOString() });
+  });
+
+  test('program yoksa 404; okunamıyorsa yazılmaz', async () => {
+    assert.equal((await scheduleRoute(setup({}).deps, headers(), ORIGIN, { weekdays: [1] })).status, 404);
+    const gh = fakeSessionRepo({ 'program.json': { version: 2, bozuk: true } });
+    const invalid = await scheduleRoute(setup({}, { gh }).deps, headers(), ORIGIN, { weekdays: [1] });
+    assert.equal(invalid.status, 409);
+    gh.putText('program.json', '{ bozuk');
+    assert.equal((await scheduleRoute(setup({}, { gh }).deps, headers(), ORIGIN, { weekdays: [1] })).status, 500);
     assert.equal(gh.commitCount(), 1);
   });
 });

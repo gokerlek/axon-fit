@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Form, getDeepErrorEntry, getInput, setErrors, setInput, useField, useForm, type FormStore } from '@formisch/react';
 import { ArrowClockwise, ArrowSquareOut, WarningCircle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
+import type { RowClientTarget } from '@/components/block-editor/editor-context';
 import { DraftAutosave, DraftNotice, useEditorDraft } from '@/components/block-editor/editor-draft';
 import { EditorSaveProvider, FloatingSaveButton, SaveButton } from '@/components/block-editor/editor-save';
 import { LabeledSelect } from '@/components/labeled-select';
@@ -49,6 +50,7 @@ import { DayEditor } from './day-editor';
 import { DaysCard } from './days-card';
 import { PhasesCard } from './phases-card';
 import { SaveTemplateDialog } from './save-template-dialog';
+import { WeekdayField, type ClientDays } from './weekday-field';
 
 export type ProgramFormStore = FormStore<typeof programFormSchema>;
 
@@ -114,9 +116,12 @@ export function ProgramForm({
   devices,
   now,
   timeZone,
+  clientDays = null,
+  clientTargets,
 }: {
   clientId: string;
   mode: 'create' | 'edit';
+  /** `weekdays`: PT'nin kayıttaki antrenman günleri (danışanınki `clientDays`'te). */
   initial: ProgramBody;
   /** Yüklenen programın sürümü (revision ve oluşturulma anı; kayıtta gönderilir); oluştururken null. */
   base: ProgramBase | null;
@@ -127,6 +132,10 @@ export function ProgramForm({
   /** Sayfanın yüklendiği an (sunucuda): evre durumu sunucu ve tarayıcıda aynı hesaplansın. */
   now: string;
   timeZone: string;
+  /** Danışanın değiştirdiği antrenman günleri (düzenlemede); yoksa null. */
+  clientDays?: ClientDays;
+  /** Danışanın satır hedefleri (düzenlemede): satırda "Danışan güncelledi" rozeti (tasarım §6.2). */
+  clientTargets?: Readonly<Record<string, RowClientTarget>>;
 }) {
   const router = useRouter();
   const exerciseById = useMemo(() => new Map(exercises.map((exercise) => [exercise.id, exercise])), [exercises]);
@@ -135,7 +144,12 @@ export function ProgramForm({
   // Düzenlemede artık olmayan cihaza yazılmış satırlar egzersizin cihazına döner (kaydedince kalıcı).
   const [start] = useState(() => {
     const prepared = prepareProgramForEditing(initial.phases, deviceIds);
-    const input: ProgramFormInput = { phased: initial.phased, currentPhaseId: initial.currentPhaseId, phases: toInput(prepared.phases) };
+    const input: ProgramFormInput = {
+      phased: initial.phased,
+      currentPhaseId: initial.currentPhaseId,
+      phases: toInput(prepared.phases),
+      weekdays: initial.weekdays ?? [],
+    };
     return {
       input,
       dropped: prepared.droppedDeviceRowIds,
@@ -214,6 +228,16 @@ export function ProgramForm({
     stored && kept.currentPhaseId === stored.current.phaseId ? reconcileRotation(initial.phases, kept.phases, stored.rotation) : {};
   const next = nextDayId({ phases: kept.phases, current: { phaseId: kept.currentPhaseId, startedAt: '' }, rotation });
   const missingDayIds = useMemo(() => new Set(missing.map((item) => item.dayId)), [missing]);
+  // Antrenman günleri programın: evresizde "Haftada kaç gün"ün altında, evrelide evrelerin üstünde (§2.11).
+  const weekdaysField = (
+    <WeekdayField
+      form={form}
+      clientId={clientId}
+      daysPerWeek={phases.find((phase) => phase.id === currentPhaseId)?.daysPerWeek}
+      client={clientDays}
+      timeZone={timeZone}
+    />
+  );
   const templateIds = useMemo(() => new Set(templateList.map((template) => template.id)), [templateList]);
 
   const current = useCallback(() => (getInput(form, { path: ['phases'] }) ?? []) as unknown as ProgramPhase[], [form]);
@@ -591,6 +615,7 @@ export function ProgramForm({
             now={now}
             timeZone={timeZone}
             actions={actions}
+            weekdays={weekdaysField}
           />
         ) : (
           <DaysCard
@@ -601,6 +626,7 @@ export function ProgramForm({
             missingDayIds={missingDayIds}
             hasTemplates={templateList.length > 0}
             actions={actions}
+            weekdays={weekdaysField}
           />
         )}
 
@@ -621,6 +647,7 @@ export function ProgramForm({
             timeZone={timeZone}
             actions={actions}
             footer={formEnd}
+            clientTargets={clientTargets}
           />
         ) : (
           <>

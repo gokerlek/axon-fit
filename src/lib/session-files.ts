@@ -6,6 +6,7 @@ import { listExercises } from './exercises';
 import { familyOf } from './muscles';
 import { clientRepoName, sessionWriter } from './github/client';
 import { commitFiles, listFolder, readBlobJson, readJson, repoHead, writeJson } from './github/files';
+import { dropNotices } from './notices-store';
 import { SESSIONS_DIR } from './schemas/session';
 import type { SessionRepo } from './session-files-core';
 import type { SessionRouteDeps } from './session-routes';
@@ -28,8 +29,14 @@ export function sessionRepo(clientId: string): SessionRepo {
     readBlob: (sha) => readBlobJson(repo, sha, api),
     listSessions: (tree) => listFolder(repo, tree, SESSIONS_DIR, api),
     write: (path, content, options) => writeJson(repo, path, content, { ...options, api }),
-    commit: (input) => commitFiles(repo, input, api),
+    commit: async (input) => {
+      const result = await commitFiles(repo, input, api);
+      // Bitiş, geçmişte düzeltme ve silme index'i değiştirir: PT'nin bildirimleri yeniden türetilsin.
+      dropNotices(clientId);
+      return result;
+    },
     invalidate: (id) => revalidateTag(`session:${id}`, { expire: 0 }),
+    noticesChanged: () => dropNotices(clientId),
     log: (message) => console.error(message),
   };
 }

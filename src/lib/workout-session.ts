@@ -76,6 +76,7 @@ export function newSessionDoc(day: WorkoutDay, input: { today: string; now: Date
       dayId: day.dayId,
       dayName: day.dayName,
       ...(day.plannedDayId ? { plannedDayId: day.plannedDayId } : {}),
+      ...(day.plannedDayId && day.plannedDayId !== day.dayId && day.plannedDayName ? { plannedDayName: day.plannedDayName } : {}),
     },
     writer: input.writer,
     entries: [],

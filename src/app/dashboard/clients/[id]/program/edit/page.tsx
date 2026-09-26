@@ -2,10 +2,12 @@ import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { EditorBackLink } from '@/components/block-editor/editor-back-link';
 import { SectionHeader } from '@/components/section-header';
+import { clientTargetNotes } from '@/lib/client-targets';
 import { loadClient } from '@/lib/clients';
 import { readAppConfig } from '@/lib/config';
 import { listDevices } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
+import { formatDayShort, todayIn } from '@/lib/format';
 import { requirePt } from '@/lib/guards';
 import { readProgramFile } from '@/lib/programs';
 import { CLIENT_ID_PATTERN } from '@/lib/schemas/client';
@@ -55,6 +57,13 @@ export default async function EditProgramPage({ params }: { params: Promise<{ id
   const templates = templateFiles.flatMap((item) =>
     item.template ? [{ id: item.template.id, name: item.template.name, blocks: item.template.blocks }] : [],
   );
+  // Danışanın geçerli satır hedefleri (tasarım §6.2): kartta "Danışan güncelledi · hedef 10–14 · 26 Eyl".
+  const tracking = new Map(exercises.map((exercise) => [exercise.id, exercise.trackingType]));
+  const clientTargets = Object.fromEntries(
+    Object.entries(clientTargetNotes(program.phases, program.clientTargets, (exerciseId) => tracking.get(exerciseId) ?? 'weight_reps')).map(
+      ([rowId, note]) => [rowId, { text: `${note.text} · ${formatDayShort(todayIn(config.timeZone, new Date(note.at)))}`, sets: note.sets, baseSets: note.baseSets }],
+    ),
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -65,7 +74,7 @@ export default async function EditProgramPage({ params }: { params: Promise<{ id
       <ProgramForm
         clientId={id}
         mode="edit"
-        initial={{ phased: program.phased, currentPhaseId: program.current.phaseId, phases: program.phases }}
+        initial={{ phased: program.phased, currentPhaseId: program.current.phaseId, phases: program.phases, weekdays: program.schedule?.weekdays ?? [] }}
         base={{ revision: program.revision, createdAt: program.createdAt }}
         stored={{ current: program.current, rotation: program.rotation }}
         templates={templates}
@@ -73,6 +82,8 @@ export default async function EditProgramPage({ params }: { params: Promise<{ id
         devices={pickerDevices(devices)}
         now={new Date().toISOString()}
         timeZone={config.timeZone}
+        clientDays={program.clientSchedule ?? null}
+        clientTargets={clientTargets}
       />
     </div>
   );

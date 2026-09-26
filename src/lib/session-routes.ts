@@ -158,7 +158,7 @@ export function putRoute(deps: SessionRouteDeps, headers: Headers, origin: strin
   });
 }
 
-/** Bitiş: tek commit (seans + index + rotasyon + onaylı sağlık ayrıntısı). */
+/** Bitiş: tek commit (seans + index + rotasyon ve danışanın program güncellemesi + öneriler + onaylı sağlık ayrıntısı). */
 export function finishRoute(deps: SessionRouteDeps, headers: Headers, origin: string, id: string, input: unknown): Promise<SessionRouteResult> {
   const blocked = postGuard(headers, origin);
   if (blocked) return Promise.resolve(blocked);
@@ -170,7 +170,10 @@ export function finishRoute(deps: SessionRouteDeps, headers: Headers, origin: st
     if (result.status === 'deleted') return GONE;
     if (result.status === 'already') return { status: 200, body: { doc: result.doc, already: true } };
     deps.log(`[seans] ${client.id} ${id} finish`);
-    return { status: 200, body: { doc: result.doc, rotation: result.plan.rotation, health: result.plan.health, ...slow(result.remaining) } };
+    return {
+      status: 200,
+      body: { doc: result.doc, rotation: result.plan.rotation, health: result.plan.health, feedback: result.plan.feedback, ...slow(result.remaining) },
+    };
   });
 }
 

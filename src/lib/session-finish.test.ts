@@ -2,8 +2,8 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { gitBlobSha, jsonText } from './github/blob.ts';
 import { HEALTH_CONSENT_VERSION, type Client } from './schemas/client.ts';
-import { emptySessionIndex, type SessionDoc, type SessionIndex } from './schemas/session.ts';
-import { allowedHealth, applyPatch, defaultRotation, planFinish, planPut, sessionDateFor, type FinishInput } from './session-finish.ts';
+import { emptySessionIndex, type FeedbackDecision, type SessionDoc, type SessionIndex } from './schemas/session.ts';
+import { allowedHealth, applyPatch, BROKEN_PROPOSALS, defaultRotation, planFinish, planPut, sessionDateFor, type FinishInput } from './session-finish.ts';
 import { withDeletions } from './session-merge.ts';
 import { at, DAY_A, DAY_B, programFile, sessionDoc, sessionEntry, W1, W2, workingSet } from './testing/session-fixtures.ts';
 
@@ -82,7 +82,11 @@ describe('bitiş: tek commit', () => {
     assert.deepEqual(plan.rotation, { choice: 'keep', applied: false });
     assert.equal(fileOf(plan, 'program.json'), undefined);
     assert.deepEqual(plan.doc.notices.map((notice) => notice.kind), ['unfinished']);
-    assert.equal((fileOf(plan, 'sessions-index.json') as SessionIndex).items[0]?.unfinished, true);
+    // PT'nin bildirimi yapılan ve planlanan seti söyler: "Gün A yarım bırakıldı (2/5 set)".
+    assert.deepEqual(plan.doc.notices[0], { kind: 'unfinished', at: plan.doc.finishedAt, done: 2, planned: 5 });
+    const row = (fileOf(plan, 'sessions-index.json') as SessionIndex).items[0];
+    assert.equal(row?.unfinished, true);
+    assert.deepEqual(row?.progress, { done: 2, planned: 5 });
     assert.equal(defaultRotation(3, 5), 'advance');
     assert.equal(defaultRotation(2, 5), 'keep');
   });
@@ -105,13 +109,16 @@ describe('bitiş: tek commit', () => {
 
   test('başka gün seçildi: bildirim; sıra seçilen günden sürer', () => {
     const doc = sessionDoc({
-      program: { revision: 7, dayId: DAY_B, dayName: 'Gün B', plannedDayId: DAY_A },
+      program: { revision: 7, dayId: DAY_B, dayName: 'Gün B', plannedDayId: DAY_A, plannedDayName: 'Gün A' },
       entries: [sessionEntry('e_cccccc', { rowId: 'r_cccccc', sets: sets(3, 1) })],
     });
     const plan = planFinish(finishInput(doc));
     assert.deepEqual(plan.doc.notices.map((notice) => notice.kind), ['other_day']);
     assert.equal((fileOf(plan, 'program.json') as ReturnType<typeof programFile>).rotation.lastDayId, DAY_B);
-    assert.equal((fileOf(plan, 'sessions-index.json') as SessionIndex).items[0]?.otherDay, true);
+    const row = (fileOf(plan, 'sessions-index.json') as SessionIndex).items[0];
+    assert.equal(row?.otherDay, true);
+    // PT'nin bildirimi: "Gün A yerine Gün B yapıldı".
+    assert.equal(row?.plannedDayName, 'Gün A');
   });
 
   test('okunamayan ya da olmayan program: rotasyon yok, bitiş sürer', () => {
@@ -172,6 +179,79 @@ describe('bitiş: sağlık ayrıntısı yalnız onayla ve yalnız health.json', 
     assert.deepEqual(allowedHealth(readinessOnly, health), { adjustReason: 'readiness' });
     assert.equal(allowedHealth(readinessOnly, { adjustReason: 'pain' }), null);
     assert.equal(allowedHealth(noConsent, health), null);
+  });
+});
+
+describe('bitiş: program güncelleme (§6)', () => {
+  const bench = (kg: number) =>
+    sessionEntry('e_aaaaaa', { rowId: 'r_aaaaaa', sets: sets(3, 1).map((set) => ({ ...set, kg, plannedSetCount: 3, topWeightKg: 60 })) });
+  const weight = (apply: boolean): FeedbackDecision => ({
+    kind: 'weight_up',
+    apply,
+    entryId: 'e_aaaaaa',
+    rowId: 'r_aaaaaa',
+    dayId: DAY_A,
+    exerciseId: 'bench-press',
+    title: 'Bench Press',
+    trackingType: 'weight_reps',
+    kg: { from: 60, to: 62.5 },
+  });
+  const legPress: FeedbackDecision = {
+    kind: 'sets',
+    apply: true,
+    entryId: 'e_aaaaaa',
+    rowId: 'r_aaaaaa',
+    dayId: DAY_A,
+    exerciseId: 'bench-press',
+    title: 'Bench Press',
+    trackingType: 'weight_reps',
+    count: { from: 3, to: 4 },
+    why: '2 antrenmandır 4 set yapıldı',
+  };
+  const leg = () => sessionEntry('e_bbbbbb', { rowId: 'r_bbbbbb', exerciseId: 'leg-press', title: 'Leg Press', sets: sets(2, 10) });
+  const incoming = (kg: number) => sessionDoc({ entries: [bench(kg), leg()], status: 'finished', finishedAt: at(55) });
+
+  test('"Evet": danışan kaydı ve rotasyon aynı program yazımında; öneri proposals.json\'a; seansa bildirimler', () => {
+    const plan = planFinish(finishInput(incoming(62.5), { feedback: { answer: 'yes', items: [weight(true), legPress] } }));
+    assert.deepEqual(plan.files.map((file) => file.path), ['sessions/s_k2m9x4qa.json', 'sessions-index.json', 'program.json', 'proposals.json']);
+    const program = fileOf(plan, 'program.json') as { revision: number; rotation: unknown; log: { kind: string; sessionId: string; changes: { text: string }[] }[] };
+    assert.equal(program.revision, 7);
+    assert.deepEqual(program.rotation, { lastDayId: DAY_A, lastCompletedAt: at(55) });
+    assert.equal(program.log[0]?.kind, 'client');
+    assert.equal(program.log[0]?.sessionId, 's_k2m9x4qa');
+    assert.equal(program.log[0]?.changes[0]?.text, 'Bench Press: çalışma ağırlığı 60 → 62,5 kg');
+    const proposals = fileOf(plan, 'proposals.json') as { items: { kind: string; status: string }[] };
+    assert.deepEqual(proposals.items.map((item) => [item.kind, item.status]), [['sets', 'pending']]);
+    assert.deepEqual(plan.feedback, { direct: 1, proposals: 1, converted: 0 });
+    assert.deepEqual(plan.doc.notices.map((notice) => notice.kind), ['program_update', 'proposal']);
+    const index = fileOf(plan, 'sessions-index.json') as SessionIndex;
+    assert.deepEqual(index.items[0]?.notices, ['program_update', 'proposal']);
+    assert.match(plan.message, /^Antrenman bitti · Gün A · 5 set · Program \(danışan\) · 1 öneri\n\n- Gün A: Bench Press: çalışma ağırlığı 60 → 62,5 kg$/);
+  });
+
+  test('"Hayır": programa bir şey yazılmaz (rotasyon yine), öneri gitmez; yukarı ağırlık seansa oneOff', () => {
+    const plan = planFinish(finishInput(incoming(62.5), { feedback: { answer: 'no', items: [weight(false), { ...legPress, apply: false }] } }));
+    assert.deepEqual(plan.files.map((file) => file.path), ['sessions/s_k2m9x4qa.json', 'sessions-index.json', 'program.json']);
+    assert.deepEqual((fileOf(plan, 'program.json') as { log: unknown[] }).log, []);
+    assert.equal(plan.doc.entries[0]?.oneOff, true);
+    const index = fileOf(plan, 'sessions-index.json') as SessionIndex;
+    assert.equal(index.items[0]?.exercises[0]?.oneOff, true);
+    assert.deepEqual(plan.feedback, { direct: 0, proposals: 0, converted: 0 });
+  });
+
+  test('rotasyon ilerlemese de danışanın güncellemesi program dosyasına yazılır', () => {
+    const plan = planFinish(finishInput(incoming(62.5), { rotation: 'keep', feedback: { answer: 'yes', items: [weight(true)] } }));
+    const program = fileOf(plan, 'program.json') as { rotation: unknown; log: unknown[] };
+    assert.deepEqual(program.rotation, {});
+    assert.equal(program.log.length, 1);
+  });
+
+  test('bozuk proposals.json ezilmez: öneri yazılmaz, kilo kaydı yine yazılır', () => {
+    const plan = planFinish(finishInput(incoming(62.5), { proposalsFile: BROKEN_PROPOSALS, feedback: { answer: 'yes', items: [weight(true), legPress] } }));
+    assert.equal(fileOf(plan, 'proposals.json'), undefined);
+    assert.equal(plan.proposalsBroken, true);
+    assert.deepEqual(plan.feedback, { direct: 1, proposals: 0, converted: 0 });
+    assert.deepEqual(plan.doc.notices.map((notice) => notice.kind), ['program_update']);
   });
 });
 

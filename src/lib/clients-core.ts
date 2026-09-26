@@ -477,3 +477,25 @@ export async function setHealthConsent(
   await store.writeClient(next, sha, decision.granted ? 'Sağlık verisi onayı verildi' : 'Sağlık verisi onayı geri çekildi');
   return next;
 }
+
+/**
+ * PT bildirimleri okudu (Genel bakış, "Tümünü okundu say"): `inbox.seenAt` = `at`. Zaman yalnız ileri
+ * gider (eski sekmeden gelen istek okunmamış yapmaz). Kayıt yoksa false. Aynı anda başka bir yazma
+ * (danışanın onayı, şifre) çakışırsa taze okuyup bir kez daha.
+ */
+export async function markNoticesSeen(store: Pick<ClientStore, 'readClient' | 'writeClient'>, id: string, at: Date): Promise<boolean> {
+  for (let attempt = 0; ; attempt += 1) {
+    const stored = await store.readClient(id);
+    if (!stored) return false;
+    const { client, sha } = stored;
+    const seenAt = at.toISOString();
+    if (client.inbox?.seenAt && Date.parse(client.inbox.seenAt) >= at.getTime()) return true;
+    try {
+      await store.writeClient({ ...client, inbox: { ...client.inbox, seenAt } }, sha, 'Bildirimler okundu');
+      return true;
+    } catch (error) {
+      if (attempt === 0 && error instanceof GithubError && error.status === 409) continue;
+      throw error;
+    }
+  }
+}

@@ -4,9 +4,11 @@ import { finishRoute } from '@/lib/session-routes';
 import { origin } from '@/lib/urls';
 
 /**
- * Antrenmanı bitirir (tasarım §4.7): `{ doc, rotation?, health? }` → TEK commit (Git Data API): seans
- * `finished` + index satırı + rotasyon (`program.json`, zaman denetimiyle) + onay varsa sağlık ayrıntısı
- * (`health.json`). Zaten bitmişse 200 no-op; silinmişse 410. Yalnız bu siteden ve JSON'la.
+ * Antrenmanı bitirir (tasarım §4.7): `{ doc, rotation?, health?, feedback? }` → TEK commit (Git Data API):
+ * seans `finished` + index satırı + rotasyon ve "Programını güncelleyelim mi?"nin doğrudan maddeleri
+ * (`program.json`: danışan kaydı, `clientTargets`; revision artmaz) + öneriler (`proposals.json`) + onay varsa
+ * sağlık ayrıntısı (`health.json`). Yanıtta `feedback`: doğrudan yazılan, öneriye giden, öneriye dönen madde
+ * sayısı. Zaten bitmişse 200 no-op; silinmişse 410. Yalnız bu siteden ve JSON'la.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

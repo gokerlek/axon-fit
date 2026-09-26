@@ -10,6 +10,7 @@ import {
   type SessionIndexRow,
 } from './schemas/session.ts';
 import { canonicalJson } from './session-merge.ts';
+import { bestOf, lacksRecords, withRecords } from './session-records.ts';
 
 /**
  * `sessions-index.json` (tasarım §4.1, §4.2) — saf. Geçmiş listesi, "bu hafta x/3", hareket deneyimi ve
@@ -20,6 +21,9 @@ import { canonicalJson } from './session-merge.ts';
  *
  * Silinen antrenmanların kimlikleri `deleted`'dadır (değer yok): kimliği orada olan dosya yeniden
  * açılamaz (`PUT` 410).
+ *
+ * Rekorlar (`session-records.ts`): her hareketin o antrenmandaki en iyileri satırda (`best`), rekor sayısı
+ * (`prs`) index her değiştiğinde (ekleme, silme, onarım) bütün satırlar için baştan hesaplanır.
  */
 
 function time(iso: string | undefined): number {
@@ -67,6 +71,7 @@ function exerciseRow(entry: SessionEntry): SessionIndexExercise | null {
     ...(entry.plan?.stage ? { stage: entry.plan.stage } : {}),
     ...(entry.oneOff ? { oneOff: true as const } : {}),
     ...(entry.lighter ? { lighter: true as const } : {}),
+    best: bestOf(sets),
   };
 }
 
@@ -78,11 +83,27 @@ export function durationOf(doc: Pick<SessionDoc, 'startedAt' | 'finishedAt' | 'e
   return Math.min(24 * 60, Math.max(0, minutes));
 }
 
+/**
+ * Onaylanmış aşırı yük (PT'nin bildirimi): hareket başına en ağır aşırı yük seti ve o setin planı.
+ * Hareketin adı o günkü hâliyle (`title`).
+ */
+export function overloadsOf(doc: Pick<SessionDoc, 'entries'>): { title: string; kg: number; plannedKg?: number }[] {
+  return doc.entries.flatMap((entry) => {
+    const sets = working(entry).filter((set) => set.overload && set.kg !== undefined);
+    const top = sets.reduce<(typeof sets)[number] | undefined>((best, set) => (!best || (set.kg ?? 0) > (best.kg ?? 0) ? set : best), undefined);
+    if (!top || top.kg === undefined) return [];
+    return [{ title: entry.title, kg: top.kg, ...(top.plannedKg !== undefined ? { plannedKg: top.plannedKg } : {}) }];
+  });
+}
+
 /** Antrenmanın index satırı; `sha` dosyanın blob kimliği. */
 export function indexRowOf(doc: SessionDoc, sha: string): SessionIndexRow {
   const notices = [...new Set(doc.notices.map((notice) => notice.kind))].sort() as NoticeKind[];
   const duration = durationOf(doc);
   const program = doc.program;
+  const otherDay = Boolean(program?.plannedDayId && program.plannedDayId !== program.dayId);
+  const unfinished = doc.notices.find((notice) => notice.kind === 'unfinished');
+  const overloads = notices.includes('overload') ? overloadsOf(doc) : [];
   return {
     id: doc.id,
     sha,
@@ -91,7 +112,7 @@ export function indexRowOf(doc: SessionDoc, sha: string): SessionIndexRow {
     startedAt: doc.startedAt,
     ...(doc.finishedAt ? { finishedAt: doc.finishedAt } : {}),
     ...(program ? { dayId: program.dayId, dayName: program.dayName } : {}),
-    otherDay: Boolean(program?.plannedDayId && program.plannedDayId !== program.dayId),
+    otherDay,
     unfinished: notices.includes('unfinished'),
     ...(duration !== undefined ? { durationMin: duration } : {}),
     volumeKg: volumeOf(doc),
@@ -99,6 +120,9 @@ export function indexRowOf(doc: SessionDoc, sha: string): SessionIndexRow {
     water: waterOf(doc),
     exercises: doc.entries.flatMap((entry) => exerciseRow(entry) ?? []),
     notices,
+    ...(otherDay && program?.plannedDayName ? { plannedDayName: program.plannedDayName } : {}),
+    ...(unfinished?.done !== undefined && unfinished.planned !== undefined ? { progress: { done: unfinished.done, planned: unfinished.planned } } : {}),
+    ...(overloads.length > 0 ? { overloads } : {}),
   };
 }
 
@@ -107,15 +131,15 @@ function sortRows(rows: SessionIndexRow[]): SessionIndexRow[] {
   return rows.sort((a, b) => time(b.startedAt ?? b.date) - time(a.startedAt ?? a.date) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
-/** Satırı ekler ya da değiştirir (kimlikle). */
+/** Satırı ekler ya da değiştirir (kimlikle); rekorlar yeniden hesaplanır. */
 export function upsertIndexRow(index: SessionIndex, row: SessionIndexRow): SessionIndex {
-  return { ...index, items: sortRows([...index.items.filter((item) => item.id !== row.id), row]) };
+  return withRecords({ ...index, items: sortRows([...index.items.filter((item) => item.id !== row.id), row]) });
 }
 
-/** Silinen antrenman: satır çıkar, kimlik `deleted`'a girer (bir kez, ilk silinme anıyla). */
+/** Silinen antrenman: satır çıkar, kimlik `deleted`'a girer (bir kez, ilk silinme anıyla); rekorlar yeniden hesaplanır. */
 export function removeIndexRow(index: SessionIndex, id: string, at: Date): SessionIndex {
   const deleted = index.deleted.some((item) => item.id === id) ? index.deleted : [...index.deleted, { id, at: at.toISOString() }];
-  return { version: 1, items: index.items.filter((item) => item.id !== id), deleted };
+  return withRecords({ version: 1, items: index.items.filter((item) => item.id !== id), deleted });
 }
 
 export function isDeletedInIndex(index: SessionIndex, id: string): boolean {
@@ -138,8 +162,9 @@ export type RepairResult = {
 
 /**
  * Index'i `sessions/` klasörünün dosyalarıyla karşılaştırıp onarır. Yalnız farklı olanlar okunur
- * (`read`, blob kimliğiyle). Silinmiş sayılan kimliğin dosyası (iz dosyası) okunmaz. İz dosyası
- * bulunursa kimlik `deleted`'a girer; index'in kendisi bozuksa bile silinenler böylece geri gelir.
+ * (`read`, blob kimliğiyle); rekor girdisi olmayan eski bitmiş satır da (`lacksRecords`). Silinmiş
+ * sayılan kimliğin dosyası (iz dosyası) okunmaz. İz dosyası bulunursa kimlik `deleted`'a girer; index'in
+ * kendisi bozuksa bile silinenler böylece geri gelir. Rekor sayıları sonda baştan hesaplanır.
  */
 export async function repairIndex(
   index: SessionIndex,
@@ -160,7 +185,7 @@ export async function repairIndex(
     present.add(id);
     if (deletedIds.has(id)) continue;
     const row = rows.get(id);
-    if (row && row.sha === file.sha && row.path === file.path) {
+    if (row && row.sha === file.sha && row.path === file.path && !lacksRecords(row)) {
       next.push(row);
       continue;
     }
@@ -185,6 +210,6 @@ export async function repairIndex(
   }
 
   const dropped = index.items.filter((row) => !present.has(row.id) || deletedIds.has(row.id)).map((row) => row.id);
-  const repaired: SessionIndex = { version: 1, items: sortRows(next), deleted };
+  const repaired: SessionIndex = withRecords({ version: 1, items: sortRows(next), deleted });
   return { index: repaired, rebuilt, dropped, unreadable, changed: canonicalJson(repaired) !== canonicalJson(index) };
 }

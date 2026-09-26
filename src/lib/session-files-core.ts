@@ -12,7 +12,8 @@ import {
   type StoredSession,
 } from './schemas/session.ts';
 import { gitBlobSha, jsonText } from './github/blob.ts';
-import { allowedHealth, applyPatch, BROKEN_HEALTH, planFinish, planPut, type FinishPlan } from './session-finish.ts';
+import { PROPOSALS_PATH } from './proposals.ts';
+import { allowedHealth, applyPatch, BROKEN_HEALTH, BROKEN_PROPOSALS, planFinish, planPut, type FinishPlan } from './session-finish.ts';
 import { indexRowOf, isDeletedInIndex, removeIndexRow, repairIndex, upsertIndexRow, type RepairResult } from './session-index.ts';
 import { tombstoneOf } from './session-merge.ts';
 import { DELETE_MESSAGE } from './session-messages.ts';
@@ -52,6 +53,11 @@ export type SessionRepo = {
   commit(input: { head: RepoHead; files: readonly { path: string; content: unknown }[]; message: string }): Promise<{ commit: string; remaining: number | null }>;
   /** Silinen antrenmanın önbelleğini düşürür (`session:<id>` etiketi). */
   invalidate(id: string): void;
+  /**
+   * PT'nin bildirim özetini düşürür (Genel bakış, `notices-store.ts`): danışanın program değişikliğinden
+   * sonra. Tek commit'li yazımlar (bitiş, düzeltme, silme) bunu bağlamada kendiliğinden yapar.
+   */
+  noticesChanged(): void;
   log(message: string): void;
 };
 
@@ -172,7 +178,7 @@ export async function putSession(repo: SessionRepo, ctx: SessionContext, incomin
 /* --- bitiş --- */
 
 export type FinishResult =
-  | { status: 'finished'; doc: SessionDoc; plan: Pick<FinishPlan, 'rotation' | 'health'>; remaining: number | null }
+  | { status: 'finished'; doc: SessionDoc; plan: Pick<FinishPlan, 'rotation' | 'health' | 'feedback'>; remaining: number | null }
   /** Zaten bitmiş: aynı commit'te öteki dosyalar da yazılmıştı (200, no-op). */
   | { status: 'already'; doc: SessionDoc }
   | { status: 'deleted' };
@@ -205,22 +211,35 @@ export async function finishSession(
         healthFile = BROKEN_HEALTH;
       }
     }
+    // Öneriler dosyası yalnız uygulanacak bir karar varken okunur; bozuksa ezilmez.
+    let proposalsFile: unknown = null;
+    if (body.feedback?.items.some((item) => item.apply)) {
+      try {
+        proposalsFile = (await repo.read(PROPOSALS_PATH, head.commit))?.content ?? null;
+      } catch (error) {
+        if (!(error instanceof GithubError && error.status === 500)) throw error;
+        proposalsFile = BROKEN_PROPOSALS;
+      }
+    }
     const plan = planFinish({
       stored,
       incoming: body.doc,
       rotation: body.rotation,
       health: body.health,
+      feedback: body.feedback,
       index,
       program: program?.content ?? null,
+      proposalsFile,
       healthFile,
       client: ctx.client,
       now: ctx.now,
       timeZone: ctx.timeZone,
     });
     if (plan.health === 'broken') repo.log(`[seans] ${id}: health.json okunamadı; sağlık ayrıntısı yazılmadı.`);
+    if (plan.proposalsBroken) repo.log(`[seans] ${id}: proposals.json okunamadı; öneriler yazılmadı.`);
     assertWritable(plan.doc);
     const written = await repo.commit({ head, files: plan.files, message: plan.message });
-    return { status: 'finished', doc: plan.doc, plan: { rotation: plan.rotation, health: plan.health }, remaining: written.remaining };
+    return { status: 'finished', doc: plan.doc, plan: { rotation: plan.rotation, health: plan.health, feedback: plan.feedback }, remaining: written.remaining };
   });
 }
 
