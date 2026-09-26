@@ -1,12 +1,15 @@
 import 'server-only';
 import { revalidateTag } from 'next/cache';
 import { readAppConfig } from './config';
+import { listDevices } from './devices';
+import { listExercises } from './exercises';
 import { clientRepoName, sessionWriter } from './github/client';
 import { commitFiles, listFolder, readBlobJson, readJson, repoHead, writeJson } from './github/files';
 import { SESSIONS_DIR } from './schemas/session';
 import type { SessionRepo } from './session-files-core';
 import type { SessionRouteDeps } from './session-routes';
 import { readClientSession, sessionClient } from './session';
+import type { WorkoutRouteDeps } from './workout-routes';
 
 /**
  * Antrenman dosyaları — GitHub'a ve Next'e bağlama. Akışlar `session-files-core.ts`'te, uçların
@@ -39,5 +42,19 @@ export async function sessionRouteDeps(): Promise<SessionRouteDeps> {
     timeZone: async () => (await readAppConfig()).timeZone,
     now: () => new Date(),
     log: (message) => console.error(message),
+  };
+}
+
+/**
+ * Antrenman ekranının gün planı ve su uçları (`workout-routes.ts`): aynı ortam + egzersiz ve cihaz
+ * kataloğu (hazır kütüphane + PT'nin kayıtları; ağırlık ızgarası cihazdan).
+ */
+export async function workoutRouteDeps(): Promise<WorkoutRouteDeps> {
+  return {
+    ...(await sessionRouteDeps()),
+    catalog: async () => {
+      const [exercises, devices] = await Promise.all([listExercises(), listDevices()]);
+      return { exercises, devices };
+    },
   };
 }

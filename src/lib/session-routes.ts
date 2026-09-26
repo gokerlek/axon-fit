@@ -45,7 +45,7 @@ export type SessionRouteDeps = {
   log(message: string): void;
 };
 
-type Authorized = { client: Client; repo: SessionRepo };
+export type Authorized = { client: Client; repo: SessionRepo };
 
 const EXPIRED = { status: 401, body: { error: 'Oturumun kapanmış. Yeniden giriş yap.' } };
 const NOT_FOUND = { status: 404, body: { error: 'Antrenman bulunamadı.' } };
@@ -94,7 +94,11 @@ function failure(deps: SessionRouteDeps, error: unknown, context: string): Sessi
   return { status, body: { error: 'Kayıt gönderilemedi. Biraz sonra tekrar dene.' } };
 }
 
-async function run(
+/**
+ * Ucun ortak kapısı: kimlik biçimi, oturum ve kayıt, GitHub hatalarının yanıta çevrilmesi. Antrenman
+ * ekranının öteki uçları (`workout-routes.ts`: gün planı, su) da bununla çalışır.
+ */
+export async function run(
   deps: SessionRouteDeps,
   id: string | null,
   context: string,

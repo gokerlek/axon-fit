@@ -8,6 +8,7 @@ import { ConsentCard } from '../consent-card';
 import { PasswordCard } from '../password-card';
 import { ProgramCard } from '../program-card';
 import { RememberClient } from '../remember-client';
+import { TodayWorkout, WaterCard } from '../today-workout';
 
 export const metadata: Metadata = { title: 'Bugün' };
 
@@ -16,7 +17,8 @@ export const metadata: Metadata = { title: 'Bugün' };
  * paylaşmaz (SPEC §5). Yalnız telefon: tek sütun, dokunma hedefleri en az 44 px. Yetki çerezden
  * okunur ve her açılışta kayıtla karşılaştırılır: PT erişimi kapattıysa ya da danışanı arşivlediyse
  * buraya giremez. Sağ üstte avatar menüsü (ayarlar, çıkış); ana sayfada yalnız karar bekleyenler
- * durur, verilmiş sağlık onayı Ayarlar'da.
+ * durur, verilmiş sağlık onayı Ayarlar'da. Altında sıradaki antrenman ("Antrenmana başla", "bu hafta
+ * x/3") ya da yarım kalan antrenman, ve bugünkü su (tasarım §0, §2.1).
  */
 export default async function MePage() {
   const [client, config, session] = await Promise.all([currentClient(), readAppConfig(), readClientSession()]);
@@ -37,7 +39,12 @@ export default async function MePage() {
         <PasswordCard reset={Boolean(client.access.passwordSetAt)} />
       ) : null}
 
-      <ProgramCard clientId={client.id} />
+      {/* Yarım antrenman varsa sıradaki antrenman kartının yerine onun kartı (telefondaki kayıt istemcide okunur). */}
+      <TodayWorkout clientId={client.id}>
+        <ProgramCard clientId={client.id}>
+          <WaterCard clientId={client.id} />
+        </ProgramCard>
+      </TodayWorkout>
     </main>
   );
 }
