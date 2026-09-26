@@ -45,6 +45,19 @@ export const HEALTH_FIELD_INFO: Record<HealthField, { label: string; description
 /** Onay metninin sürümü: metin değişirse artar, eski onay "güncel değil" sayılır. */
 export const HEALTH_CONSENT_VERSION = '2026-09';
 
+/**
+ * Danışanın uygulamaya gelmeden önceki antrenman geçmişi (tasarım §5.2 "Genel deneyim tabanı", açık
+ * soru 4): her hareketin aşamasına taban olur. Yeni → taban yok (her hareket Tanışma'dan başlar); 6 ay+
+ * → Tanışma tek seans (yalnız ayar), sonra en az Başlangıç; 1 yıl+ → Tanışma tek seans, sonra en az Orta.
+ */
+export const TRAINING_EXPERIENCES = ['new', 'six_months', 'one_year'] as const;
+export type TrainingExperience = (typeof TRAINING_EXPERIENCES)[number];
+export const TRAINING_EXPERIENCE_LABELS: Record<TrainingExperience, string> = {
+  new: 'Yeni başlıyor',
+  six_months: '6 ay ve üstü',
+  one_year: '1 yıl ve üstü',
+};
+
 export const clientIdSchema = v.pipe(v.string(), v.regex(CLIENT_ID_PATTERN, 'Danışan kimliği geçersiz.'));
 
 const timestamp = v.pipe(v.string(), v.isoTimestamp());
@@ -86,6 +99,8 @@ export const clientSchema = v.object({
     }),
   }),
   consents: v.object({ health: v.optional(healthConsentSchema) }),
+  /** PT'nin girdiği antrenman geçmişi; yoksa yeni sayılır (öneri motorunda aşama tabanı). */
+  training: v.optional(v.object({ experience: v.picklist(TRAINING_EXPERIENCES) })),
   /**
    * Oturum kuşağı: danışanın oturum çerezi bu sayıyı taşır. PT "erişimi kapat" deyince
    * artar ve açık bütün oturumlar bir sonraki istekte düşer.
@@ -134,6 +149,9 @@ export const inviteSchema = v.object({
 });
 export type Invite = v.InferOutput<typeof inviteSchema>;
 
+/** Formdaki antrenman geçmişi: verilmezse kayıttaki kalır (yeni danışanda "yeni"). */
+const trainingExperienceSchema = v.optional(v.picklist(TRAINING_EXPERIENCES, 'Antrenman geçmişini seç.'));
+
 /** PT'nin formu. Durum yalnız düzenlemede görünür; yeni danışan aktif başlar. */
 export const clientFormSchema = v.pipe(
   v.object({
@@ -142,6 +160,7 @@ export const clientFormSchema = v.pipe(
     status: v.picklist(CLIENT_STATUSES, 'Durumu seç.'),
     healthEnabled: v.boolean(),
     healthFields: healthFieldsSchema,
+    trainingExperience: trainingExperienceSchema,
   }),
   v.forward(
     v.partialCheck(
@@ -163,6 +182,7 @@ export const clientSaveSchema = v.pipe(
     status: v.picklist(CLIENT_STATUSES, 'Durumu seç.'),
     healthEnabled: v.boolean(),
     healthFields: healthFieldsSchema,
+    trainingExperience: trainingExperienceSchema,
   }),
   v.forward(
     v.partialCheck(
@@ -173,3 +193,12 @@ export const clientSaveSchema = v.pipe(
     ['healthFields'],
   ),
 );
+
+/** Kaydın antrenman geçmişi: formda seçildiyse o, değilse kayıttaki (yoksa alan yazılmaz). */
+export function trainingOf(
+  input: Pick<ClientInput, 'trainingExperience'>,
+  current?: Client['training'],
+): Pick<Client, 'training'> {
+  const experience = input.trainingExperience ?? current?.experience;
+  return experience ? { training: { experience } } : {};
+}

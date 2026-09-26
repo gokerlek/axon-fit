@@ -28,6 +28,7 @@ import {
   clientIndexSchema,
   HEALTH_CONSENT_VERSION,
   inviteSchema,
+  trainingOf,
   type Client,
   type ClientIndexEntry,
   type ClientInput,
@@ -134,11 +135,13 @@ export async function updateClient(store: ClientStore, id: string, input: Client
   const stored = await store.readClient(id);
   if (!stored) throw new GithubError('Danışan bulunamadı.', 404);
   const { client, sha } = stored;
-  const { note: _note, ...rest } = client;
+  const { note: _note, training: _training, ...rest } = client;
   const next: Client = {
     ...rest,
     name: input.name,
     ...(input.note ? { note: input.note } : {}),
+    // Antrenman geçmişi formda seçilmediyse (eski istemci) kayıttaki kalır.
+    ...trainingOf(input, client.training),
     status: input.status,
     modules: {
       ...client.modules,

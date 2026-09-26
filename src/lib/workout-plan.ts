@@ -1,9 +1,12 @@
 import type { AlternativeCandidate } from './alternatives.ts';
 import { withClientTargets } from './client-targets.ts';
 import { loadSpecFor, type DeviceLoadSettings } from './device-loads.ts';
+import { exposureOf, type Stage } from './exposure.ts';
 import { todayIn } from './format.ts';
 import { currentPhaseOf, mondayOf, nextDayId } from './program-plan.ts';
 import { planSession, warmupSets, type LoadSpec, type ProgressionRule, type SessionPlan, type TrackingType } from './progression.ts';
+import { recommend, type Why } from './recommend.ts';
+import type { TrainingExperience } from './schemas/client.ts';
 import type { Program } from './schemas/program.ts';
 import { effectiveSchedule, weekTarget, type EffectiveSchedule } from './training-days.ts';
 import type { SessionDoc, SessionEntry, SessionIndex, SessionIndexRow, SkipReason } from './schemas/session.ts';
@@ -32,6 +35,11 @@ import type { PreviousSet } from './workout-cursor.ts';
  * - Satır başına plan var olan motordan (`planSession`): satırın kuralı ve setleri (`planInputFor`),
  *   cihazın ağırlık ızgarası (`loadSpecFor`), geçmiş yalnız aynı egzersiz ve aynı cihazla
  *   (`exerciseHistory`, SPEC §7.3). Geçmiş index'ten seçilen son bitmiş antrenmanlardır.
+ * - Öneri katmanı (§5, `recommend.ts`): `insight` verilirse (uçlar hep verir) hareketin deneyimi bütün
+ *   index'ten (`exposureOf`, egzersiz kimliğiyle, danışanın antrenman geçmişi taban) hesaplanır; plan
+ *   motorun planının üstüne aşama kurallarıyla kurulur. Önceden dolu ağırlık ve kart çipi bu plandan
+ *   gelir: satır aşamayı (`stage`, hareket kaydına yazılır) ve danışan dilinde gerekçeyi (`why`) taşır.
+ *   Verilmezse (eski testler) yalnız motor.
  * - "Önceki" sütunu ve önceden dolu tekrar için geçen seferki setler (`lastTime`): aynı satırın en
  *   yeni kaydı; satırın kaydı yoksa aynı egzersiz ve cihazınki. Danışanın ayar notu (sehpa, koltuk)
  *   da aynı kayıttan gelir (`setupNote`); hareketin kaydı açılınca ona taşınır.
@@ -95,7 +103,28 @@ export type WorkoutRow = {
   setupNote?: string;
   /** Aynı günün önceki antrenmanında bu satır; kaydı yoksa (ya da eski anlık görüntüde) yok. */
   previous?: RowPrevious;
+  /** Hareketin bugünkü aşaması (§5.2): hareket kaydına yazılır (hafifletme sayımı). Eski anlık görüntüde yok. */
+  stage?: Stage;
+  /** Önerinin danışan dilinde gerekçesi (§5.7): kartın çipi ve dokununca açılan metin. Yoksa `REASON_LABELS`. */
+  why?: Why;
+  /**
+   * Bugünün yoklaması satırı değiştirdi (ağrı ya da hafif gün; `adjustDay`): yoklama artışı geri çektiği
+   * için antrenman içinde de "kolay ve tepede" adımı yok (§5.5).
+   */
+  adjusted?: 'pain' | 'readiness';
 };
+
+/** Öneri katmanının girdisi: onarılmış index, şimdi ve danışanın antrenman geçmişi. */
+export type WorkoutInsight = {
+  index: Pick<SessionIndex, 'items'>;
+  now: Date;
+  experience?: TrainingExperience | undefined;
+};
+
+/** Hareket kaydına yazılan planın özeti (§4.2): üst ağırlık, gerekçe, aşama. */
+export function entryPlanOf(row: Pick<WorkoutRow, 'plan' | 'stage'>): { topWeightKg: number; reason: string; stage?: string } {
+  return { topWeightKg: row.plan.topWeightKg, reason: row.plan.reason, ...(row.stage ? { stage: row.stage } : {}) };
+}
 
 export type WorkoutDay = {
   dayId: string;
@@ -249,6 +278,7 @@ export function warmupsFor(
 /**
  * Satırın planı: satırın kuralı ve setleri (`planInputFor`), cihazın ızgarası (`loadSpecFor`), geçmiş
  * yalnız aynı egzersiz ve cihazla; "Önceki", ısınma ve ayar notu. `history` bitmiş antrenmanlar.
+ * `insight` verilirse öneri katmanı (aşama, gerekçe).
  */
 export function workoutRowFor(input: {
   row: TemplateRow;
@@ -259,14 +289,26 @@ export function workoutRowFor(input: {
   firstForMuscle: boolean;
   /** Programın günü: satırın önceki antrenmandaki kaydı (`previous`) bununla bulunur; muadil ve eklenende yok. */
   dayId?: string;
+  insight?: WorkoutInsight | undefined;
 }): WorkoutRow {
-  const { row, exercise } = input;
+  const { row, exercise, insight } = input;
   const deviceId = effectiveDeviceId(row, exercise, new Set(input.devices.keys()));
   const device = deviceId ? input.devices.get(deviceId) : undefined;
   const spec = loadSpecFor(exercise, device);
   const { rule, sets } = planInputFor(row, exercise);
   const results = exerciseHistory(input.history, { exerciseId: row.exerciseId, deviceId });
-  const plan = planSession({ spec, rule, sets, history: results, rowId: row.id });
+  const recommended = insight
+    ? recommend({
+        spec,
+        rule,
+        sets,
+        history: results,
+        rowId: row.id,
+        exercise,
+        exposure: exposureOf(row.exerciseId, insight.index, insight.now, { experience: insight.experience }),
+      })
+    : null;
+  const plan = recommended?.plan ?? planSession({ spec, rule, sets, history: results, rowId: row.id });
   const warmups = warmupsFor(exercise, spec, plan, input.firstForMuscle);
   const setupNote = setupNoteOf(input.history, { rowId: row.id, exerciseId: row.exerciseId, deviceId });
   const previous = input.dayId ? previousRowOf(input.history, { dayId: input.dayId, rowId: row.id, exerciseId: row.exerciseId }) : undefined;
@@ -285,6 +327,7 @@ export function workoutRowFor(input: {
     ...(warmups.length > 0 ? { warmups } : {}),
     ...(setupNote ? { setupNote } : {}),
     ...(previous ? { previous } : {}),
+    ...(recommended ? { stage: recommended.stage, why: recommended.why } : {}),
   };
 }
 
@@ -307,13 +350,22 @@ export function swapRowFor(input: {
   devices: ReadonlyMap<string, WorkoutDevice>;
   history: readonly SessionDoc[];
   firstForMuscle: boolean;
+  insight?: WorkoutInsight | undefined;
 }): ExtraRow {
   const { row, exercise } = input;
   const sets = valueKind(input.original.trackingType) === valueKind(exercise.trackingType) ? row.sets : defaultSets(exercise, row.sets.length);
   const template: TemplateRow = { id: row.id, exerciseId: exercise.id, sets, ...(row.rule ? { rule: row.rule } : {}) };
   return {
     exerciseId: exercise.id,
-    row: workoutRowFor({ row: template, blockId: input.blockId, exercise, devices: input.devices, history: input.history, firstForMuscle: input.firstForMuscle }),
+    row: workoutRowFor({
+      row: template,
+      blockId: input.blockId,
+      exercise,
+      devices: input.devices,
+      history: input.history,
+      firstForMuscle: input.firstForMuscle,
+      insight: input.insight,
+    }),
     template,
   };
 }
@@ -329,12 +381,21 @@ export function addedRowFor(input: {
   devices: ReadonlyMap<string, WorkoutDevice>;
   history: readonly SessionDoc[];
   setCount?: number | undefined;
+  insight?: WorkoutInsight | undefined;
 }): ExtraRow {
   const { exercise } = input;
   const template: TemplateRow = { id: input.key, exerciseId: exercise.id, sets: defaultSets(exercise, input.setCount ?? DEFAULT_SETS[exercise.category]) };
   return {
     exerciseId: exercise.id,
-    row: workoutRowFor({ row: template, blockId: input.key, exercise, devices: input.devices, history: input.history, firstForMuscle: false }),
+    row: workoutRowFor({
+      row: template,
+      blockId: input.key,
+      exercise,
+      devices: input.devices,
+      history: input.history,
+      firstForMuscle: false,
+      insight: input.insight,
+    }),
     template,
     restSeconds: DEFAULT_REST_SECONDS[exercise.category],
   };
@@ -368,6 +429,7 @@ export function buildWorkoutDay(input: {
   exercises: ReadonlyMap<string, WorkoutExercise>;
   devices: ReadonlyMap<string, WorkoutDevice>;
   history: readonly SessionDoc[];
+  insight?: WorkoutInsight | undefined;
 }): WorkoutDay | null {
   const planned = nextDayId(input.program);
   const found = resolveDay(input.program, input.dayId);
@@ -386,7 +448,16 @@ export function buildWorkoutDay(input: {
   for (const block of blocks) {
     for (const row of block.rows) {
       const exercise = input.exercises.get(row.exerciseId) as WorkoutExercise;
-      rows[row.id] = workoutRowFor({ row, blockId: block.id, exercise, devices: input.devices, history, firstForMuscle: first.has(row.id), dayId: day.id });
+      rows[row.id] = workoutRowFor({
+        row,
+        blockId: block.id,
+        exercise,
+        devices: input.devices,
+        history,
+        firstForMuscle: first.has(row.id),
+        dayId: day.id,
+        insight: input.insight,
+      });
     }
   }
   return {

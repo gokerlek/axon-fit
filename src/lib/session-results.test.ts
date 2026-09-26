@@ -33,6 +33,26 @@ describe('toSetResults', () => {
   test('"bir defalık" hareket karara hiç girmez', () => {
     assert.deepEqual(toSetResults(sessionEntry('e_aaaaaa', { oneOff: true, sets: [workingSet('st_aaaaaaaa', 2)] })), []);
   });
+
+  test('yoklamayla yalnız o gün hafifletilen hareket (`lighten`, §2.2) karara girmez; ağrının azaltması (`decrease`) girer', () => {
+    const entry = (reason: string) => sessionEntry('e_aaaaaa', { plan: { topWeightKg: 50, reason }, sets: [workingSet('st_aaaaaaaa', 2, { kg: 50 })] });
+    assert.deepEqual(toSetResults(entry('lighten')), []);
+    assert.equal(toSetResults(entry('decrease')).length, 1);
+    assert.equal(toSetResults(entry('hold')).length, 1);
+  });
+
+  test('hafif hareket motorda kalır ve işaretlenir (§5.5)', () => {
+    const [set] = toSetResults(sessionEntry('e_aaaaaa', { lighter: true, sets: [workingSet('st_aaaaaaaa', 2, { topWeightKg: 65 })] }));
+    assert.deepEqual(set, { weightKg: 60, value: 10, effort: 'good', topWeightKg: 65, lighter: true });
+  });
+
+  test('Tanışma\'da ya da ayar seansında planlanan: kaçırması tıkanma sayılmaz (`noStall`)', () => {
+    const results = (plan: { reason?: string; stage?: string }) => toSetResults(sessionEntry('e_aaaaaa', { plan, sets: [workingSet('st_aaaaaaaa', 2)] }))[0]?.noStall;
+    assert.equal(results({ reason: 'first_time', stage: 'intro' }), true);
+    assert.equal(results({ reason: 'calibrate', stage: 'novice' }), true);
+    assert.equal(results({ reason: 'increase', stage: 'novice' }), undefined);
+    assert.equal(results({ reason: 'hold' }), undefined);
+  });
 });
 
 describe('hareket geçmişi → planSession', () => {
@@ -81,6 +101,19 @@ describe('hareket geçmişi → planSession', () => {
       history: exerciseHistory([finished('s_aaaaaaaa', 0, [10, 10, 7])], { exerciseId: 'bench-press' }),
     });
     assert.deepEqual([hold.reason, hold.topWeightKg], ['hold', 60]);
+  });
+
+  test('hafifletilmiş gün yokmuş gibi: sonraki plan bir önceki normal antrenmandan, tıkanma serisi değişmez', () => {
+    const sets = [target, target, target];
+    const plan = (docs: ReturnType<typeof finished>[]) =>
+      planSession({ spec: barbell, rule: { scheme: 'double', targetRir: 2 }, sets, rowId: 'r_aaaaaa', history: exerciseHistory(docs, { exerciseId: 'bench-press' }) });
+    const normal = finished('s_aaaaaaaa', 0, [10, 10, 10]);
+    // Hafif günde 50 kg ile 2 set, hepsi tepede: artış 50'den değil, 60'tan.
+    const light = finished('s_bbbbbbbb', 3000, [10, 10], { plan: { topWeightKg: 50, reason: 'lighten' } });
+    const lightSets = light.entries[0]?.sets.map((set) => ({ ...set, kg: 50, plannedSetCount: 2 })) ?? [];
+    const lightDoc = { ...light, entries: [{ ...(light.entries[0] as (typeof light.entries)[number]), sets: lightSets }] };
+    assert.deepEqual(plan([normal, lightDoc]), plan([normal]));
+    assert.deepEqual([plan([normal, lightDoc]).reason, plan([normal, lightDoc]).topWeightKg], ['increase', 62.5]);
   });
 
   test('yarım bırakılan (2/3 set) antrenman artış getirmez', () => {

@@ -141,6 +141,34 @@ describe('GET /api/me/workout', () => {
     assert.deepEqual(data.water, { file: 1, sessions: 2 });
   });
 
+  test('öneri katmanı: aşama ve gerekçe satırda; danışanın antrenman geçmişi taban (§5.2, açık soru 4)', async () => {
+    const files = {
+      'program.json': programFile(),
+      'sessions/s_aaaaaaaa.json': finished('s_aaaaaaaa', '2026-09-22T15:00:00.000Z', 9),
+      'sessions/s_bbbbbbbb.json': finished('s_bbbbbbbb', '2026-09-24T15:00:00.000Z', 10),
+    };
+    const fresh = body(await workoutRoute(setup(files).deps, null)).day?.rows.r_aaaaaa;
+    assert.equal(fresh?.stage, 'intro');
+    assert.equal(fresh?.plan.reason, 'increase');
+    assert.equal(fresh?.why?.chip, 'Tanışma 3/4 · +2,5 kg');
+    // 1 yıl+: en az Orta → 2-for-2: önceki seans tepede değildi, bir kez daha.
+    const experienced = setup(files);
+    experienced.deps.loadClient = async () => ({ ...CLIENT, training: { experience: 'one_year' } });
+    const row = body(await workoutRoute(experienced.deps, null)).day?.rows.r_aaaaaa;
+    assert.equal(row?.stage, 'intermediate');
+    assert.equal(row?.plan.reason, 'confirm_increase');
+    assert.equal(row?.plan.topWeightKg, 60);
+    assert.deepEqual(row?.plan.sets.map((set) => set.target), [10, 10, 10]);
+  });
+
+  test('4 haftadan uzun aradan dönüş: ayar seansı ~%90 (60 → 54 → 52,5)', async () => {
+    const { deps } = setup({ 'program.json': programFile(), 'sessions/s_aaaaaaaa.json': finished('s_aaaaaaaa', '2026-08-20T15:00:00.000Z', 10) });
+    const row = body(await workoutRoute(deps, null)).day?.rows.r_aaaaaa;
+    assert.equal(row?.plan.reason, 'calibrate');
+    assert.equal(row?.plan.topWeightKg, 52.5);
+    assert.match(row?.why?.detail ?? '', /^37 gündür/);
+  });
+
   test('sunucudaki yarım antrenman döner; gün onun günü (istenen gün önce gelir)', async () => {
     const active = sessionDoc({
       id: 's_cccccccc',

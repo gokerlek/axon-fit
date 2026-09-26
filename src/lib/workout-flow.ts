@@ -4,7 +4,7 @@ import { normalizeSession, withDeletions } from './session-merge.ts';
 import { isStraight } from './set-plan.ts';
 import { BLOCK_KIND_LABELS, FALLBACK_REST_SECONDS, ROW_ID_PATTERN, type BlockKind, type TemplateBlock } from './template-plan.ts';
 import { defaultRotation, doNow, dropUnit, entryForRow, entryStatusOf, restoreUnit, skipUnit, type CursorUnit, type Stamp } from './workout-cursor.ts';
-import { dayBody, extraKey, type ExtraRow, type ExtraRows, type WorkoutDay, type WorkoutRow } from './workout-plan.ts';
+import { dayBody, entryPlanOf, extraKey, type ExtraRow, type ExtraRows, type WorkoutDay, type WorkoutRow } from './workout-plan.ts';
 import { cursorOf, ensureEntries, newRowEntryId, plannedSetCounts } from './workout-session.ts';
 
 /**
@@ -287,7 +287,7 @@ export function swapRow(day: WorkoutDay, doc: SessionDoc, input: { rowId: string
     ...(row.deviceId ? { deviceId: row.deviceId } : {}),
     status: current?.status === 'skipped' ? 'skipped' : 'pending',
     ...(current?.skip ? { skip: current.skip } : {}),
-    plan: { topWeightKg: row.plan.topWeightKg, reason: row.plan.reason },
+    plan: entryPlanOf(row),
     ...(row.setupNote ? { setupNote: row.setupNote } : {}),
     updatedAt: stamp.at,
     by: stamp.by,
@@ -334,7 +334,7 @@ export function addExercise(day: WorkoutDay, doc: SessionDoc, input: { entryId: 
     status: 'pending',
     added: true,
     plannedSets: Math.max(1, extra.template.sets.length),
-    plan: { topWeightKg: extra.row.plan.topWeightKg, reason: extra.row.plan.reason },
+    plan: entryPlanOf(extra.row),
     ...(extra.row.setupNote ? { setupNote: extra.row.setupNote } : {}),
     updatedAt: stamp.at,
     by: stamp.by,

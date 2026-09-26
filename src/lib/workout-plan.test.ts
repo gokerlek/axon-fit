@@ -3,8 +3,22 @@ import assert from 'node:assert/strict';
 import type { SessionDoc, SessionIndex } from './schemas/session.ts';
 import { indexRowOf } from './session-index.ts';
 import { at, DAY_A, DAY_B, PHASE, programFile, sessionDoc, sessionEntry, singleBlock, workingSet } from './testing/session-fixtures.ts';
-import { BENCH, GOBLET, parsedProgram, workoutDay } from './testing/workout-fixtures.ts';
-import { activeRow, dayExerciseIds, historyRows, lastTimeOf, previousRowOf, programStamp, sessionWaterOn, setupNoteOf, warmupsFor, weekOf } from './workout-plan.ts';
+import { BENCH, DEVICES, EXERCISES, GOBLET, parsedProgram, workoutDay } from './testing/workout-fixtures.ts';
+import {
+  activeRow,
+  buildWorkoutDay,
+  dayExerciseIds,
+  entryPlanOf,
+  historyRows,
+  lastTimeOf,
+  previousRowOf,
+  programStamp,
+  sessionWaterOn,
+  setupNoteOf,
+  warmupsFor,
+  weekOf,
+} from './workout-plan.ts';
+import { logSet } from './workout-session.ts';
 
 let counter = 0;
 const setId = () => `st_${(++counter).toString(36).padStart(8, '0')}`;
@@ -98,6 +112,44 @@ describe('günün planı', () => {
     const previous = lastTimeOf([withExtra], { rowId: 'r_aaaaaa', exerciseId: 'bench-press' });
     assert.equal(previous.length, 3);
     assert.deepEqual(lastTimeOf([withExtra], { rowId: 'r_aaaaaa', exerciseId: 'bench-press', deviceId: 'smith-makinesi' }), []);
+  });
+});
+
+describe('günün planı: öneri katmanı (§5)', () => {
+  const NOW = new Date('2026-09-26T16:00:00.000Z');
+  const day = (history: SessionDoc[], experience?: 'new' | 'six_months' | 'one_year') => {
+    const index: SessionIndex = { version: 1, items: history.map((doc, n) => indexRowOf(doc, n.toString(16).padStart(40, 'a'))), deleted: [] };
+    const built = buildWorkoutDay({ program: parsedProgram(), exercises: EXERCISES, devices: DEVICES, history, insight: { index, now: NOW, experience } });
+    if (!built) throw new Error('Gün kurulamadı.');
+    return built;
+  };
+
+  test('insight yoksa yalnız motor: aşama ve gerekçe yok', () => {
+    const row = workoutDay({ history: [finished('s_aaaaaaaa', -1000, three(60, 10))] }).rows.r_aaaaaa;
+    assert.equal(row?.stage, undefined);
+    assert.equal(row?.why, undefined);
+  });
+
+  test('insight varsa satır aşamayı ve gerekçeyi taşır; önceden dolu ağırlık bu plandan', () => {
+    const history = [finished('s_aaaaaaaa', -3000, three(57.5, 10)), finished('s_bbbbbbbb', -1000, three(60, 10))];
+    const row = day(history).rows.r_aaaaaa;
+    assert.equal(row?.stage, 'intro');
+    assert.equal(row?.plan.topWeightKg, 62.5);
+    assert.equal(row?.why?.tone, 'up');
+    assert.deepEqual(row?.plan.sets.map((set) => set.weightKg), [62.5, 62.5, 62.5]);
+    // 6 ay+: Tanışma tek seans, sonra en az Başlangıç (Bench %2,5: 60 → 62,5).
+    assert.equal(day(history, 'six_months').rows.r_aaaaaa?.stage, 'novice');
+  });
+
+  test('hareket kaydına planın aşaması yazılır (hafifletme sayımı, §4.2)', () => {
+    const history = [finished('s_aaaaaaaa', -1000, three(60, 10))];
+    const built = day(history);
+    const row = built.rows.r_aaaaaa;
+    assert.ok(row);
+    assert.deepEqual(entryPlanOf(row), { topWeightKg: 62.5, reason: 'increase', stage: 'intro' });
+    const doc = sessionDoc({ id: 's_cccccccc', program: { revision: 7, dayId: DAY_A, dayName: 'Gün A' } });
+    const logged = logSet(built, doc, { rowId: 'r_aaaaaa', setIndex: 0, kg: 62.5, value: 8, stamp: { at: at(5), by: 'w_aaaaaa' } }).doc;
+    assert.deepEqual(logged.entries[0]?.plan, { topWeightKg: 62.5, reason: 'increase', stage: 'intro' });
   });
 });
 

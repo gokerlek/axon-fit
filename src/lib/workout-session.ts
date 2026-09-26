@@ -6,7 +6,7 @@ import { normalizeSession, withDeletions } from './session-merge.ts';
 import { toSetResults } from './session-results.ts';
 import { randomId, ROW_ID_PATTERN, type TemplateRow } from './template-plan.ts';
 import { entryForRow, entryStatusOf, prefillSet, workoutCursor, type PreviousSet, type Stamp, type WorkoutCursor } from './workout-cursor.ts';
-import { dayBody, type WorkoutDay, type WorkoutRow } from './workout-plan.ts';
+import { dayBody, entryPlanOf, type WorkoutDay, type WorkoutRow } from './workout-plan.ts';
 
 /**
  * Antrenman ekranının telefondaki işleri (tasarım §2.4, §2.5, §4.2) — saf: yeni belge, sıradaki set ve
@@ -170,8 +170,10 @@ export function nextSet(day: WorkoutDay, doc: Pick<SessionDoc, 'entries' | 'orde
 
   const entry = entryForRow(doc.entries, position.rowId);
   const before = views.slice(0, view.position).flatMap((item) => (item.logged ? [item.logged] : []));
-  const done = entry ? toSetResults({ ...entry, sets: before }) : [];
-  const suggestion = nextSetInPlan({ spec: row.spec, rule: row.rule, sets: template.sets, plan: row.plan, done });
+  // Bugünün setleri hafifletilen günde de sayılır: planın gerekçesi (`lighten`) yalnız sonraki antrenmanın
+  // süzgecidir (`toSetResults`); burada kalsa önceki setin ağırlığı ve inişi sıradaki sete geçmezdi.
+  const done = entry ? toSetResults({ ...entry, plan: undefined, sets: before }) : [];
+  const suggestion = nextSetInPlan({ spec: row.spec, rule: row.rule, sets: template.sets, plan: row.plan, done, raise: !row.adjusted });
   // Basamak değişirken (piramit, back-off) motor planın üst ağırlığından hesaplar; danışan önceki seti
   // plandan farklı yaptıysa onun ağırlığı kalır (aynı yüzdede motor zaten önceki setin ağırlığını verir).
   const previous = views[view.position - 1];
@@ -222,7 +224,7 @@ function entryFor(day: WorkoutDay, doc: SessionDoc, rowId: string, stamp: Stamp,
     title: row.title,
     ...(row.deviceId ? { deviceId: row.deviceId } : {}),
     status: 'pending',
-    plan: { topWeightKg: row.plan.topWeightKg, reason: row.plan.reason },
+    plan: entryPlanOf(row),
     ...(row.setupNote ? { setupNote: row.setupNote } : {}),
     updatedAt: stamp.at,
     by: stamp.by,

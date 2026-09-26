@@ -26,6 +26,9 @@ const isoDate = v.pipe(
 const nprs = v.pipe(v.number('Sayı gir.'), v.integer('Tam sayı gir.'), v.minValue(0, 'En az 0.'), v.maxValue(10, 'En fazla 10.'));
 const minutes = v.pipe(v.number('Sayı gir.'), v.minValue(0, 'Negatif olamaz.'), v.maxValue(600, 'En fazla 600 dakika.'));
 
+/** Program satırı (`r_` + 6). */
+const rowId = v.pipe(v.string(), v.regex(/^r_[a-z0-9]{6}$/));
+
 /** "lumbar_disc_herniation:acute" gibi; sözlükte olmalı. */
 const conditionRef = v.pipe(
   v.string(),
@@ -61,7 +64,12 @@ export const healthCheckInSchema = v.object({
    */
   sessionId: v.optional(v.pipe(v.string(), v.regex(/^s_[a-z0-9]{8}$/))),
   /** Ağrı nedeniyle geçilen satırlar. */
-  skippedRows: v.optional(v.array(v.object({ rowId: v.pipe(v.string(), v.regex(/^r_[a-z0-9]{6}$/)), reason: v.literal('pain') }))),
+  skippedRows: v.optional(v.array(v.object({ rowId, reason: v.literal('pain') }))),
+  /**
+   * Antrenman sonrası kartta "Hangi harekette?" (isteğe bağlı): ağrı yapan satırlar. Sonraki antrenmanda
+   * seans içi ağrının kuralı bunlara uygulanır, bir hafta boyunca bunlarda artış olmaz (`session-check.ts`).
+   */
+  painRows: v.optional(v.pipe(v.array(rowId), v.maxLength(60))),
   /** Hafifletmenin nedeni. */
   adjustReason: v.optional(v.picklist(['readiness', 'pain'] as const)),
   readiness: v.optional(readinessSchema),
@@ -74,6 +82,21 @@ export const healthCheckInSchema = v.object({
   redFlag: v.optional(v.picklist(RED_FLAG_CHECKS, 'Kırmızı bayrak sorusunu cevapla.')),
 });
 export type HealthCheckIn = v.InferOutput<typeof healthCheckInSchema>;
+
+/**
+ * Danışanın yoklama yazımı (`POST /api/me/check-in`, tasarım §2.2, §2.9): antrenman başındaki sheet ve
+ * antrenman sonrası kart. Tarihi sunucu koyar; bitişteki ayrıntı (`skippedRows`) bitiş ucundan gelir.
+ * Aynı `sessionId`'li kayıt varsa alanları onun üstüne yazılır. Sunucu onayın kapsamadığı alanları atar
+ * (`session-check.ts` → `allowedCheckIn`).
+ */
+export const checkInPostSchema = v.pipe(
+  v.omit(healthCheckInSchema, ['date', 'skippedRows']),
+  v.check(
+    (body) => Object.entries(body).some(([key, value]) => key !== 'sessionId' && value !== undefined),
+    'Kaydedilecek cevap yok.',
+  ),
+);
+export type CheckInPost = v.InferOutput<typeof checkInPostSchema>;
 
 /** Seans dosyasına giden efor bilgisi (sağlık verisi değil). */
 export const sessionEffortSchema = v.object({

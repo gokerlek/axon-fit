@@ -1,4 +1,5 @@
-import { deloadWeight, type LoadSpec, type Plan, type Suggestion } from './progression.ts';
+import { formatNumber } from './format.ts';
+import { deloadWeight, LIGHTEN_FACTOR, type LoadSpec, type Plan, type Suggestion } from './progression.ts';
 
 /**
  * Seans yoklaması ve yük toleransı — "ağrı izleme" kuralı.
@@ -101,7 +102,9 @@ export type ToleranceReason = {
     | 'not_back_to_baseline'
     | 'peak_over_ceiling'
     | 'pain_rising_weekly'
-    | 'high_irritability';
+    | 'high_irritability'
+    // Hareket başına (`session-check.ts`): son 7 günde ağrı nedeniyle geçildi ya da ağrılı bildirildi.
+    | 'painful_exercise';
   action: Exclude<ToleranceAction, 'progress'>;
   message: string;
 };
@@ -154,7 +157,7 @@ export function assessTolerance({
     reasons.push({
       code: 'not_back_to_baseline',
       action: 'reduce',
-      message: 'Önceki seansın ağrısı ertesi sabah geçmedi: yük %15 azaltılır.',
+      message: 'Önceki seansın ağrısı ertesi sabah başlangıç düzeyine dönmedi: yük %15 azaltılır.',
     });
   }
   const ceiling = PAIN_CEILING[mode];
@@ -182,7 +185,7 @@ export function assessTolerance({
     reasons.push({
       code: 'pain_rising_weekly',
       action: 'hold',
-      message: `Ağrı haftadan haftaya arttı (${lastWeek.toFixed(1)} → ${thisWeek.toFixed(1)}): artırma yok.`,
+      message: `Ağrı haftadan haftaya arttı (${formatNumber(Math.round(lastWeek * 10) / 10)} → ${formatNumber(Math.round(thisWeek * 10) / 10)}): artırma yok.`,
     });
   }
 
@@ -199,7 +202,7 @@ export function assessTolerance({
 }
 
 /** Artış sayılan öneriler: "hold" bunları geri çeker (gerekçesi ne olursa olsun son ağırlıktan ağır öneriyle birlikte). */
-const RAISES = new Set<Suggestion['reason']>(['increase', 'range_increase', 'add_rep', 'add_time', 'harder_variant', 'device_max']);
+const RAISES = new Set<Suggestion['reason']>(['increase', 'range_increase', 'add_rep', 'add_time', 'reps_first', 'harder_variant', 'device_max']);
 
 /**
  * İlerleme önerisini tolerans kararına göre düzeltir. `last` son yapılan plandır
@@ -215,7 +218,8 @@ export function applyTolerance(
     case 'stop':
       return { ...last, reason: 'paused' };
     case 'reduce': {
-      const weightKg = deloadWeight(last.weightKg, spec);
+      // Ağrı azaltması %15'te kalır (tıkanma hafifletmesi %10'a indi, `DELOAD_FACTOR`).
+      const weightKg = deloadWeight(last.weightKg, spec, LIGHTEN_FACTOR);
       return { weightKg, target: last.target, reason: weightKg < last.weightKg ? 'pain_reduce' : 'pain_reduce_unavailable' };
     }
     case 'hold':
