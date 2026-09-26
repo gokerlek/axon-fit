@@ -1052,12 +1052,15 @@ export function nextSetInPlan({
   sets,
   plan,
   done,
+  raise = true,
 }: {
   spec: LoadSpec;
   rule: Pick<ProgressionRule, 'scheme'>;
   sets: readonly SetTarget[];
   plan: SessionPlan;
   done: SessionResult;
+  /** false: "kolay ve tepede" adımı yok (bugünün yoklamasıyla ayarlanan satır, tasarım §5.5). */
+  raise?: boolean;
 }): PlannedSet & { reason: SuggestionReason } {
   const i = done.length;
   const fallback: PlannedSet = { weightKg: plan.topWeightKg, target: sets[0]?.min ?? 0, amrap: false, setIndex: 0 };
@@ -1080,9 +1083,12 @@ export function nextSetInPlan({
       const lowered = decreaseWeight(last.weightKg, spec);
       return { ...next, weightKg: lowered, reason: lowered < last.weightKg ? 'decrease' : 'hold' };
     }
-    // Cihazın en ağır ayarındaysa artacak yer yok: aynı ağırlık.
+    // Cihazın en ağır ayarındaysa artacak yer yok: aynı ağırlık. Öneri katmanı artışı bilerek erteledi
+    // (önce tekrar, 2-for-2 onayı) ya da bugünün yoklaması geri çekti (`raise: false`): "kolay ve tepede"
+    // adımı yok (tasarım §5.3–5.5).
+    const deferred = !raise || plan.reason === 'reps_first' || plan.reason === 'confirm_increase';
     const raised = grid.up(last.weightKg, 1);
-    if (!lastSpec.amrap && last.effort === 'easy' && last.value >= lastSpec.max && raised > last.weightKg) {
+    if (!deferred && !lastSpec.amrap && last.effort === 'easy' && last.value >= lastSpec.max && raised > last.weightKg) {
       return { ...next, weightKg: raised, reason: 'increase' };
     }
     return { ...next, weightKg: last.weightKg, reason: 'hold' };

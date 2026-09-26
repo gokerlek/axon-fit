@@ -169,8 +169,10 @@ export function nextSet(day: WorkoutDay, doc: Pick<SessionDoc, 'entries' | 'orde
 
   const entry = entryForRow(doc.entries, position.rowId);
   const before = views.slice(0, view.position).flatMap((item) => (item.logged ? [item.logged] : []));
-  const done = entry ? toSetResults({ ...entry, sets: before }) : [];
-  const suggestion = nextSetInPlan({ spec: row.spec, rule: row.rule, sets: template.sets, plan: row.plan, done });
+  // Bugünün setleri hafifletilen günde de sayılır: planın gerekçesi (`lighten`) yalnız sonraki antrenmanın
+  // süzgecidir (`toSetResults`); burada kalsa önceki setin ağırlığı ve inişi sıradaki sete geçmezdi.
+  const done = entry ? toSetResults({ ...entry, plan: undefined, sets: before }) : [];
+  const suggestion = nextSetInPlan({ spec: row.spec, rule: row.rule, sets: template.sets, plan: row.plan, done, raise: !row.adjusted });
   // Basamak değişirken (piramit, back-off) motor planın üst ağırlığından hesaplar; danışan önceki seti
   // plandan farklı yaptıysa onun ağırlığı kalır (aynı yüzdede motor zaten önceki setin ağırlığını verir).
   const previous = views[view.position - 1];

@@ -199,7 +199,7 @@ export function ExerciseProgress({ exercises, initialKey, today }: { exercises: 
           ) : points.length === 1 ? (
             <p className="rounded-lg bg-muted px-3 py-2.5 text-sm">
               İlk kayıt: <span className="font-medium tabular-nums">{formatWithUnit(points[0]!.value, info.unit)}</span> ·{' '}
-              {formatDay(points[0]!.date)}. Grafik ikinci antrenmandan sonra çizilir.
+              {formatDay(points[0]!.date)}. Grafik ikinci antrenman gününden sonra çizilir.
             </p>
           ) : (
             <p className="rounded-lg bg-muted px-3 py-2.5 text-sm text-muted-foreground">

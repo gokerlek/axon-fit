@@ -376,6 +376,22 @@ describe('bugünün planı (yalnız bugün; seans dosyasına nötr gerekçe)', (
     assert.deepEqual([result.day.rows.r_aaaaaa?.why?.chip, result.lighter], ['Ağrı · tekrarı azalt', false]);
   });
 
+  test('yoklamanın değiştirdiği satır işaretlenir: antrenman içinde "kolay ve tepede" adımı yok', () => {
+    const pain = adjustDay(day(), { outcome: outcome({ today: hold() }), lighten: false, mode: 'pain_free' });
+    assert.equal(pain.day.rows.r_aaaaaa?.adjusted, 'pain');
+    const light = adjustDay(day(), { outcome: outcome({ score: 40, low: true }), lighten: true, mode: 'pain_free' });
+    assert.equal(light.day.rows.r_aaaaaa?.adjusted, 'readiness');
+    assert.equal(day().rows.r_aaaaaa?.adjusted, undefined);
+  });
+
+  test('süreli harekette azaltılacak ağırlık yok: aralığın altı, "süreyi azalt"', () => {
+    const input = dayWithBlocks([{ id: 'b_aaaaaa', kind: 'single', restSeconds: 60, rows: [{ id: 'r_aaaaaa', exerciseId: 'plank', sets: [{ min: 30, max: 60 }, { min: 30, max: 60 }] }] }]);
+    const result = adjustDay(input, { outcome: outcome({ previous: reduce() }), lighten: false, mode: 'pain_free' });
+    assert.deepEqual(result.day.rows.r_aaaaaa?.plan.sets.map((set) => set.target), [30, 30]);
+    assert.equal(result.day.rows.r_aaaaaa?.why?.chip, 'Ağrı · süreyi azalt');
+    assert.match(result.day.rows.r_aaaaaa?.why?.detail ?? '', /Bu harekette azaltılacak ağırlık yok/);
+  });
+
   test('yük yok (kırmızı bayrak): plan değişmez, antrenman başlamaz', () => {
     const input = day();
     const result = adjustDay(input, { outcome: outcome({ stop: true, today: { action: 'stop', reasons: [] } }), lighten: true, mode: 'pain_free' });

@@ -157,7 +157,7 @@ export function assessTolerance({
     reasons.push({
       code: 'not_back_to_baseline',
       action: 'reduce',
-      message: 'Önceki seansın ağrısı ertesi sabah geçmedi: yük %15 azaltılır.',
+      message: 'Önceki seansın ağrısı ertesi sabah başlangıç düzeyine dönmedi: yük %15 azaltılır.',
     });
   }
   const ceiling = PAIN_CEILING[mode];

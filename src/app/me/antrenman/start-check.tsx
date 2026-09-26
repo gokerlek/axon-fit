@@ -215,11 +215,11 @@ export function StartCheck({
                   {context.previous ? (
                     <ChoiceField
                       id="pain-returned"
-                      label="Geçen antrenmandan sonraki ağrın ertesi sabah geçti mi?"
+                      label="Geçen antrenmandan sonraki ağrın ertesi sabah her zamanki düzeyine döndü mü?"
                       inline
                       choices={[
-                        ['yes', 'Evet, geçti'],
-                        ['no', 'Hayır'],
+                        ['yes', 'Evet, her zamanki gibi'],
+                        ['no', 'Hayır, daha fazlaydı'],
                       ]}
                       value={answers.returnedToBaseline === undefined ? undefined : answers.returnedToBaseline ? 'yes' : 'no'}
                       onChange={(value) => set({ returnedToBaseline: value === undefined ? undefined : value === 'yes' })}

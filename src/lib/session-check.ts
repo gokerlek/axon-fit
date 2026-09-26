@@ -38,8 +38,9 @@ import type { WorkoutDay, WorkoutRow } from './workout-plan.ts';
  *   planına uygulanır (`applyTolerance`, en son):
  *   - bugünün durumu bütün hareketlere: kırmızı bayrak ya da kola/bacağa yayılan semptom → yük yok,
  *     antrenman başlamaz (`stop`); haftalık ağrı ≥ 2 puan arttı ya da kolay tetikleniyor → artış yok;
- *   - önceki antrenmanın ağrısı (ertesi sabah geçmedi, seans içi tepesi tavanı aştı) → son ağırlıktan %15
- *     aşağı; önceki antrenmanda ağrı yapan hareketler adıyla bildirildiyse yalnız onlara, yoksa hepsine;
+ *   - önceki antrenmanın ağrısı (ertesi sabah her zamanki düzeyine dönmedi, seans içi tepesi tavanı aştı)
+ *     → son ağırlıktan %15 aşağı; önceki antrenmanda ağrı yapan hareketler adıyla bildirildiyse yalnız
+ *     onlara, yoksa hepsine;
  *   - son 7 günde ağrı nedeniyle geçilen ya da ağrılı bildirilen hareket → o harekette artış yok
  *     (`painful_exercise`) [sentez: kuralın hareket başına uygulanması].
  *
@@ -184,7 +185,7 @@ export function cr10Text(value: number): string {
 
 /* --- antrenman başının girdisi (sunucudan) --- */
 
-/** Önceki antrenmanın ağrısı: "ertesi sabah geçti mi" bunun için sorulur. */
+/** Önceki antrenmanın ağrısı: "ertesi sabah her zamanki düzeyine döndü mü" bunun için sorulur. */
 export type PreviousPain = {
   date: string;
   /** Seans içi en yüksek ağrı (antrenman sonrası kart). */
@@ -201,7 +202,7 @@ export type CheckContext = {
   mode: ToleranceMode;
   /** Son 14 günün 24 saatlik ağrıları (haftalık artış kuralı); ağrı takibi yoksa boş. */
   history: { date: string; painBaseline: number }[];
-  /** Son 7 günde ağrı bildirilen antrenman; yoksa null ("ertesi sabah geçti mi" sorulmaz). */
+  /** Son 7 günde ağrı bildirilen antrenman; yoksa null ("ertesi sabah döndü mü" sorulmaz). */
   previous: PreviousPain | null;
   /** Son 7 günde ağrı nedeniyle geçilen ya da ağrılı bildirilen satırlar: bugün artış yok. */
   painRows: string[];
@@ -421,7 +422,7 @@ function tolerate(row: WorkoutRow, sets: readonly SetTarget[], tolerance: Tolera
 function painCause(reason: ToleranceReason, outcome: StartOutcome, mode: ToleranceMode): string {
   switch (reason.code) {
     case 'not_back_to_baseline':
-      return 'geçen antrenmandan sonraki ağrın ertesi sabah geçmedi';
+      return 'geçen antrenmandan sonraki ağrın ertesi sabah her zamanki düzeyine dönmedi';
     case 'peak_over_ceiling':
       return `geçen antrenmanda ağrın tavanı (${formatNumber(PAIN_CEILING[mode])}/10) aştı`;
     case 'pain_rising_weekly':
@@ -485,7 +486,7 @@ function whyOf(input: {
   if (kind === 'unavailable') {
     return {
       tone,
-      chip: 'Ağrı · tekrarı azalt',
+      chip: row.trackingType === 'duration' ? 'Ağrı · süreyi azalt' : 'Ağrı · tekrarı azalt',
       detail: `${cause}. ${weighted ? 'Ağırlık zaten en hafif ayarda' : 'Bu harekette azaltılacak ağırlık yok'}: bugün aralığın altında kal, gerekirse bir set az yap.`,
     };
   }
@@ -552,6 +553,7 @@ export function adjustDay(day: WorkoutDay, input: { outcome: StartOutcome; light
       ...rest,
       plan,
       ...(warmups && warmups.length > 0 ? { warmups } : {}),
+      adjusted: tolerated.kind === 'none' ? 'readiness' : 'pain',
       why: whyOf({
         row,
         before: row.plan,

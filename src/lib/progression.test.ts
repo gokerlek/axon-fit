@@ -1040,6 +1040,30 @@ describe('set başına plan', () => {
     });
   });
 
+  describe('"kolay ve tepede" ertelenen artışı öne çekmez (tasarım §5.3–5.4)', () => {
+    const machine: LoadSpec = { trackingType: 'weight_reps', loadStepKg: 0, minLoadKg: 30, loadsKg: [30, 35, 40, 45, 50, 55, 60] };
+    const planned = (weightKg: number, target: number, reason: SessionPlan['reason']): SessionPlan => ({
+      sets: S3.map((_, setIndex) => ({ weightKg, target, amrap: false, setIndex })),
+      topWeightKg: weightKg,
+      reason,
+    });
+
+    test('önce tekrar: 30 kg × 13 kolay → sonraki set yine 30 kg', () => {
+      const next = nextSetInPlan({ spec: machine, rule, sets: S3, plan: planned(30, 13, 'reps_first'), done: [one(30, 13, 'easy')] });
+      assert.deepEqual([next.weightKg, next.reason], [30, 'hold']);
+    });
+
+    test('2-for-2 onayı: 100 kg × 12 kolay → sonraki set yine 100 kg', () => {
+      const next = nextSetInPlan({ spec: barbell, rule, sets: S3, plan: planned(100, 12, 'confirm_increase'), done: [one(100, 12, 'easy')] });
+      assert.deepEqual([next.weightKg, next.reason], [100, 'hold']);
+    });
+
+    test('artış planında kısayol sürer', () => {
+      const next = nextSetInPlan({ spec: barbell, rule, sets: S3, plan: planned(100, 8, 'increase'), done: [one(100, 12, 'easy')] });
+      assert.deepEqual([next.weightKg, next.reason], [102.5, 'increase']);
+    });
+  });
+
   test('üst ağırlık değişince setler yeniden hesaplanır', () => {
     const backoff: SetTarget[] = [{ min: 5, max: 5 }, { min: 8, max: 8, loadPct: 85 }];
     const plan = planSession({ spec: barbell, rule, sets: backoff, history: [], startWeightKg: 100 });

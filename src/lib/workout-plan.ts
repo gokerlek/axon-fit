@@ -84,6 +84,11 @@ export type WorkoutRow = {
   stage?: Stage;
   /** Önerinin danışan dilinde gerekçesi (§5.7): kartın çipi ve dokununca açılan metin. Yoksa `REASON_LABELS`. */
   why?: Why;
+  /**
+   * Bugünün yoklaması satırı değiştirdi (ağrı ya da hafif gün; `adjustDay`): yoklama artışı geri çektiği
+   * için antrenman içinde de "kolay ve tepede" adımı yok (§5.5).
+   */
+  adjusted?: 'pain' | 'readiness';
 };
 
 /** Öneri katmanının girdisi: onarılmış index, şimdi ve danışanın antrenman geçmişi. */

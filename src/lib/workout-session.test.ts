@@ -473,6 +473,52 @@ describe('antrenman belgesi: zorluk ve "Kolaydı"', () => {
     doc = logNext(day, doc, 5, { kg: 60, value: 10 });
     assert.equal(easyShortcut(day, doc, doc.entries[0]?.sets.at(-1)?.id ?? ''), null);
   });
+
+  test('hafifletilen günde de önceki set sıradakini belirler: danışanın ağırlığı, tıkanınca iniş', () => {
+    const base = workoutDay();
+    const row = base.rows.r_aaaaaa;
+    if (!row) throw new Error('Satır yok.');
+    const day = { ...base, rows: { ...base.rows, r_aaaaaa: { ...row, plan: { ...row.plan, reason: 'lighten' as const } } } };
+    let doc = start(day);
+    doc = logNext(day, doc, 1, { kg: 60, value: 9 });
+    assert.equal(doc.entries[0]?.plan?.reason, 'lighten');
+    assert.equal(nextSet(day, doc)?.kg, 60);
+    doc = logNext(day, doc, 2, { kg: 60, value: 5 });
+    assert.equal(nextSet(day, doc)?.kg, 57.5);
+    // Sonraki antrenmanın girdisinde hafifletilen gün yine yok.
+    const entry = doc.entries[0];
+    if (!entry) throw new Error('Kayıt yok.');
+    assert.deepEqual(toSetResults(entry), []);
+  });
+
+  test('yoklamanın ayarladığı satırda "Kolaydı" çıkmaz: artışı yoklama geri çekti (§5.5)', () => {
+    const base = workoutDay();
+    const row = base.rows.r_aaaaaa;
+    if (!row) throw new Error('Satır yok.');
+    const day = { ...base, rows: { ...base.rows, r_aaaaaa: { ...row, adjusted: 'pain' as const } } };
+    let doc = start(day);
+    doc = logNext(day, doc, 1, { kg: 60, value: 10 });
+    const top = doc.entries[0]?.sets[0]?.id ?? '';
+    assert.equal(easyShortcut(day, doc, top), null);
+    doc = setSetEffort(doc, top, 'easy', stamp(2));
+    assert.equal(nextSet(day, doc)?.kg, 60);
+  });
+
+  test('"Kolaydı" önce tekrar ve 2-for-2 seanslarında çıkmaz: artış bilerek ertelendi (§5.3–5.4)', () => {
+    for (const reason of ['reps_first', 'confirm_increase'] as const) {
+      const base = workoutDay();
+      const row = base.rows.r_aaaaaa;
+      if (!row) throw new Error('Satır yok.');
+      const day = { ...base, rows: { ...base.rows, r_aaaaaa: { ...row, plan: { ...row.plan, reason } } } };
+      let doc = start(day);
+      doc = logNext(day, doc, 1, { kg: 60, value: 10 });
+      const top = doc.entries[0]?.sets[0]?.id ?? '';
+      assert.equal(easyShortcut(day, doc, top), null, reason);
+      doc = setSetEffort(doc, top, 'easy', stamp(2));
+      assert.equal(nextSet(day, doc)?.kg, 60, reason);
+      assert.equal(easyShortcut(day, doc, top), null, reason);
+    }
+  });
 });
 
 describe('ekran metinleri', () => {
