@@ -211,7 +211,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
         </div>
         {days.client ? (
           <span className="text-xs text-muted-foreground">
-            {days.pt.length > 0 ? `Senin günlerin: ${weekdaysText(days.pt)}` : 'Sen gün seçmemiştin.'}
+            {days.pt.length > 0 ? `Programdaki günler: ${weekdaysText(days.pt)}` : 'Programda gün seçilmemişti.'}
           </span>
         ) : null}
       </TableCell>

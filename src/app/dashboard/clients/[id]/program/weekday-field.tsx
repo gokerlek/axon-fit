@@ -32,7 +32,7 @@ export function ResetDaysButton({ clientId, className }: { clientId: string; cla
   return (
     <Button type="button" variant="ghost" size="sm" className={cn('touch:h-11', className)} disabled={reset.isPending} onClick={() => reset.mutate()}>
       {reset.isPending ? <Spinner data-icon="inline-start" /> : <ArrowCounterClockwise data-icon="inline-start" />}
-      PT&apos;nin günlerine dön
+      Programdaki günlere dön
     </Button>
   );
 }
