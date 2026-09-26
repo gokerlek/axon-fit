@@ -77,6 +77,7 @@ import { EntryPanel, type TimerView, type TransitionView } from './entry-panel';
 import { ExerciseCard } from './exercise-card';
 import { AddExerciseSheet, FlowSheet, SwapSheet, type SwapTarget } from './flow-sheets';
 import { RestPanel, RestStrip, type EffortPromptView, type RestView } from './rest-panel';
+import { StartCheck } from './start-check';
 import { useWorkoutOutbox } from './use-workout-outbox';
 import { beep, isIOS, unlockAudio, useWakeLock, vibrate } from './workout-feedback';
 import { DeleteSetDialog, EditSetSheet, FinishedElsewhereDialog, FinishSheet, type EditTarget, type EditValues } from './workout-sheets';
@@ -1299,6 +1300,8 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
       <EditSetSheet target={editing} onClose={() => setEditing(null)} onSave={onSaveEdit} onDelete={onAskDelete} />
       <DeleteSetDialog target={deleting} onCancel={() => setDeleting(null)} onConfirm={onConfirmDelete} />
       <FinishedElsewhereDialog count={elsewhere?.count ?? null} busy={elsewhereBusy} onAdd={onAddElsewhere} onSkip={() => leave('Bu antrenman başka bir cihazda bitirildi.', 'info')} />
+      {/* Yoklama (§2.2): yalnız sağlık onayı varken ve antrenman yeni başlıyorken açılır. */}
+      <StartCheck clientId={clientId} local={local} onApply={commit} onLeave={leave} />
       <p aria-live="polite" className="sr-only">
         {announcement}
       </p>

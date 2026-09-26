@@ -12,14 +12,16 @@ import type { SessionDoc, SessionEntry } from './schemas/session.ts';
  * girmez, motor bir önceki seanstan planlar (§6.2). `lighter` hareket motorda kalır ve her sete
  * işaretlenir: motor ilk kez nötr, üst üste ikincisini kaçırma sayar (§5.5). Tanışma'da ya da ayar
  * seansında planlanan hareketin (`plan.stage: "intro"`, `plan.reason: "calibrate"`) setleri `noStall`
- * taşır: kaçırması tıkanma serisine girmez (§5.2–5.3).
+ * taşır: kaçırması tıkanma serisine girmez (§5.2–5.3). Yoklamadan sonra yalnız o gün hafifletilen
+ * hareket (`plan.reason: "lighten"`, §2.2) de girmez: hafifletme o günün planıdır, sonraki plan bir önceki
+ * normal antrenmandan kurulur.
  */
 
 /** Motorun seti; cihaz geçmişi süzmek için (`SPEC §7.3`) cihaz da taşınır. */
 export type EngineSetResult = SetResult & { deviceId?: string };
 
 export function toSetResults(entry: SessionEntry): EngineSetResult[] {
-  if (entry.oneOff) return [];
+  if (entry.oneOff || entry.plan?.reason === 'lighten') return [];
   const noStall = !stallCounts(entry.plan);
   return entry.sets
     .filter((set) => set.type === 'working' && !set.extra)

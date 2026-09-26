@@ -3,6 +3,7 @@ import { canSetPassword, healthConsentState } from '@/lib/client-status';
 import { readAppConfig } from '@/lib/config';
 import { currentClient } from '@/lib/guards';
 import { readClientSession } from '@/lib/session';
+import { AfterCheck } from '../after-check';
 import { ClientHeader } from '../client-header';
 import { ConsentCard } from '../consent-card';
 import { PasswordCard } from '../password-card';
@@ -18,7 +19,8 @@ export const metadata: Metadata = { title: 'Bugün' };
  * okunur ve her açılışta kayıtla karşılaştırılır: PT erişimi kapattıysa ya da danışanı arşivlediyse
  * buraya giremez. Sağ üstte avatar menüsü (ayarlar, çıkış); ana sayfada yalnız karar bekleyenler
  * durur, verilmiş sağlık onayı Ayarlar'da. Altında sıradaki antrenman ("Antrenmana başla", "bu hafta
- * x/3") ya da yarım kalan antrenman, ve bugünkü su (tasarım §0, §2.1).
+ * x/3") ya da yarım kalan antrenman, ve bugünkü su (tasarım §0, §2.1). Antrenmandan 10 dk – 24 saat
+ * sonra üstte "Antrenman ne kadar zordu?" kartı (§2.9).
  */
 export default async function MePage() {
   const [client, config, session] = await Promise.all([currentClient(), readAppConfig(), readClientSession()]);
@@ -38,6 +40,9 @@ export default async function MePage() {
       {canSetPassword(client.access, session ?? {}, new Date()) ? (
         <PasswordCard reset={Boolean(client.access.passwordSetAt)} />
       ) : null}
+
+      {/* Antrenmandan 10 dk – 24 saat sonra "Antrenman ne kadar zordu?" (§2.9); yoklamanın girdisini de telefona alır. */}
+      <AfterCheck clientId={client.id} />
 
       {/* Yarım antrenman varsa sıradaki antrenman kartının yerine onun kartı (telefondaki kayıt istemcide okunur). */}
       <TodayWorkout clientId={client.id}>

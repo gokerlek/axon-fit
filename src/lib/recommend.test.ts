@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import type { Exposure, Stage } from './exposure.ts';
 import {
   planSession,
+  plannedSets,
   type Effort,
   type LoadSpec,
   type ProgressionRule,
@@ -13,6 +14,8 @@ import {
   deloadHintDue,
   increasePct,
   increaseTo,
+  LIGHTEN_MIN_SETS,
+  lightenPlan,
   muscleSetsSince,
   RECOMMEND_TUNING,
   recommend,
@@ -478,6 +481,7 @@ describe('set artışı adayları (§5.6: yalnız PT\'ye öneri)', () => {
     { name: '2. son 2 haftada hold var', input: { index: index(row(10, [{ reason: 'increase' }]), row(3, [{ reason: 'hold' }])) } },
     { name: '2. son 2 haftada hafifletme var', input: { index: index(row(10, [{ reason: 'increase' }]), row(3, [{ reason: 'deload' }])) } },
     { name: '2. hafif seans var', input: { index: index(row(10, [{ reason: 'increase' }]), row(3, [{ reason: 'add_rep', lighter: true }])) } },
+    { name: '2. yoklamayla hafifletilmiş gün var', input: { index: index(row(10, [{ reason: 'increase' }]), row(3, [{ reason: 'lighten' }])) } },
     { name: '2. artış 2 haftadan eski', input: { index: index(row(15, [{ reason: 'increase' }]), row(3, [{ reason: 'confirm_increase' }])) } },
     { name: '2. artış başka satırda', input: { index: index(row(3, [{ reason: 'increase', rowId: 'r_bbbbbb' }])) } },
     { name: '3. hazır oluşluk 59', input: { readinessScore: 59 } },
@@ -519,5 +523,46 @@ describe('set artışı adayları (§5.6: yalnız PT\'ye öneri)', () => {
       row(1, [{ exerciseId: 'yok-boyle', sets: 3 }]),
     );
     assert.deepEqual(muscleSetsSince(items, NOW, (id) => weights[id]), { chest_lower: 9, triceps_long: 3.5, front_delts: 1.75 });
+  });
+});
+
+describe('hafifletme: yalnız bugünün planı (§2.2: −%15, 3 ve üstü sette son set düşer)', () => {
+  const PYRAMID: SetTarget[] = [{ min: 8, max: 10, loadPct: 80 }, { min: 8, max: 10, loadPct: 90 }, { min: 8, max: 10 }];
+  const FOUR: SetTarget[] = [...S3, { min: 8, max: 12 }];
+  const TWO: SetTarget[] = [{ min: 8, max: 12 }, { min: 8, max: 12 }];
+  const plan = (targets: SetTarget[], spec: LoadSpec, top: number, reason: SessionPlanReason = 'increase') => ({
+    sets: plannedSets(targets, spec, top, targets.map((set) => set.min)),
+    topWeightKg: top,
+    reason,
+  });
+  type SessionPlanReason = Parameters<typeof lightenPlan>[0]['reason'];
+  const rows: { name: string; targets: SetTarget[]; spec: LoadSpec; top: number; reason?: SessionPlanReason; weights: number[]; indexes: number[]; expected: SessionPlanReason }[] = [
+    { name: 'halter 60 kg, 3 set → floor(51) = 50 kg, 2 set', targets: S3, spec: barbell, top: 60, weights: [50, 50], indexes: [0, 1], expected: 'lighten' },
+    { name: '2 set: set düşmez, yalnız ağırlık', targets: TWO, spec: barbell, top: 60, weights: [50, 50], indexes: [0, 1], expected: 'lighten' },
+    { name: '4 set → 3 set; 100 kg → 85 kg', targets: FOUR, spec: barbell, top: 100, weights: [85, 85, 85], indexes: [0, 1, 2], expected: 'lighten' },
+    { name: 'tabanın hemen üstü: 22,5 → 20 (bar)', targets: S3, spec: barbell, top: 22.5, weights: [20, 20], indexes: [0, 1], expected: 'lighten' },
+    { name: 'tabanda: ağırlık aynı, yalnız set', targets: S3, spec: barbell, top: 20, weights: [20, 20], indexes: [0, 1], expected: 'lighten' },
+    { name: 'makine listesi: 45 → 38,25 → 35', targets: S3, spec: machine, top: 45, weights: [35, 35], indexes: [0, 1], expected: 'lighten' },
+    { name: 'piramit: yüzdeler yeni üst ağırlıktan, son (tepe) set düşer', targets: PYRAMID, spec: barbell, top: 100, weights: [67.5, 75], indexes: [0, 1], expected: 'lighten' },
+    { name: 'vücut ağırlığı: ağırlık yok, yalnız set', targets: S3, spec: bodyweight, top: 0, weights: [0, 0], indexes: [0, 1], expected: 'lighten' },
+    { name: 'zaten hafif (tıkanma hafifletmesi): ağırlık ve gerekçe kalır, set düşer', targets: S3, spec: barbell, top: 55, reason: 'deload', weights: [55, 55], indexes: [0, 1], expected: 'deload' },
+    { name: 'zaten hafif (aradan dönüş): ağırlık ve gerekçe kalır, set düşer', targets: S3, spec: barbell, top: 52.5, reason: 'calibrate', weights: [52.5, 52.5], indexes: [0, 1], expected: 'calibrate' },
+  ];
+  for (const item of rows) {
+    test(item.name, () => {
+      const result = lightenPlan(plan(item.targets, item.spec, item.top, item.reason), item.targets, item.spec);
+      assert.deepEqual(result.sets.map((set) => set.weightKg), item.weights);
+      assert.deepEqual(result.sets.map((set) => set.setIndex), item.indexes);
+      assert.equal(result.reason, item.expected);
+    });
+  }
+
+  test('hedefler ve AMRAP PT\'nin düzeniyle kalır; eşik 3 set', () => {
+    assert.equal(LIGHTEN_MIN_SETS, 3);
+    const targets: SetTarget[] = [{ min: 8, max: 10 }, { min: 6, max: 8, amrap: true }, { min: 5, max: 5 }];
+    const input = { sets: plannedSets(targets, barbell, 60, [9, 7, 5]), topWeightKg: 60, reason: 'add_rep' as const };
+    const result = lightenPlan(input, targets, barbell);
+    assert.deepEqual(result.sets.map((set) => [set.target, set.amrap]), [[9, false], [7, true]]);
+    assert.equal(result.topWeightKg, 50);
   });
 });

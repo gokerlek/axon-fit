@@ -3,9 +3,12 @@ import { formatKg, formatNumber, formatSignedWithUnit } from './format.ts';
 import {
   decreaseWeight,
   DELOAD_FACTOR,
+  deloadWeight,
   DURATION_STEP_SECONDS,
   gridOf,
   isFullLoad,
+  LIGHTEN_FACTOR,
+  percentOfTop,
   planSession,
   plannedSets,
   REASON_LABELS,
@@ -51,6 +54,8 @@ import { SET_LIMITS } from './set-plan.ts';
  *   açık soru 3 [sentez]). Kaçırması tıkanma sayılmaz (`stallCounts`).
  * - Hafif seans (§5.5) motordan saklanmaz: `planSession` ilk kez nötr (`lighter_retry`), üst üste ikincisini
  *   kaçırma sayar. Tıkanma hafifletmesi −%10, setler ⅔ (`DELOAD_FACTOR`, açık soru 2).
+ * - Yoklamanın hafifletmesi (§2.2, `lightenPlan`) yalnız bugünün planıdır: −%15 (`LIGHTEN_FACTOR`), 3 ve üstü
+ *   sette son set düşer; gerekçe `lighten`, motor o antrenmanı saymaz.
  * - Set artışı (§5.6) asla kendiliğinden değildir: `setIncreaseCandidates` PT'ye öneri adaylarını döner
  *   (`proposals.json` → `kind: "algo_sets"`).
  *
@@ -402,6 +407,36 @@ export function recommend(input: {
   return { plan, stage: input.exposure.stage, why: explain(ctx, plan, note) };
 }
 
+/* --- hafifletme: yalnız bugünün planı (yoklama, tasarım §2.2) --- */
+
+/** Bu kadar ve daha çok çalışma setli satırda hafifletme son seti düşürür (tasarım §2.2). */
+export const LIGHTEN_MIN_SETS = 3;
+
+/** Planı zaten hafif olan gerekçeler: ağırlığa ve gerekçeye dokunulmaz, yalnız set düşer. */
+const ALREADY_LIGHT = new Set<SuggestionReason>(['deload', 'calibrate']);
+
+/**
+ * Hazır oluşluk düşükken "Hacmi hafifletelim mi?" → Evet (tasarım §2.2): yalnız bugünün planı değişir.
+ * Ağırlık %15 az (`deloadWeight` + `LIGHTEN_FACTOR`: ızgaraya aşağı, tabanın altına inmez; ağırlıksızda
+ * aynı), 3 ve üstü çalışma setli satırda son set düşer; set düzeni (yüzdeler, AMRAP, hedefler) PT'ninki
+ * kalır. Gerekçe `lighten`: motor bu antrenmanı saymaz (`toSetResults`), sonraki plan bir önceki normal
+ * antrenmandan kurulur; tıkanma serisi ne artar ne sıfırlanır.
+ *
+ * Plan zaten hafifse (tıkanma hafifletmesi `deload`, aradan dönüş `calibrate`) ağırlık ve gerekçe
+ * korunur, yalnız set düşer: o antrenman motorda ve deneyimde sayılmaya devam eder (hafifletme sayımı
+ * ve ayar seansı kaybolmaz) [sentez].
+ */
+export function lightenPlan(plan: SessionPlan, sets: readonly SetTarget[], spec: LoadSpec): SessionPlan {
+  const kept = plan.sets.length >= LIGHTEN_MIN_SETS ? plan.sets.slice(0, -1) : plan.sets;
+  if (ALREADY_LIGHT.has(plan.reason)) return { ...plan, sets: kept };
+  const topWeightKg = spec.trackingType === 'weight_reps' ? deloadWeight(plan.topWeightKg, spec, LIGHTEN_FACTOR) : plan.topWeightKg;
+  return {
+    sets: kept.map((planned) => ({ ...planned, weightKg: percentOfTop(topWeightKg, sets[planned.setIndex]?.loadPct ?? planned.loadPct, spec) })),
+    topWeightKg,
+    reason: 'lighten',
+  };
+}
+
 /* --- İleri: PT'ye hafifletme ipucu (§5.3) --- */
 
 /**
@@ -441,7 +476,8 @@ export const SET_INCREASE_TUNING: Readonly<SetIncreaseTuning> = {
 
 /** Son iki haftada ilerleme sayılan ve saymayan gerekçeler (index satırındaki planın gerekçesi). */
 const PROGRESS_REASONS = new Set(['increase', 'add_rep', 'add_time', 'reps_first']);
-const STALL_REASONS = new Set(['hold', 'decrease', 'deload', 'lighter_retry']);
+/** Hafifletilmiş gün (`lighten`, yoklama) de sayılır: toparlanma iyi değildi [sentez]. */
+const STALL_REASONS = new Set(['hold', 'decrease', 'deload', 'lighter_retry', 'lighten']);
 
 export type SetIncreaseRow = {
   rowId: string;
@@ -506,8 +542,9 @@ export function muscleSetsSince(
  * kendiliğinden uygulanmaz; faz 8'in bitiş sheet'i ve `proposals.json` (`kind: "algo_sets"`) bunu okur.
  * 1. Aşama ≥ Orta ve deneyim ≥ 4 hafta.
  * 2. Son 2 haftada satırda en az bir artış (`increase`, `add_rep`, `add_time`, `reps_first`); hiç `hold`,
- *    `decrease`, `deload`, hafif seans yok (ilerliyor).
- * 3. Sağlık onayı varsa son hazır oluşluk ≥ 60 (`readinessScore`; onay yoksa verilmez, koşul atlanır).
+ *    `decrease`, `deload`, hafif seans ya da hafifletilmiş gün (`lighten`) yok (ilerliyor).
+ * 3. Sağlık onayı varsa son hazır oluşluk ≥ 60 (`readinessScore`: `session-check.ts` → `latestReadinessScore`;
+ *    onay yoksa verilmez, koşul atlanır).
  * 4. Hedef kasların son 7 gündeki kesirli seti < 10 (ACSM 2026; hacim arttıkça kazanç azalarak artar,
  *    Pelland 2025).
  * 5. Satıra en çok +1 set; kas başına haftada en çok 2 set önerisi (`proposedThisWeek` dahil). RP: iyi

@@ -179,6 +179,8 @@ export type SuggestionReason =
   | 'reps_first'
   // Hafif seans ilk kez: plan bir kez daha (§5.5).
   | 'lighter_retry'
+  // Yoklamadan sonra yalnız bugünün planı hafifletildi (`recommend.ts` → `lightenPlan`); motor o antrenmanı saymaz.
+  | 'lighten'
   // Yük toleransı (ağrı izleme) öneriyi geri çektiğinde — `src/lib/check-in.ts`.
   | 'pain_hold'
   | 'pain_reduce'
@@ -204,6 +206,7 @@ export const REASON_LABELS: Record<SuggestionReason, string> = {
   calibrate: 'Aradan sonra ilk antrenman: son ağırlığın biraz altında ayar.',
   reps_first: 'Sonraki ağırlık büyük bir sıçrama: önce tekrar ekle.',
   lighter_retry: 'Geçen sefer plandan hafifti: planı bir kez daha dene.',
+  lighten: 'Bugün hafif: ağırlık yaklaşık %15 az, 3 ve üstü setli harekette bir set eksik.',
   pain_hold: 'Ağrı ya da irritabilite yükselmiş: artırma yok, aynı yükte kal.',
   pain_reduce: 'Ağrı eşiği aşıldı ya da 24 saatte geçmedi: yük %15 azaldı.',
   pain_reduce_unavailable:

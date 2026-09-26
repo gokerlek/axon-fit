@@ -37,6 +37,10 @@ describe('yük toleransı (ağrı izleme)', () => {
     const artti = assessTolerance({ current: gun('2026-09-23', { painBaseline: 4 }), history: [...gecenHafta, gun('2026-09-21', { painBaseline: 4 })] });
     assert.equal(artti.action, 'hold');
     assert.equal(artti.reasons[0]?.code, 'pain_rising_weekly');
+    // Türkçe ondalık: "2 → 4"; kesirli ortalama virgülle.
+    assert.equal(artti.reasons[0]?.message, 'Ağrı haftadan haftaya arttı (2 → 4): artırma yok.');
+    const kesirli = assessTolerance({ current: gun('2026-09-23', { painBaseline: 5 }), history: [gun('2026-09-14', { painBaseline: 1 }), gun('2026-09-15', { painBaseline: 2 }), gun('2026-09-22', { painBaseline: 4 })] });
+    assert.equal(kesirli.reasons[0]?.message, 'Ağrı haftadan haftaya arttı (1,5 → 4,5): artırma yok.');
 
     const azArtti = assessTolerance({ current: gun('2026-09-23', { painBaseline: 3 }), history: gecenHafta });
     assert.equal(azArtti.action, 'progress');

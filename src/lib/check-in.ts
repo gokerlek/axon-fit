@@ -1,3 +1,4 @@
+import { formatNumber } from './format.ts';
 import { deloadWeight, LIGHTEN_FACTOR, type LoadSpec, type Plan, type Suggestion } from './progression.ts';
 
 /**
@@ -101,7 +102,9 @@ export type ToleranceReason = {
     | 'not_back_to_baseline'
     | 'peak_over_ceiling'
     | 'pain_rising_weekly'
-    | 'high_irritability';
+    | 'high_irritability'
+    // Hareket başına (`session-check.ts`): son 7 günde ağrı nedeniyle geçildi ya da ağrılı bildirildi.
+    | 'painful_exercise';
   action: Exclude<ToleranceAction, 'progress'>;
   message: string;
 };
@@ -182,7 +185,7 @@ export function assessTolerance({
     reasons.push({
       code: 'pain_rising_weekly',
       action: 'hold',
-      message: `Ağrı haftadan haftaya arttı (${lastWeek.toFixed(1)} → ${thisWeek.toFixed(1)}): artırma yok.`,
+      message: `Ağrı haftadan haftaya arttı (${formatNumber(Math.round(lastWeek * 10) / 10)} → ${formatNumber(Math.round(thisWeek * 10) / 10)}): artırma yok.`,
     });
   }
 
