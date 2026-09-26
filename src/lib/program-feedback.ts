@@ -360,7 +360,9 @@ export function feedbackItems(input: { day: WorkoutDay; doc: SessionDoc; extras:
   for (const suggestion of input.suggestions ?? []) {
     const plan = day.rows[suggestion.rowId];
     const entry = plan ? entryForRow(doc.entries, suggestion.rowId) : undefined;
-    if (!plan || !entry || entry.swappedFrom || proposals.some((item) => item.kind === 'sets' && item.rowId === suggestion.rowId)) continue;
+    // Bugün yapılmayan (geçilen) ya da muadille yapılan satıra set artışı önerilmez; danışanın set önerisi varsa o yeter.
+    if (!plan || !entry || entry.swappedFrom || entry.status === 'skipped' || working(entry).length === 0) continue;
+    if (proposals.some((item) => item.kind === 'sets' && item.rowId === suggestion.rowId)) continue;
     proposals.push({
       key: `algo_sets:${suggestion.rowId}`,
       kind: 'algo_sets',

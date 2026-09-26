@@ -62,7 +62,9 @@ function useDraftExists(clientId: string): boolean {
 
 /**
  * "Danışandan öneriler (n)" (tasarım §6.4): danışanın Program sekmesinde en üstte. Set sayısı ve yapı
- * değişiklikleri (bitişteki "Programını güncelleyelim mi?"dan) PT'nin onayını bekler. [Uygula] öneriyi
+ * değişiklikleri (bitişteki "Programını güncelleyelim mi?"dan) ve öneri motorunun set artışı adayları
+ * (`algo_sets`, §5.6; gerekçesiyle: deneyim, son iki haftanın ilerlemesi, kasın haftalık seti) PT'nin onayını
+ * bekler; hiçbiri kendiliğinden uygulanmaz. [Uygula] öneriyi
  * programa yazar (kaydın yolu: fark, revision +1, geçmişe "Danışanın önerisi"); [Reddet] isteğe bağlı notla.
  * Önerinin dayandığı satır o arada değiştiyse uygulanmaz ("Program değişti; öneri uygulanamadı"). Düzenleyicide
  * kaydedilmemiş taslak varsa önce sorulur: uygulamak revision'ı artırır, taslak kaydederken çakışır.

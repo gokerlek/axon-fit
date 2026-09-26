@@ -5,7 +5,7 @@ import { sessionDocSchema, type SessionDoc } from './schemas/session.ts';
 import { at, DAY_A, DAY_B, programFile, singleBlock, W1, workingSet } from './testing/session-fixtures.ts';
 import { BENCH, CRUNCH, DB_PRESS, dayWithBlocks, DEVICES, PLANK, PUSH_UP, workoutDay } from './testing/workout-fixtures.ts';
 import { mergeAll } from './session-merge.ts';
-import { cursorOf, logSet, newSessionDoc, nextSet, setViews } from './workout-session.ts';
+import { addExtraRound, cursorOf, logSet, newSessionDoc, nextSet, setViews } from './workout-session.ts';
 import {
   addExercise,
   canSwap,
@@ -21,6 +21,7 @@ import {
   skipMessage,
   swapRow,
   undoSkip,
+  withExtraRounds,
   withFinishReason,
 } from './workout-flow.ts';
 import { addedRowFor, extraKey, rekeyExtra, swapRowFor, type ExtraRows, type WorkoutDay } from './workout-plan.ts';
@@ -40,7 +41,7 @@ function start(day: WorkoutDay): SessionDoc {
 function logNext(day: WorkoutDay, doc: SessionDoc, minute: number, random = sequence()): SessionDoc {
   const next = nextSet(day, doc);
   if (!next) throw new Error('Set kalmadı.');
-  return logSet(day, doc, { rowId: next.rowId, setIndex: next.setIndex, kg: next.kg, value: next.value, stamp: stamp(minute), random }).doc;
+  return logSet(day, doc, { rowId: next.rowId, setIndex: next.setIndex, kg: next.kg, value: next.value, extra: next.extra === true, stamp: stamp(minute), random }).doc;
 }
 
 /** Gün A: Bench (3 set), Plank (2 × 30–45 sn), Goblet Squat (2 set). */
@@ -178,6 +179,22 @@ describe('"Hareketi geç ›", "Bugün yapma", "Geri al"', () => {
     assert.equal(nextRow(day, back), 'r_bbbbbb');
     assert.deepEqual(flowView(day, back).skipped, []);
     valid(back);
+  });
+
+  test('"Şimdi yap" bekleyen "+ Set ekle" setinin önüne girer; fazladan set sonra sırasını bulur', () => {
+    const base = dayWithBlocks([
+      { id: 'b_aaaaaa', kind: 'single', restSeconds: 90, rows: [{ id: 'r_aaaaaa', exerciseId: 'bench-press', sets: [{ min: 8, max: 10 }, { min: 8, max: 10 }, { min: 8, max: 10 }] }] },
+      { id: 'b_bbbbbb', kind: 'single', restSeconds: 60, rows: [{ id: 'r_bbbbbb', exerciseId: 'goblet-squat', sets: [{ min: 10, max: 12 }, { min: 10, max: 12 }] }] },
+    ]);
+    let doc = logNext(base, logNext(base, start(base), 1), 2);
+    const day = withExtraRounds(base, addExtraRound(base, doc, 'b_aaaaaa'));
+    doc = logNext(day, doc, 3);
+    assert.deepEqual([nextSet(day, doc)?.rowId, nextSet(day, doc)?.extra], ['r_aaaaaa', true]);
+    let after = doNowAt(day, doc, 'b_bbbbbb', stamp(4));
+    assert.equal(nextSet(day, after)?.rowId, 'r_bbbbbb');
+    after = logNext(day, logNext(day, after, 5), 6);
+    assert.deepEqual([nextSet(day, after)?.rowId, nextSet(day, after)?.extra], ['r_aaaaaa', true]);
+    valid(after);
   });
 
   test('grupta geçme bütün grubu sona alır', () => {

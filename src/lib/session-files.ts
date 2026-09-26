@@ -3,7 +3,7 @@ import { revalidateTag } from 'next/cache';
 import { readAppConfig } from './config';
 import { listDevices } from './devices';
 import { listExercises } from './exercises';
-import { familyOf } from './muscles';
+import { exerciseSetWeights, familyOf } from './muscles';
 import { clientRepoName, sessionWriter } from './github/client';
 import { commitFiles, listFolder, readBlobJson, readJson, repoHead, writeJson } from './github/files';
 import { dropNotices } from './notices-store';
@@ -55,8 +55,8 @@ export async function sessionRouteDeps(): Promise<SessionRouteDeps> {
 
 /**
  * Antrenman ekranının gün planı, muadil, kütüphane ve su uçları (`workout-routes.ts`): aynı ortam +
- * egzersiz ve cihaz kataloğu (hazır kütüphane + PT'nin kayıtları; ağırlık ızgarası cihazdan) ve kas
- * aileleri (muadil sıralaması).
+ * egzersiz ve cihaz kataloğu (hazır kütüphane + PT'nin kayıtları; ağırlık ızgarası cihazdan), kas
+ * aileleri (muadil sıralaması) ve setin kaslara payı (set artışı önerisinin haftalık kesirli seti).
  */
 export async function workoutRouteDeps(): Promise<WorkoutRouteDeps> {
   return {
@@ -66,5 +66,7 @@ export async function workoutRouteDeps(): Promise<WorkoutRouteDeps> {
       return { exercises, devices };
     },
     familyOf,
+    // Katalogdaki hareketler kütüphanenin kayıtlarıdır; kas adları şemanın kaslarıdır.
+    setWeights: (exercise) => exerciseSetWeights(exercise as Parameters<typeof exerciseSetWeights>[0]),
   };
 }

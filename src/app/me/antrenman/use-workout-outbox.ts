@@ -166,6 +166,9 @@ export function useWorkoutOutbox(options: Options): { outbox: Outbox; problem: O
     () => navigator.onLine,
     () => true,
   );
+  // Kuyruk seçenekleri yalnız zamanlayıcıda ve olay dinleyicilerinde okur, çizim sırasında hiç okumaz; derleyici
+  // bunu kanıtlayamadığı için uyarıyor.
+  // eslint-disable-next-line react-hooks/refs
   const [outbox] = useState(() => createRunner(() => latest.current, setProblem));
 
   useEffect(() => {

@@ -476,8 +476,11 @@ export const SET_INCREASE_TUNING: Readonly<SetIncreaseTuning> = {
 
 /** Son iki haftada ilerleme sayılan ve saymayan gerekçeler (index satırındaki planın gerekçesi). */
 const PROGRESS_REASONS = new Set(['increase', 'add_rep', 'add_time', 'reps_first']);
-/** Hafifletilmiş gün (`lighten`, yoklama) de sayılır: toparlanma iyi değildi [sentez]. */
-const STALL_REASONS = new Set(['hold', 'decrease', 'deload', 'lighter_retry', 'lighten']);
+/**
+ * Hafifletilmiş gün (`lighten`, yoklama) de sayılır: toparlanma iyi değildi [sentez]. Bugünün planının
+ * gerekçesi de bununla okunur (`set-suggestions.ts`: bugün "aynı ağırlık" ya da hafif günse ilerleme yok).
+ */
+export const STALL_REASONS: ReadonlySet<string> = new Set(['hold', 'decrease', 'deload', 'lighter_retry', 'lighten']);
 
 export type SetIncreaseRow = {
   rowId: string;

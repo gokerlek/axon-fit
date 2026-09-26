@@ -458,11 +458,11 @@ export async function setHealthConsent(
   const stored = await store.readClient(id);
   if (!stored) throw new GithubError('Danışan bulunamadı.', 404);
   const { client, sha } = stored;
-  const module = client.modules.health;
-  if (!module.enabled) throw new GithubError('Sağlık modülü kapalı.', 409);
+  const healthModule = client.modules.health;
+  if (!healthModule.enabled) throw new GithubError('Sağlık modülü kapalı.', 409);
   if (decision.granted) {
     const shown = new Set(decision.fields);
-    const same = shown.size === module.fields.length && module.fields.every((field) => shown.has(field));
+    const same = shown.size === healthModule.fields.length && healthModule.fields.every((field) => shown.has(field));
     if (!same || decision.version !== HEALTH_CONSENT_VERSION) {
       throw new GithubError('Antrenörün sorulan bilgileri değiştirdi. Sayfayı yenileyip yeniden bak.', 409);
     }
@@ -474,7 +474,7 @@ export async function setHealthConsent(
       health: {
         granted: decision.granted,
         version: HEALTH_CONSENT_VERSION,
-        fields: decision.granted ? module.fields : [],
+        fields: decision.granted ? healthModule.fields : [],
         at: store.now().toISOString(),
       },
     },

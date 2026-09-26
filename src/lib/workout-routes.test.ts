@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GithubError } from './github/errors.ts';
-import type { Client } from './schemas/client.ts';
+import { HEALTH_CONSENT_VERSION, type Client } from './schemas/client.ts';
 import type { SessionDoc } from './schemas/session.ts';
 import type { ClientSession } from './session-core.ts';
 import { fakeSessionRepo, type FakeSessionRepo } from './testing/fake-session-repo.ts';
@@ -47,6 +47,10 @@ function setup(files: Record<string, unknown> = { 'program.json': programFile() 
     log: (message) => logs.push(message),
     catalog: async () => ({ exercises: [...EXERCISES.values()], devices: [...DEVICES.values()] }),
     familyOf: (muscle) => muscle,
+    setWeights: (exercise) => ({
+      ...Object.fromEntries(exercise.secondaryMuscles.map((muscle) => [muscle, 0.5])),
+      ...Object.fromEntries(exercise.primaryMuscles.map((muscle) => [muscle, 1])),
+    }),
   };
   return { gh, deps, logs };
 }
@@ -159,6 +163,54 @@ describe('GET /api/me/workout', () => {
     assert.equal(row?.plan.reason, 'confirm_increase');
     assert.equal(row?.plan.topWeightKg, 60);
     assert.deepEqual(row?.plan.sets.map((set) => set.target), [10, 10, 10]);
+  });
+
+  test('set artışı adayı (§5.6) günün planında; bu hafta verilmiş öneri ve düşük hazır oluşluk (onaylı) engeller', async () => {
+    const planned = (doc: SessionDoc, reason: string): SessionDoc => ({ ...doc, entries: doc.entries.map((entry) => ({ ...entry, plan: { topWeightKg: 60, reason } })) });
+    const files = {
+      'program.json': programFile(),
+      'sessions/s_aaaaaaaa.json': planned(finished('s_aaaaaaaa', '2026-08-27T15:00:00.000Z', 10), 'hold'),
+      'sessions/s_bbbbbbbb.json': planned(finished('s_bbbbbbbb', '2026-09-09T15:00:00.000Z', 10), 'hold'),
+      'sessions/s_cccccccc.json': planned(finished('s_cccccccc', '2026-09-23T15:00:00.000Z', 10), 'increase'),
+    };
+    const experienced = (extra: Record<string, unknown> = {}, client: Partial<Client> = {}) => {
+      const result = setup({ ...files, ...extra });
+      result.deps.loadClient = async () => ({ ...CLIENT, training: { experience: 'one_year' }, ...client });
+      return result.deps;
+    };
+    const day = body(await workoutRoute(experienced(), null)).day;
+    // Göğsün son 7 günü: 3 gün önceki 3 set + bugünün planı (3 + 2 set).
+    assert.deepEqual(day?.setIncrease, [
+      { rowId: 'r_aaaaaa', from: 3, to: 4, why: '4 haftadır bu harekette; son 2 haftada ilerliyor. Hedef kasın son 7 günde 8 seti var (önerilen ~10).' },
+    ]);
+    // Deneyim tabanı yoksa (Tanışma) aday yok.
+    assert.equal(body(await workoutRoute(setup(files).deps, null)).day?.setIncrease, undefined);
+    // Bu hafta göğse iki algoritmik öneri verildi.
+    const proposal = (id: string, sessionId: string) => ({
+      id,
+      at: '2026-09-24T10:00:00.000Z',
+      sessionId,
+      dayId: DAY_B,
+      rowId: 'r_cccccc',
+      exerciseId: 'bench-press',
+      title: 'Bench Press',
+      kind: 'algo_sets',
+      from: 3,
+      to: 4,
+      text: 'Bench Press 3 → 4 set',
+      status: 'pending',
+    });
+    const busy = experienced({ 'proposals.json': { version: 1, items: [proposal('pr_aaaaaa', 's_dddddddd'), proposal('pr_bbbbbb', 's_eeeeeeee')] } });
+    assert.equal(body(await workoutRoute(busy, null)).day?.setIncrease, undefined);
+    // Sağlık onayı varken son hazır oluşluk 60'ın altı.
+    const consent = {
+      modules: { health: { enabled: true, fields: ['readiness' as const] } },
+      consents: { health: { granted: true, version: HEALTH_CONSENT_VERSION, fields: ['readiness' as const], at: '2026-09-01T10:00:00.000Z' } },
+    };
+    const health = { conditions: [], measurements: [], movementScreens: [], checkIns: [{ date: '2026-09-25', readiness: { sleep: 2, energy: 2, soreness: 3, stress: 3 } }] };
+    assert.equal(body(await workoutRoute(experienced({ 'health.json': health }, consent), null)).day?.setIncrease, undefined);
+    // Onay yoksa sağlık dosyası okunmaz, koşul atlanır.
+    assert.equal(body(await workoutRoute(experienced({ 'health.json': health }), null)).day?.setIncrease?.length, 1);
   });
 
   test('4 haftadan uzun aradan dönüş: ayar seansı ~%90 (60 → 54 → 52,5)', async () => {

@@ -3,6 +3,7 @@ import { withClientTargets } from './client-targets.ts';
 import { loadSpecFor, type DeviceLoadSettings } from './device-loads.ts';
 import { exposureOf, type Stage } from './exposure.ts';
 import { todayIn } from './format.ts';
+import type { SetSuggestion } from './program-feedback.ts';
 import { currentPhaseOf, mondayOf, nextDayId } from './program-plan.ts';
 import { planSession, warmupSets, type LoadSpec, type ProgressionRule, type SessionPlan, type TrackingType } from './progression.ts';
 import { recommend, type Why } from './recommend.ts';
@@ -10,6 +11,7 @@ import type { TrainingExperience } from './schemas/client.ts';
 import type { Program } from './schemas/program.ts';
 import { effectiveSchedule, weekTarget, type EffectiveSchedule } from './training-days.ts';
 import type { SessionDoc, SessionEntry, SessionIndex, SessionIndexRow, SkipReason } from './schemas/session.ts';
+import { waterOf } from './session-index.ts';
 import { exerciseHistory } from './session-results.ts';
 import {
   DEFAULT_REST_SECONDS,
@@ -143,6 +145,17 @@ export type WorkoutDay = {
   /** Günün blokları (kütüphanede olmayan satırlar çıkmış): imleç bununla yürür. */
   blocks: TemplateBlock[];
   rows: Record<string, WorkoutRow>;
+  /**
+   * Öneri katmanının set artışı adayları (§5.6; `set-suggestions.ts`): bitişte "Antrenörüne öner: Bench Press
+   * 3 → 4 set". Sunucu günü kurarken hesaplar; yoklama o satırın planını indirdiyse ya da hazır oluşluk
+   * düşükse telefonda düşer (`session-check.ts` → `adjustDay`). Eski anlık görüntüde yok.
+   */
+  setIncrease?: SetSuggestion[];
+  /**
+   * "+ Set ekle" (§2.4): birim anahtarı (blok ya da eklenen hareketin kaydı) başına istenen fazladan tur.
+   * Yalnız telefonda, günün etkin hâlinde (`workout-flow.ts` → `withExtraRounds`); sunucu yazmaz.
+   */
+  extraRounds?: Record<string, number>;
 };
 
 /**
@@ -512,6 +525,27 @@ export function weekOf(index: SessionIndex, program: Program | null, now: Date, 
   const daysPerWeek = program ? currentPhaseOf(program)?.phase.daysPerWeek : undefined;
   const weekdays = program ? effectiveSchedule(program).weekdays : [];
   return { done: days.length, target: weekTarget(weekdays, daysPerWeek), days, start };
+}
+
+/**
+ * Bitişten hemen sonra Bugün'ün sayıları, sunucudan taze gelene kadar (iyimser; telefon bitişin yanıtıyla
+ * yazar): antrenmanın günü bu haftadaysa "Bu hafta x/y"ye girer (gün başına bir, `weekOf` gibi; aynı gün
+ * ikinci antrenman sayıyı değiştirmez), suyu bugünün bitmiş antrenmanlarına geçer, yarım antrenman kartı
+ * düşer. Önbellekteki eski sayı bir an bile görünmesin.
+ */
+export function afterFinish<T extends { today: string; week: WeekCount; water: { file: number; sessions: number }; active: Pick<SessionDoc, 'id'> | null }>(
+  data: T,
+  doc: Pick<SessionDoc, 'id' | 'date' | 'waterTaps'>,
+): T {
+  const counted = mondayOf(doc.date) === data.week.start && doc.date <= data.today && !data.week.days.includes(doc.date);
+  const days = counted ? [...data.week.days, doc.date].sort() : data.week.days;
+  const known = data.active?.id === doc.id;
+  return {
+    ...data,
+    week: counted ? { ...data.week, done: days.length, days } : data.week,
+    water: doc.date === data.today ? { ...data.water, sessions: data.water.sessions + waterOf(doc) } : data.water,
+    active: known ? null : data.active,
+  };
 }
 
 /** Bugün'ün ve Ayarlar'ın "Günlerini değiştir"i için: geçerli günler, PT'ninkiler, danışanınki ve sıklık. */

@@ -30,7 +30,7 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
           <CardHeader>
             <CardTitle>Kayıt okunamadı</CardTitle>
             <CardDescription>
-              {loaded.problem} Repo'yu GitHub'da geri yüklediysen sayfayı yenile; yoksa “Sil” ile kimliği listeden çıkar.
+              {loaded.problem} Repo&apos;yu GitHub&apos;da geri yüklediysen sayfayı yenile; yoksa “Sil” ile kimliği listeden çıkar.
             </CardDescription>
           </CardHeader>
         </Card>

@@ -432,6 +432,22 @@ describe('bugünün planı (yalnız bugün; seans dosyasına nötr gerekçe)', (
     const after = result.day.rows.r_aaaaaa?.plan;
     assert.deepEqual([after?.reason, after?.topWeightKg, after?.sets.length], ['deload', before?.topWeightKg, (before?.sets.length ?? 0) - 1]);
   });
+
+  test('set artışı önerisi (§5.6): hazır oluşluk düşükse ("Planı koru" da) hiç, planı inen satırda bugün yok', () => {
+    const suggested = () => ({
+      ...day(),
+      setIncrease: [
+        { rowId: 'r_aaaaaa', from: 3, to: 4, why: 'a' },
+        { rowId: 'r_bbbbbb', from: 2, to: 3, why: 'b' },
+      ],
+    });
+    const kept = adjustDay(suggested(), { outcome: outcome({ score: 55, low: true }), lighten: false, mode: 'pain_free' });
+    assert.deepEqual([kept.day.setIncrease, kept.changed], [[], []]);
+    const painful = adjustDay(suggested(), { outcome: outcome({ previous: reduce('peak_over_ceiling'), previousRows: ['r_bbbbbb'] }), lighten: false, mode: 'pain_free' });
+    assert.deepEqual(painful.day.setIncrease?.map((item) => item.rowId), ['r_aaaaaa']);
+    const fine = suggested();
+    assert.equal(adjustDay(fine, { outcome: outcome({ score: 80 }), lighten: false, mode: 'pain_free' }).day, fine);
+  });
 });
 
 describe('seans dosyası: nötr işaret', () => {

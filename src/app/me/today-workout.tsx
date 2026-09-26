@@ -178,6 +178,8 @@ export function WaterCard({ clientId }: { clientId: string }) {
   useEffect(() => {
     const stored = readPendingWater(clientId);
     pendingRef.current = stored;
+    // Telefonda bekleyen dokunuşlar sunucu çiziminden sonra okunur (ilk çizim sunucununkiyle aynı kalsın).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPending(stored);
     if (stored.length > 0) void flush();
     const onOnline = () => void flush();

@@ -1,7 +1,7 @@
 import { formatNumber } from './format.ts';
 import type { SessionDoc } from './schemas/session.ts';
 import { BLOCK_KIND_LABELS, type BlockKind } from './template-plan.ts';
-import type { CursorUnit } from './workout-cursor.ts';
+import { slotDone, type CursorUnit } from './workout-cursor.ts';
 import type { WorkoutDay } from './workout-plan.ts';
 import { cursorOf, setViews, type NextSet } from './workout-session.ts';
 
@@ -66,23 +66,26 @@ function unitOf(day: WorkoutDay, doc: Pick<SessionDoc, 'entries' | 'order'>, uni
 
 /**
  * Grubun kartı: `focus` gösterilen settir (sıradaki ya da az önce kaydedilen): tur onun turu, üyesi
- * "current". Grup değilse (tek hareket) null.
+ * "current". Fazladan turlar ("+ Tur ekle") planın turlarının arkasından sayılır ("Tur 4/4"). Grup değilse
+ * (tek hareket) null.
  */
 export function groupView(
   day: WorkoutDay,
   doc: Pick<SessionDoc, 'entries' | 'order'>,
   unitKey: string,
-  focus: Pick<NextSet, 'rowId' | 'position' | 'kg'> | null,
+  focus: Pick<NextSet, 'rowId' | 'position' | 'kg' | 'round' | 'extra'> | null,
 ): GroupView | null {
   const unit = unitOf(day, doc, unitKey);
   if (!unit || unit.kind === 'single') return null;
-  const rounds = Math.max(1, ...unit.members.map((member) => member.planned));
+  const planned = Math.max(0, ...unit.members.map((member) => member.planned));
+  const rounds = Math.max(1, planned, ...unit.slots.map((slot) => slot.round + 1));
   const inUnit = focus && unit.members.some((member) => member.rowId === focus.rowId);
-  const round = inUnit ? focus.position : rounds - 1;
+  const round = inUnit ? (focus.extra ? focus.round : focus.position) : rounds - 1;
   const members = unit.members.flatMap((member, index): GroupMember[] => {
     const row = member.rowId ? day.rows[member.rowId] : undefined;
     if (!row) return [];
-    const view = setViews(day, doc, row.rowId)[round];
+    const views = setViews(day, doc, row.rowId);
+    const view = round < planned ? views.filter((item) => !item.extra)[round] : views.filter((item) => item.extra)[round - planned];
     const logged = view?.logged;
     const current = inUnit && focus.rowId === row.rowId;
     const status: GroupMemberStatus = member.skipped
@@ -119,7 +122,7 @@ export function nextMemberLetter(day: WorkoutDay, doc: Pick<SessionDoc, 'entries
   const unit = next ? cursor.units[next.unit] : undefined;
   if (!next || !unit || unit.kind === 'single') return null;
   const at = unit.slots.findIndex((slot) => slot.member === next.member && slot.round === next.round);
-  const following = unit.slots.slice(at + 1).find((slot) => (unit.members[slot.member]?.done ?? 0) <= slot.round);
+  const following = unit.slots.slice(at + 1).find((slot) => !slotDone(unit, slot));
   if (!following || following.round !== next.round || following.member === next.member) return null;
   return memberLetter(following.member);
 }

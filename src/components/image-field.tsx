@@ -20,16 +20,19 @@ export const KEEP: ImageChange = { kind: 'keep' };
 
 /** Seçilen dosyanın önizleme adresi (bellekten; bırakınca geri verilir). */
 export function usePreview(change: ImageChange): string | null {
-  const [preview, setPreview] = useState<string | null>(null);
+  // Adres hangi dosyanın: dosya değişince (ya da kaldırılınca) eskisinin geri verilmiş adresi gösterilmez.
+  const [preview, setPreview] = useState<{ file: File; url: string } | null>(null);
 
   useEffect(() => {
-    if (change.kind !== 'upload') return setPreview(null);
+    if (change.kind !== 'upload') return;
+    // Adres tarayıcının dış kaynağıdır: etkiyle açılır, etkinin temizliğinde geri verilir.
     const url = URL.createObjectURL(change.file);
-    setPreview(url);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPreview({ file: change.file, url });
     return () => URL.revokeObjectURL(url);
   }, [change]);
 
-  return change.kind === 'upload' ? preview : null;
+  return change.kind === 'upload' && preview?.file === change.file ? preview.url : null;
 }
 
 export function ImageField({

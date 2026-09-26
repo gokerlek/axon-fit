@@ -22,8 +22,9 @@ import {
 import { indexRowOf, upsertIndexRow } from './session-index.ts';
 import { mergeAll, normalizeSession, sameSessionData, withDeletions } from './session-merge.ts';
 import { finishMessage, patchMessage, putMessage } from './session-messages.ts';
+import { verifyAlgoSets } from './set-suggestions.ts';
 import type { TemplateBody } from './template-plan.ts';
-import { defaultRotation, workoutUnits } from './workout-cursor.ts';
+import { completionOf, defaultRotation, workoutUnits } from './workout-cursor.ts';
 
 /**
  * Antrenman yazımlarının saf hesapları (tasarım §4.3–§4.7): sunucunun gelen belgeyi nasıl kabul ettiği,
@@ -96,16 +97,13 @@ export function dayOf(program: Program | null, dayId: string | undefined): Templ
 }
 
 /**
- * Yapılan ve planlanan çalışma setleri: geçilen hareketin setleri de planda sayılır (yarım antrenman).
- * Plan satırının set sayısı o günkü plandan (`plannedSetCount`), yoksa programdaki günden; gün
- * bulunamazsa (program değişti) yalnız kayıttan.
+ * Yapılan ve planlanan çalışma setleri (`completionOf`: telefonun erken bitiş sheet'iyle aynı tanım):
+ * geçilen hareketin setleri de planda sayılır (yarım antrenman). Plan satırının set sayısı o günkü plandan
+ * (`plannedSetCount`, hareket kaydındaki `plannedSets`), yoksa programdaki günden; gün bulunamazsa
+ * (program değişti) yalnız kayıttan.
  */
 export function completion(doc: Pick<SessionDoc, 'entries' | 'order'>, day: TemplateBody | null): { done: number; planned: number } {
-  const members = workoutUnits(day ?? { blocks: [] }, doc).flatMap((unit) => unit.members);
-  return {
-    done: members.reduce((sum, member) => sum + Math.min(member.done, member.planned), 0),
-    planned: members.reduce((sum, member) => sum + member.planned, 0),
-  };
+  return completionOf(workoutUnits(day ?? { blocks: [] }, doc));
 }
 
 /** Hazır seçim (§2.7): planın yarısı yapıldıysa sıradaki gün, değilse aynı gün sırada kalır (telefonla ortak). */
@@ -158,6 +156,11 @@ export type FinishInput = {
   proposalsFile?: unknown;
   /** `health.json`'un ham içeriği: yalnız onaylı ayrıntı varsa okunur (yoksa ya da okunmadıysa null; bozuk JSON'sa `BROKEN_HEALTH`). */
   healthFile: unknown;
+  /**
+   * Son hazır oluşluk puanı (`health.json`, bugünün yoklaması dahil): yalnız sağlık onayı varken ve
+   * uygulanacak algoritmik set önerisi varken okunur; 60'ın altındaysa öneri gitmez (§5.6, `verifyAlgoSets`).
+   */
+  readinessScore?: number | undefined;
   client: Pick<Client, 'modules' | 'consents'>;
   now: Date;
   timeZone: string;
@@ -217,13 +220,15 @@ export function planFinish(input: FinishInput): FinishPlan {
   const choice = input.rotation ?? doc.rotation?.value ?? defaultRotation(done, planned);
   if (input.rotation || !doc.rotation) doc = { ...doc, rotation: { value: choice, updatedAt: now.toISOString(), by: doc.writer } };
 
-  // Program güncelleme (§6): uygulanmayan ağırlığın izi seansa, kararlar programa ve önerilere.
-  const decisions = input.feedback?.items ?? [];
+  // Program güncelleme (§6): uygulanmayan ağırlığın izi seansa, kararlar programa ve önerilere. Algoritmik
+  // set önerisi sunucuda yeniden denetlenir (+1 set, hazır oluşluk).
+  const verified = verifyAlgoSets(input.feedback, input.readinessScore);
+  const decisions = verified?.items ?? [];
   doc = withFeedbackFlags(doc, decisions, { at: now.toISOString(), by: doc.writer });
   const proposalsBroken = input.proposalsFile === BROKEN_PROPOSALS;
   const feedback = planProgramFeedback({
     doc,
-    feedback: input.feedback,
+    feedback: verified,
     program,
     rawProgram,
     proposals: proposalsBroken ? null : (input.proposalsFile ?? null),

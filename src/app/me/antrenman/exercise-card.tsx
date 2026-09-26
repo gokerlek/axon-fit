@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useIsPresent, useReducedMotion } from 'motion/react';
-import { ArrowBendUpRight, ArrowDown, ArrowsLeftRight, ArrowUp, Check, Equals, NotePencil, Play, Plus, Sparkle, Wrench } from '@phosphor-icons/react';
+import { ArrowBendUpRight, ArrowDown, ArrowsLeftRight, ArrowUp, Check, Equals, NotePencil, Play, Plus, Sparkle, Wrench, X } from '@phosphor-icons/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -197,6 +197,10 @@ function SetupNoteForm({ note, onSave }: { note: string | undefined; onSave: (te
  *
  * "Değiştir" (§2.6) başlığın sağında (grupta tur satırında, şu anki üye için): yalnız hareketin çalışma
  * seti kaydedilmemişken.
+ *
+ * "+ Set ekle" (§2.4) tablonun altında: planın son setini tekrarlayan fazladan bir set (grupta "+ Tur ekle":
+ * her üyeye bir set). Fazladan satırın "Önceki" hücresinde "fazladan" yazar; bekleyen fazladan set satırdaki
+ * ✕ ile bırakılır.
  */
 export function ExerciseCard({
   row,
@@ -211,6 +215,8 @@ export function ExerciseCard({
   onToggleWarmup,
   onSetupNote,
   onSwap,
+  onAddSet,
+  onDropExtra,
 }: {
   row: WorkoutRow;
   group: GroupView | null;
@@ -228,6 +234,10 @@ export function ExerciseCard({
   onSetupNote: (text: string) => void;
   /** "Değiştir" açıksa muadil sheet'ini açar; kapalıysa null. */
   onSwap: (() => void) | null;
+  /** "+ Set ekle" (grupta tur); kapalıysa (kaydedilirken, sınırda) null. */
+  onAddSet: (() => void) | null;
+  /** Bekleyen fazladan seti bırakır. */
+  onDropExtra: () => void;
 }) {
   const [open, setOpen] = useState<'reason' | 'note' | 'setup' | null>(null);
   const [warmOpen, setWarmOpen] = useState(false);
@@ -351,7 +361,7 @@ export function ExerciseCard({
                   const amrap = Boolean(set.target.amrap);
                   return (
                     <TableRow
-                      key={set.setIndex}
+                      key={set.extra ? `extra-${set.setIndex}` : set.setIndex}
                       ref={current ? currentRef : undefined}
                       aria-current={current ? 'step' : undefined}
                       onClick={logged ? () => onEditSet(logged.id) : undefined}
@@ -363,7 +373,7 @@ export function ExerciseCard({
                         {set.position + 1}
                         {amrap ? <span className="sr-only">, AMRAP</span> : null}
                       </TableCell>
-                      <TableCell className="truncate text-muted-foreground">{previousText(set.previous, row.trackingType)}</TableCell>
+                      <TableCell className="truncate text-muted-foreground">{set.extra ? 'fazladan' : previousText(set.previous, row.trackingType)}</TableCell>
                       {showTarget ? <TableCell className="text-muted-foreground">{targetCell(set.target, row.trackingType)}</TableCell> : null}
                       {weighted ? (
                         <TableCell className={cn(logged ? 'font-semibold' : 'text-muted-foreground')}>
@@ -405,6 +415,14 @@ export function ExerciseCard({
                               <Check weight="bold" />
                             </motion.span>
                           </button>
+                        ) : set.extra ? (
+                          <button
+                            type="button"
+                            aria-label={`${label}, fazladan: ${group ? 'turu' : 'seti'} kaldır`}
+                            onClick={onDropExtra}
+                            className="inline-flex size-11 items-center justify-center rounded-full text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4">
+                            <X weight="bold" />
+                          </button>
                         ) : null}
                       </TableCell>
                     </TableRow>
@@ -412,6 +430,12 @@ export function ExerciseCard({
                 })}
               </TableBody>
             </Table>
+            {onAddSet ? (
+              <Button variant="ghost" className="h-11 w-full justify-start gap-2 rounded-none border-t px-3 text-primary hover:text-primary" onClick={onAddSet}>
+                <Plus data-icon="inline-start" weight="bold" />
+                {group ? 'Tur ekle' : 'Set ekle'}
+              </Button>
+            ) : null}
           </motion.div>
         </AnimatePresence>
       </div>

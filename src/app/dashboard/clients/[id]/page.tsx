@@ -308,7 +308,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                   nativeButton={false}
                   render={<a href={`https://github.com/${serverEnv().owner}/${repo}`} target="_blank" rel="noreferrer" />}>
                   <ArrowSquareOut data-icon="inline-start" weight="fill" />
-                  GitHub'da aç
+                  GitHub&apos;da aç
                 </Button>
               </div>
             </details>

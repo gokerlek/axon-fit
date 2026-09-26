@@ -15,6 +15,11 @@ import { DEFAULT_TRANSITION_SECONDS, type BlockKind, type TemplateBody } from '.
  * atlanır; süperset ve komplekste üyeler arasında dinlenme yok, devrede istasyon geçişi, tur sonunda
  * blok dinlenmesi. Geçilen üye grubu bozmaz: kalan üyeler tur düzeniyle sürer. İmleç, bu sırada ilk
  * yapılmamış ve geçilmemiş settir. Son setten sonra dinlenme yok.
+ *
+ * "+ Set ekle" (§2.4, §6.1): birime istenen fazladan turlar (`extraRounds`; tek harekette fazladan set)
+ * planın turlarından sonra gelir; grupta her (geçilmemiş) üyeye bir set, aynı tur düzeniyle. Fazladan set
+ * `extra` işaretiyle yazılır ve planın sayısına girmez: "bitti mi" sorusu yalnız planın setlerine bakar,
+ * bekleyen fazladan set bitirmeyi engellemez.
  */
 
 export type CursorMember = {
@@ -34,7 +39,11 @@ export type CursorMember = {
   moved: boolean;
 };
 
-export type CursorSlot = { member: number; round: number; restAfterSeconds: number };
+/**
+ * Birimin bir seti: üye, tur, ardından dinlenme. Fazladan turda `extra` üyenin kaçıncı fazladan seti (0'dan);
+ * `round` planın turlarının arkasından sürer.
+ */
+export type CursorSlot = { member: number; round: number; restAfterSeconds: number; extra?: number };
 
 export type CursorUnit = {
   /** Blok kimliği ya da (plan dışı harekette) hareket kaydının kimliği. */
@@ -56,13 +65,16 @@ export type CursorPosition = {
   round: number;
   /** Bu setten sonra dinlenme; antrenmanın son setinde 0. */
   restAfterSeconds: number;
+  /** "+ Set ekle": üyenin kaçıncı fazladan seti (0'dan); planın setiyse yok. */
+  extra?: number;
 };
 
 export type WorkoutCursor = {
   /** Yapılış sırasında bütün birimler (geçilenler dahil). */
   units: CursorUnit[];
+  /** Sıradaki set; planın setleri bittiyse bekleyen fazladan set olabilir. */
   next: CursorPosition | null;
-  /** Geçilmemiş her set yapıldı: "Antrenman tamamlandı, bitirelim mi?" */
+  /** Geçilmemiş her planlı set yapıldı: "Antrenman tamamlandı, bitirelim mi?" (bekleyen fazladan set engellemez). */
   allDone: boolean;
   progress: {
     /** "7/17 set": yapılan ve (geçilmemiş birimlerde) planlanan çalışma setleri. */
@@ -74,9 +86,11 @@ export type WorkoutCursor = {
   };
 };
 
-type PlanOverrides = {
+export type PlanOverrides = {
   /** Bugünkü planın satır başına çalışma seti (`planSession`: hafifletmede daha az); yoksa satırın setleri. */
   plannedSets?: ReadonlyMap<string, number>;
+  /** "+ Set ekle": birim anahtarı (blok ya da eklenen hareketin kaydı) başına istenen fazladan tur. */
+  extraRounds?: ReadonlyMap<string, number>;
 };
 
 function workingSets(entry: Pick<SessionEntry, 'sets'> | undefined): SessionSet[] {
@@ -85,7 +99,9 @@ function workingSets(entry: Pick<SessionEntry, 'sets'> | undefined): SessionSet[
 
 /**
  * Üyenin sayıları. Planlanan set: bugünkü planın verdiği (`plannedSets`) → setlere yazılmış o günkü plan
- * (`plannedSetCount`) → satırın set sayısı.
+ * (`plannedSetCount`) → hareket kaydındaki planlanan set (eklenen hareket; planın satırdan az set verdiği
+ * gün, `workout-session.ts` → `entryFor`) → satırın set sayısı. Sunucu (`completion`) telefonun planını
+ * bilmez; kayda yazılan sayıyla aynı sonuca varır.
  */
 function memberOf(entry: SessionEntry | undefined, rowId: string | null, planned: { count: number; explicit: boolean }): CursorMember {
   const working = workingSets(entry);
@@ -93,7 +109,7 @@ function memberOf(entry: SessionEntry | undefined, rowId: string | null, planned
   return {
     rowId,
     entryId: entry?.id ?? null,
-    planned: !planned.explicit && recorded > 0 ? recorded : planned.count,
+    planned: planned.explicit ? planned.count : recorded > 0 ? recorded : (entry?.plannedSets ?? planned.count),
     done: working.filter((set) => !set.extra).length,
     extra: working.filter((set) => set.extra).length,
     skipped: entry?.status === 'skipped',
@@ -101,22 +117,39 @@ function memberOf(entry: SessionEntry | undefined, rowId: string | null, planned
   };
 }
 
-/** Birimin set sırası: `setSlots` kuralı, geçilen üyeler olmadan. */
-function slotsOf(kind: BlockKind, members: readonly CursorMember[], restSeconds: number, transitionSeconds: number | undefined): CursorSlot[] {
+/**
+ * Birimin set sırası: `setSlots` kuralı, geçilen üyeler olmadan; ardından fazladan turlar. Fazladan turda
+ * üyenin seti ya istenen turların içindedir (`extraRounds`) ya da zaten yapılmıştır (başka cihazda, isteği
+ * sonra kaldırılan): yapılmış fazladan set yerinde kalır, istenmeyen boş set beklemez.
+ */
+function slotsOf(kind: BlockKind, members: readonly CursorMember[], restSeconds: number, transitionSeconds: number | undefined, extraRounds = 0): CursorSlot[] {
   const between = kind === 'circuit' ? (transitionSeconds ?? DEFAULT_TRANSITION_SECONDS) : 0;
   const rounds = Math.max(0, ...members.map((member) => member.planned));
   const slots: CursorSlot[] = [];
-  for (let round = 0; round < rounds; round++) {
-    const active = members.flatMap((member, index) => (!member.skipped && member.planned > round ? [index] : []));
+  const push = (active: readonly number[], round: number, extra?: number) =>
     active.forEach((member, position) => {
-      slots.push({ member, round, restAfterSeconds: position === active.length - 1 ? restSeconds : between });
+      slots.push({ member, round, restAfterSeconds: position === active.length - 1 ? restSeconds : between, ...(extra !== undefined ? { extra } : {}) });
     });
+  for (let round = 0; round < rounds; round++) {
+    push(members.flatMap((member, index) => (!member.skipped && member.planned > round ? [index] : [])), round);
+  }
+  const extras = Math.max(extraRounds, ...members.map((member) => member.extra));
+  for (let extra = 0; extra < extras; extra++) {
+    push(members.flatMap((member, index) => (!member.skipped && (extra < extraRounds || member.extra > extra) ? [index] : [])), rounds + extra, extra);
   }
   return slots;
 }
 
-function remaining(unit: CursorUnit): boolean {
-  return unit.slots.some((slot) => (unit.members[slot.member]?.done ?? 0) <= slot.round);
+/** Set yapıldı mı: planın setinde üyenin yaptığı, fazladan sette fazladan yaptığı sayıyla. */
+export function slotDone(unit: Pick<CursorUnit, 'members'>, slot: CursorSlot): boolean {
+  const member = unit.members[slot.member];
+  if (!member) return true;
+  return slot.extra === undefined ? member.done > slot.round : member.extra > slot.extra;
+}
+
+/** Planın yapılmamış seti kaldı mı (fazladan setler hariç). */
+export function remaining(unit: Pick<CursorUnit, 'members' | 'slots'>): boolean {
+  return unit.slots.some((slot) => slot.extra === undefined && !slotDone(unit, slot));
 }
 
 function unitSkipped(unit: CursorUnit): boolean {
@@ -156,7 +189,7 @@ export function workoutUnits(plan: TemplateBody, session: Pick<SessionDoc, 'entr
       blockId: block.id,
       kind: block.kind,
       members,
-      slots: slotsOf(block.kind, members, block.restSeconds, block.transitionSeconds),
+      slots: slotsOf(block.kind, members, block.restSeconds, block.transitionSeconds, overrides.extraRounds?.get(block.id)),
     });
   }
   // Plan dışı: eklenen hareketler ve (o arada programdan kalkmış) satırların kayıtları.
@@ -164,7 +197,7 @@ export function workoutUnits(plan: TemplateBody, session: Pick<SessionDoc, 'entr
     if (used.has(entry.id)) continue;
     const done = workingSets(entry).filter((set) => !set.extra).length;
     const member = memberOf(entry, null, { count: entry.plannedSets ?? Math.max(1, done), explicit: entry.plannedSets !== undefined });
-    units.push({ key: entry.id, blockId: null, kind: 'single', members: [member], slots: slotsOf('single', [member], 0, undefined) });
+    units.push({ key: entry.id, blockId: null, kind: 'single', members: [member], slots: slotsOf('single', [member], 0, undefined, overrides.extraRounds?.get(entry.id)) });
   }
 
   const order = session.order?.value ?? [];
@@ -188,7 +221,7 @@ export function workoutCursor(plan: TemplateBody, session: Pick<SessionDoc, 'ent
     if (unitSkipped(unit)) continue;
     for (const slot of unit.slots) {
       const member = unit.members[slot.member];
-      if (!member || member.done > slot.round) continue;
+      if (!member || slotDone(unit, slot)) continue;
       if (next) {
         pendingAfter = true;
         break;
@@ -201,6 +234,7 @@ export function workoutCursor(plan: TemplateBody, session: Pick<SessionDoc, 'ent
         blockId: unit.blockId,
         round: slot.round,
         restAfterSeconds: slot.restAfterSeconds,
+        ...(slot.extra !== undefined ? { extra: slot.extra } : {}),
       };
     }
     if (pendingAfter) break;
@@ -211,7 +245,23 @@ export function workoutCursor(plan: TemplateBody, session: Pick<SessionDoc, 'ent
   const doneSets = members.reduce((sum, member) => sum + Math.min(member.done, member.planned), 0);
   const plannedSets = members.reduce((sum, member) => sum + (member.skipped ? Math.min(member.done, member.planned) : member.planned), 0);
   const current = next ? open.indexOf(units[next.unit] as CursorUnit) + 1 : open.length;
-  return { units, next, allDone: next === null, progress: { doneSets, plannedSets, currentUnit: current, totalUnits: open.length } };
+  const allDone = open.every((unit) => !remaining(unit));
+  return { units, next, allDone, progress: { doneSets, plannedSets, currentUnit: current, totalUnits: open.length } };
+}
+
+/**
+ * Bitişin sayısı (tasarım §2.7 b; PT'nin "Gün A yarım bırakıldı (12/17 set)" bildirimi): yapılan ve günün
+ * bütün planlı çalışma setleri. Geçilen hareketin setleri de planda sayılır ("Calf Raise · geçildi"
+ * yapılmayanlar listesindedir); fazladan setler sayılmaz. Telefonun erken bitiş sheet'i (`workoutSummary`)
+ * ve sunucunun bildirimi (`session-finish.ts` → `completion`) bu tek tanımla. Antrenman sırasındaki üst
+ * çubuk ("7/17 set", `progress`) kalan işi gösterir: geçilen hareket orada plandan düşer.
+ */
+export function completionOf(units: readonly Pick<CursorUnit, 'members'>[]): { done: number; planned: number } {
+  const members = units.flatMap((unit) => unit.members);
+  return {
+    done: members.reduce((sum, member) => sum + Math.min(member.done, member.planned), 0),
+    planned: members.reduce((sum, member) => sum + member.planned, 0),
+  };
 }
 
 /* --- geç, sona al, şimdi yap --- */
@@ -287,14 +337,17 @@ export function restoreUnit(plan: TemplateBody, doc: SessionDoc, entryId: string
   );
 }
 
-/** "Şimdi yap": birim, kalanların başına alınır (geçilmişse geri gelir); sıra oradan sürer. */
+/**
+ * "Şimdi yap": birim, kalanların başına alınır (geçilmişse geri gelir); sıra oradan sürer. Bekleyen
+ * "+ Set ekle" seti de kalan iştir: yalnız o kalan birim açık sayılır, yeni birim onun önüne girer.
+ */
 export function doNow(plan: TemplateBody, doc: SessionDoc, entryId: string, stamp: Stamp, overrides: PlanOverrides = {}): SessionDoc {
   const restored = restoreUnit(plan, doc, entryId, stamp, overrides);
   const units = workoutUnits(plan, restored, overrides);
   const unit = unitOfEntry(units, entryId);
   if (!unit) return doc;
   const rest = units.filter((item) => item !== unit);
-  const firstOpen = rest.findIndex((item) => !unitSkipped(item) && remaining(item));
+  const firstOpen = rest.findIndex((item) => !unitSkipped(item) && item.slots.some((slot) => !slotDone(item, slot)));
   const at = firstOpen < 0 ? rest.length : firstOpen;
   return withOrder(restored, [...rest.slice(0, at), unit, ...rest.slice(at)], stamp);
 }
@@ -308,6 +361,11 @@ export type PreviousSet = { setIndex: number; kg?: number | undefined; value: nu
  * sırası). Tekrar/süre: geçen seferki aynı sıradaki setin, aynı ağırlıktaki değeri; yoksa aralığın
  * altı. Tepe hiçbir zaman önceden dolmaz (dokunup geçmek "geçen seferle aynı" demektir, motor artış
  * vermez); bu seansın önceki setinin tekrarı da kopyalanmaz.
+ *
+ * `cap`: bugünün yoklaması planı indirdiyse (ağrıyla azaltma, hafif gün, "yük azaltılamadı"; satırın
+ * `adjusted`'ı) planın bu setteki hedefi. Önceden dolu değer onu aşmaz: vücut ağırlığı ve süreli harekette
+ * ağırlık değişmediği için geçen seferki değer hep eşleşir, açıklama "bugün aralığın altında kal" derken
+ * panel geçen seferkini gösteriyordu. Değer yalnız aşağı çekilir; olağan günde kural aynı.
  */
 export function prefillSet(input: {
   target: { min: number; max: number };
@@ -316,6 +374,7 @@ export function prefillSet(input: {
   previousKgInSession?: number | undefined;
   draftKg?: number | undefined;
   lastTime: readonly PreviousSet[];
+  cap?: number | undefined;
 }): { kg: number | undefined; value: number } {
   const kg = input.draftKg ?? input.previousKgInSession ?? input.plannedKg;
   const same = input.lastTime.find(
@@ -323,7 +382,7 @@ export function prefillSet(input: {
   );
   const ceiling = input.target.max > input.target.min ? input.target.max - 1 : input.target.min;
   const value = same ? Math.max(0, Math.min(same.value, ceiling)) : input.target.min;
-  return { kg, value };
+  return { kg, value: input.cap !== undefined ? Math.max(0, Math.min(value, input.cap)) : value };
 }
 
 /**

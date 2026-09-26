@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowClockwise, Barbell, CaretLeft, CheckCircle, CloudSlash, Drop, List, WarningCircle } from '@phosphor-icons/react';
+import { ArrowClockwise, Barbell, CaretLeft, CloudSlash, Drop, List, WarningCircle } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Progress } from '@/components/ui/progress';
@@ -35,23 +35,27 @@ import {
   swapRow,
   undoSkip,
   unitTitle,
+  withExtraRounds,
   withFinishReason,
   type FinishReason,
 } from '@/lib/workout-flow';
 import { groupView, nextMemberLetter } from '@/lib/workout-groups';
 import { createLocalWorkout, setsMissingOn, unsentSets, withChange, type LocalWorkout } from '@/lib/workout-outbox';
 import { acknowledgeRest, adjustRest, alarmPending, LATE_MS, startRest, tickRest, type RestEvent, type RestTimer } from '@/lib/workout-rest';
-import { extraKey, rekeyExtra, type WorkoutDay } from '@/lib/workout-plan';
+import { afterFinish, extraKey, rekeyExtra, type WorkoutDay } from '@/lib/workout-plan';
 import type { AddedRowResponse, LibraryItem, SwapOption, WorkoutResponse } from '@/lib/workout-routes';
 import {
+  addExtraRound,
   addWaterTap,
   afterLog,
   cursorOf,
   deleteSet,
+  dropExtraRound,
   easyShortcut,
   editSet,
   effortQuestions,
   elapsedText,
+  ensureEntries,
   findSet,
   logSet,
   logWarmup,
@@ -66,6 +70,7 @@ import {
   setupNoteOf,
   setValueText,
   setViews,
+  unitKeyOfRow,
   unlogWarmup,
   warmupViews,
   workoutSummary,
@@ -74,7 +79,9 @@ import {
   type NextSet,
 } from '@/lib/workout-session';
 import { startSetTimer, stopSetTimer, tickSetTimer } from '@/lib/workout-timer';
+import { WORKOUT_KEY } from '../today-workout';
 import { clearLocalWorkout, clearWorkoutCache, readLocalWorkout, readWorkoutCache, saveLocalWorkout, saveWorkoutCache, writerId } from '../workout-storage';
+import { DonePanel } from './done-panel';
 import { EntryPanel, type TimerView, type TransitionView } from './entry-panel';
 import { ExerciseCard } from './exercise-card';
 import { AddExerciseSheet, FlowSheet, SwapSheet, type SwapTarget } from './flow-sheets';
@@ -135,14 +142,19 @@ const TOAST_BUTTONS = { actionButton: 'touch:min-h-11 touch:px-3! touch:text-sm!
 
 const effective = new WeakMap<LocalWorkout, WorkoutDay>();
 
+/** Günün etkin hâli verilen belgeyle: başlangıçtaki gün + muadiller + eklenen hareketler + istenen fazladan turlar. */
+function dayFor(local: LocalWorkout, doc: SessionDoc): WorkoutDay {
+  return withExtraRounds(effectiveDay(local.plan, doc, local.extras), local.extraRounds);
+}
+
 /**
- * Günün etkin planı: başlangıçtaki gün + muadiller + eklenen hareketler (`effectiveDay`). Her kayıt yeni
- * bir `LocalWorkout` olduğu için kayıt başına bir kez kurulur.
+ * Günün etkin planı: başlangıçtaki gün + muadiller + eklenen hareketler (`effectiveDay`) + "+ Set ekle"nin
+ * turları (`withExtraRounds`). Her kayıt yeni bir `LocalWorkout` olduğu için kayıt başına bir kez kurulur.
  */
 function planOf(local: LocalWorkout): WorkoutDay {
   let day = effective.get(local);
   if (!day) {
-    day = effectiveDay(local.plan, local.doc, local.extras);
+    day = dayFor(local, local.doc);
     effective.set(local, day);
   }
   return day;
@@ -198,6 +210,11 @@ function lastWorkingSetId(doc: SessionDoc): string | null {
  * tek dokunuşluk "Hareketi geç ›" (sona alır; 5 sn toast [Bugün yapma] [Geri al]), başlıkta "Değiştir"
  * (muadil, kendi geçmişiyle). Ekran günün etkin planıyla çalışır (`planOf`: muadiller ve eklenenler).
  * Geçme, sıra ve muadil de kendi başına gönderilmez; neden yalnız bitişte sorulur.
+ *
+ * "+ Set ekle" (§2.4): kartın tablosunun altında (grupta "Tur ekle") ve bitmiş antrenmanda "Devam et"ten
+ * sonra (`DonePanel`: harekete set ya da yeni hareket). İstek telefonda durur (`extraRounds`), fazladan set
+ * `extra` işaretiyle yazılır; iki antrenman üst üste plandan fazla set yapılırsa bitişte antrenöre set önerisi
+ * olur (§6.1). Bekleyen fazladan set bitirmeyi engellemez; satırdaki ✕ ya da paneldeki "Kaldır" bırakır.
  */
 export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: string; dayParam: string | null; finishOnOpen: boolean }) {
   const router = useRouter();
@@ -210,9 +227,9 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
 
   const [saving, setSaving] = useState<Saving | null>(null);
   const [fresh, setFresh] = useState<string | null>(null);
-  const [restView, setRestView] = useState<RestView | null>(null);
+  const [restTick, setRestTick] = useState<{ key: string; view: RestView } | null>(null);
   const [transition, setTransition] = useState<TransitionView | null>(null);
-  const [timerView, setTimerView] = useState<TimerView | null>(null);
+  const [timerTick, setTimerTick] = useState<{ key: string; view: TimerView } | null>(null);
   const [undoWater, setUndoWater] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
   const [finishing, setFinishing] = useState(false);
@@ -255,7 +272,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
     localRef.current = null;
     clearLocalWorkout(clientId);
     clearWorkoutCache(clientId);
-    void queryClient.invalidateQueries({ queryKey: ['me', 'workout'] });
+    void queryClient.invalidateQueries({ queryKey: WORKOUT_KEY });
   }, [clientId, queryClient]);
 
   const leave = useCallback(
@@ -435,11 +452,10 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
     [announce, guard],
   );
 
+  // Görünüm hangi dinlenmenin: dinlenme bitince (ya da yenisi başlayınca) eskisinin görünümü kendiliğinden düşer.
+  const restView = restTick && restTick.key === restKey ? restTick.view : null;
   useEffect(() => {
-    if (!restKey) {
-      setRestView(null);
-      return;
-    }
+    if (!restKey) return;
     let frame = 0;
     let shown = '';
     const loop = () => {
@@ -453,7 +469,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
       const key = `${tick.state}:${seconds}:${pending}`;
       if (key !== shown) {
         shown = key;
-        setRestView({ state: tick.state, seconds, alarmPending: pending });
+        setRestTick({ key: restKey, view: { state: tick.state, seconds, alarmPending: pending } });
       }
       frame = window.requestAnimationFrame(loop);
     };
@@ -464,11 +480,9 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
   /* --- süreli set sayacı ve devrenin istasyon geçişi: zaman damgasından --- */
 
   const timerKey = local?.timer ? `${local.timer.rowId}#${local.timer.setIndex}@${local.timer.startedAt}` : null;
+  const timerView = timerTick && timerTick.key === timerKey ? timerTick.view : null;
   useEffect(() => {
-    if (!timerKey) {
-      setTimerView(null);
-      return;
-    }
+    if (!timerKey) return;
     let frame = 0;
     let shown = '';
     const loop = () => {
@@ -484,7 +498,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
       const key = `${tick.seconds}:${tick.phase}`;
       if (key !== shown) {
         shown = key;
-        setTimerView({ seconds: tick.seconds, toMin: tick.toMin, fraction: tick.fraction, phase: tick.phase });
+        setTimerTick({ key: timerKey, view: { seconds: tick.seconds, toMin: tick.toMin, fraction: tick.fraction, phase: tick.phase } });
       }
       frame = window.requestAnimationFrame(loop);
     };
@@ -572,7 +586,15 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
       const value = seconds ?? next.value;
       // Aşırı yük: "Onayla · Set bitti" (ilk kez) ya da bu harekette zaten onaylanmış.
       const overload = overloadState(plan, current.doc, next, next.kg) !== 'none';
-      const { doc, setId } = logSet(plan, current.doc, { rowId: next.rowId, setIndex: next.setIndex, kg: next.kg, value, overload, stamp: stampOf(current) });
+      const { doc, setId } = logSet(plan, current.doc, {
+        rowId: next.rowId,
+        setIndex: next.setIndex,
+        kg: next.kg,
+        value,
+        overload,
+        extra: next.extra === true,
+        stamp: stampOf(current),
+      });
       const after = afterLog(plan, current.doc, doc);
       commit(withChange({ ...current, draft: null, rest: null, timer: null }, doc, { send: true }));
       outbox.schedule();
@@ -810,9 +832,16 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
   const onConfirmDelete = useCallback(() => {
     const current = localRef.current;
     if (!current || !deleting) return;
-    const doc = deleteSet(planOf(current), current.doc, deleting.setId, stampOf(current));
+    const plan = planOf(current);
+    const found = findSet(current.doc, deleting.setId);
+    const doc = deleteSet(plan, current.doc, deleting.setId, stampOf(current));
     const rest = current.rest?.setId === deleting.setId ? null : current.rest;
-    commit(withChange({ ...current, rest, draft: null }, doc, { send: true }));
+    // Tek harekette silinen fazladan set istenen turdan da düşer (yeniden beklemesin); grupta tur üyelerle paylaşılır.
+    const rowKey = found?.set.extra ? rowKeyOf(found.entry) : undefined;
+    const unitKey = rowKey ? unitKeyOfRow(plan, rowKey) : undefined;
+    const single = unitKey ? plan.blocks.find((block) => block.id === unitKey)?.rows.length === 1 : false;
+    const extraRounds = unitKey && single ? dropExtraRound(plan, unitKey) : current.extraRounds;
+    commit(withChange({ ...current, rest, draft: null, extraRounds }, doc, { send: true }));
     outbox.schedule();
     setDeleting(null);
     announce('Set silindi');
@@ -822,7 +851,9 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
   /**
    * Bitişi gönderir (tek commit): `feedback` "Programını güncelleyelim mi?"nin kararları; uygulanmayan ağırlık
    * önce seansa işlenir (`oneOff` / `lighter`). Başarılıysa özet karuseli açılır (§2.8, dock yok); program
-   * güncellemesi bir an sonra bildirimle söylenir.
+   * güncellemesi bir an sonra bildirimle söylenir. Bugün'ün sayıları ("Bu hafta x/y", su, yarım kart) hemen
+   * bitişin yanıtıyla güncellenir (`afterFinish`): Bugün'e dönünce eski sayı bir an bile görünmez, taze veri
+   * arkadan gelir.
    */
   const submitFinish = useCallback(
     async (rotation: RotationChoice | null, health: FinishHealth | undefined, feedback: FinishFeedback | undefined) => {
@@ -839,10 +870,13 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
       outbox.stop();
       const doc: SessionDoc = { ...current.doc, status: 'finished', finishedAt: new Date().toISOString() };
       try {
-        const result = await fetchJson<{ feedback?: FeedbackOutcome }>(`/api/me/sessions/${current.doc.id}/finish`, {
+        const result = await fetchJson<{ doc?: SessionDoc; feedback?: FeedbackOutcome }>(`/api/me/sessions/${current.doc.id}/finish`, {
           method: 'POST',
           body: JSON.stringify({ doc, ...(rotation ? { rotation } : {}), ...(health ? { health } : {}), ...(feedback ? { feedback } : {}) }),
         });
+        // Tarih sunucunun (ilk yazımda koyduğu); yanıt gelmediyse telefondaki.
+        const saved = result.doc ?? doc;
+        queryClient.setQueryData<WorkoutResponse>(WORKOUT_KEY, (old) => (old ? afterFinish(old, saved) : old));
         release();
         router.replace(`/me/antrenman/ozet/${current.doc.id}`);
         const message = result.feedback ? feedbackMessage(result.feedback) : null;
@@ -865,18 +899,26 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
         );
       }
     },
-    [outbox, leave, release, router, commit],
+    [outbox, leave, release, router, commit, queryClient],
   );
 
   /**
    * Bitir; `reason`: yapılmayanların isteğe bağlı nedeni (ağrı yalnız onayla, ayrıntısı `health.json`'a);
    * `rotation`: "Sıradaki antrenman" satırındaki seçim (gösterilmediyse sunucunun hazır seçimi). Plandan
-   * sapma ya da öneri varsa önce "Programını güncelleyelim mi?" (§2.7 c), özetten önce.
+   * sapma ya da öneri varsa önce "Programını güncelleyelim mi?" (§2.7 c), özetten önce; öneri katmanının set
+   * artışı adayları (`plan.setIncrease`, §5.6) orada "Antrenörüne öner" olarak. Günün her satırının kaydı
+   * açılır (`ensureEntries`): hafifletilen günde planın set sayısı kayda yazılır, sunucunun "yarım bırakıldı
+   * (x/y set)" sayısı sheet'tekiyle aynı olur.
    */
   const onFinish = useCallback(
     (reason: FinishReason | null, rotation: RotationChoice | null) => {
       let current = localRef.current;
       if (!current) return;
+      const ready = ensureEntries(planOf(current), current.doc, stampOf(current));
+      if (ready !== current.doc) {
+        current = withChange(current, ready, { send: false });
+        commit(current);
+      }
       let health: FinishHealth | undefined;
       if (reason) {
         const result = withFinishReason(planOf(current), current.doc, reason, stampOf(current));
@@ -884,7 +926,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
         current = withChange(current, result.doc, { send: false });
         commit(current);
       }
-      const items = feedbackItems({ day: current.plan, doc: current.doc, extras: current.extras });
+      const items = feedbackItems({ day: current.plan, doc: current.doc, extras: current.extras, suggestions: current.plan.setIncrease });
       if (items.length === 0) {
         void submitFinish(rotation, health, undefined);
         return;
@@ -918,7 +960,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
     (current: LocalWorkout, doc: SessionDoc, extra: Partial<LocalWorkout> = {}) => {
       const before = nextSet(planOf(current), current.doc);
       const next = { ...current, ...extra };
-      const after = nextSet(effectiveDay(next.plan, doc, next.extras), doc);
+      const after = nextSet(dayFor(next, doc), doc);
       const moved = before?.rowId !== after?.rowId || before?.setIndex !== after?.setIndex;
       commit(withChange(moved ? { ...next, draft: null, timer: null } : next, doc, { send: false }));
       if (moved) setTransition(null);
@@ -1097,6 +1139,50 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
     [addBusy, commitFlow, announce, onJump],
   );
 
+  /**
+   * "+ Set ekle" (§2.4; grupta tur) ya da bitmiş antrenmanda "Devam et"ten sonra bir harekete fazladan set:
+   * yalnız telefonda istenir (kendi başına gönderilmez); yapılan set `extra` işaretiyle yazılır. Planın setleri
+   * bittiyse imleç fazladan sete geçer, bitirme sorusu kapanır.
+   */
+  const onAddSet = useCallback(
+    (key: string) => {
+      const current = localRef.current;
+      if (!current || saving) return;
+      const plan = planOf(current);
+      const extraRounds = addExtraRound(plan, current.doc, key);
+      if ((extraRounds[key] ?? 0) <= (plan.extraRounds?.[key] ?? 0)) return;
+      const group = (plan.blocks.find((block) => block.id === key)?.rows.length ?? 1) > 1;
+      const before = nextSet(plan, current.doc);
+      const next = { ...current, extraRounds };
+      const after = nextSet(planOf(next), current.doc);
+      const moved = before?.rowId !== after?.rowId || before?.setIndex !== after?.setIndex;
+      commit(moved ? { ...next, draft: null, timer: null } : next);
+      guard();
+      setFinishOpen(false);
+      announce(group ? 'Fazladan tur eklendi' : 'Fazladan set eklendi');
+      if (moved) focusLater('exercise-title', DURATION.base);
+    },
+    [saving, commit, guard, announce, focusLater],
+  );
+
+  /** Bekleyen fazladan seti (grupta turu) bırakır; geriye bir şey kalmadıysa bitirme sorusu. */
+  const onDropExtra = useCallback(
+    (key: string) => {
+      const current = localRef.current;
+      if (!current || saving) return;
+      const plan = planOf(current);
+      const before = nextSet(plan, current.doc);
+      const next = { ...current, extraRounds: dropExtraRound(plan, key) };
+      const after = nextSet(planOf(next), current.doc);
+      const moved = before?.rowId !== after?.rowId || before?.setIndex !== after?.setIndex;
+      commit(moved ? { ...next, draft: null, timer: null } : next);
+      guard();
+      announce('Fazladan set kaldırıldı');
+      if (before && !after) later(DURATION.slow + 50, () => setFinishOpen(true));
+    },
+    [saving, commit, guard, announce, later],
+  );
+
   /** Bitişte "Geçileni yap": ilk geçilen hareket şimdi. */
   const onDoSkipped = useCallback(() => {
     const current = localRef.current;
@@ -1180,6 +1266,8 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
   const summary = workoutSummary(plan, doc, new Date(now));
   const rotation = finishRotation(plan, summary);
   const flow = flowView(plan, doc);
+  // "+ Set ekle": birim sınırda değilse (en çok `EXTRA_ROUNDS_MAX` tur).
+  const addable = (key: string) => (addExtraRound(plan, doc, key)[key] ?? 0) > (plan.extraRounds?.[key] ?? 0);
   const todayIds = new Set(Object.values(plan.rows).map((item) => item.exerciseId));
   const progress = cursor.progress;
   const unsent = unsentSets(local);
@@ -1288,19 +1376,18 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
                   onToggleWarmup={(index, done) => onToggleWarmup(row.rowId, index, done)}
                   onSetupNote={(text) => onSetupNote(row.rowId, text)}
                   onSwap={!saving && canSwap(local.plan, doc, row.rowId) ? () => openSwap(row.rowId) : null}
+                  onAddSet={!saving && addable(unitKey) ? () => onAddSet(unitKey) : null}
+                  onDropExtra={() => onDropExtra(unitKey)}
                 />
               </motion.div>
             ) : (
               <motion.div key="done" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: tween(DURATION.base) }}>
-                <Empty className="border">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <CheckCircle weight="fill" />
-                    </EmptyMedia>
-                    <EmptyTitle>Bütün hareketler bitti</EmptyTitle>
-                    <EmptyDescription>Antrenmanı bitirmek için aşağıdaki düğmeye dokun.</EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
+                <DonePanel
+                  items={flow.active.filter((item) => item.state === 'done' && addable(item.key))}
+                  disabled={saving !== null || addBusy !== null}
+                  onAddSet={onAddSet}
+                  onAddExercise={() => setAddOpen(true)}
+                />
               </motion.div>
             )}
           </AnimatePresence>
@@ -1340,6 +1427,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
               onStopTimer={onStopTimer}
               onCancelTimer={onCancelTimer}
               onSkip={() => (next ? onSkip(next.unitKey) : undefined)}
+              onDropExtra={() => (next ? onDropExtra(next.unitKey) : undefined)}
               onFinish={() => setFinishOpen(true)}
             />
           </section>

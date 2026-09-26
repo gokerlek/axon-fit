@@ -170,6 +170,8 @@ export function useEditorDraft<TSchema extends v.GenericSchema<Record<string, un
     const raw = readRaw(storageKey);
     if (raw === null) return;
     const draft = parseDraft(raw, schema, baseSchema);
+    // Depodaki taslak ancak sunucu çiziminden sonra okunabilir (ilk çizim sunucununkiyle aynı kalsın).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (draft && offerDraft(draft.input as v.InferInput<TSchema>, getInput(form), prepare)) present(draft);
     else if (!form.isDirty) removeRaw(storageKey);
   }, [form, schema, baseSchema, storageKey, present, prepare]);

@@ -513,6 +513,8 @@ export type DayAdjustment = {
  * hafifletmesi (`lightenPlan`); ikisi birlikteyse daha hafif ağırlık ve hafifletmenin set sayısı. Ağrının
  * yük azaltması hafifletmeden önce gelir (gerekçe `decrease`, motorda kalır). Isınma setleri yeni en hafif
  * çalışma setinin altındakilerle sınırlanır. `stop` kararında plan değişmez (antrenman başlamaz).
+ * Set artışı adayları (`setIncrease`, §5.6) hazır oluşluk düşükse ("Planı koru" dense de) ve planı değişen
+ * satırda düşer; `changed` boş olsa da gün bu yüzden değişebilir.
  */
 export function adjustDay(day: WorkoutDay, input: { outcome: StartOutcome; lighten: boolean; mode: ToleranceMode }): DayAdjustment {
   const { outcome, lighten } = input;
@@ -568,8 +570,11 @@ export function adjustDay(day: WorkoutDay, input: { outcome: StartOutcome; light
     };
   }
   const lighter = reduced || lightened;
+  // Set artışı önerisi (§5.6): hazır oluşluk 60'ın altındaysa hiç, planı yoklamayla inen satırda bugün önerilmez.
+  const setIncrease = day.setIncrease?.filter((item) => !outcome.low && !changed.includes(item.rowId));
+  const dropped = setIncrease !== undefined && setIncrease.length !== day.setIncrease?.length;
   return {
-    day: changed.length > 0 ? { ...day, rows } : day,
+    day: changed.length > 0 || dropped ? { ...day, ...(changed.length > 0 ? { rows } : {}), ...(dropped ? { setIncrease } : {}) } : day,
     lighter,
     ...(reduced ? { adjustReason: 'pain' as const } : lightened ? { adjustReason: 'readiness' as const } : {}),
     changed,

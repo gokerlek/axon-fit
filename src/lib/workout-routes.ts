@@ -3,16 +3,19 @@ import { groupByEquipment, rankAlternatives } from './alternatives.ts';
 import { effectiveSets } from './client-targets.ts';
 import { postGuard } from './client-auth-routes.ts';
 import { canRecordHealth } from './client-status.ts';
+import { HEALTH_PATH } from './check-in-routes.ts';
 import { todayIn } from './format.ts';
 import { GithubError } from './github/errors.ts';
 import { currentPhaseOf, DAY_ID_PATTERN, nextDayId } from './program-plan.ts';
 import type { TrackingType } from './progression.ts';
+import { parseProposals, PROPOSALS_PATH } from './proposals.ts';
 import type { Client } from './schemas/client.ts';
 import { EQUIPMENT_LABELS, type Category, type Equipment } from './schemas/exercise.ts';
 import { clientScheduleBodySchema, programSchema, type Program } from './schemas/program.ts';
 import { parseStoredSession, type SessionDoc, type SessionIndex } from './schemas/session.ts';
 import { readIndex, type SessionRepo, type StoredJson } from './session-files-core.ts';
 import { run, type SessionRouteDeps, type SessionRouteResult } from './session-routes.ts';
+import { readinessFromHealth, setSuggestionsFor, type SuggestionExercise } from './set-suggestions.ts';
 import { firstForMuscleRowIds, ROW_ID_PATTERN } from './template-plan.ts';
 import { applyClientSchedule } from './training-days.ts';
 import { mergeWaterTaps, parseWaterFile, WATER_PATH, waterMessage, waterOnDay, waterPostSchema } from './water.ts';
@@ -51,7 +54,9 @@ import {
  *   katmanı (§5) bütün uçlarda aynı girdiyle: onarılmış index, şimdi, danışanın antrenman geçmişi
  *   (`insightOf`).
  *   Yarım antrenmanda muadil ve eklenen hareketlerin planları da (`extras`): başka cihazda ya da
- *   silinmiş tarayıcı verisiyle sürdürülen antrenman aynı hareketlerle açılır.
+ *   silinmiş tarayıcı verisiyle sürdürülen antrenman aynı hareketlerle açılır. Günün set artışı adayları
+ *   (§5.6, `set-suggestions.ts`) planda (`day.setIncrease`): `proposals.json` (bu haftaki öneriler) ve
+ *   sağlık onayı varken `health.json` (son hazır oluşluk) bunun için okunur.
  * - `GET /api/me/workout/alternatives?day=&row=`: satırın muadilleri ("Değiştir", §2.6), ekipmana göre
  *   gruplu (`alternatives.ts`); her biri kendi geçmişiyle planlı. Bugünün öteki hareketleri önerilmez.
  * - `GET /api/me/workout/exercises[?add=]`: "Hareket ekle"nin kütüphanesi; `add` verilirse o egzersizin
@@ -67,6 +72,8 @@ export type WorkoutRouteDeps = SessionRouteDeps & {
   catalog(): Promise<{ exercises: readonly WorkoutExercise[]; devices: readonly WorkoutDevice[] }>;
   /** Kasın ailesi (üst kanat → "Kanat"): muadil sıralaması (`muscles.ts`). */
   familyOf(muscle: string): string;
+  /** Hareketin setinin kaslara payı (kesirli set; `muscles.ts` → `exerciseSetWeights`): set artışı önerisi. */
+  setWeights(exercise: SuggestionExercise): Readonly<Partial<Record<string, number>>>;
 };
 
 /** Muadil listesinin en çok uzunluğu (PT'nin sabitledikleri dahil). */
@@ -222,12 +229,15 @@ export function sessionExtras(input: {
 
 export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null): Promise<SessionRouteResult> {
   return run(deps, null, 'workout', async ({ client, repo }) => {
-    const [repaired, programFile, waterFile, catalog, timeZone] = await Promise.all([
+    const [repaired, programFile, waterFile, catalog, timeZone, proposalsFile, healthFile] = await Promise.all([
       readIndex(repo),
       readTolerant(repo, 'program.json'),
       readTolerant(repo, WATER_PATH),
       catalogOf(deps),
       deps.timeZone(),
+      readTolerant(repo, PROPOSALS_PATH),
+      // Sağlık verisi yalnız onay varken okunur (gösterim de işlemedir): set artışının hazır oluşluk koşulu.
+      canRecordHealth(client, 'readiness') ? readTolerant(repo, HEALTH_PATH) : Promise.resolve(null),
     ]);
     const now = deps.now();
     const today = todayIn(timeZone, now);
@@ -249,6 +259,20 @@ export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null): P
       const insight = insightOf(index, now, client);
       day = buildWorkoutDay({ program, dayId, exercises: catalog.exercises, devices: catalog.devices, history, insight });
       if (day && current) extras = sessionExtras({ day, doc: current, catalog, history, insight });
+      if (day) {
+        const setIncrease = setSuggestionsFor({
+          day,
+          exercises: catalog.exercises,
+          index,
+          now,
+          experience: client.training?.experience,
+          readinessScore: healthFile && healthFile !== 'broken' ? readinessFromHealth(healthFile.content) : undefined,
+          proposals: proposalsFile && proposalsFile !== 'broken' ? parseProposals(proposalsFile.content).items : [],
+          setWeightsOf: deps.setWeights,
+          sessionId: current?.id,
+        });
+        if (setIncrease.length > 0) day = { ...day, setIncrease };
+      }
     }
 
     const phase = program ? currentPhaseOf(program)?.phase : undefined;

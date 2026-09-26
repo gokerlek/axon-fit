@@ -2,7 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { SessionDoc, SessionEntry } from './schemas/session.ts';
 import { at, groupBlock, plan, sessionDoc, sessionEntry, singleBlock, W1, workingSet } from './testing/session-fixtures.ts';
-import { doNow, dropUnit, entryForRow, entryStatusOf, prefillSet, restoreUnit, rowKeyOf, skipUnit, workoutCursor } from './workout-cursor.ts';
+import { completionOf, doNow, dropUnit, entryForRow, entryStatusOf, prefillSet, restoreUnit, rowKeyOf, skipUnit, workoutCursor, workoutUnits } from './workout-cursor.ts';
 
 let setCounter = 0;
 /** Harekete `count` çalışma seti ekler. */
@@ -97,6 +97,70 @@ describe('imleç: gruplar', () => {
     const cursor = workoutCursor(circuit, doc);
     assert.deepEqual([cursor.next?.rowId, cursor.next?.restAfterSeconds], ['r_cccccc', 90]);
     assert.equal(cursor.progress.totalUnits, 1);
+  });
+});
+
+describe('imleç: "+ Set ekle" (fazladan tur)', () => {
+  const superset = plan(groupBlock('b_gggggg', 'superset', [{ id: 'r_aaaaaa', sets: 3 }, { id: 'r_bbbbbb', sets: 2 }], 120));
+  const pair = () => [sessionEntry('e_aaaaaa', { rowId: 'r_aaaaaa' }), sessionEntry('e_bbbbbb', { rowId: 'r_bbbbbb' })];
+
+  test('istenen fazladan set planın setlerinden sonra gelir; araya dinlenme, bitince sıradaki hareket', () => {
+    const extraRounds = new Map([['b_aaaaaa', 1]]);
+    const mid = workoutCursor(day, docWith({ e_aaaaaa: 2 }), { extraRounds });
+    // Planın son setinden sonra fazladan set var: dinlenme bloğunki.
+    assert.deepEqual([mid.next?.rowId, mid.next?.round, mid.next?.extra, mid.next?.restAfterSeconds], ['r_aaaaaa', 2, undefined, 90]);
+    const extra = workoutCursor(day, docWith({ e_aaaaaa: 3 }), { extraRounds });
+    assert.deepEqual([extra.next?.rowId, extra.next?.round, extra.next?.extra], ['r_aaaaaa', 3, 0]);
+    // Fazladan set planın sayısına girmez.
+    assert.deepEqual(extra.progress, { doneSets: 3, plannedSets: 7, currentUnit: 1, totalUnits: 3 });
+    const after = workoutCursor(day, sessionDoc({ entries: entries().map((entry) => (entry.id === 'e_aaaaaa' ? withSets(entry, 3, 1) : entry)) }), { extraRounds });
+    assert.equal(after.next?.rowId, 'r_bbbbbb');
+    assert.equal(after.next?.extra, undefined);
+  });
+
+  test('bekleyen fazladan set bitirmeyi engellemez; son set oysa ardından dinlenme yok', () => {
+    const cursor = workoutCursor(day, docWith({ e_aaaaaa: 3, e_bbbbbb: 2, e_cccccc: 2 }), { extraRounds: new Map([['b_aaaaaa', 1]]) });
+    assert.equal(cursor.allDone, true);
+    assert.deepEqual([cursor.next?.rowId, cursor.next?.extra, cursor.next?.restAfterSeconds], ['r_aaaaaa', 0, 0]);
+  });
+
+  test('yapılmış fazladan set istek olmasa da yerinde (başka cihaz); istenmeyen set beklemez', () => {
+    const doc = sessionDoc({ entries: entries().map((entry) => (entry.id === 'e_aaaaaa' ? withSets(entry, 3, 1) : entry)) });
+    const units = workoutUnits(day, doc);
+    assert.deepEqual(units[0]?.slots.map((slot) => [slot.round, slot.extra]), [[0, undefined], [1, undefined], [2, undefined], [3, 0]]);
+    assert.equal(workoutCursor(day, doc).next?.rowId, 'r_bbbbbb');
+  });
+
+  test('grupta fazladan tur: her üyeye bir set, tur düzeniyle; geçilen üyeye yok', () => {
+    const extraRounds = new Map([['b_gggggg', 1]]);
+    const done = sessionDoc({ entries: [withSets(pair()[0] as SessionEntry, 3), withSets(pair()[1] as SessionEntry, 2)] });
+    const a = workoutCursor(superset, done, { extraRounds });
+    assert.deepEqual([a.next?.rowId, a.next?.round, a.next?.extra, a.next?.restAfterSeconds], ['r_aaaaaa', 3, 0, 0]);
+    const afterA = sessionDoc({ entries: [withSets(pair()[0] as SessionEntry, 3, 1), withSets(pair()[1] as SessionEntry, 2)] });
+    const b = workoutCursor(superset, afterA, { extraRounds });
+    assert.deepEqual([b.next?.rowId, b.next?.round, b.next?.extra], ['r_bbbbbb', 3, 0]);
+    const skipped = sessionDoc({ entries: [withSets(pair()[0] as SessionEntry, 3, 1), { ...(pair()[1] as SessionEntry), status: 'skipped' as const }] });
+    assert.equal(workoutCursor(superset, skipped, { extraRounds }).next, null);
+  });
+});
+
+describe('bitişin sayısı: erken bitiş sheet\'i ve PT bildirimi aynı', () => {
+  test('geçilen hareketin setleri planda; fazladan setler sayılmaz; üst çubuk geçileni düşer', () => {
+    const doc = sessionDoc({
+      entries: entries().map((entry) =>
+        entry.id === 'e_aaaaaa' ? withSets(entry, 3, 1) : entry.id === 'e_bbbbbb' ? withSets(entry, 2) : { ...entry, status: 'skipped' as const },
+      ),
+    });
+    const cursor = workoutCursor(day, doc);
+    assert.deepEqual(completionOf(cursor.units), { done: 5, planned: 7 });
+    assert.deepEqual([cursor.progress.doneSets, cursor.progress.plannedSets], [5, 5]);
+  });
+
+  test('kayda yazılan planlanan set (hafifletilen gün): sunucu da telefonun sayısını bulur', () => {
+    const doc = sessionDoc({ entries: entries().map((entry) => (entry.id === 'e_aaaaaa' ? { ...entry, plannedSets: 2 } : entry)) });
+    assert.deepEqual(completionOf(workoutUnits(day, doc)), { done: 0, planned: 6 });
+    // Telefonun planı (açık sayı) kazanır.
+    assert.deepEqual(completionOf(workoutUnits(day, doc, { plannedSets: new Map([['r_aaaaaa', 1]]) })), { done: 0, planned: 5 });
   });
 });
 
@@ -200,5 +264,24 @@ describe('önceden dolu değerler', () => {
     assert.deepEqual(prefillSet({ target: { min: 8, max: 10 }, setIndex: 1, plannedKg: 62.5, previousKgInSession: 60, lastTime }), { kg: 60, value: 9 });
     assert.equal(prefillSet({ target: { min: 8, max: 10 }, setIndex: 1, plannedKg: 62.5, previousKgInSession: 60, draftKg: 65, lastTime }).kg, 65);
     assert.deepEqual(prefillSet({ target: { min: 30, max: 60 }, setIndex: 0, lastTime: [] }), { kg: undefined, value: 30 });
+  });
+
+  test('yoklamanın indirdiği günde planın hedefi aşılmaz (süreli, vücut ağırlığı); olağan günde kural aynı', () => {
+    const seconds = [
+      { setIndex: 0, value: 50 },
+      { setIndex: 1, value: 45 },
+    ];
+    // "Yük azaltılamadı · bugün aralığın altında kal": plan alt sınırı verir, geçen seferki 50 sn değil.
+    assert.deepEqual(prefillSet({ target: { min: 30, max: 60 }, setIndex: 0, lastTime: seconds, cap: 30 }), { kg: undefined, value: 30 });
+    const reps = [
+      { setIndex: 0, value: 12 },
+      { setIndex: 1, value: 10 },
+    ];
+    assert.equal(prefillSet({ target: { min: 8, max: 15 }, setIndex: 0, lastTime: reps, cap: 8 }).value, 8);
+    // Planın hedefi geçen seferkinin üstündeyse geçen seferki kalır: değer yalnız aşağı çekilir.
+    assert.equal(prefillSet({ target: { min: 8, max: 15 }, setIndex: 1, lastTime: reps, cap: 11 }).value, 10);
+    // Tepe kuralı yine geçerli.
+    assert.equal(prefillSet({ target: { min: 8, max: 15 }, setIndex: 0, lastTime: [{ setIndex: 0, value: 15 }], cap: 15 }).value, 14);
+    assert.equal(prefillSet({ target: { min: 30, max: 60 }, setIndex: 0, lastTime: seconds }).value, 50);
   });
 });

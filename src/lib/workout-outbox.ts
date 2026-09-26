@@ -66,6 +66,11 @@ export type LocalWorkout = {
   draft: SetDraft | null;
   /** Süreli setin sayacı ("Başlat ▶"); sayılmıyorsa null. */
   timer: SetTimer | null;
+  /**
+   * "+ Set ekle": birim anahtarı başına istenen fazladan tur (`workout-session.ts` → `addExtraRound`). Kendi
+   * başına gönderilmez: yapılan fazladan set belgeye `extra` işaretiyle yazılır.
+   */
+  extraRounds: Record<string, number>;
 };
 
 export function createLocalWorkout(
@@ -90,6 +95,7 @@ export function createLocalWorkout(
     restCount: 0,
     draft: null,
     timer: null,
+    extraRounds: {},
   };
 }
 
@@ -199,6 +205,12 @@ function isDraft(value: unknown): value is SetDraft {
   return isRecord(value) && typeof value.rowId === 'string' && typeof value.setIndex === 'number';
 }
 
+/** İstenen fazladan turlar: pozitif tam sayı olmayan atlanır (önceki sürümün kaydında alan yok). */
+function roundsOf(value: unknown): Record<string, number> {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isInteger(entry[1]) && entry[1] > 0));
+}
+
 /**
  * Yerel kaydı okur. Belge şemadan geçer ve etkin olmalı; plan biçimce denetlenir. Okunamayan kayıt
  * yok sayılır (null): üzerine yeni antrenman yazılabilir.
@@ -232,5 +244,6 @@ export function parseLocalWorkout(text: string | null): LocalWorkout | null {
     restCount: count(raw.restCount),
     draft: isDraft(raw.draft) ? raw.draft : null,
     timer: parseSetTimer(raw.timer),
+    extraRounds: roundsOf(raw.extraRounds),
   };
 }

@@ -48,6 +48,8 @@ export function AfterCheck({ clientId }: { clientId: string }) {
 
   useEffect(() => {
     const cached = readCheckCache(clientId);
+    // Telefonda saklanan girdi sunucu çiziminden sonra okunur (ilk çizim sunucununkiyle aynı kalsın).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (cached) setData(cached.data);
     const controller = new AbortController();
     fetchCheckContext(clientId, controller.signal)
