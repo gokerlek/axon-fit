@@ -18,6 +18,7 @@ import {
   groupSkipNote,
   kindOptions,
   loadIntensity,
+  muscleLoadOf,
   normalizeTemplate,
   randomId,
   roundsOf,
@@ -30,6 +31,8 @@ import {
   settleKind,
   templateMuscleLoad,
   templateSummary,
+  WEEKLY_SET_BANDS,
+  weeklySetBand,
   type BlockKind,
   type PlanExercise,
   type TemplateBlock,
@@ -376,6 +379,36 @@ describe('şablon kas yükü', () => {
 
   test('boş şablon', () => {
     assert.deepEqual(templateMuscleLoad({ blocks: [] }, LIBRARY, setWeights), { load: {}, missingRowIds: [] });
+  });
+
+  test('ortak hesap yapılan setlerle de: kalem başına set × pay; ısınma ve bilinmeyen dışarıda', () => {
+    const { load, missing } = muscleLoadOf(
+      [
+        { key: 's_1:0', exerciseId: 'squat', sets: 3 },
+        { key: 's_1:1', exerciseId: 'bisiklet', sets: 1 },
+        { key: 's_2:0', exerciseId: 'squat', sets: 2 },
+        { key: 's_2:1', exerciseId: 'silinmis', sets: 4 },
+      ],
+      LIBRARY,
+      setWeights,
+    );
+    assert.deepEqual(load, { quadriceps: 5, glutes: 5, adductors: 2.5, erectors: 1.25 });
+    assert.deepEqual(missing, ['s_2:1']);
+  });
+
+  test('haftalık yük kademesi (SPEC §7.4): 0 boş · 1–9 az · 10–20 yeterli · 20 üstü fazla', () => {
+    const cases: [number, ReturnType<typeof weeklySetBand>][] = [
+      [0, 'none'],
+      [-1, 'none'],
+      [0.25, 'low'],
+      [9.5, 'low'],
+      [10, 'enough'],
+      [20, 'enough'],
+      [20.25, 'high'],
+      [35, 'high'],
+    ];
+    for (const [sets, band] of cases) assert.equal(weeklySetBand(sets), band, `${sets} set`);
+    assert.deepEqual(WEEKLY_SET_BANDS, { enough: 10, high: 20 });
   });
 
   test('harita tonu en çok çalışan kasa göre; kardiyo ve sıfır dışarıda', () => {

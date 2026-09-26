@@ -313,23 +313,50 @@ export function templateMuscleLoad<E extends PlanExercise>(
   exercises: ReadonlyMap<string, E>,
   setWeightsOf: (exercise: E) => Partial<Record<string, number>>,
 ): { load: Record<string, number>; missingRowIds: string[] } {
+  const rows = template.blocks.flatMap((block) => block.rows.map((row) => ({ key: row.id, exerciseId: row.exerciseId, sets: row.sets.length })));
+  const { load, missing } = muscleLoadOf(rows, exercises, setWeightsOf);
+  return { load, missingRowIds: missing };
+}
+
+/**
+ * Kas yükünün ortak hesabı: kalem başına set sayısı × kasın payı, kas başına toplam. Şablon ve program
+ * haritası planlanan setleri (`templateMuscleLoad`), İlerleme sekmesi yapılan çalışma setlerini verir
+ * (gerçekleşen haftalık yük, SPEC §7.4). Isınma ve soğuma türündeki hareketler sayılmaz; kütüphanede
+ * olmayan egzersizin kalemi `missing`'e düşer.
+ */
+export function muscleLoadOf<E extends PlanExercise>(
+  items: Iterable<{ key: string; exerciseId: string; sets: number }>,
+  exercises: ReadonlyMap<string, E>,
+  setWeightsOf: (exercise: E) => Partial<Record<string, number>>,
+): { load: Record<string, number>; missing: string[] } {
   const load: Record<string, number> = {};
-  const missingRowIds: string[] = [];
-  for (const block of template.blocks) {
-    for (const row of block.rows) {
-      const exercise = exercises.get(row.exerciseId);
-      if (!exercise) {
-        missingRowIds.push(row.id);
-        continue;
-      }
-      if (NO_LOAD_CATEGORIES.has(exercise.category)) continue;
-      for (const [muscle, weight] of Object.entries(setWeightsOf(exercise))) {
-        if (weight) load[muscle] = (load[muscle] ?? 0) + row.sets.length * weight;
-      }
+  const missing: string[] = [];
+  for (const item of items) {
+    const exercise = exercises.get(item.exerciseId);
+    if (!exercise) {
+      missing.push(item.key);
+      continue;
+    }
+    if (NO_LOAD_CATEGORIES.has(exercise.category)) continue;
+    for (const [muscle, weight] of Object.entries(setWeightsOf(exercise))) {
+      if (weight) load[muscle] = (load[muscle] ?? 0) + item.sets * weight;
     }
   }
   for (const muscle of Object.keys(load)) load[muscle] = clean(load[muscle] ?? 0);
-  return { load, missingRowIds };
+  return { load, missing };
+}
+
+/**
+ * Haftalık yük kademesi (SPEC §7.4): 0 boş · 1–9 az · 10–20 yeterli · 20'nin üstü fazla. Kesirli sette
+ * 10'un altı az (9,5 az), 20 dahil yeterli. Haftada kas başına ~10 set: ACSM 2026.
+ */
+export const WEEKLY_SET_BANDS = { enough: 10, high: 20 } as const;
+export type WeeklySetBand = 'none' | 'low' | 'enough' | 'high';
+
+export function weeklySetBand(sets: number): WeeklySetBand {
+  if (!(sets > 0)) return 'none';
+  if (sets < WEEKLY_SET_BANDS.enough) return 'low';
+  return sets <= WEEKLY_SET_BANDS.high ? 'enough' : 'high';
 }
 
 /** Kas yükünü bir çarpanla ölçekler (haftalık yük = bir tur × sıklık ÷ gün sayısı). */

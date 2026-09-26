@@ -803,7 +803,7 @@ export function phaseMuscleLoad<E extends PlanExercise>(
 const DAY_MS = 86_400_000;
 
 /** Pazartesi başlayan haftanın ilk günü ("2026-09-21"); `check-in.ts` ile aynı takvim hesabı. */
-function mondayOf(day: string): string {
+export function mondayOf(day: string): string {
   const [y, m, d] = day.split('-').map(Number);
   const index = Math.floor(Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1) / DAY_MS);
   // 1970-01-01 perşembe; pazartesiye göre kaydır.

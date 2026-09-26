@@ -8,7 +8,8 @@ import { formatDay, formatDayShort, formatNumber, formatWithUnit } from '@/lib/f
 import { cn } from '@/lib/utils';
 
 /**
- * Zaman içinde ilerleme grafiği — ölçümler, ileride e1RM ve haftalık hacim de bunu kullanır.
+ * Zaman içinde ilerleme grafiği — ölçümler, danışanın İlerleme sekmesi (hareket başına en ağır set,
+ * tahmini maksimum, toplam; haftalık toplam ağırlık) bunu kullanır.
  *
  * Bir ya da iki seri (ör. sol/sağ), tek eksen. Tarih ekseni gerçek zamanlıdır: ölçümler
  * düzensiz aralıklarla alındığı için noktalar eşit aralıkla dizilmez. Renkler tema
@@ -113,6 +114,9 @@ export function ProgressChart({
   series,
   minSpan,
   forecast,
+  dateLabel = formatDay,
+  pointNoun = 'ölçüm günü',
+  yAxisWidth = 40,
   className,
 }: {
   /** Neyin çizildiği: ekran okuyucu özetinde ve tablo başlığında. */
@@ -131,6 +135,15 @@ export function ProgressChart({
    * başlar; gerçek değerlerden ayrı çizilir ve tabloda ayrı satırda yazılır.
    */
   forecast?: readonly ForecastPoint[];
+  /**
+   * Noktanın adı (ipucu, tablo, ekran okuyucu özeti). Varsayılan gün ("22 Eylül 2026"); haftalık
+   * toplamda hafta ("21–27 Eyl"). Eksen etiketleri yine gündür.
+   */
+  dateLabel?: (date: string) => string;
+  /** Ekran okuyucu özetinde noktaların adı: "6 ölçüm günü", "6 antrenman günü", "12 hafta". */
+  pointNoun?: string;
+  /** Değer ekseninin genişliği (px): binlik sayılarda ("12.500") 40 dar kalır. */
+  yAxisWidth?: number;
   className?: string;
 }) {
   const projected = series.length === 1 && forecast && forecast.length > 1 ? forecast : undefined;
@@ -162,14 +175,14 @@ export function ProgressChart({
   const labelOf = (key: string) => series.find((item) => item.key === key)?.label ?? key;
 
   const latest = series.map((item) => ({ item, point: item.points.at(-1) }));
-  const summary = `${title}: ${actualTimes.length} ölçüm günü. ${latest
+  const summary = `${title}: ${actualTimes.length} ${pointNoun}. ${latest
     .map(({ item, point }) =>
-      point ? `${series.length > 1 ? `${item.label} son değer` : 'Son değer'} ${format(point.value)}, ${formatDay(point.date)}` : '',
+      point ? `${series.length > 1 ? `${item.label} son değer` : 'Son değer'} ${format(point.value)}, ${dateLabel(point.date)}` : '',
     )
     .filter(Boolean)
     .join('; ')}.${
     projected
-      ? ` Tahmin ${formatDay(projected.at(-1)!.date)}: ${format(projected.at(-1)!.value)}${band(projected.at(-1)!.low, projected.at(-1)!.high)}.`
+      ? ` Tahmin ${dateLabel(projected.at(-1)!.date)}: ${format(projected.at(-1)!.value)}${band(projected.at(-1)!.low, projected.at(-1)!.high)}.`
       : ''
   }`;
 
@@ -222,7 +235,7 @@ export function ProgressChart({
             tickLine={false}
             axisLine={false}
             tickMargin={4}
-            width={40}
+            width={yAxisWidth}
           />
           <ChartTooltip
             cursor={{ strokeWidth: 1 }}
@@ -230,7 +243,7 @@ export function ProgressChart({
               if (!active || !payload?.length || typeof label !== 'number') return null;
               return (
                 <div className="grid min-w-32 gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
-                  <div className="font-medium">{formatDay(toDay(label))}</div>
+                  <div className="font-medium">{dateLabel(toDay(label))}</div>
                   {payload.map((item) => {
                     const key = String(item.dataKey);
                     if (key === 'band') return null;
@@ -330,7 +343,7 @@ export function ProgressChart({
             {projected
               ? projected.slice(1).reverse().map((point) => (
                   <TableRow key={`tahmin-${point.date}`} className="text-muted-foreground">
-                    <TableCell>{formatDay(point.date)} (tahmin)</TableCell>
+                    <TableCell>{dateLabel(point.date)} (tahmin)</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {format(point.value)}
                       {band(point.low, point.high)}
@@ -340,7 +353,7 @@ export function ProgressChart({
               : null}
             {[...rows].filter((row) => actualTimes.includes(row.time)).reverse().map((row) => (
               <TableRow key={row.time}>
-                <TableCell>{formatDay(toDay(row.time))}</TableCell>
+                <TableCell>{dateLabel(toDay(row.time))}</TableCell>
                 {series.map((item) => {
                   const value = row[item.key];
                   return (
