@@ -1,12 +1,15 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  daysBetween,
   etaToGoal,
   FORECAST_MAX_DAYS,
   forecast,
   forecastAsOf,
   normalizePoints,
   rangeStart,
+  shiftDay,
+  slopeBand,
   theilSen,
   trendStatus,
   valueAt,
@@ -288,4 +291,57 @@ describe('tahmin bugüne göre', () => {
       forecast: { ok: false, reason: 'too_few_points' },
     });
   });
+});
+
+describe('eğimin güven aralığı (Sen 1968)', () => {
+  // Haftalık noktalar; eğimler birim/gün, beklenenler haftalık (× 7) yazılı.
+  const week = (band: ReturnType<typeof slopeBand>) => band && { low: band.low * 7, high: band.high * 7, slope: band.slopePerDay * 7 };
+
+  const cases: { name: string; values: number[]; low: number; high: number; slope: number }[] = [
+    // Bütün ikili eğimler aynı: aralık tek nokta.
+    { name: 'düz artış', values: [100, 102, 104, 106], low: 2, high: 2, slope: 2 },
+    { name: 'düz azalış', values: [106, 104, 102, 100], low: -2, high: -2, slope: -2 },
+    // Eğimler (hafta) −2, 1, 1, 2, 4, 4; N = 6, Var(S) = 4·3·13/18, C = 1,28·√Var ≈ 3,768.
+    // Alt uç 1,116. sıra (−2 ile 1 arası), üst uç 5,884. sıra (4 ile 4 arası).
+    { name: 'oynak dört nokta', values: [100, 104, 102, 106], low: -2 + 3 * ((6 - 1.28 * Math.sqrt(156 / 18)) / 2 - 1), high: 4, slope: 1.5 },
+    // Hepsi aynı değer: bağ düzeltmesi varyansı sıfırlar, aralık sıfırda.
+    { name: 'hep aynı değer', values: [80, 80, 80, 80], low: 0, high: 0, slope: 0 },
+  ];
+  for (const item of cases) {
+    test(item.name, () => {
+      const band = week(slopeBand(series('2026-06-01', 7, item.values)))!;
+      close(band.low, item.low, 1e-9);
+      close(band.high, item.high, 1e-9);
+      close(band.slope, item.slope, 1e-9);
+    });
+  }
+
+  test('orta eğim Theil–Sen eğimiyle aynı', () => {
+    const points = series('2026-06-01', 3, [60, 61, 60, 63, 62.5, 64, 66, 65]);
+    close(slopeBand(points)!.slopePerDay, theilSen(points)!.slopePerDay);
+  });
+
+  test('aynı oynaklıkta nokta arttıkça aralık daralır: 4 noktada sıfırı kapsar, 12 noktada kapsamaz', () => {
+    const noisy = (count: number) => series('2026-06-01', 7, Array.from({ length: count }, (_, i) => 100 + i + (i % 2 ? 1.5 : -1.5)));
+    assert.ok(slopeBand(noisy(4))!.low < 0);
+    assert.ok(slopeBand(noisy(12))!.low > 0);
+  });
+
+  test('tek günde nokta yoksa null', () => {
+    assert.equal(slopeBand([]), null);
+    assert.equal(slopeBand([{ date: '2026-06-01', value: 1 }, { date: '2026-06-01', value: 3 }]), null);
+  });
+});
+
+describe('gün hesabı', () => {
+  for (const [date, days, expected] of [
+    ['2026-09-27', -28, '2026-08-30'],
+    ['2026-02-27', 2, '2026-03-01'],
+    ['2026-12-31', 1, '2027-01-01'],
+  ] as const) {
+    test(`${date} ${days > 0 ? '+' : ''}${days} gün → ${expected}`, () => {
+      assert.equal(shiftDay(date, days), expected);
+      assert.equal(daysBetween(date, expected), days);
+    });
+  }
 });

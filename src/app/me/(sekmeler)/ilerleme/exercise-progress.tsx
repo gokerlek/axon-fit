@@ -29,8 +29,8 @@ import {
 import { forecastAsOf, rangeStart, type RangePreset } from '@/lib/trend';
 import { cn } from '@/lib/utils';
 
-/** Telefonda alttan açılan, ekran boyu sheet (antrenman ekranının kütüphanesiyle aynı). */
-const TALL =
+/** Telefonda alttan açılan, ekran boyu sheet (antrenman ekranının kütüphanesiyle aynı; Gelişim'in kas sheet'i de). */
+export const TALL_SHEET =
   'h-[calc(100dvh-max(1rem,env(safe-area-inset-top)))] max-h-[calc(100dvh-max(1rem,env(safe-area-inset-top)))] gap-0 rounded-t-2xl pb-[env(safe-area-inset-bottom)]';
 
 /** Grafiğin tarih aralıkları; 375 px'te tek satıra sığan kısa adlar. */
@@ -306,7 +306,7 @@ function ExercisePicker({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} onOpenChangeComplete={(next) => (next ? undefined : setSearch(''))}>
-      <SheetContent side="bottom" showCloseButton={false} className={TALL} initialFocus={title}>
+      <SheetContent side="bottom" showCloseButton={false} className={TALL_SHEET} initialFocus={title}>
         <SheetHeader className="gap-1 pt-5 pb-3">
           <SheetTitle ref={title} tabIndex={-1} className="text-lg font-semibold outline-none">
             Hareket seç

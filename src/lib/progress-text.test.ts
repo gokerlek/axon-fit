@@ -5,8 +5,12 @@ import type { ExercisePoint } from './progress.ts';
 import {
   ACHIEVEMENT_TITLES,
   achievementDetail,
+  adherenceText,
+  circumferenceText,
   describeTrend,
+  formatChangePct,
   formatSeconds,
+  groupRoleText,
   METRICS,
   METRICS_OF,
   metricForecast,
@@ -15,7 +19,12 @@ import {
   recordLabel,
   recordPrevious,
   recordValue,
+  recentAverage,
+  STRENGTH_METHOD_NOTE,
+  strengthDetail,
+  strengthMissingText,
   streakText,
+  waterSummary,
   weekLabel,
 } from './progress-text.ts';
 import { forecast } from './trend.ts';
@@ -162,5 +171,111 @@ describe('hafta, başarı ve seri metinleri', () => {
     assert.equal(streakText({ current: 0, best: 5, thisWeek: 0, target: 3 }), 'Bu hafta 0/3 gün · en uzun seri 5 hafta');
     assert.equal(streakText({ current: 3, best: 3, thisWeek: 2, target: 3 }), '3 hafta üst üste · bu hafta 2/3 gün');
     assert.equal(streakText({ current: 2, best: 6, thisWeek: 3, target: 3 }), '2 hafta üst üste · en uzun 6 hafta · bu hafta 3/3 gün');
+  });
+});
+
+describe('Gelişim metinleri', () => {
+  for (const [ratio, text] of [
+    [0.084, '+%8,4'],
+    [0.12345, '+%12,3'],
+    [-0.03, '−%3'],
+    [0, '±%0'],
+  ] as const) {
+    test(`değişim ${ratio} → ${text}`, () => assert.equal(formatChangePct(ratio), text));
+  }
+
+  test('çizginin başı, sonu, değişimi ve olası aralığı', () => {
+    assert.equal(
+      strengthDetail({
+        metric: 'e1rm',
+        points: [],
+        fit: { from: '2026-08-30', to: '2026-09-27', start: 60, end: 68, change: 8, low: 5.34, high: 10.46, changePct: 8 / 60 },
+      }),
+      '≈ 60 → 68 kg (+%13,3) · olası değişim +5,3 – +10,5 kg',
+    );
+    assert.equal(
+      strengthDetail({
+        metric: 'reps',
+        points: [],
+        fit: { from: '2026-08-30', to: '2026-09-27', start: 10, end: 10.5, change: 0.5, low: -1, high: 2, changePct: 0.05 },
+      }),
+      '≈ 10 → 10,5 tekrar (+%5) · olası değişim −1 – +2 tekrar',
+    );
+  });
+
+  const day = (date: string) => ({ date, value: 1 });
+  for (const [name, exercise, text] of [
+    [
+      'az antrenman günü',
+      { missing: 'too_few_points' as const, points: [day('2026-09-13'), day('2026-09-20'), day('2026-09-27')] },
+      'Karar için bu dönemde en az 4 antrenman günü gerekir; şimdilik 3.',
+    ],
+    [
+      'kısa süre',
+      { missing: 'too_short_span' as const, points: [day('2026-09-15'), day('2026-09-19'), day('2026-09-23'), day('2026-09-27')] },
+      'Kayıtların en az 3 haftaya yayılması gerekir; bu dönemde 12 güne sığıyor.',
+    ],
+  ] as const) {
+    test(`karar yoksa: ${name}`, () => {
+      assert.equal(strengthMissingText(exercise), text);
+      assert.equal(strengthDetail({ metric: 'e1rm', ...exercise }), text);
+    });
+  }
+
+  const labels: Record<string, string> = { chest_upper: 'Üst göğüs', chest_lower: 'Alt göğüs', triceps_long: 'Triceps (uzun baş)' };
+  for (const [name, roles, text] of [
+    ['hepsi aynı rol', [{ muscle: 'chest_upper', role: 'primary' }, { muscle: 'chest_lower', role: 'primary' }], 'Hedef'],
+    [
+      'kas kas',
+      [
+        { muscle: 'chest_upper', role: 'secondary' },
+        { muscle: 'chest_lower', role: 'primary' },
+        { muscle: 'triceps_long', role: 'secondary' },
+      ],
+      'Hedef: alt göğüs · Yardımcı: üst göğüs, triceps (uzun baş)',
+    ],
+  ] as const) {
+    test(`hareketin rolü: ${name}`, () => assert.equal(groupRoleText(roles, (muscle) => labels[muscle] ?? muscle), text));
+  }
+
+  for (const [change, text] of [
+    [{ id: 'arm_flexed_girth', key: 'right', delta: 0.6, kind: null }, 'Kol çevresi (kasılı), sağ: +0,6 cm'],
+    [{ id: 'mid_thigh_girth', key: 'left', delta: -0.4, kind: null }, 'Uyluk çevresi (orta), sol: −0,4 cm'],
+    [{ id: 'hip_girth', key: 'value', delta: 1, kind: 'no_real_change' }, 'Kalça çevresi: +1 cm · ölçüm hatası payı içinde'],
+    [{ id: 'hip_girth', key: 'value', delta: 3, kind: 'increased' }, 'Kalça çevresi: +3 cm'],
+  ] as const) {
+    test(`çevre: ${text}`, () => assert.equal(circumferenceText(change), text));
+  }
+
+  test('yöntem notu: Theil–Sen, aralık kuralı, eşikler, rol payları ve "büyüme değil"', () => {
+    const note = STRENGTH_METHOD_NOTE.join(' ');
+    for (const part of ['Theil–Sen', '≈%80', 'en az 4 antrenman günü ve 3 hafta', 'yardımcı kas yarım', 'kasın büyüdüğünü tek başına göstermez']) {
+      assert.ok(note.includes(part), part);
+    }
+  });
+});
+
+describe('grafik bölümü metinleri', () => {
+  test('son 4 haftanın ortalaması: bugün dahil 28 gün', () => {
+    const points = [
+      { date: '2026-08-30', value: 100 },
+      { date: '2026-08-31', value: 6 },
+      { date: '2026-09-27', value: 7 },
+      { date: '2026-09-28', value: 100 },
+    ];
+    assert.deepEqual(recentAverage(points, '2026-09-27'), { average: 6.5, count: 2 });
+    assert.equal(recentAverage([], '2026-09-27'), null);
+  });
+
+  for (const [recent, text] of [
+    [{ done: 11, planned: 12, weeks: 4 }, 'Son 4 tamamlanan haftada 11/12 gün (%92).'],
+    [{ done: 3, planned: 3, weeks: 1 }, 'Geçen hafta 3/3 gün (%100).'],
+  ] as const) {
+    test(`düzen: ${text}`, () => assert.equal(adherenceText(recent), text));
+  }
+
+  test('su: kayıtlı gün ve o günlerin ortalaması', () => {
+    assert.deepEqual(waterSummary([{ glasses: 0 }, { glasses: 5 }, { glasses: 8 }, { glasses: 0 }]), { recorded: 2, average: 6.5 });
+    assert.deepEqual(waterSummary([{ glasses: 0 }]), { recorded: 0, average: null });
   });
 });

@@ -22,6 +22,16 @@ function dateOf(day: number): string {
   return new Date(day * DAY_MS).toISOString().slice(0, 10);
 }
 
+/** Güne gün ekler ("2026-09-27", −28 → "2026-08-30"). */
+export function shiftDay(date: string, days: number): string {
+  return dateOf(dayNumber(date) + days);
+}
+
+/** İki gün arasındaki gün sayısı (`to − from`). */
+export function daysBetween(from: string, to: string): number {
+  return dayNumber(to) - dayNumber(from);
+}
+
 function median(values: readonly number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -64,18 +74,24 @@ export type Fit = {
  * kadar gün arayla ölçülmüş çiftler girer (birkaç güne sıkışmış ölçümlerin kendi aralarındaki eğimi
  * dışarıda kalır); böyle çift yoksa null.
  */
-export function theilSen(points: readonly Point[], { minPairDays = 1 } = {}): Fit | null {
-  const pts = normalizePoints(points);
-  if (pts.length < 2) return null;
-  const days = pts.map((point) => dayNumber(point.date));
-  const originDay = days[0]!;
-  const t = days.map((day) => day - originDay);
+/** İkili eğimler (birim/gün): yalnız en az `minPairDays` gün arayla ölçülmüş çiftler. */
+function pairSlopes(pts: readonly Point[], t: readonly number[], minPairDays: number): number[] {
   const slopes: number[] = [];
   for (let i = 0; i < pts.length; i += 1) {
     for (let j = i + 1; j < pts.length; j += 1) {
       if (t[j]! - t[i]! >= minPairDays) slopes.push((pts[j]!.value - pts[i]!.value) / (t[j]! - t[i]!));
     }
   }
+  return slopes;
+}
+
+export function theilSen(points: readonly Point[], { minPairDays = 1 } = {}): Fit | null {
+  const pts = normalizePoints(points);
+  if (pts.length < 2) return null;
+  const days = pts.map((point) => dayNumber(point.date));
+  const originDay = days[0]!;
+  const t = days.map((day) => day - originDay);
+  const slopes = pairSlopes(pts, t, minPairDays);
   if (slopes.length === 0) return null;
   const slopePerDay = median(slopes);
   const intercept = median(pts.map((point, i) => point.value - slopePerDay * t[i]!));
@@ -95,8 +111,43 @@ export const FORECAST_MIN_POINTS = 4;
 export const FORECAST_MIN_SPAN_DAYS = 21;
 /** Ufuk en fazla gözlenen sürenin yarısı ve 8 hafta. */
 export const FORECAST_MAX_DAYS = 56;
-/** Bant ≈ %80 tahmin aralığı. */
-const BAND_Z = 1.28;
+/** Bant ≈ %80 tahmin aralığı (eğim aralığı da aynı z'yle, `slopeBand`). */
+export const BAND_Z = 1.28;
+
+/**
+ * Theil–Sen eğiminin güven aralığı (Sen 1968; Gilbert 1987 §16.5): ikili eğimler sıralanır, alt ve üst
+ * uç Kendall S istatistiğinin varyansından bulunan iki sıradaki eğimlerdir: `C = z·√Var(S)`, alt uç
+ * `(N − C) / 2`, üst uç `(N + C) / 2 + 1` sırasında (N: eğim sayısı; kesirli sıra komşu iki eğim arasında
+ * doğrusal).
+ * Dağılım varsayımı yok; az noktada aralık kendiliğinden geniştir (4 noktada alt uç ≈ en küçük eğim).
+ * Aynı değerler (aynı kilo, aynı tekrar) varyansı düzeltir. `z` varsayılanı tahmin bandınınki (≈%80).
+ * En az 2 farklı gün gerekir; yoksa null.
+ */
+export function slopeBand(points: readonly Point[], { z = BAND_Z } = {}): { slopePerDay: number; low: number; high: number; n: number } | null {
+  const pts = normalizePoints(points);
+  if (pts.length < 2) return null;
+  const origin = dayNumber(pts[0]!.date);
+  const slopes = pairSlopes(
+    pts,
+    pts.map((point) => dayNumber(point.date) - origin),
+    1,
+  ).sort((a, b) => a - b);
+  const n = pts.length;
+  const count = slopes.length;
+  // Bağ düzeltmesi: aynı değeri taşıyan t noktalık her grup için t(t−1)(2t+5).
+  const ties = new Map<number, number>();
+  for (const point of pts) ties.set(point.value, (ties.get(point.value) ?? 0) + 1);
+  const tieTerm = [...ties.values()].reduce((sum, t) => sum + t * (t - 1) * (2 * t + 5), 0);
+  const variance = Math.max(0, (n * (n - 1) * (2 * n + 5) - tieTerm) / 18);
+  const c = z * Math.sqrt(variance);
+  const rank = (position: number) => {
+    const clamped = Math.min(count, Math.max(1, position));
+    const lower = Math.floor(clamped);
+    const upper = Math.ceil(clamped);
+    return slopes[lower - 1]! + (slopes[upper - 1]! - slopes[lower - 1]!) * (clamped - lower);
+  };
+  return { slopePerDay: median(slopes), low: rank((count - c) / 2), high: rank((count + c) / 2 + 1), n };
+}
 
 export type ForecastPoint = Point & { low: number; high: number };
 

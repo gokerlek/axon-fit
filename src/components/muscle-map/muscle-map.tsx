@@ -55,7 +55,24 @@ export function tierOf(level: number): MuscleRole | null {
   return 'stabilizer';
 }
 
-export type MuscleTone = 'role' | 'load';
+export type MuscleTone = 'role' | 'load' | 'status';
+
+/**
+ * `tone="status"` (İlerleme'nin Gelişim bölümü): güç gelişiminin kararı. Belirgin gelişme tam ton, gelişme
+ * orta ton, sabit gri, gerileme çizgili desen ve kalın kenar; kararı olmayan kas boş. Renk tek başına
+ * bilgi taşımaz: gerileme desenle ve kenarla da ayrılır, listede ikon ve sözcükle yazılır.
+ */
+export type MuscleStatusTone = 'strong' | 'improved' | 'stable' | 'declined';
+
+const STATUS_FILLS: Record<Exclude<MuscleStatusTone, 'declined'>, string> = {
+  strong: 'var(--muscle-target)',
+  improved: 'var(--muscle-secondary)',
+  stable: 'color-mix(in oklab, var(--foreground) 30%, var(--card))',
+};
+
+function statusFill(status: MuscleStatusTone, patternId: string): string {
+  return status === 'declined' ? `url(#${patternId}-declined)` : STATUS_FILLS[status];
+}
 
 /** Desen kimliği `url(#…)` içinde güvenle kullanılabilsin. */
 function usePatternId() {
@@ -81,6 +98,11 @@ function MusclePatterns({ id }: { id: string }) {
         <rect width={TILE} height={TILE} style={{ ...none, fill: 'var(--muscle-stabilizer)' }} />
         <circle cx={TILE / 2} cy={TILE / 2} r={TILE * 0.26} style={{ ...none, fill: 'var(--muscle-target)' }} />
       </pattern>
+      {/* Gerileme: boş kas üstünde koyu çizgiler (ters yönde; yardımcının çizgisiyle karışmasın). */}
+      <pattern id={`${id}-declined`} patternUnits="userSpaceOnUse" width={TILE} height={TILE} patternTransform="rotate(-45)">
+        <rect width={TILE} height={TILE} style={{ ...none, fill: 'var(--muscle-empty)' }} />
+        <rect width={TILE * 0.35} height={TILE} style={{ ...none, fill: 'color-mix(in oklab, var(--foreground) 60%, var(--card))' }} />
+      </pattern>
     </defs>
   );
 }
@@ -96,21 +118,41 @@ export function MuscleSwatch({ role, className }: { role: MuscleRole; className?
   );
 }
 
+/** Gelişim açıklamasındaki örnek: haritadaki dolgunun ve desenin aynısı. */
+export function MuscleStatusSwatch({ status, className }: { status: MuscleStatusTone; className?: string }) {
+  const id = usePatternId();
+  return (
+    <svg viewBox="0 0 3 3" className={cn('size-3.5 shrink-0 rounded-[3px]', className)} aria-hidden>
+      <MusclePatterns id={id} />
+      <rect
+        width={3}
+        height={3}
+        style={{ fill: statusFill(status, id) }}
+        className={status === 'declined' ? 'stroke-foreground [stroke-width:0.5]' : undefined}
+      />
+    </svg>
+  );
+}
+
 /** Bir kasın dolgusu. */
 function muscleFill({
   level,
   tone,
+  status,
   patternId,
   disabled,
   highlighted,
 }: {
   level: number;
   tone: MuscleTone;
+  status: MuscleStatusTone | undefined;
   patternId: string;
   disabled: boolean;
   highlighted: boolean;
 }): string {
-  if (level > 0) {
+  if (tone === 'status') {
+    if (status) return statusFill(status, patternId);
+  } else if (level > 0) {
     if (tone === 'load') {
       const share = Math.round(25 + 75 * Math.min(1, level));
       return `color-mix(in oklab, var(--muscle-target) ${share}%, var(--muscle-empty))`;
@@ -125,8 +167,13 @@ function muscleFill({
 type MuscleMapProps = {
   /** Kasın ne kadar çalıştığı (0–1). Ör. hedef 1, yardımcı 0,45, ya da haftalık set yükü. Rengi bu belirler. */
   intensity?: MuscleIntensity;
-  /** `role` (varsayılan): yoğunluk hedef/yardımcı/dengeleyici seviyesine çevrilir (dolu/çizgili/noktalı). `load`: sürekli ton. */
+  /**
+   * `role` (varsayılan): yoğunluk hedef/yardımcı/dengeleyici seviyesine çevrilir (dolu/çizgili/noktalı).
+   * `load`: sürekli ton. `status`: güç gelişiminin kararı (`statuses`), yoğunluğa bakılmaz.
+   */
   tone?: MuscleTone;
+  /** `tone="status"` için kas başına karar; olmayan kas boş çizilir. */
+  statuses?: Partial<Record<BodyMuscle, MuscleStatusTone>>;
   /** Seçili kaslar (süzgeç, form). `intensity`'de tonu yoksa hedef gibi (dolu) çizilir. */
   selected?: readonly BodyMuscle[];
   /** Tıklanamayan kaslar (ör. formda hedef kas); rengi yine `intensity`'den gelir. */
@@ -137,6 +184,8 @@ type MuscleMapProps = {
   counts?: Partial<Record<BodyMuscle, number>>;
   /** Üstüne gelinen kasın alt satırdaki açıklaması. Varsayılan: ad (+ sayı). */
   describe?: (muscle: BodyMuscle) => React.ReactNode;
+  /** Tıklanabilir kasın ekran okuyucu adı. Varsayılan: ad (+ egzersiz sayısı). */
+  labelOf?: (muscle: BodyMuscle) => string;
   /** Hiçbir kasın üstünde değilken alt satır. */
   hint?: React.ReactNode;
   /** `flip`: tek gövde, ön/arka çevrilir. `split`: ön ve arka yan yana. */
@@ -163,11 +212,13 @@ type MuscleMapProps = {
 export function MuscleMap({
   intensity,
   tone = 'role',
+  statuses,
   selected = [],
   disabled,
   onToggle,
   counts,
   describe,
+  labelOf,
   hint,
   layout = 'flip',
   side: sideProp,
@@ -196,9 +247,11 @@ export function MuscleMap({
       label={layout === 'flip' ? label : `${label} — ${SIDE_LABELS[face]}`}
       intensity={intensity}
       tone={tone}
+      statuses={statuses}
       selected={selected}
       disabled={disabled}
       counts={counts}
+      labelOf={labelOf}
       onToggle={onToggle}
       highlighted={hovered}
       onHighlight={setHovered}
@@ -274,6 +327,8 @@ type BodyProps = {
   label: string;
   intensity?: MuscleIntensity;
   tone: MuscleTone;
+  statuses?: Partial<Record<BodyMuscle, MuscleStatusTone>> | undefined;
+  labelOf?: ((muscle: BodyMuscle) => string) | undefined;
   selected: readonly BodyMuscle[];
   disabled?: readonly BodyMuscle[];
   counts?: Partial<Record<BodyMuscle, number>>;
@@ -308,7 +363,7 @@ function nearestMuscle(x: number, y: number, svg: SVGSVGElement): BodyMuscle | n
 }
 
 /** Tek yüzün SVG'si. Her kas bir `g`; sol ve sağ birlikte yanar. */
-function Body({ side, label, intensity, tone, selected, disabled: locked, counts, onToggle, highlighted, onHighlight }: BodyProps) {
+function Body({ side, label, intensity, tone, statuses, labelOf, selected, disabled: locked, counts, onToggle, highlighted, onHighlight }: BodyProps) {
   const { neutral, groups } = SHAPES[side];
   const interactive = Boolean(onToggle);
   const patternId = usePatternId();
@@ -348,6 +403,7 @@ function Body({ side, label, intensity, tone, selected, disabled: locked, counts
         const clickable = interactive && !disabled;
         const isHighlighted = highlighted === muscle;
         const count = counts?.[muscle];
+        const status = tone === 'status' ? statuses?.[muscle] : undefined;
 
         return (
           <g
@@ -358,14 +414,18 @@ function Body({ side, label, intensity, tone, selected, disabled: locked, counts
             tabIndex={clickable ? 0 : undefined}
             aria-pressed={interactive ? isSelected : undefined}
             aria-disabled={disabled || undefined}
-            aria-label={interactive ? `${MUSCLE_LABELS[muscle]}${count === undefined ? '' : `, ${count} egzersiz`}` : undefined}
+            aria-label={
+              interactive ? (labelOf?.(muscle) ?? `${MUSCLE_LABELS[muscle]}${count === undefined ? '' : `, ${count} egzersiz`}`) : undefined
+            }
             data-tier={tone === 'role' ? (tierOf(level) ?? 'empty') : undefined}
+            data-status={tone === 'status' ? (status ?? 'empty') : undefined}
             className={cn(
               'outline-none transition-[fill,stroke,stroke-width] duration-160',
+              status === 'declined' && 'stroke-foreground [stroke-width:0.22]',
               isHighlighted && 'stroke-foreground [stroke-width:0.3]',
               clickable && 'cursor-pointer',
             )}
-            style={{ fill: muscleFill({ level, tone, patternId, disabled, highlighted: isHighlighted }) }}
+            style={{ fill: muscleFill({ level, tone, status, patternId, disabled, highlighted: isHighlighted }) }}
             onPointerEnter={() => onHighlight(muscle)}
             onPointerLeave={(event) => {
               // Dokunmatikte parmak kalkınca da "leave" gelir; son dokunulan kas alt satırda kalsın.

@@ -4,7 +4,7 @@ import { mondayOf } from './program-plan.ts';
 import type { TrackingType } from './progression.ts';
 import type { TrainingExperience } from './schemas/client.ts';
 import type { SessionDoc, SessionIndex, SessionIndexRow } from './schemas/session.ts';
-import { muscleLoadOf, type PlanExercise } from './template-plan.ts';
+import { countsForLoad, muscleLoadOf, type PlanExercise } from './template-plan.ts';
 
 /**
  * İlerleme sekmesi (tasarım `docs/design/antrenman-ekrani.md` §0, §8 satır 10; SPEC §6) — saf hesaplar.
@@ -28,8 +28,8 @@ import { muscleLoadOf, type PlanExercise } from './template-plan.ts';
  *   0,25; ısınma ve soğuma hareketleri sayılmaz), yapılan setlerle (SPEC §7.4 "gerçekleşen").
  */
 
-/** Özetin biçimi değişirse artar: önbellekteki eski özetler kullanılmaz. */
-export const DIGEST_VERSION = 1;
+/** Özetin biçimi değişirse artar: önbellekteki eski özetler kullanılmaz (2: seans zorluğu eklendi). */
+export const DIGEST_VERSION = 2;
 /** En çok bu kadar son antrenmanın dosyası okunur (ilk açılışta; sonra önbellekten). */
 export const PROGRESS_MAX_SESSIONS = 300;
 /** Haftalık görünümler en çok bu kadar hafta geriye gider. */
@@ -47,8 +47,11 @@ export function addDays(day: string, days: number): string {
 
 export type DigestSet = { kg?: number; reps?: number; seconds?: number };
 export type DigestEntry = { exerciseId: string; title: string; deviceId?: string; sets: DigestSet[] };
-/** Bir antrenmanın İlerleme için gereken kısmı: hareket (ve cihaz) başına çalışma setleri. */
-export type SessionDigest = { id: string; date: string; startedAt: string; entries: DigestEntry[] };
+/**
+ * Bir antrenmanın İlerleme için gereken kısmı: hareket (ve cihaz) başına çalışma setleri ve seans zorluğu
+ * (CR-10, bitişten sonra sorulur; antrenman verisidir, sağlık verisi değil — SPEC §4).
+ */
+export type SessionDigest = { id: string; date: string; startedAt: string; entries: DigestEntry[]; rpe?: number };
 
 /** Seri anahtarı: hareket, cihazlıysa `hareket@cihaz`. */
 export function seriesKey(exerciseId: string, deviceId?: string): string {
@@ -59,7 +62,7 @@ export function seriesKey(exerciseId: string, deviceId?: string): string {
  * Antrenman dosyasından özet: çalışma setleri (ısınma hariç; fazladan ve "bir defalık" dahil), hareket ve
  * cihaz başına tek kalem (aynı hareket iki kez eklendiyse setleri birleşir). Seti olmayan hareket düşer.
  */
-export function digestSession(doc: Pick<SessionDoc, 'id' | 'date' | 'startedAt' | 'entries'>): SessionDigest {
+export function digestSession(doc: Pick<SessionDoc, 'id' | 'date' | 'startedAt' | 'entries'> & Partial<Pick<SessionDoc, 'effort'>>): SessionDigest {
   const entries = new Map<string, DigestEntry>();
   for (const entry of doc.entries) {
     const sets = entry.sets
@@ -75,7 +78,8 @@ export function digestSession(doc: Pick<SessionDoc, 'id' | 'date' | 'startedAt' 
     if (current) current.sets.push(...sets);
     else entries.set(key, { exerciseId: entry.exerciseId, title: entry.title, ...(entry.deviceId ? { deviceId: entry.deviceId } : {}), sets });
   }
-  return { id: doc.id, date: doc.date, startedAt: doc.startedAt, entries: [...entries.values()] };
+  const rpe = doc.effort?.sessionRpe;
+  return { id: doc.id, date: doc.date, startedAt: doc.startedAt, entries: [...entries.values()], ...(rpe !== undefined ? { rpe } : {}) };
 }
 
 function byStart<T extends { startedAt?: string | undefined; date: string; id: string }>(a: T, b: T): number {
@@ -160,6 +164,11 @@ export type ExerciseView = {
   points: ExercisePoint[];
   best: RecordMark[];
   events: RecordEvent[];
+  /**
+   * Kas → rol payı (hedef 1 · yardımcı 0,5 · dengeleyici 0,25; `setWeightsOf`): Gelişim bölümü kasları
+   * bununla tartar (`muscle-progress.ts`). Kütüphanede olmayan, ısınma ve soğuma hareketinde boş.
+   */
+  muscles: Partial<Record<string, number>>;
 };
 
 type Series = { exerciseId: string; deviceId?: string; title: string; sessions: { id: string; date: string; sets: DigestSet[] }[] };
@@ -342,6 +351,10 @@ export function achievementsOf(input: {
 
 /* --- sayfanın tamamı --- */
 
+function positiveWeights(weights: Partial<Record<string, number>>): Partial<Record<string, number>> {
+  return Object.fromEntries(Object.entries(weights).filter(([, weight]) => weight !== undefined && weight > 0));
+}
+
 /** Bir antrenmanda bir hareketin kırdığı rekorlar (hareket başına bir satır). */
 export type RecordItem = {
   sessionId: string;
@@ -417,6 +430,7 @@ export function buildProgressView<E extends PlanExercise>(input: {
       points: exercisePoints(series.sessions),
       best,
       events,
+      muscles: exercise && countsForLoad(exercise.category) ? positiveWeights(input.setWeightsOf(exercise)) : {},
     };
   });
   exercises.sort((a, b) => b.lastDate.localeCompare(a.lastDate) || b.sessions - a.sessions || a.title.localeCompare(b.title, 'tr'));
