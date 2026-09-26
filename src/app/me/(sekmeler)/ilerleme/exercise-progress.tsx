@@ -17,6 +17,8 @@ import type { ExerciseView } from '@/lib/progress';
 import {
   describeTrend,
   E1RM_NOTE,
+  highRepDaysSince,
+  highRepDaysText,
   METRICS,
   METRICS_OF,
   metricForecast,
@@ -112,6 +114,8 @@ export function ExerciseProgress({ exercises, initialKey, today }: { exercises: 
   const info = METRICS[shown];
   const outlook = points.length > 1 ? metricForecast(shown, points) : null;
   const drawn = outlook ? forecastAsOf(outlook, today) : null;
+  // Son günlerin bütün setleri 12'den çok tekrarlıysa grafik orada biter: "son kayıt … gün önce" yanıltır.
+  const highRep = shown === 'e1rm' && points.length > 0 ? highRepDaysSince(exercise.points, from) : 0;
   const title = `${exercise.title} · ${info.label}`;
 
   return (
@@ -208,7 +212,10 @@ export function ExerciseProgress({ exercises, initialKey, today }: { exercises: 
                 : 'Bu dönemde bu değer için kayıt yok.'}
             </p>
           )}
-          {outlook ? <p className="text-sm text-muted-foreground">{describeTrend(outlook, info.unit, today)}</p> : null}
+          {highRep > 0 ? <p className="text-sm text-muted-foreground">{highRepDaysText(highRep)}</p> : null}
+          {outlook && !(highRep > 0 && drawn?.kind === 'stale') ? (
+            <p className="text-sm text-muted-foreground">{describeTrend(outlook, info.unit, today)}</p>
+          ) : null}
           {shown === 'e1rm' ? <p className="text-xs text-muted-foreground">{E1RM_NOTE}</p> : null}
           {shown === 'volume' ? (
             <p className="text-xs text-muted-foreground">Toplam ağırlık: ısınma hariç her setin ağırlığı × tekrarı, gün başına.</p>

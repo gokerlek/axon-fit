@@ -83,9 +83,9 @@ export function ProgressBars({
   const format = valueLabel ?? ((value: number) => formatWithUnit(value, unit));
   const values = rows.map((row) => row.value);
   const scale = niceScale(0, Math.max(1, ...values, target?.value ?? 0), { nonNegative: true });
-  const withYear = rows.length > 0 && rows[0]!.date.slice(0, 4) !== rows.at(-1)!.date.slice(0, 4);
-  // Telefonda etiketler seyrek: en çok ~6 etiket, ilk ve son kalır.
-  const interval = rows.length > 8 ? Math.ceil(rows.length / 6) - 1 : 0;
+  // Dönem yılbaşını geçiyorsa yıl yalnız ilk sütunda ve yeni yılın ilk sütununda: her etikette yıl telefona sığmaz.
+  const yearDates = new Set(rows.filter((row, i) => i === 0 || row.date.slice(0, 4) !== rows[i - 1]!.date.slice(0, 4)).map((row) => row.date));
+  const withYear = yearDates.size > 1;
 
   const complete = rows.filter((row) => !row.partial);
   const last = rows.at(-1);
@@ -118,11 +118,13 @@ export function ProgressBars({
           <CartesianGrid vertical={false} />
           <XAxis
             dataKey="date"
-            tickFormatter={(date: string) => formatDayShort(date, withYear)}
+            tickFormatter={(date: string) => formatDayShort(date, withYear && yearDates.has(date))}
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            interval={interval}
+            // Etiketler telefonda ölçülerek seyreltilir (üst üste bineni kütüphane gizler); ilk ve son kalır.
+            interval="preserveStartEnd"
+            minTickGap={6}
           />
           <YAxis
             domain={scale.domain}

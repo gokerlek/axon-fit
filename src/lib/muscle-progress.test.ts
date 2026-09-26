@@ -80,8 +80,8 @@ describe('hareketin güç kararı', () => {
     { name: 'oynak dört nokta: sabit', start: '2026-09-06', every: 7, values: [100, 104, 102, 106], status: 'stable' },
     { name: 'üç antrenman günü: veri az', start: '2026-09-13', every: 7, values: [100, 102, 104], status: 'insufficient', missing: 'too_few_points' },
     { name: 'dört gün ama 12 güne sıkışmış: veri az', start: '2026-09-15', every: 4, values: [100, 102, 104, 106], status: 'insufficient', missing: 'too_short_span' },
-    // 12 tekrardan fazla setlerin günü tahmini maksimum taşımaz: sayılmaz.
-    { name: 'tahmini maksimumu olmayan günler sayılmaz', start: '2026-08-30', every: 7, values: [100, null, 104, null, 108], status: 'insufficient', missing: 'too_few_points', shown: 3 },
+    // Yüklü seti olmayan gün (ne tahmini maksimum ne en ağır set) değer taşımaz: sayılmaz.
+    { name: 'değeri olmayan günler sayılmaz', start: '2026-08-30', every: 7, values: [100, null, 104, null, 108], status: 'insufficient', missing: 'too_few_points', shown: 3 },
     { name: 'eski kayıtlar 4 haftalık pencerede yok', start: '2026-06-07', every: 7, values: [100, 102, 104, 106, 108], window: '4h', status: 'insufficient', missing: 'too_few_points', shown: 0 },
     { name: 'aynı kayıtlar "tümü"nde gelişti', start: '2026-06-07', every: 7, values: [100, 102, 104, 106, 108], window: 'tumu', status: 'improved', pct: 0.08 },
     // Bugünden sonraki gün (saat dilimi, elle düzeltme) karara girmez.
@@ -115,6 +115,34 @@ describe('hareketin güç kararı', () => {
     close(result.fit?.change, 8);
     close(result.fit?.low, 8);
     close(result.fit?.high, 8);
+  });
+
+  test('bütün setleri 12\'den çok tekrarlı günler de sayılır: en ağır setin Epley\'i', () => {
+    // 10–15 tekrarlık hareket çift ilerlemede 13–16 tekrara çıkar; tahmini maksimum (1–12) o günlerde yok.
+    const days: [number, number][] = [
+      [12.5, 13],
+      [12.5, 14],
+      [12.5, 15],
+      [12.5, 16],
+      [15, 13],
+    ];
+    const pts = points('2026-08-23', 7, days.map(() => null)).map((point, i) => ({ ...point, topKg: days[i]![0], topReps: days[i]![1] }));
+    const result = exerciseStrength(source('pushdown', pts), { today: TODAY, window: '8h' });
+    assert.equal(result.status, 'improved');
+    assert.equal(result.missing, undefined);
+    assert.deepEqual(
+      result.points.map((point) => point.value),
+      [17.9, 18.3, 18.8, 19.2, 21.5],
+    );
+  });
+
+  test('tahmini maksimumu olan gün onunla, olmayan en ağır setle', () => {
+    const pts = points('2026-08-30', 7, [100, null, 104, null, 108]).map((point) => (point.e1rm === undefined ? { ...point, topKg: 80, topReps: 15 } : point));
+    const result = exerciseStrength(source('bench', pts), { today: TODAY, window: '8h' });
+    assert.deepEqual(
+      result.points.map((point) => point.value),
+      [100, 120, 104, 120, 108],
+    );
   });
 
   test('kas payları ve ad girdiden aynen geçer', () => {
@@ -160,8 +188,9 @@ describe('kasın kararı', () => {
       exercises: [decided('curl', 'improved', 0.08, { biceps: 1 }), decided('row', 'declined', -0.04, { biceps: 0.5 })],
       muscle: 'biceps',
       status: 'improved',
-      pct: (0.08 - 0.02) / 1.5,
-      strong: false,
+      // Yüzde yalnız karara uyan hareketten: gerileyen yardımcı düşürmez.
+      pct: 0.08,
+      strong: true,
     },
     {
       name: 'hedef sabit, yardımcı gelişti: sabit',
@@ -175,7 +204,7 @@ describe('kasın kararı', () => {
       exercises: [decided('squat', 'declined', -0.05, { quadriceps: 1 }), decided('lunge', 'stable', 0.01, { quadriceps: 0.5 })],
       muscle: 'quadriceps',
       status: 'declined',
-      pct: (-0.05 + 0.005) / 1.5,
+      pct: -0.05,
     },
     {
       name: 'yarı yarıya: sabit',
@@ -209,6 +238,15 @@ describe('kasın kararı', () => {
       strong: true,
       contributors: 2,
     },
+    {
+      // Hedefte küçük artış, yardımcıda büyük düşüş: "Gelişti · −%15" yazılmaz, yüzde kararla aynı işaretli.
+      name: 'hedef gelişti, yardımcı çok geriledi: yüzde yine artı',
+      exercises: [decided('bench', 'improved', 0.025, { chest_lower: 1 }), decided('dips', 'declined', -0.5, { chest_lower: 0.5 })],
+      muscle: 'chest_lower',
+      status: 'improved',
+      pct: 0.025,
+      strong: false,
+    },
     { name: 'belirgin eşiği %5 dahil', exercises: [decided('bench', 'improved', 0.05, { chest_lower: 1 })], muscle: 'chest_lower', status: 'improved', pct: 0.05, strong: true },
     { name: 'eşiğin altı orta ton', exercises: [decided('bench', 'improved', 0.049, { chest_lower: 1 })], muscle: 'chest_lower', status: 'improved', pct: 0.049, strong: false },
   ];
@@ -224,6 +262,29 @@ describe('kasın kararı', () => {
       if (item.contributors !== undefined) assert.equal(result.contributors.length, item.contributors);
     });
   }
+
+  test('tekrar değişimi tahmini maksimum cinsinden: 8 → 13 tekrar %62 değil ≈ %13', () => {
+    const pushUp = exerciseStrength(source('push-up', points('2026-08-16', 7, [8, 9, 10, 11, 12, 13], 'bodyweight_reps'), 'bodyweight_reps', { chest_lower: 1 }), {
+      today: TODAY,
+      window: '8h',
+    });
+    close(pushUp.fit?.changePct, 5 / 8);
+    const chest = muscleStrength([pushUp]).find((entry) => entry.muscle === 'chest_lower')!;
+    assert.equal(chest.status, 'improved');
+    close(chest.changePct, 43 / 38 - 1);
+    close(chest.contributors[0]!.changePct, 43 / 38 - 1);
+  });
+
+  test('süre değişimi kas yüzdesine girmez; kararına oy verir', () => {
+    const plank = exerciseStrength(source('plank', points('2026-08-16', 7, [30, 40, 50, 60, 70, 80], 'duration'), 'duration', { abs_upper: 1 }), {
+      today: TODAY,
+      window: '8h',
+    });
+    const abs = muscleStrength([plank]).find((entry) => entry.muscle === 'abs_upper')!;
+    assert.equal(abs.status, 'improved');
+    assert.equal(abs.changePct, null);
+    assert.equal(abs.strong, false);
+  });
 
   test('dönemde hiç yapılmamış hareket katkı vermez', () => {
     const result = muscleStrength([decided('bench', 'improved', 0.1, { chest_lower: 1 }), decided('fly', 'insufficient', null, { chest_lower: 1, delt_front: 0.5 }, 0)]);

@@ -11,6 +11,8 @@ import {
   formatChangePct,
   formatSeconds,
   groupRoleText,
+  highRepDaysSince,
+  highRepDaysText,
   METRICS,
   METRICS_OF,
   metricForecast,
@@ -61,6 +63,23 @@ describe('grafik seçimleri', () => {
     assert.deepEqual(metricPoints(points, 'total_reps').map((item) => item.value), [30, 45]);
     assert.deepEqual(metricPoints(points, 'seconds'), [{ date: '2026-09-08', value: 60 }]);
     assert.deepEqual(metricPoints(points, 'total_seconds'), [{ date: '2026-09-08', value: 150 }]);
+  });
+
+  test('tahmini maksimumun son noktasından sonraki çok tekrarlı günler', () => {
+    const points = [
+      point('2026-08-10', { topKg: 12.5, e1rm: 17.5 }),
+      point('2026-08-17', { topKg: 12.5 }),
+      point('2026-08-24', { topKg: 12.5, e1rm: 17.9 }),
+      point('2026-08-31', { topKg: 12.5 }),
+      point('2026-09-07', { bestReps: 12 }),
+      point('2026-09-14', { topKg: 12.5 }),
+    ];
+    // Aradaki çok tekrarlı gün sayılmaz (grafik ondan sonra devam ediyor); yüksüz gün de sayılmaz.
+    assert.equal(highRepDaysSince(points), 2);
+    assert.equal(highRepDaysSince(points, '2026-09-10'), 1);
+    assert.equal(highRepDaysSince(points.slice(0, 3)), 0);
+    assert.equal(highRepDaysText(1), 'Son antrenman gününde bütün setler 12\'den çok tekrarlı; tahmini maksimum o günler için hesaplanmaz. Ağırlığın “En ağır”da, güç gelişimin Gelişim\'de görünür.');
+    assert.ok(highRepDaysText(3).startsWith('Son 3 antrenman gününde'));
   });
 
   test('eksenin en az aralığı: ağırlıkta en büyüğün %10\'u (en az 5 kg), tekrarda 4, sürede 20 sn', () => {
@@ -247,9 +266,9 @@ describe('Gelişim metinleri', () => {
     test(`çevre: ${text}`, () => assert.equal(circumferenceText(change), text));
   }
 
-  test('yöntem notu: Theil–Sen, aralık kuralı, eşikler, rol payları ve "büyüme değil"', () => {
+  test('yöntem notu: Theil–Sen, aralık kuralı, eşikler, çok tekrarlı gün, rol payları ve "büyüme değil"', () => {
     const note = STRENGTH_METHOD_NOTE.join(' ');
-    for (const part of ['Theil–Sen', '≈%80', 'en az 4 antrenman günü ve 3 hafta', 'yardımcı kas yarım', 'kasın büyüdüğünü tek başına göstermez']) {
+    for (const part of ['Theil–Sen', '≈%80', 'en az 4 antrenman günü ve 3 hafta', '12\'den çok tekrarla yaptığın gün de sayılır', 'yardımcı kas yarım', 'kasın büyüdüğünü tek başına göstermez']) {
       assert.ok(note.includes(part), part);
     }
   });

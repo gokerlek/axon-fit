@@ -12,11 +12,11 @@ import { daysBetween, FORECAST_MIN_POINTS, FORECAST_MIN_SPAN_DAYS, shiftDay, slo
  * ekranı da aynı hesabı kullanır.
  *
  * Hareket başına: seçili penceredeki antrenman günlerinin en iyi değeri (ağırlıklıda tahmini maksimum,
- * Epley; vücut ağırlığında en çok tekrar; sürelide en uzun set — `metricPoints`) Theil–Sen doğrusuyla
- * (`trend.ts`) özetlenir. Karar çizginin değişiminin ≈%80 aralığıyla verilir (Sen 1968, `slopeBand`):
- * aralığın alt ucu sıfırın üstündeyse "gelişti", üst ucu altındaysa "geriledi", sıfırı kapsıyorsa "sabit".
- * Pencerede en az 4 antrenman günü ve 3 hafta yoksa karar yok (ölçüm tahminiyle aynı kural,
- * `FORECAST_MIN_POINTS` / `FORECAST_MIN_SPAN_DAYS`).
+ * Epley, 12'den çok tekrarlı günde en ağır setten; vücut ağırlığında en çok tekrar; sürelide en uzun set —
+ * `strengthPoints`) Theil–Sen doğrusuyla (`trend.ts`) özetlenir. Karar çizginin değişiminin ≈%80
+ * aralığıyla verilir (Sen 1968, `slopeBand`): aralığın alt ucu sıfırın üstündeyse "gelişti", üst ucu
+ * altındaysa "geriledi", sıfırı kapsıyorsa "sabit". Pencerede en az 4 antrenman günü ve 3 hafta yoksa
+ * karar yok (ölçüm tahminiyle aynı kural, `FORECAST_MIN_POINTS` / `FORECAST_MIN_SPAN_DAYS`).
  *
  * Kas başına: onu çalıştıran hareketlerin kararları, şablon haritasının rol paylarıyla (hedef 1, yardımcı
  * 0,5, dengeleyici 0,25) tartılır. Bu **güç** gelişimidir: kasın büyüdüğünü göstermez (beceri ve sinir
@@ -82,12 +82,25 @@ export type ExerciseStrength = Omit<StrengthSource, 'points'> & {
   fit?: StrengthFit;
 };
 
+/**
+ * Güç kararının günlük değeri. Ağırlıklıda tahmini maksimum; bütün setleri 12'den çok tekrarlı günde en
+ * ağır setin sınırsız Epley'i (kg × (1 + tekrar ÷ 30)). Karar yalnız değişim oranına bakar ve Epley sabit
+ * ağırlıkta tekrarla artar; 10–15 tekrarlık hareketin günleri düşmesin **[sentez]**.
+ */
+function strengthPoints(raw: readonly ExercisePoint[], metric: Metric): Point[] {
+  if (metric !== 'e1rm') return metricPoints(raw, metric);
+  return raw.flatMap((point) => {
+    const value = point.e1rm ?? (point.topKg !== undefined && point.topReps !== undefined ? point.topKg * (1 + point.topReps / 30) : undefined);
+    return value === undefined ? [] : [{ date: point.date, value: Math.round(value * 10) / 10 }];
+  });
+}
+
 /** Bir hareketin penceredeki güç eğilimi ve kararı. */
 export function exerciseStrength(source: StrengthSource, input: { today: string; window: StrengthWindow }): ExerciseStrength {
   const { points: raw, ...rest } = source;
   const metric = STRENGTH_METRIC[source.trackingType];
   const from = strengthWindowStart(input.window, input.today);
-  const points = metricPoints(raw, metric).filter((point) => (!from || point.date >= from) && point.date <= input.today);
+  const points = strengthPoints(raw, metric).filter((point) => (!from || point.date >= from) && point.date <= input.today);
   const base = { ...rest, metric, points };
   if (points.length < FORECAST_MIN_POINTS) return { ...base, status: 'insufficient', missing: 'too_few_points' };
   const first = points[0]!.date;
@@ -134,13 +147,28 @@ export type MuscleContributor = {
 export type MuscleStrength = {
   muscle: Muscle;
   status: StrengthStatus;
-  /** Kararı olan hareketlerin rol payıyla ağırlıklı ortalama değişimi; yoksa null. */
+  /**
+   * Kararla aynı yöndeki hareketlerin (sabitte kararı olan hepsinin) rol payıyla ağırlıklı ortalama
+   * değişimi, tahmini maksimum cinsinden (`comparablePct`; süreli hareket girmez); yoksa null.
+   */
   changePct: number | null;
   /** Gelişti ve değişim `STRONG_GAIN` ya da üstü. */
   strong: boolean;
   /** Payı büyükten küçüğe, sonra ada göre. */
   contributors: MuscleContributor[];
 };
+
+/**
+ * Kas yüzdesine giren değişim, tahmini maksimum cinsinden **[sentez]**: tekrar değişimi Epley'le çevrilir
+ * (aynı yükte tahmini maksimum ∝ 1 + tekrar/30, `oneRepMax`); süre bir güce çevrilemez, kas yüzdesine girmez.
+ */
+function comparablePct(exercise: ExerciseStrength): number | null {
+  const fit = exercise.fit;
+  if (!fit) return null;
+  if (exercise.metric === 'e1rm') return fit.changePct;
+  if (exercise.metric === 'reps') return (30 + fit.end) / (30 + fit.start) - 1;
+  return null;
+}
 
 const STATUS_ORDER: Record<StrengthStatus, number> = { improved: 0, stable: 1, declined: 2, insufficient: 3 };
 
@@ -167,7 +195,7 @@ export function muscleStrength(exercises: readonly ExerciseStrength[]): MuscleSt
         weight,
         role: roleOfWeight(weight),
         status: exercise.status,
-        changePct: exercise.fit?.changePct ?? null,
+        changePct: comparablePct(exercise),
       });
       byMuscle.set(muscle as Muscle, list);
     }
@@ -186,7 +214,8 @@ export function muscleStrength(exercises: readonly ExerciseStrength[]): MuscleSt
     const total = voting.reduce((sum, item) => sum + item.weight, 0);
     const share = (status: StrengthStatus) => voting.filter((item) => item.status === status).reduce((sum, item) => sum + item.weight, 0);
     const status: StrengthStatus = share('improved') > total / 2 ? 'improved' : share('declined') > total / 2 ? 'declined' : 'stable';
-    const weighted = voting.filter((item) => item.changePct !== null);
+    // Yüzde yalnız karara uyan hareketlerden: gelişen kasta gerileyen hareketin düşüşü "Gelişti · −%…" yazdırmasın.
+    const weighted = voting.filter((item) => item.changePct !== null && (status === 'stable' || item.status === status));
     const weight = weighted.reduce((sum, item) => sum + item.weight, 0);
     const changePct = weight > 0 ? weighted.reduce((sum, item) => sum + item.weight * item.changePct!, 0) / weight : null;
     result.push({ muscle, status, changePct, strong: status === 'improved' && changePct !== null && changePct >= STRONG_GAIN, contributors });

@@ -112,6 +112,23 @@ export function describeTrend(result: Forecast, unit: string, today: string): st
   return `${trend} Böyle giderse ${weeks} hafta sonra (${formatDay(end.date)}) ≈ ${formatWithUnit(tenth(end.value), unit)}${range}. Tahmin eğilimin süreceğini varsayar.`;
 }
 
+/**
+ * Tahmini maksimum grafiğinin son noktasından sonraki, bütün setleri 12'den çok tekrarlı antrenman günleri
+ * (yüklü set var, tahmini maksimum yok); `from`dan itibaren. Grafik bu günleri çizmez; hareket yapılmamış
+ * sanılmasın ve "son kayıt … gün önce" denmesin diye sayılır.
+ */
+export function highRepDaysSince(points: readonly ExercisePoint[], from?: string): number {
+  const shown = points.filter((point) => !from || point.date >= from);
+  const last = shown.filter((point) => point.e1rm !== undefined).at(-1)?.date;
+  return shown.filter((point) => (!last || point.date > last) && point.e1rm === undefined && point.topKg !== undefined).length;
+}
+
+/** Grafiğin altında: son günlerin neden çizilmediği ve nereye bakılacağı. */
+export function highRepDaysText(count: number): string {
+  const days = count === 1 ? 'Son antrenman gününde' : `Son ${count} antrenman gününde`;
+  return `${days} bütün setler ${E1RM_MAX_REPS}'den çok tekrarlı; tahmini maksimum o günler için hesaplanmaz. Ağırlığın “En ağır”da, güç gelişimin Gelişim'de görünür.`;
+}
+
 /** Tahmini maksimumun açıklaması (grafiğin altında). */
 export const E1RM_NOTE = `Tek tekrarda kaldırabileceğin en ağır yükün tahmini; kaldırman gereken bir hedef değil, gidişatı gösterir. Epley formülüyle hesaplanır: ağırlık × (1 + tekrar ÷ 30). Yalnız 1–${E1RM_MAX_REPS} tekrarlı setlerden: tekrar arttıkça tahmin şaşar, en isabetlisi az tekrarlı setlerdir.`;
 
@@ -245,7 +262,7 @@ const ROLE_NAMES: Record<MuscleRole, string> = { primary: 'Hedef', secondary: 'Y
 
 /** Gelişim bölümünün yöntem notu (kas sheet'inin altında). */
 export const STRENGTH_METHOD_NOTE = [
-  'Her hareket için seçtiğin dönemdeki antrenman günlerinin en iyisi alınır: ağırlıklı harekette tahmini maksimum, vücut ağırlığıyla yaptığında en çok tekrar, süreli harekette en uzun set.',
+  `Her hareket için seçtiğin dönemdeki antrenman günlerinin en iyisi alınır: ağırlıklı harekette tahmini maksimum, vücut ağırlığıyla yaptığında en çok tekrar, süreli harekette en uzun set. Bütün setlerini ${E1RM_MAX_REPS}'den çok tekrarla yaptığın gün de sayılır: tahmini maksimum o gün en ağır setinden hesaplanır.`,
   'Bu değerlerden tek bir kötü güne kapılmayan bir eğilim çizgisi çizilir (Theil–Sen). Çizginin değişiminin olası aralığı (≈%80) tamamen artıdaysa “gelişti”, tamamen eksideyse “geriledi”, sıfırı kapsıyorsa “sabit” denir.',
   `Karar için dönemde en az ${FORECAST_MIN_POINTS} antrenman günü ve ${FORECAST_MIN_SPAN_DAYS / 7} hafta gerekir.`,
   'Kas, onu çalıştıran hareketlerden hesaplanır: hedef kas tam, yardımcı kas yarım, dengeleyici kas çeyrek sayılır; yalnız dengeleyici olarak çalıştığı hareketler kasa karar vermez.',
