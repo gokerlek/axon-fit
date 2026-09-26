@@ -1,6 +1,5 @@
 'use client';
 
-import { SignOut } from '@phosphor-icons/react';
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -9,30 +8,33 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 
 /**
- * Çıkış (SPEC §5): sayfanın altında, ikincil; yanlış dokunuşla oturum kapanmasın diye onay
- * sorulur. Çıkış POST'tur (bağlantı önizlemesi tetiklemesin) ve yalnız danışan çerezini siler;
- * telefonda saklanan kimlik kalır, `/giris` şifreyle açılır. Şifresi olmayan danışana yeniden
- * girmek için yeni kare kod gerekeceği söylenir.
+ * Çıkış onayı (SPEC §5): avatar menüsündeki "Çıkış yap" açar; yanlış dokunuşla oturum kapanmasın
+ * diye sorulur. Çıkış POST'tur (bağlantı önizlemesi tetiklemesin) ve yalnız danışan çerezini siler;
+ * telefonda saklanan kimlik kalır, `/giris` şifreyle açılır. Şifresi olmayan danışana yeniden girmek
+ * için yeni kare kod gerekeceği söylenir.
  */
-export function LogoutButton({ hasPassword }: { hasPassword: boolean }) {
+export function LogoutDialog({
+  open,
+  onOpenChange,
+  hasPassword,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  hasPassword: boolean;
+}) {
   return (
-    <AlertDialog>
-      <AlertDialogTrigger render={<Button variant="ghost" className="h-11 w-full text-muted-foreground" />}>
-        <SignOut data-icon="inline-start" weight="fill" />
-        Çıkış
-      </AlertDialogTrigger>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Çıkış yapılsın mı?</AlertDialogTitle>
           <AlertDialogDescription>
             {hasPassword
               ? 'Tekrar girmek için şifren gerekir; şifreni unuttuysan antrenörüne söyle.'
-              : 'Henüz şifre belirlemedin: tekrar girmek için antrenöründen yeni bir kare kod istemen gerekir. İstersen önce yukarıdan şifre belirle.'}
+              : "Henüz şifre belirlemedin: tekrar girmek için antrenöründen yeni bir kare kod istemen gerekir. İstersen önce Ayarlar'dan şifre belirle."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
