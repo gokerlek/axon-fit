@@ -874,7 +874,8 @@ describe('sıklık ve haftalık yük', () => {
       now,
       timeZone: 'Europe/Istanbul',
     });
-    assert.deepEqual(result, { done: 2, target: 3, weekStart: '2026-09-21' });
+    // Günler de (Bugün'ün gün şeridi): pazartesi 01:30'daki antrenman pazartesiye sayılır.
+    assert.deepEqual(result, { done: 2, target: 3, weekStart: '2026-09-21', days: ['2026-09-21', '2026-09-22'] });
     assert.equal(weekProgress({ completedAt: [], now, timeZone: 'Europe/Istanbul' }).target, null);
   });
 });

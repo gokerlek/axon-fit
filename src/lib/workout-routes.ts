@@ -7,11 +7,12 @@ import { GithubError } from './github/errors.ts';
 import { currentPhaseOf, DAY_ID_PATTERN, nextDayId } from './program-plan.ts';
 import type { TrackingType } from './progression.ts';
 import { EQUIPMENT_LABELS, type Category, type Equipment } from './schemas/exercise.ts';
-import { programSchema, type Program } from './schemas/program.ts';
+import { clientScheduleBodySchema, programSchema, type Program } from './schemas/program.ts';
 import { parseStoredSession, type SessionDoc, type SessionIndex } from './schemas/session.ts';
 import { readIndex, type SessionRepo, type StoredJson } from './session-files-core.ts';
 import { run, type SessionRouteDeps, type SessionRouteResult } from './session-routes.ts';
 import { firstForMuscleRowIds, ROW_ID_PATTERN } from './template-plan.ts';
+import { applyClientSchedule } from './training-days.ts';
 import { mergeWaterTaps, parseWaterFile, WATER_PATH, waterMessage, waterOnDay, waterPostSchema } from './water.ts';
 import {
   activeRow,
@@ -21,15 +22,20 @@ import {
   dayExerciseIds,
   extraKey,
   historyRows,
+  lastDoneDates,
+  programStamp,
   resolveDay,
+  scheduleOf,
   sessionWaterOn,
   swapRowFor,
   weekOf,
   type ExtraRow,
   type ExtraRows,
+  type WeekCount,
   type WorkoutDay,
   type WorkoutDevice,
   type WorkoutExercise,
+  type WorkoutSchedule,
 } from './workout-plan.ts';
 
 /**
@@ -47,6 +53,8 @@ import {
  *   varsayılan setleriyle planı.
  * - `POST /api/me/water`: antrenman dışı su dokunuşları `water.json`'a, kimlikle birleşerek
  *   (idempotent); değişiklik yoksa yazılmaz, çakışmada taze okuyup bir kez daha. Bozuk dosya ezilmez.
+ * - `POST /api/me/schedule`: danışanın antrenman günleri (§2.11) `program.json` → `clientSchedule`;
+ *   revision artmaz, program geçmişine `client` kaydı, PT'nin bildirim özeti düşer.
  */
 
 export type WorkoutRouteDeps = SessionRouteDeps & {
@@ -63,11 +71,21 @@ export type WorkoutResponse = {
   /** Uygulamanın saat dilimindeki bugün: yeni antrenmanın tarihi. */
   today: string;
   timeZone: string;
-  program: { revision: number; phaseId: string; nextDayId: string | null; days: { id: string; name: string }[] } | null;
+  program: {
+    revision: number;
+    /** Programın sürüm damgası (`programStamp`): Bugün telefondaki planı bununla eskimiş sayar. */
+    stamp: string;
+    phaseId: string;
+    nextDayId: string | null;
+    /** Şu anki evrenin günleri; `lastDate`: son yapıldığı gün ("Başka gün seç"). */
+    days: { id: string; name: string; lastDate?: string }[];
+  } | null;
   /** Program okunamıyorsa danışana dönük metin. */
   problem?: string;
   day: WorkoutDay | null;
-  week: { done: number; target: number | null };
+  week: WeekCount;
+  /** Antrenman günleri (Bugün'ün gün şeridi, "Günlerini değiştir"); program yoksa null. */
+  schedule: WorkoutSchedule | null;
   /** Bugünkü su: `water.json` ve bitmiş antrenmanlar (etkin antrenmanın suyu belgesinde). */
   water: { file: number; sessions: number };
   /** Sunucudaki yarım antrenman (başka cihaz, silinmiş tarayıcı verisi). */
@@ -209,16 +227,24 @@ export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null): P
     }
 
     const phase = program ? currentPhaseOf(program)?.phase : undefined;
+    const last = lastDoneDates(index);
     const body: WorkoutResponse = {
       today,
       timeZone,
       program:
         program && phase
-          ? { revision: program.revision, phaseId: phase.id, nextDayId: nextDayId(program), days: phase.days.map((item) => ({ id: item.id, name: item.name })) }
+          ? {
+              revision: program.revision,
+              stamp: programStamp(program),
+              phaseId: phase.id,
+              nextDayId: nextDayId(program),
+              days: phase.days.map((item) => ({ id: item.id, name: item.name, ...(last[item.id] ? { lastDate: last[item.id] } : {}) })),
+            }
           : null,
       ...(problem ? { problem } : {}),
       day,
       week: weekOf(index, program, now, timeZone),
+      schedule: program ? scheduleOf(program) : null,
       water: {
         file: waterFile && waterFile !== 'broken' ? waterOnDay(parseWaterFile(waterFile.content).file.taps, today, timeZone) : 0,
         sessions: sessionWaterOn(index, today),
@@ -328,6 +354,53 @@ export function waterRoute(deps: SessionRouteDeps, headers: Headers, origin: str
         await repo.write(WATER_PATH, merged.file, { sha: file?.sha, message: waterMessage(merged.added) });
         deps.log(`[su] ${client.id} ${merged.added.length} dokunuş`);
         return { status: 200, body: { file: waterOnDay(merged.file.taps, today, timeZone) } };
+      } catch (error) {
+        if (attempt === 0 && error instanceof GithubError && error.status === 409) continue;
+        throw error;
+      }
+    }
+  });
+}
+
+export type ScheduleResponse = { schedule: WorkoutSchedule; unchanged?: true };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Danışanın antrenman günleri (tasarım §2.11; Bugün'deki ve Ayarlar'daki "Günlerini değiştir"):
+ * doğrudan uygulanır (`applyClientSchedule`), program geçmişine `client` türünde yazılır, revision
+ * artmaz; PT'nin açık düzenleyicisi 412 almaz. Dosya ham hâliyle korunur: yalnız danışanın katmanı ve
+ * geçmiş değişir (bilinmeyen alanlar düşmez). Değişiklik yoksa yazılmaz; çakışmada taze okuyup bir kez
+ * daha. Yazınca PT'nin bildirim özeti düşer ("Danışan programını güncelledi").
+ */
+export function scheduleRoute(deps: SessionRouteDeps, headers: Headers, origin: string, input: unknown): Promise<SessionRouteResult> {
+  const blocked = postGuard(headers, origin);
+  if (blocked) return Promise.resolve(blocked);
+  return run(deps, null, 'schedule', async ({ client, repo }) => {
+    const parsed = v.safeParse(clientScheduleBodySchema, input);
+    if (!parsed.success) return { status: 400, body: { error: 'En az bir gün seç.' } };
+    for (let attempt = 0; ; attempt += 1) {
+      // Bozuk JSON 500 fırlatır: dosya ezilmez.
+      const file = await repo.read('program.json');
+      if (!file) return { status: 404, body: { error: 'Henüz programın yok; antrenörün hazırlayınca günlerini seçebilirsin.' } };
+      const program = v.safeParse(programSchema, file.content);
+      if (!program.success) return { status: 409, body: { error: PROGRAM_PROBLEM } };
+      const applied = applyClientSchedule(program.output, parsed.output.weekdays, deps.now());
+      if (!applied) {
+        const body: ScheduleResponse = { schedule: scheduleOf(program.output), unchanged: true };
+        return { status: 200, body };
+      }
+      const raw = isRecord(file.content) && file.content.version === 2 ? file.content : program.output;
+      const { clientSchedule: _dropped, ...rest } = raw as Record<string, unknown>;
+      const next = { ...rest, ...(applied.program.clientSchedule ? { clientSchedule: applied.program.clientSchedule } : {}), log: applied.program.log };
+      try {
+        await repo.write('program.json', next, { sha: file.sha, message: `Program (danışan): ${applied.text}` });
+        repo.noticesChanged();
+        deps.log(`[program] ${client.id} günler`);
+        const body: ScheduleResponse = { schedule: scheduleOf(applied.program) };
+        return { status: 200, body };
       } catch (error) {
         if (attempt === 0 && error instanceof GithubError && error.status === 409) continue;
         throw error;

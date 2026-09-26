@@ -12,6 +12,34 @@ function finished(id: string, minute: number, overrides: Partial<SessionDoc> = {
   return sessionDoc({ id, status: 'finished', startedAt: at(minute), finishedAt: at(minute + 52), ...overrides });
 }
 
+describe('index satırı: PT bildirimlerinin ayrıntısı', () => {
+  test('başka gün: sıradaki günün adı; yarım: yapılan/planlanan set; aşırı yük: hareket başına en ağır set', () => {
+    const doc = finished('s_aaaaaaaa', 0, {
+      program: { revision: 3, dayId: DAY_B, dayName: 'Gün B', plannedDayId: DAY_A, plannedDayName: 'Gün A' },
+      entries: [
+        sessionEntry('e_aaaaaa', {
+          sets: [
+            workingSet('st_aaaaaaaa', 2, { kg: 80, reps: 8, overload: true, plannedKg: 62.5 }),
+            workingSet('st_bbbbbbbb', 4, { kg: 85, reps: 6, overload: true, plannedKg: 62.5 }),
+            workingSet('st_cccccccc', 6, { kg: 62.5, reps: 10 }),
+          ],
+        }),
+        sessionEntry('e_bbbbbb', { exerciseId: 'squat', title: 'Squat', sets: [workingSet('st_dddddddd', 8, { kg: 100, reps: 5 })] }),
+      ],
+      notices: [{ kind: 'overload', at: at(2) }, { kind: 'unfinished', at: at(52), done: 4, planned: 9 }],
+    });
+    const row = indexRowOf(doc, 'f'.repeat(40));
+    assert.equal(row.plannedDayName, 'Gün A');
+    assert.deepEqual(row.progress, { done: 4, planned: 9 });
+    assert.deepEqual(row.overloads, [{ title: 'Bench Press', kg: 85, plannedKg: 62.5 }]);
+  });
+
+  test('sıradaki gün aynıysa ad yazılmaz; bildirim yoksa ayrıntı da yok', () => {
+    const row = indexRowOf(finished('s_aaaaaaaa', 0, { program: { revision: 3, dayId: DAY_A, dayName: 'Gün A', plannedDayId: DAY_A } }), 'f'.repeat(40));
+    assert.equal('plannedDayName' in row || 'progress' in row || 'overloads' in row, false);
+  });
+});
+
 describe('index satırı', () => {
   test('tonaj, set, su, süre, hareketler, bildirimler', () => {
     const doc = finished('s_aaaaaaaa', 0, {

@@ -65,7 +65,7 @@ export default async function EditProgramPage({ params }: { params: Promise<{ id
       <ProgramForm
         clientId={id}
         mode="edit"
-        initial={{ phased: program.phased, currentPhaseId: program.current.phaseId, phases: program.phases }}
+        initial={{ phased: program.phased, currentPhaseId: program.current.phaseId, phases: program.phases, weekdays: program.schedule?.weekdays ?? [] }}
         base={{ revision: program.revision, createdAt: program.createdAt }}
         stored={{ current: program.current, rotation: program.rotation }}
         templates={templates}
@@ -73,6 +73,7 @@ export default async function EditProgramPage({ params }: { params: Promise<{ id
         devices={pickerDevices(devices)}
         now={new Date().toISOString()}
         timeZone={config.timeZone}
+        clientDays={program.clientSchedule ?? null}
       />
     </div>
   );

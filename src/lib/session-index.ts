@@ -78,11 +78,27 @@ export function durationOf(doc: Pick<SessionDoc, 'startedAt' | 'finishedAt' | 'e
   return Math.min(24 * 60, Math.max(0, minutes));
 }
 
+/**
+ * Onaylanmış aşırı yük (PT'nin bildirimi): hareket başına en ağır aşırı yük seti ve o setin planı.
+ * Hareketin adı o günkü hâliyle (`title`).
+ */
+export function overloadsOf(doc: Pick<SessionDoc, 'entries'>): { title: string; kg: number; plannedKg?: number }[] {
+  return doc.entries.flatMap((entry) => {
+    const sets = working(entry).filter((set) => set.overload && set.kg !== undefined);
+    const top = sets.reduce<(typeof sets)[number] | undefined>((best, set) => (!best || (set.kg ?? 0) > (best.kg ?? 0) ? set : best), undefined);
+    if (!top || top.kg === undefined) return [];
+    return [{ title: entry.title, kg: top.kg, ...(top.plannedKg !== undefined ? { plannedKg: top.plannedKg } : {}) }];
+  });
+}
+
 /** Antrenmanın index satırı; `sha` dosyanın blob kimliği. */
 export function indexRowOf(doc: SessionDoc, sha: string): SessionIndexRow {
   const notices = [...new Set(doc.notices.map((notice) => notice.kind))].sort() as NoticeKind[];
   const duration = durationOf(doc);
   const program = doc.program;
+  const otherDay = Boolean(program?.plannedDayId && program.plannedDayId !== program.dayId);
+  const unfinished = doc.notices.find((notice) => notice.kind === 'unfinished');
+  const overloads = notices.includes('overload') ? overloadsOf(doc) : [];
   return {
     id: doc.id,
     sha,
@@ -91,7 +107,7 @@ export function indexRowOf(doc: SessionDoc, sha: string): SessionIndexRow {
     startedAt: doc.startedAt,
     ...(doc.finishedAt ? { finishedAt: doc.finishedAt } : {}),
     ...(program ? { dayId: program.dayId, dayName: program.dayName } : {}),
-    otherDay: Boolean(program?.plannedDayId && program.plannedDayId !== program.dayId),
+    otherDay,
     unfinished: notices.includes('unfinished'),
     ...(duration !== undefined ? { durationMin: duration } : {}),
     volumeKg: volumeOf(doc),
@@ -99,6 +115,9 @@ export function indexRowOf(doc: SessionDoc, sha: string): SessionIndexRow {
     water: waterOf(doc),
     exercises: doc.entries.flatMap((entry) => exerciseRow(entry) ?? []),
     notices,
+    ...(otherDay && program?.plannedDayName ? { plannedDayName: program.plannedDayName } : {}),
+    ...(unfinished?.done !== undefined && unfinished.planned !== undefined ? { progress: { done: unfinished.done, planned: unfinished.planned } } : {}),
+    ...(overloads.length > 0 ? { overloads } : {}),
   };
 }
 

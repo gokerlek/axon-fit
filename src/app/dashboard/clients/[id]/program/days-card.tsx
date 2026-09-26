@@ -11,8 +11,9 @@ import { FrequencySelect } from './frequency-select';
 import type { PhaseActions, ProgramFormStore } from './program-form';
 
 /**
- * Evresiz program: günler sırayla döner (A → B → C), haftada kaç gün, "+ Gün". Uyum, güç
- * gibi dönemler istenirse "Evrelere böl". Program tek, gizli bir evrede durur (`phases[0]`).
+ * Evresiz program: günler sırayla döner (A → B → C), haftada kaç gün ve altında antrenman günleri
+ * (`weekdays`), "+ Gün". Uyum, güç gibi dönemler istenirse "Evrelere böl". Program tek, gizli bir evrede
+ * durur (`phases[0]`).
  */
 export function DaysCard({
   form,
@@ -22,6 +23,7 @@ export function DaysCard({
   missingDayIds,
   hasTemplates,
   actions,
+  weekdays,
 }: {
   form: ProgramFormStore;
   phases: ProgramPhase[];
@@ -30,6 +32,8 @@ export function DaysCard({
   missingDayIds: ReadonlySet<string>;
   hasTemplates: boolean;
   actions: PhaseActions;
+  /** Antrenman günleri alanı (program düzeyinde; `WeekdayField`). */
+  weekdays: React.ReactNode;
 }) {
   const phasesArray = useFieldArray(form, { path: ['phases'] });
   const daysArray = useFieldArray(form, { path: ['phases', 0, 'days'] });
@@ -59,6 +63,7 @@ export function DaysCard({
           description="Danışanın ekranında ve haftalık kas yükünde kullanılır."
           className="max-w-xs"
         />
+        {weekdays}
         <div className="flex flex-col gap-1.5">
           <span className="text-xs text-muted-foreground">Günler</span>
           <DayChips

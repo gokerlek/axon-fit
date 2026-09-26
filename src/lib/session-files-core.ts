@@ -52,6 +52,11 @@ export type SessionRepo = {
   commit(input: { head: RepoHead; files: readonly { path: string; content: unknown }[]; message: string }): Promise<{ commit: string; remaining: number | null }>;
   /** Silinen antrenmanın önbelleğini düşürür (`session:<id>` etiketi). */
   invalidate(id: string): void;
+  /**
+   * PT'nin bildirim özetini düşürür (Genel bakış, `notices-store.ts`): danışanın program değişikliğinden
+   * sonra. Tek commit'li yazımlar (bitiş, düzeltme, silme) bunu bağlamada kendiliğinden yapar.
+   */
+  noticesChanged(): void;
   log(message: string): void;
 };
 

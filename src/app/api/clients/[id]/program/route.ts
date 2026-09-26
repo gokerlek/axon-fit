@@ -29,7 +29,8 @@ function failed(error: unknown, fallback: string) {
  * anını gönderir: program o arada başka yerde kaydedildiyse (ya da silinip yeniden oluşturulduysa)
  * 412 döner ve kayıt yapılmaz. Değişiklik yoksa hiçbir şey yazılmaz; varsa geçmişe ve commit
  * mesajına otomatik özet girer. Cihazı o arada silinmiş satırlar egzersizin cihazına döner; sayısı
- * yanıtta (`droppedDevices`), düzenleyici PT'ye söyler.
+ * yanıtta (`droppedDevices`), düzenleyici PT'ye söyler. Antrenman günleri değişince danışanın kendi
+ * günleri silinir (son söz PT'nin, tasarım §2.11).
  */
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   if ((await readPtSession())?.role !== 'pt') return forbidden();
@@ -46,13 +47,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'Bilgileri kontrol et.', fields }, { status: 400 });
   }
 
-  const { baseRevision, baseCreatedAt, phased, currentPhaseId, phases } = parsed.output;
+  const { baseRevision, baseCreatedAt, phased, currentPhaseId, phases, weekdays } = parsed.output;
   try {
     if (!(await readClient(id))) return clientMissing();
     const [exercises, devices] = await Promise.all([listExercises(), listDevices()]);
     const result = await saveProgram(
       id,
-      { phased, currentPhaseId, phases },
+      // Günleri göndermeyen eski sekme kayıttakine dokunmaz (`ptScheduleEdit`).
+      { phased, currentPhaseId, phases, ...(weekdays !== undefined ? { weekdays } : {}) },
       baseRevision === null ? null : { revision: baseRevision, createdAt: baseCreatedAt },
       { exercises: new Map(exercises.map((exercise) => [exercise.id, exercise])), deviceIds: new Set(devices.map((device) => device.id)) },
       programDiffContext(exercises, devices),

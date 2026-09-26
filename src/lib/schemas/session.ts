@@ -172,7 +172,16 @@ export type SessionEntry = v.InferOutput<typeof sessionEntrySchema>;
 export const waterTapSchema = v.object({ id: tapIdSchema, d: v.picklist([1, -1] as const), at: timestamp });
 export type WaterTap = v.InferOutput<typeof waterTapSchema>;
 
-export const sessionNoticeSchema = v.object({ kind: v.picklist(NOTICE_KINDS), at: timestamp });
+/**
+ * PT'ye bildirim. Yarım antrenmanda (`unfinished`) yapılan ve planlanan çalışma seti de yazılır ("Gün A
+ * yarım bırakıldı (12/17 set)"); öteki türlerin ayrıntısı belgenin kendisinden türetilir (`indexRowOf`).
+ */
+export const sessionNoticeSchema = v.object({
+  kind: v.picklist(NOTICE_KINDS),
+  at: timestamp,
+  done: v.optional(int(0, SESSION_LIMITS.entries * SESSION_LIMITS.setsPerEntry)),
+  planned: v.optional(int(0, SESSION_LIMITS.entries * SESSION_LIMITS.setsPerEntry)),
+});
 export type SessionNotice = v.InferOutput<typeof sessionNoticeSchema>;
 
 export const sessionEffortSchema = v.object({
@@ -191,6 +200,8 @@ export const sessionProgramSchema = v.object({
   dayName: v.pipe(v.string(), v.minLength(1), v.maxLength(SESSION_LIMITS.dayName)),
   /** Sıradaki gündü; `dayId`'den farklıysa danışan başka gün seçti (`other_day`). */
   plannedDayId: v.optional(id(DAY_ID_PATTERN, 'Gün kimliği geçersiz.')),
+  /** Sıradaki günün o günkü adı: PT'nin bildirimi ("Gün B yerine Gün C yapıldı"). */
+  plannedDayName: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(SESSION_LIMITS.dayName))),
 });
 export type SessionProgram = v.InferOutput<typeof sessionProgramSchema>;
 
@@ -302,6 +313,19 @@ export const sessionIndexRowSchema = v.object({
   water: int(0, SESSION_LIMITS.waterTaps),
   exercises: v.array(sessionIndexExerciseSchema),
   notices: v.array(v.picklist(NOTICE_KINDS)),
+  /** Başka gün seçildiyse sıradaki günün adı (bildirim metni). */
+  plannedDayName: v.optional(v.pipe(v.string(), v.maxLength(SESSION_LIMITS.dayName))),
+  /** Yarım antrenmanda yapılan ve planlanan çalışma seti (bildirim metni). */
+  progress: v.optional(
+    v.object({ done: int(0, SESSION_LIMITS.entries * SESSION_LIMITS.setsPerEntry), planned: int(0, SESSION_LIMITS.entries * SESSION_LIMITS.setsPerEntry) }),
+  ),
+  /** Onaylanmış aşırı yük: hareket başına en ağır set ve planın ağırlığı ("Bench Press 85 kg (hedef 62,5)"). */
+  overloads: v.optional(
+    v.pipe(
+      v.array(v.object({ title: v.pipe(v.string(), v.maxLength(SESSION_LIMITS.title)), kg, plannedKg: v.optional(kg) })),
+      v.maxLength(SESSION_LIMITS.entries),
+    ),
+  ),
 });
 export type SessionIndexRow = v.InferOutput<typeof sessionIndexRowSchema>;
 

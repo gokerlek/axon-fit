@@ -98,6 +98,15 @@ describe('birleştirme: kurallar', () => {
     assert.deepEqual(merged.notices.map((notice) => notice.kind), ['other_day', 'overload']);
   });
 
+  test('bildirimin ayrıntısı (yarım: yapılan/planlanan set) birleşimde kalır; iki hâli varsa sonuç sıradan bağımsız', () => {
+    const a = sessionDoc({ notices: [{ kind: 'unfinished', at: at(50), done: 12, planned: 17 }] });
+    const b = sessionDoc({ notices: [{ kind: 'unfinished', at: at(50) }] });
+    const c = sessionDoc({ notices: [{ kind: 'unfinished', at: at(50), done: 13, planned: 17 }] });
+    assert.deepEqual(docOf(mergeSessions(a, b)).notices, [{ kind: 'unfinished', at: at(50), done: 12, planned: 17 }]);
+    assert.deepEqual(docOf(mergeSessions(b, a)).notices, docOf(mergeSessions(a, b)).notices);
+    assert.deepEqual(docOf(mergeAll([a, b, c])).notices, docOf(mergeAll([c, b, a])).notices);
+  });
+
   test('yazan cihaz değişiklik sayılmaz; farklı antrenmanlar birleşmez', () => {
     assert.equal(sameSessionData(sessionDoc({ writer: W1 }), sessionDoc({ writer: W2 })), true);
     assert.equal(sameSessionData(sessionDoc(), sessionDoc({ waterTaps: [{ id: 'wt_aaaaaaaa', d: 1, at: at(1) }] })), false);

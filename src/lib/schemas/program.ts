@@ -91,7 +91,25 @@ export const programPhasesSchema = v.pipe(
   v.check((phases) => duplicateProgramIds(phases).length === 0, 'Evre, gün, blok ve satır kimlikleri benzersiz olmalı.'),
 );
 
-const bodyFields = { phased: v.boolean('Evre seçimi okunamadı.'), currentPhaseId: phaseIdSchema, phases: programPhasesSchema };
+/**
+ * Antrenman günleri (tasarım §2.11): ISO hafta günü, 1 = Pazartesi … 7 = Pazar; her gün bir kez.
+ * Boş dizi = seçilmedi. Program günlere çakılmaz: A → B → C sırası seçilen günlere dağılır.
+ */
+export const weekdaysSchema = v.pipe(
+  v.array(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(7)), 'Günleri seç.'),
+  v.maxLength(7),
+  v.check((days) => new Set(days).size === days.length, 'Bir gün iki kez seçilmiş.'),
+);
+/** Danışanın seçimi: en az bir gün (hiç gün seçmemek "antrenman yok" olurdu). */
+export const clientWeekdaysSchema = v.pipe(weekdaysSchema, v.minLength(1, 'En az bir gün seç.'));
+
+const bodyFields = {
+  phased: v.boolean('Evre seçimi okunamadı.'),
+  currentPhaseId: phaseIdSchema,
+  phases: programPhasesSchema,
+  /** Göndermeyen eski sekme ve taslak kayıttaki günleri değiştirmez. */
+  weekdays: v.optional(weekdaysSchema),
+};
 const CURRENT_MISSING = 'Şu anki evre programda yok.';
 const UNPHASED_PROBLEM = 'Evresiz programda tek, süresiz gün listesi olur.';
 
@@ -124,6 +142,12 @@ export const programSaveSchema = v.pipe(
   v.forward(v.partialCheck([['phased'], ['phases']], unphasedOk, UNPHASED_PROBLEM), ['phases']),
 );
 
+/** Danışanın "Günlerini değiştir"i (Bugün ya da Ayarlar). */
+export const clientScheduleBodySchema = v.object({ weekdays: clientWeekdaysSchema });
+
+/** PT: "PT'nin günlerine dön" (danışanın katmanını siler; revision artmaz, düzenleyici 412 almaz). */
+export const programScheduleActionSchema = v.object({ action: v.literal('reset') });
+
 /** Evre geçişi (program sayfasındaki öneri): sürüm kayıttaki gibi (`baseRevision`, `baseCreatedAt`). */
 export const programPhaseSwitchSchema = v.object({ phaseId: phaseIdSchema, baseRevision: positive, baseCreatedAt: v.optional(timestamp) });
 
@@ -155,6 +179,10 @@ export const programSchema = v.pipe(
     current: v.object({ phaseId: phaseIdSchema, startedAt: timestamp }),
     /** Antrenman ekranı yazar (revision artmaz). */
     rotation: v.object({ lastDayId: v.optional(dayIdSchema), lastCompletedAt: v.optional(timestamp) }),
+    /** PT'nin antrenman günleri; yoksa seçilmemiş. */
+    schedule: v.optional(v.object({ weekdays: weekdaysSchema })),
+    /** Danışanın değiştirdiği günler: revision artmaz, PT günleri değiştirince silinir. Geçerli = bu ?? PT'ninki. */
+    clientSchedule: v.optional(v.object({ weekdays: clientWeekdaysSchema, at: timestamp })),
     /** En yenisi üstte. */
     log: v.pipe(v.array(programLogEntrySchema), v.maxLength(L.log)),
   }),

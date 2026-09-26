@@ -176,13 +176,20 @@ describe('Bugün: index\'ten', () => {
     assert.deepEqual(historyRows(index(), new Set(['squat'])), []);
   });
 
-  test('"bu hafta x/3": pazartesiden; hedef evrenin sıklığı', () => {
+  test('"bu hafta x/y": pazartesiden; hedef seçili gün sayısı, yoksa evrenin sıklığı; yapılan günler', () => {
     const now = new Date('2026-09-26T16:00:00.000Z');
-    assert.deepEqual(weekOf(index(), parsedProgram(), now, TZ), { done: 2, target: null });
+    const week = { days: ['2026-09-22', '2026-09-26'], start: '2026-09-21' };
+    assert.deepEqual(weekOf(index(), parsedProgram(), now, TZ), { done: 2, target: null, ...week });
     const raw = programFile();
     (raw.phases as { daysPerWeek?: number }[])[0]!.daysPerWeek = 3;
-    assert.deepEqual(weekOf(index(), parsedProgram(raw), now, TZ), { done: 2, target: 3 });
-    assert.deepEqual(weekOf(index(), null, now, TZ), { done: 2, target: null });
+    assert.deepEqual(weekOf(index(), parsedProgram(raw), now, TZ), { done: 2, target: 3, ...week });
+    assert.deepEqual(weekOf(index(), parsedProgram({ ...raw, schedule: { weekdays: [1, 2, 4, 6] } }), now, TZ), { done: 2, target: 4, ...week });
+    assert.deepEqual(
+      weekOf(index(), parsedProgram({ ...raw, schedule: { weekdays: [1, 2, 4, 6] }, clientSchedule: { weekdays: [2, 6], at: '2026-09-25T10:00:00.000Z' } }), now, TZ).target,
+      2,
+      'danışanın günleri geçerli',
+    );
+    assert.deepEqual(weekOf(index(), null, now, TZ), { done: 2, target: null, ...week });
   });
 
   test('bugünkü su: yalnız bitmiş antrenmanlar (etkinin suyu telefondaki belgeden)', () => {

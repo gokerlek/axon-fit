@@ -3,6 +3,7 @@ import { loadSpecFor, type DeviceLoadSettings } from './device-loads.ts';
 import { currentPhaseOf, nextDayId, weekProgress } from './program-plan.ts';
 import { planSession, warmupSets, type LoadSpec, type ProgressionRule, type SessionPlan, type TrackingType } from './progression.ts';
 import type { Program } from './schemas/program.ts';
+import { effectiveSchedule, weekTarget, type EffectiveSchedule } from './training-days.ts';
 import type { SessionDoc, SessionEntry, SessionIndex, SessionIndexRow } from './schemas/session.ts';
 import { exerciseHistory } from './session-results.ts';
 import {
@@ -81,6 +82,13 @@ export type WorkoutDay = {
   revision: number;
   /** Rotasyonda sıradaki gün; `dayId`'den farklıysa başka gün seçildi. */
   plannedDayId: string | null;
+  /** Sıradaki günün adı (başka gün seçildiyse PT'nin bildirimi için). */
+  plannedDayName?: string;
+  /**
+   * Şu anki evrenin günleri, dönüş sırasıyla: bitişteki "Sıradaki antrenman: Gün B" satırı. Eski anlık
+   * görüntüde yok (satır görünmez, sunucu varsayılanı uygular).
+   */
+  rotationDays?: { id: string; name: string }[];
   /** Günün blokları (kütüphanede olmayan satırlar çıkmış): imleç bununla yürür. */
   blocks: TemplateBlock[];
   rows: Record<string, WorkoutRow>;
@@ -315,6 +323,8 @@ export function buildWorkoutDay(input: {
   if (!found) return null;
   const { phase, day } = found;
   const history = input.history.filter((doc) => doc.status === 'finished');
+  const current = currentPhaseOf(input.program)?.phase;
+  const plannedName = planned ? current?.days.find((item) => item.id === planned)?.name : undefined;
 
   const blocks: TemplateBlock[] = day.blocks.flatMap((block) => {
     const kept = block.rows.filter((row) => input.exercises.has(row.exerciseId));
@@ -334,6 +344,8 @@ export function buildWorkoutDay(input: {
     phaseId: phase.id,
     revision: input.program.revision,
     plannedDayId: planned,
+    ...(plannedName ? { plannedDayName: plannedName } : {}),
+    rotationDays: (current?.days ?? []).map((item) => ({ id: item.id, name: item.name })),
     blocks,
     rows,
   };
@@ -356,12 +368,62 @@ export function activeRow(index: SessionIndex): SessionIndexRow | null {
   );
 }
 
-/** "Bu hafta x/3": bitmiş antrenmanların bitiş anlarından; hedef şu anki evrenin sıklığı. */
-export function weekOf(index: SessionIndex, program: Program | null, now: Date, timeZone: string): { done: number; target: number | null } {
+export type WeekCount = {
+  done: number;
+  /** Seçili antrenman günü sayısı; gün seçilmemişse şu anki evrenin sıklığı; o da yoksa null. */
+  target: number | null;
+  /** Bu hafta antrenman yapılan günler (Bugün'ün gün şeridi). */
+  days: string[];
+  /** Haftanın pazartesisi. */
+  start: string;
+};
+
+/**
+ * "Bu hafta x/y" (tasarım §2.11): bitmiş antrenmanların bitiş anlarından, pazartesi başlayan hafta,
+ * uygulamanın saat diliminde; y seçili gün sayısı, yoksa şu anki evrenin sıklığı.
+ */
+export function weekOf(index: SessionIndex, program: Program | null, now: Date, timeZone: string): WeekCount {
   const completedAt = index.items.flatMap((row) => (row.finishedAt ? [row.finishedAt] : []));
   const daysPerWeek = program ? currentPhaseOf(program)?.phase.daysPerWeek : undefined;
-  const { done, target } = weekProgress({ completedAt, ...(daysPerWeek !== undefined ? { daysPerWeek } : {}), now, timeZone });
-  return { done, target };
+  const weekdays = program ? effectiveSchedule(program).weekdays : [];
+  const { done, days, weekStart } = weekProgress({ completedAt, now, timeZone });
+  return { done, target: weekTarget(weekdays, daysPerWeek), days, start: weekStart };
+}
+
+/** Bugün'ün ve Ayarlar'ın "Günlerini değiştir"i için: geçerli günler, PT'ninkiler, danışanınki ve sıklık. */
+export type WorkoutSchedule = EffectiveSchedule & { daysPerWeek: number | null };
+
+export function scheduleOf(program: Program): WorkoutSchedule {
+  return { ...effectiveSchedule(program), daysPerWeek: currentPhaseOf(program)?.phase.daysPerWeek ?? null };
+}
+
+/**
+ * Programın o anki sürümünün damgası: telefonda saklanan gün planı bununla karşılaştırılır. PT'nin kaydı
+ * (revision, updatedAt), evre, rotasyon (başka cihazda bitirilen antrenman) ve günler değişince değişir;
+ * Bugün sunucuda taze okunan programın damgasını verir, eskiyen plan "Antrenmana başla"da kullanılmaz.
+ */
+export function programStamp(program: Pick<Program, 'revision' | 'createdAt' | 'updatedAt' | 'current' | 'rotation' | 'schedule' | 'clientSchedule'>): string {
+  return [
+    program.revision,
+    program.createdAt,
+    program.updatedAt,
+    program.current.phaseId,
+    program.rotation.lastDayId ?? '',
+    program.rotation.lastCompletedAt ?? '',
+    (program.schedule?.weekdays ?? []).join(''),
+    program.clientSchedule?.at ?? '',
+  ].join('|');
+}
+
+/** Günlerin son yapıldığı tarih ("Başka gün seç": "son: 22 Eyl"): bitmiş antrenmanlardan. */
+export function lastDoneDates(index: SessionIndex): Record<string, string> {
+  const last: Record<string, string> = {};
+  for (const row of index.items) {
+    if (!row.finishedAt || !row.dayId) continue;
+    const known = last[row.dayId];
+    if (!known || row.date > known) last[row.dayId] = row.date;
+  }
+  return last;
 }
 
 /** Bitmiş antrenmanların o günkü suyu (etkin antrenmanın suyu telefondaki belgeden eklenir). */

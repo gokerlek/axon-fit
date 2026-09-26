@@ -29,12 +29,13 @@ import { localWorkoutText, readPendingWater, savePendingWater, saveWorkoutCache,
  * - `GET /api/me/workout` bir kez çekilir ve telefonda saklanır: "Antrenmana başla" ağ beklemez.
  * - Yarım antrenman (telefonda ya da sunucuda) varsa sıradaki antrenman kartının yerine "Yarım kalan
  *   antrenman" kartı: "Kaldığın yerden devam et" ve "Antrenmanı bitir".
- * - "Bu hafta x/3" ve bugünkü su (+1): dokunuşlar 10 sn biriktirilip tek istekte `water.json`'a gider;
+ * - "Bu hafta x/y" (y seçili antrenman günü sayısı, yoksa sıklık) ve bugünkü su (+1): dokunuşlar 10 sn
+ *   biriktirilip tek istekte `water.json`'a gider;
  *   gönderilene kadar telefonda durur. Günün toplamı = `water.json` + bitmiş antrenmanlar + yarım
  *   antrenmanın suyu (çift sayılmaz).
  */
 
-const WORKOUT_KEY = ['me', 'workout'] as const;
+export const WORKOUT_KEY = ['me', 'workout'] as const;
 
 export function useWorkoutOverview(clientId: string) {
   return useServiceQuery<WorkoutResponse>({

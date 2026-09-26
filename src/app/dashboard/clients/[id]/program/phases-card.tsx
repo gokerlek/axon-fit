@@ -255,11 +255,22 @@ function Suggestion({ shared, now, timeZone }: { shared: Shared; now: string; ti
 }
 
 /**
- * Evreler (program evrelere bölündüyse): ad, süre ve sıklık alanları, evre menüsü, günler.
+ * Evreler (program evrelere bölündüyse): programın antrenman günleri (bütün evrelerde aynı), evre başına
+ * ad, süre ve sıklık alanları, evre menüsü, günler.
  * Günler çip olarak seçilir; seçili gün aşağıdaki gün düzenleyicide açılır. Hatalı gün
  * kırmızı çerçeveyle işaretlenir. "Evreleri kaldır" günleri tek listede birleştirir.
  */
-export function PhasesCard({ now, timeZone, ...shared }: Shared & { now: string; timeZone: string }) {
+export function PhasesCard({
+  now,
+  timeZone,
+  weekdays,
+  ...shared
+}: Shared & {
+  now: string;
+  timeZone: string;
+  /** Antrenman günleri alanı (program düzeyinde, bütün evrelerde; `WeekdayField`). */
+  weekdays: React.ReactNode;
+}) {
   const { form, phases, currentPhaseId, actions } = shared;
   // Formisch kancası: günlerin `getDeepError` okumaları bu bileşenin çizimine bağlansın.
   const phasesArray = useFieldArray(form, { path: ['phases'] });
@@ -303,6 +314,7 @@ export function PhasesCard({ now, timeZone, ...shared }: Shared & { now: string;
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <Suggestion shared={shared} now={now} timeZone={timeZone} />
+        {weekdays}
         <ol className="flex flex-col gap-3" aria-label="Evreler">
           {phases.map((phase, index) => (
             <PhaseRow key={phase.id} phase={phase} index={index} shared={shared} />

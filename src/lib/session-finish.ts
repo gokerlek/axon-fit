@@ -20,7 +20,7 @@ import { indexRowOf, upsertIndexRow } from './session-index.ts';
 import { mergeAll, normalizeSession, sameSessionData, withDeletions } from './session-merge.ts';
 import { finishMessage, patchMessage, putMessage } from './session-messages.ts';
 import type { TemplateBody } from './template-plan.ts';
-import { workoutUnits } from './workout-cursor.ts';
+import { defaultRotation, workoutUnits } from './workout-cursor.ts';
 
 /**
  * Antrenman yazımlarının saf hesapları (tasarım §4.3–§4.7): sunucunun gelen belgeyi nasıl kabul ettiği,
@@ -105,10 +105,8 @@ export function completion(doc: Pick<SessionDoc, 'entries' | 'order'>, day: Temp
   };
 }
 
-/** Hazır seçim (§2.7): planın yarısı yapıldıysa sıradaki gün, değilse aynı gün sırada kalır. */
-export function defaultRotation(done: number, planned: number): RotationChoice {
-  return planned === 0 || done * 2 >= planned ? 'advance' : 'keep';
-}
+/** Hazır seçim (§2.7): planın yarısı yapıldıysa sıradaki gün, değilse aynı gün sırada kalır (telefonla ortak). */
+export { defaultRotation };
 
 /** Onayın izin verdiği sağlık ayrıntısı; hiçbiri yoksa null. Ağrı `check_in`, hazır oluşluk `readiness` parçası. */
 export function allowedHealth(client: Pick<Client, 'modules' | 'consents'>, health: FinishHealth | undefined): FinishHealth | null {
@@ -196,7 +194,8 @@ export function planFinish(input: FinishInput): FinishPlan {
   if (input.rotation || !doc.rotation) doc = { ...doc, rotation: { value: choice, updatedAt: now.toISOString(), by: doc.writer } };
 
   let notices = doc.notices;
-  if (done < planned) notices = withNotice(notices, { kind: 'unfinished', at: doc.finishedAt as string });
+  // Yarım antrenman: PT'nin bildirimi yapılan ve planlanan seti söyler ("12/17 set").
+  if (done < planned) notices = withNotice(notices, { kind: 'unfinished', at: doc.finishedAt as string, done, planned });
   if (doc.program?.plannedDayId && doc.program.plannedDayId !== doc.program.dayId) {
     notices = withNotice(notices, { kind: 'other_day', at: doc.startedAt });
   }

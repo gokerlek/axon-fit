@@ -38,15 +38,18 @@ import { readProgramFile } from '@/lib/programs';
 import { CLIENT_ID_PATTERN } from '@/lib/schemas/client';
 import { templateSummary } from '@/lib/template-plan';
 import { templateChoices } from '@/lib/templates';
+import { effectiveSchedule, weekdaysText } from '@/lib/training-days';
 import { cn } from '@/lib/utils';
 import { InvalidProgramAlert } from './invalid-program-alert';
 import { PhaseTransition } from './phase-transition';
+import { ResetDaysButton } from './weekday-field';
 
 export const metadata: Metadata = { title: 'Program' };
 
 /**
- * Danışanın programı — yalnız gösterim; tek eylem "Düzenle" (SPEC §6). İstisna: şu anki
- * evrenin süresi dolunca sonraki evreye geçiş önerisi burada onaylanır (SPEC §7.4).
+ * Danışanın programı — yalnız gösterim; tek eylem "Düzenle" (SPEC §6). İstisnalar: şu anki
+ * evrenin süresi dolunca sonraki evreye geçiş önerisi burada onaylanır (SPEC §7.4); danışan antrenman
+ * günlerini değiştirdiyse "Danışan değiştirdi" ve [PT'nin günlerine dön] (tasarım §2.11).
  * Evresiz programda evreden söz edilmez: "Döngü" kartı (sıradaki gün, sıklık, planlanan
  * haftalık yük) ve sırayla dönen günler.
  */
@@ -139,6 +142,25 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
       />
     ) : null;
   const nextSummary = nextDay ? templateSummary({ blocks: nextDay.blocks }, byId) : null;
+  // Antrenman günleri (§2.11): geçerli olanlar; danışan değiştirdiyse rozet ve PT'nin günlerine dönüş.
+  const days = effectiveSchedule(program);
+  const daysRow = (
+    <TableRow>
+      <TableCell className="text-muted-foreground">Antrenman günleri</TableCell>
+      <TableCell className="whitespace-normal">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span>{weekdaysText(days.weekdays) || 'Seçilmedi'}</span>
+          {days.client ? <Badge variant="secondary">Danışan değiştirdi</Badge> : null}
+          {days.client ? <ResetDaysButton clientId={id} className="-my-1" /> : null}
+        </div>
+        {days.client ? (
+          <span className="text-xs text-muted-foreground">
+            {days.pt.length > 0 ? `Senin günlerin: ${weekdaysText(days.pt)}` : 'Sen gün seçmemiştin.'}
+          </span>
+        ) : null}
+      </TableCell>
+    </TableRow>
+  );
 
   const dayCards = (phase: ProgramPhase) => (
     <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -296,6 +318,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
                     <TableCell className="text-muted-foreground">Sıklık</TableCell>
                     <TableCell>{frequency ?? 'Belirtilmedi'}</TableCell>
                   </TableRow>
+                  {daysRow}
                   <TableRow>
                     <TableCell className="text-muted-foreground">Sıradaki gün</TableCell>
                     <TableCell>{nextDay?.name ?? '—'}</TableCell>
@@ -321,6 +344,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
                     <TableCell className="text-muted-foreground">Sıklık</TableCell>
                     <TableCell>{frequency ?? 'Belirtilmedi'}</TableCell>
                   </TableRow>
+                  {daysRow}
                   <TableRow>
                     <TableCell className="text-muted-foreground">Son antrenman</TableCell>
                     <TableCell>
@@ -391,7 +415,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
         <Card id="gecmis" className="scroll-mt-4 lg:order-6 lg:col-span-2">
           <CardHeader>
             <CardTitle>Program geçmişi</CardTitle>
-            <CardDescription>Her kaydettiğinde ne değiştiği buraya yazılır.</CardDescription>
+            <CardDescription>Her kaydettiğinde ve danışan günlerini değiştirdiğinde ne değiştiği buraya yazılır.</CardDescription>
           </CardHeader>
           <CardContent>
             <ChangeLog entries={program.log} timeZone={timeZone} initial={20} />

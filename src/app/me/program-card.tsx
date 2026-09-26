@@ -8,8 +8,10 @@ import { listExercises } from '@/lib/exercises';
 import { currentPhaseOf, frequencyLabel, nextDayId, phaseStatus } from '@/lib/program-plan';
 import { readProgramFile } from '@/lib/programs';
 import { templateSummary } from '@/lib/template-plan';
+import { programStamp } from '@/lib/workout-plan';
 import { ClientDayPlan } from './client-day-plan';
 import { WeekBadge } from './today-workout';
+import { DayStatus, OtherDayButton, WeekStrip, WorkoutFreshness } from './training-week';
 
 function Unavailable({ children }: { children?: React.ReactNode }) {
   return (
@@ -29,9 +31,13 @@ function Unavailable({ children }: { children?: React.ReactNode }) {
  * Danışanın sıradaki antrenmanı: kendi programında (evreliyse şu anki evrenin) sıradaki
  * günü, yapılış sırasıyla ve setler danışanın dilinde (`ClientDayPlan`); altında diğer günler
  * dönüş sırasıyla. Evresiz programda evreden söz edilmez; haftada kaç gün belirtildiyse yazılır,
- * sağ üstte "Bu hafta x/3" (`WeekBadge`, istemcide). "Antrenmana başla" tek dokunuştur: antrenman
- * ekranını açar (plan Bugün açılınca telefona alınmıştır, ağ beklenmez). `children` ana kartın hemen
- * altına (Bugün'ün su kartı). `clientId` oturumdan doğrulanmış kayıttan gelir (`currentClient`).
+ * sağ üstte "Bu hafta x/y" (`WeekBadge`, istemcide). Antrenman günleri (tasarım §2.11): üst satır
+ * "Bugün antrenman günün · Gün B" ya da "Dinlenme günü · sıradaki antrenman Çarşamba (Gün B)", 7 günlük
+ * şerit ve "Günlerini değiştir"; dinlenme gününde de başlatılabilir. "Antrenmana başla" tek dokunuştur:
+ * antrenman ekranını açar (plan Bugün açılınca telefona alınmıştır, ağ beklenmez); telefondaki plan
+ * programın bu sürümüne ait değilse atılır (`WorkoutFreshness`). "Başka gün seç" (§2.3) altında.
+ * `children` ana kartın hemen altına (Bugün'ün su kartı). `clientId` oturumdan doğrulanmış kayıttan
+ * gelir (`currentClient`).
  */
 export async function ProgramCard({ clientId, children }: { clientId: string; children?: React.ReactNode }) {
   const [file, exercises] = await Promise.all([readProgramFile(clientId).catch(() => undefined), listExercises()]);
@@ -86,9 +92,12 @@ export async function ProgramCard({ clientId, children }: { clientId: string; ch
 
   return (
     <>
+      <WorkoutFreshness clientId={clientId} stamp={programStamp(program)} />
       <Card>
         <CardHeader>
-          <CardDescription>Sıradaki antrenman</CardDescription>
+          <CardDescription>
+            <DayStatus clientId={clientId} dayName={day.name} />
+          </CardDescription>
           <CardAction>
             <WeekBadge clientId={clientId} />
           </CardAction>
@@ -100,7 +109,8 @@ export async function ProgramCard({ clientId, children }: { clientId: string; ch
             <span className="tabular-nums">{summary.minutes}</span> dk
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4">
+          <WeekStrip clientId={clientId} />
           {summary.rows > 0 ? (
             <ClientDayPlan blocks={day.blocks} exercises={byId} />
           ) : (
@@ -113,6 +123,7 @@ export async function ProgramCard({ clientId, children }: { clientId: string; ch
               <Play data-icon="inline-start" weight="fill" />
               Antrenmana başla
             </Button>
+            <OtherDayButton clientId={clientId} />
           </CardFooter>
         ) : null}
       </Card>

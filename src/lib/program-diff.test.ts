@@ -424,6 +424,28 @@ describe('kaydın uygulanması', () => {
     assert.deepEqual(result?.program.rotation, { lastDayId: 'd_aaaaaa', lastCompletedAt: '2026-09-20T10:00:00.000Z' });
   });
 
+  test('antrenman günleri: PT değiştirince yazılır, danışanın günleri silinir; göndermeyen eski sekme dokunmaz', () => {
+    const clientSchedule = { weekdays: [2, 4, 6], at: '2026-09-23T10:00:00.000Z' };
+    const withDays: ProgramState = { ...stored, schedule: { weekdays: [1, 3, 5] }, clientSchedule };
+    const same = { phased: true, currentPhaseId: uyum.id, phases: stored.phases };
+    // Eski sekme (günler yok) ve aynı günler: değişiklik yok, danışanın günleri kalır.
+    assert.equal(applyProgramEdit(withDays, same, ctx, simdi), null);
+    assert.equal(applyProgramEdit(withDays, { ...same, weekdays: [5, 1, 3] }, ctx, simdi), null);
+    const changed = applyProgramEdit(withDays, { ...same, weekdays: [1, 4] }, ctx, simdi);
+    assert.ok(changed);
+    assert.deepEqual(changed.program.schedule, { weekdays: [1, 4] });
+    assert.equal('clientSchedule' in changed.program, false);
+    assert.equal(changed.program.revision, 6);
+    assert.deepEqual(texts(changed.changes), ['Antrenman günleri: Pzt, Çar, Cum → Pzt, Per', 'Danışanın günleri kaldırıldı (Sal, Per, Cmt)']);
+    // Başka bir değişiklikle kaydedilen program danışanın günlerini korur.
+    const renamed = applyProgramEdit(withDays, { ...same, phases: [{ ...uyum, name: 'Uyum 2' }, guc] }, ctx, simdi);
+    assert.deepEqual(renamed?.program.clientSchedule, clientSchedule);
+    assert.deepEqual(renamed?.program.schedule, { weekdays: [1, 3, 5] });
+    // Günler kaldırılabilir.
+    const cleared = applyProgramEdit(withDays, { ...same, weekdays: [] }, ctx, simdi);
+    assert.equal(cleared && 'schedule' in cleared.program, false);
+  });
+
   test('düzenleyici göndermediyse kayıttaki kaynak korunur', () => {
     const { source: _source, ...withoutSource } = uyum.days[0] as ProgramDay;
     const phases = [{ ...uyum, name: 'Uyum 2', days: [withoutSource, B, C] }, guc];
