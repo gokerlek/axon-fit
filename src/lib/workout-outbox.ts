@@ -1,7 +1,7 @@
 import * as v from 'valibot';
 import { sessionDocSchema, type SessionDoc } from './schemas/session.ts';
 import { canonicalJson, mergeAll } from './session-merge.ts';
-import type { WorkoutDay } from './workout-plan.ts';
+import type { ExtraRow, ExtraRows, WorkoutDay } from './workout-plan.ts';
 import type { RestTimer } from './workout-rest.ts';
 import type { SetDraft } from './workout-session.ts';
 import { parseSetTimer, type SetTimer } from './workout-timer.ts';
@@ -49,6 +49,10 @@ export type LocalWorkout = {
   acked: SessionDoc | null;
   /** Başlangıçtaki günün planı (anlık görüntü). */
   plan: WorkoutDay;
+  /** Muadil ve eklenen hareketlerin planları (sunucudan, kendi geçmişleriyle): günün etkin hâli bunlarla (`effectiveDay`). */
+  extras: ExtraRows;
+  /** Sağlık onayı var: bitişte "Ağrı" nedeni çıkar. */
+  pain: boolean;
   /** Yerel değişiklik sayacı; sunucuya ulaşan son değişiklik; gönderilmesi gereken son değişiklik. */
   rev: number;
   ackedRev: number;
@@ -64,8 +68,29 @@ export type LocalWorkout = {
   timer: SetTimer | null;
 };
 
-export function createLocalWorkout(doc: SessionDoc, plan: WorkoutDay, acked: SessionDoc | null = null): LocalWorkout {
-  return { v: LOCAL_VERSION, doc, acked, plan, rev: 0, ackedRev: 0, dueRev: 0, lastSentAt: null, slow: false, rest: null, restCount: 0, draft: null, timer: null };
+export function createLocalWorkout(
+  doc: SessionDoc,
+  plan: WorkoutDay,
+  acked: SessionDoc | null = null,
+  options: { extras?: ExtraRows; pain?: boolean } = {},
+): LocalWorkout {
+  return {
+    v: LOCAL_VERSION,
+    doc,
+    acked,
+    plan,
+    extras: options.extras ?? {},
+    pain: options.pain ?? false,
+    rev: 0,
+    ackedRev: 0,
+    dueRev: 0,
+    lastSentAt: null,
+    slow: false,
+    rest: null,
+    restCount: 0,
+    draft: null,
+    timer: null,
+  };
 }
 
 /** Yerel değişiklik: `send` set değişikliğidir (gönderim ister). */
@@ -152,6 +177,24 @@ function isPlan(value: unknown): value is WorkoutDay {
   return isRecord(value) && typeof value.dayId === 'string' && typeof value.dayName === 'string' && Array.isArray(value.blocks) && isRecord(value.rows);
 }
 
+function isExtra(value: unknown): value is ExtraRow {
+  return (
+    isRecord(value) &&
+    typeof value.exerciseId === 'string' &&
+    isRecord(value.row) &&
+    typeof value.row.rowId === 'string' &&
+    isRecord(value.row.plan) &&
+    isRecord(value.template) &&
+    Array.isArray(value.template.sets)
+  );
+}
+
+/** Muadil ve eklenen hareketlerin planları: biçimi bozuk olan atlanır (hareket asıl satırın düzeniyle sürer). */
+function extrasOf(value: unknown): ExtraRows {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, ExtraRow] => isExtra(entry[1])));
+}
+
 function isDraft(value: unknown): value is SetDraft {
   return isRecord(value) && typeof value.rowId === 'string' && typeof value.setIndex === 'number';
 }
@@ -178,6 +221,8 @@ export function parseLocalWorkout(text: string | null): LocalWorkout | null {
     doc: doc.output,
     acked: acked?.success ? acked.output : null,
     plan: raw.plan,
+    extras: extrasOf(raw.extras),
+    pain: raw.pain === true,
     rev: count(raw.rev),
     ackedRev: count(raw.ackedRev),
     dueRev: count(raw.dueRev),

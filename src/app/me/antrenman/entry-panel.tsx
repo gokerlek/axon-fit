@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'motion/react';
-import { ArrowRight, Check, FlagCheckered, Play, Stop, WarningCircle } from '@phosphor-icons/react';
+import { ArrowRight, CaretRight, Check, FlagCheckered, Play, Stop, WarningCircle } from '@phosphor-icons/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Stepper } from '@/components/ui/stepper';
@@ -67,6 +67,8 @@ function TimerBox({ view, target }: { view: TimerView; target: NextSet['target']
  * - Aşırı yük (hareket başına bir kez): ağırlık planın çok üstündeyse uyarı ve "Onayla · Set bitti";
  *   "Düzelt" önerilen ağırlığa döner. Engellemez.
  * - Devrede istasyon geçişi panelin üst kenarında ince çubuk olarak sayar.
+ * - "Hareketi geç ›" üst satırın sağında (§2.6): başparmak erişiminde, başlıktaki "Değiştir"den uzakta;
+ *   tek dokunuş, hareket sona alınır.
  */
 export function EntryPanel({
   row,
@@ -83,6 +85,7 @@ export function EntryPanel({
   onStartTimer,
   onStopTimer,
   onCancelTimer,
+  onSkip,
   onFinish,
 }: {
   row: WorkoutRow | null;
@@ -103,6 +106,8 @@ export function EntryPanel({
   onStartTimer: () => void;
   onStopTimer: () => void;
   onCancelTimer: () => void;
+  /** "Hareketi geç ›": şu anki hareket (grupta bütün grup) sona alınır. */
+  onSkip: () => void;
   onFinish: () => void;
 }) {
   if (!next || !row) {
@@ -178,6 +183,11 @@ export function EntryPanel({
         ) : running ? (
           <Button variant="ghost" className="-mr-2 h-11 shrink-0 px-3 text-muted-foreground" onClick={onCancelTimer}>
             Vazgeç
+          </Button>
+        ) : !frozen ? (
+          <Button variant="ghost" className="-mr-2 h-11 shrink-0 gap-0.5 px-2.5 text-primary hover:text-primary" onClick={onSkip}>
+            Hareketi geç
+            <CaretRight data-icon="inline-end" weight="bold" />
           </Button>
         ) : null}
       </div>

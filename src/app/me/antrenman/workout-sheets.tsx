@@ -18,16 +18,51 @@ import { Stepper } from '@/components/ui/stepper';
 import { formatKg, formatNumber } from '@/lib/format';
 import { EFFORT_LABELS, gridOf, type Effort, type LoadSpec, type TrackingType } from '@/lib/progression';
 import { SESSION_LIMITS } from '@/lib/schemas/session';
+import { cn } from '@/lib/utils';
+import { FINISH_REASON_LABELS, FINISH_REASONS, type FinishReason } from '@/lib/workout-flow';
 import { EFFORT_CHOICES, type EffortChoice, type WorkoutSummary } from '@/lib/workout-session';
 import { AmrapReps, EffortPrompt, type EffortPromptView } from './rest-panel';
 
 const BOTTOM = 'gap-0 rounded-t-2xl pb-[env(safe-area-inset-bottom)]';
 
+/** "Neden? (isteğe bağlı)": kapalı gelir; tek seçim, yeniden dokunmak kaldırır. "Ağrı" yalnız sağlık onayı varken. */
+function ReasonPicker({ pain, value, onChange }: { pain: boolean; value: FinishReason | null; onChange: (reason: FinishReason | null) => void }) {
+  const [open, setOpen] = useState(value !== null);
+  const reasons = FINISH_REASONS.filter((reason) => reason !== 'pain' || pain);
+  return (
+    <div className="flex flex-col gap-2">
+      <Button variant="ghost" className="-mx-2 h-11 justify-between px-2 font-normal text-muted-foreground" aria-expanded={open} aria-controls="finish-reasons" onClick={() => setOpen(!open)}>
+        Neden? (isteğe bağlı)
+        <CaretDown data-icon="inline-end" className={cn('transition-transform duration-160', open && 'rotate-180')} />
+      </Button>
+      {open ? (
+        <div id="finish-reasons" role="group" aria-label="Neden" className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-2">
+            {reasons.map((reason) => (
+              <Button
+                key={reason}
+                variant={value === reason ? 'default' : 'secondary'}
+                aria-pressed={value === reason}
+                className="h-11 px-4"
+                onClick={() => onChange(value === reason ? null : reason)}>
+                {FINISH_REASON_LABELS[reason]}
+              </Button>
+            ))}
+          </div>
+          {value === 'pain' ? <p className="text-[0.8125rem] text-muted-foreground">Ağrı yalnız sağlık kaydına yazılır; antrenman kaydında &quot;diğer&quot; görünür.</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /**
- * Basit bitiş (tasarım §2.7 a/b; tam sorular, rotasyon satırı ve neden Faz 6'da):
+ * Basit bitiş (tasarım §2.7 a/b; rotasyon satırı ve program soruları Faz 6'da):
  * - hepsi bitti: "Antrenman tamamlandı, bitirelim mi?" ve özet satırı; son hareketin dinlenmesi
- *   olmadığı için onun "nasıldı?" sorusu (ve AMRAP'la bittiyse "Kaç tekrar yaptın?") burada;
- * - erken: "Antrenmanı bitir?", yapılan/planlanan set ve yapılmayanlar;
+ *   olmadığı için onun "nasıldı?" sorusu (ve AMRAP'la bittiyse "Kaç tekrar yaptın?") burada. Geçilen
+ *   hareket kaldıysa "1 hareket geçildi: Plank" [Geçileni yap];
+ * - erken: "Antrenmanı bitir?", yapılan/planlanan set ve yapılmayanlar (geçilenler "geçildi");
+ * - yapılmayan varsa kapalı "Neden? (isteğe bağlı)": neden antrenman ortasında sorulmaz, yalnız burada;
  * - hiç set yok: dosya ilk sette oluştuğu için silinecek bir şey de yok; "Antrenmanı iptal et".
  * Yıkıcı işlem yorgun başparmağın düştüğü yerde durmaz: silme bu sheet'te yok.
  */
@@ -38,8 +73,10 @@ export function FinishSheet({
   busy,
   effort,
   amrap,
+  pain,
   onEffort,
   onAmrap,
+  onDoSkipped,
   onFinish,
   onCancelWorkout,
 }: {
@@ -51,18 +88,25 @@ export function FinishSheet({
   effort: EffortPromptView | null;
   /** Son set AMRAP'sa yaptığı tekrar. */
   amrap: { reps: number } | null;
+  /** Sağlık onayı: "Ağrı" nedeni. */
+  pain: boolean;
   onEffort: (entryId: string, effort: EffortChoice) => void;
   onAmrap: (reps: number) => void;
-  onFinish: () => void;
+  /** "Geçileni yap": ilk geçilen hareket şimdi. */
+  onDoSkipped: () => void;
+  onFinish: (reason: FinishReason | null) => void;
   onCancelWorkout: () => void;
 }) {
   const none = summary.sets === 0;
-  const all = !none && summary.remaining.length === 0;
+  const all = !none && summary.allDone;
+  const skipped = summary.remaining.filter((item) => item.skipped);
+  const [reason, setReason] = useState<FinishReason | null>(null);
   // Odak birincil eylemde (zorluk düğmeleri önce gelse de).
   const primary = useRef<HTMLButtonElement>(null);
+  const asks = !none && summary.remaining.length > 0;
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" showCloseButton={false} className={BOTTOM} initialFocus={primary}>
+    <Sheet open={open} onOpenChange={onOpenChange} onOpenChangeComplete={(next) => (next ? undefined : setReason(null))}>
+      <SheetContent side="bottom" showCloseButton={false} className={cn(BOTTOM, 'max-h-[calc(100dvh-max(1rem,env(safe-area-inset-top)))]')} initialFocus={primary}>
         <SheetHeader className="gap-1.5 pt-5">
           {all ? <CheckCircle className="mb-1 size-10 text-primary" /> : null}
           <SheetTitle className="text-lg font-semibold">
@@ -75,26 +119,37 @@ export function FinishSheet({
                 ? `${summary.exercises} hareket · ${summary.sets} set · ${formatKg(Math.round(summary.volumeKg))} · ${summary.minutes} dk`
                 : `${summary.doneSets}/${summary.plannedSets} set yapıldı. Yapılmayanlar:`}
           </SheetDescription>
+        </SheetHeader>
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-4">
           {!none && !all ? (
-            <ul className="mt-1 flex flex-col gap-1 text-sm tabular-nums">
+            <ul className="flex flex-col gap-1 text-sm tabular-nums">
               {summary.remaining.map((item) => (
                 <li key={item.rowId} className="flex justify-between gap-3">
                   <span className="min-w-0 truncate">{item.title}</span>
-                  <span className="shrink-0 text-muted-foreground">
-                    {item.done}/{item.planned} set
-                  </span>
+                  <span className="shrink-0 text-muted-foreground">{item.skipped ? 'geçildi' : `${item.done}/${item.planned} set`}</span>
                 </li>
               ))}
             </ul>
           ) : null}
-        </SheetHeader>
-        {all && (amrap || effort) ? (
-          <div className="flex flex-col gap-1 border-t px-4 pt-2">
-            {amrap ? <AmrapReps reps={amrap.reps} onChange={onAmrap} /> : null}
-            {effort ? <EffortPrompt view={effort} onAnswer={onEffort} /> : null}
-          </div>
-        ) : null}
-        <SheetFooter className="pt-2">
+          {all && skipped.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm">
+                {skipped.length} hareket geçildi: <span className="font-medium">{skipped.map((item) => item.title).join(', ')}</span>
+              </p>
+              <Button variant="outline" className="h-11 w-full" onClick={onDoSkipped}>
+                Geçileni yap
+              </Button>
+            </div>
+          ) : null}
+          {asks ? <ReasonPicker pain={pain} value={reason} onChange={setReason} /> : null}
+          {all && (amrap || effort) ? (
+            <div className="flex flex-col gap-1 border-t pt-2">
+              {amrap ? <AmrapReps reps={amrap.reps} onChange={onAmrap} /> : null}
+              {effort ? <EffortPrompt view={effort} onAnswer={onEffort} /> : null}
+            </div>
+          ) : null}
+        </div>
+        <SheetFooter className="pt-3">
           {none ? (
             <>
               <Button ref={primary} size="lg" className="h-14 w-full text-base" onClick={() => onOpenChange(false)}>
@@ -106,12 +161,12 @@ export function FinishSheet({
             </>
           ) : (
             <>
-              <Button ref={primary} size="lg" className="h-14 w-full text-base" disabled={busy} onClick={onFinish}>
+              <Button ref={primary} size="lg" className="h-14 w-full text-base" disabled={busy} onClick={() => onFinish(asks ? reason : null)}>
                 {busy ? <Spinner data-icon="inline-start" /> : null}
                 Bitir
               </Button>
               <Button variant="outline" className="h-11 w-full" onClick={() => onOpenChange(false)}>
-                {all ? 'Devam et' : 'Kalanlara dön'}
+                {all ? 'Devam et (set ya da hareket ekle)' : 'Kalanlara dön'}
               </Button>
             </>
           )}

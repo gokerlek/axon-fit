@@ -1,10 +1,22 @@
+import type { AlternativeCandidate } from './alternatives.ts';
 import { loadSpecFor, type DeviceLoadSettings } from './device-loads.ts';
 import { currentPhaseOf, nextDayId, weekProgress } from './program-plan.ts';
 import { planSession, warmupSets, type LoadSpec, type ProgressionRule, type SessionPlan, type TrackingType } from './progression.ts';
 import type { Program } from './schemas/program.ts';
 import type { SessionDoc, SessionEntry, SessionIndex, SessionIndexRow } from './schemas/session.ts';
 import { exerciseHistory } from './session-results.ts';
-import { effectiveDeviceId, firstForMuscleRowIds, planInputFor, type PlanExercise, type TemplateBlock, type TemplateBody } from './template-plan.ts';
+import {
+  DEFAULT_REST_SECONDS,
+  DEFAULT_SETS,
+  defaultSets,
+  effectiveDeviceId,
+  firstForMuscleRowIds,
+  planInputFor,
+  type PlanExercise,
+  type TemplateBlock,
+  type TemplateBody,
+  type TemplateRow,
+} from './template-plan.ts';
 import type { PreviousSet } from './workout-cursor.ts';
 
 /**
@@ -24,13 +36,17 @@ import type { PreviousSet } from './workout-cursor.ts';
  *   grubunun gündeki ilk hareketi, en hafif çalışma seti 40 kg ve üstü (piramitte ilk basamak).
  * - Bugün'ün sayıları index'ten: "bu hafta x/3" (`weekProgress`), yarım antrenman, bitmiş
  *   antrenmanların bugünkü suyu.
+ * - Muadil ("Değiştir") ve eklenen hareket ("Hareket ekle", §2.6) aynı motorla, kendi geçmişiyle
+ *   planlanır (`swapRowFor`, `addedRowFor`): muadil satırın set düzenini (hedefleri) ve kuralını
+ *   alır, kendi cihazıyla; kayıt türü farklıysa (tekrar ↔ süre) kendi varsayılan hedefiyle aynı sayıda
+ *   set. Eklenen hareket egzersizin varsayılan setleri ve dinlenmesiyle tek hareketlik bloktur.
  */
 
 /** Motorun okuduğu son bitmiş antrenman sayısı (tasarım §4.1: "son ~8 seans dosyası"). */
 export const HISTORY_SESSIONS = 8;
 
-/** Plan için egzersiz alanları: kural, yük, kaslar, başlık. */
-export type WorkoutExercise = PlanExercise & { loadStepKg: number; minLoadKg: number };
+/** Plan için egzersiz alanları: kural, yük, kaslar, başlık; muadil sıralaması için kalıp, tutuş, PT'nin sabitledikleri. */
+export type WorkoutExercise = PlanExercise & { loadStepKg: number; minLoadKg: number } & Pick<AlternativeCandidate, 'pattern' | 'grip' | 'alternatives'>;
 export type WorkoutDevice = DeviceLoadSettings & { id: string };
 
 /** Isınma seti: ağırlık ve tekrar (hacme ve rekora girmez). */
@@ -69,6 +85,20 @@ export type WorkoutDay = {
   blocks: TemplateBlock[];
   rows: Record<string, WorkoutRow>;
 };
+
+/**
+ * Programda olmayan satır: muadil (anahtarı yerini aldığı satır) ya da eklenen hareket (anahtarı
+ * hareket kaydının kimliği). Satırın planı, şablon satırı (hedefler) ve eklenende blok dinlenmesi.
+ * Telefon başlangıçtaki gün planının yanında saklar; imleç günün etkin hâlini bunlarla kurar
+ * (`workout-flow.ts` → `effectiveDay`).
+ */
+export type ExtraRow = { exerciseId: string; row: WorkoutRow; template: TemplateRow; restSeconds?: number };
+export type ExtraRows = Record<string, ExtraRow>;
+
+/** `ExtraRows` anahtarı: satır (ya da eklenen hareket) ve egzersiz. */
+export function extraKey(rowId: string, exerciseId: string): string {
+  return `${rowId}:${exerciseId}`;
+}
 
 function time(iso: string | undefined): number {
   const at = iso ? Date.parse(iso) : Number.NaN;
@@ -162,6 +192,101 @@ export function warmupsFor(
   }).map((set) => ({ kg: set.weightKg, reps: set.target }));
 }
 
+/**
+ * Satırın planı: satırın kuralı ve setleri (`planInputFor`), cihazın ızgarası (`loadSpecFor`), geçmiş
+ * yalnız aynı egzersiz ve cihazla; "Önceki", ısınma ve ayar notu. `history` bitmiş antrenmanlar.
+ */
+export function workoutRowFor(input: {
+  row: TemplateRow;
+  blockId: string;
+  exercise: WorkoutExercise;
+  devices: ReadonlyMap<string, WorkoutDevice>;
+  history: readonly SessionDoc[];
+  firstForMuscle: boolean;
+}): WorkoutRow {
+  const { row, exercise } = input;
+  const deviceId = effectiveDeviceId(row, exercise, new Set(input.devices.keys()));
+  const device = deviceId ? input.devices.get(deviceId) : undefined;
+  const spec = loadSpecFor(exercise, device);
+  const { rule, sets } = planInputFor(row, exercise);
+  const results = exerciseHistory(input.history, { exerciseId: row.exerciseId, deviceId });
+  const plan = planSession({ spec, rule, sets, history: results, rowId: row.id });
+  const warmups = warmupsFor(exercise, spec, plan, input.firstForMuscle);
+  const setupNote = setupNoteOf(input.history, { rowId: row.id, exerciseId: row.exerciseId, deviceId });
+  return {
+    rowId: row.id,
+    blockId: input.blockId,
+    exerciseId: row.exerciseId,
+    title: exercise.title,
+    trackingType: exercise.trackingType,
+    ...(deviceId ? { deviceId } : {}),
+    spec,
+    rule,
+    plan,
+    lastTime: lastTimeOf(input.history, { rowId: row.id, exerciseId: row.exerciseId, deviceId }),
+    ...(row.note ? { note: row.note } : {}),
+    ...(warmups.length > 0 ? { warmups } : {}),
+    ...(setupNote ? { setupNote } : {}),
+  };
+}
+
+/** Tekrar ve süre birbirinin hedefi olamaz (8–12 tekrar ≠ 8–12 sn). */
+function valueKind(trackingType: TrackingType): 'time' | 'count' {
+  return trackingType === 'duration' ? 'time' : 'count';
+}
+
+/**
+ * Muadilin satırı ("Değiştir", §2.6): yerini aldığı satırın kimliği, bloğu, set düzeni ve kuralı;
+ * egzersiz ve cihaz muadilin kendisi (PT'nin cihaz seçimi ve notu asıl harekete aitti). Kayıt türü
+ * farklıysa (tekrar ↔ süre) muadilin varsayılan hedefiyle aynı sayıda set. Plan muadilin kendi
+ * geçmişinden.
+ */
+export function swapRowFor(input: {
+  row: TemplateRow;
+  blockId: string;
+  original: Pick<PlanExercise, 'trackingType'>;
+  exercise: WorkoutExercise;
+  devices: ReadonlyMap<string, WorkoutDevice>;
+  history: readonly SessionDoc[];
+  firstForMuscle: boolean;
+}): ExtraRow {
+  const { row, exercise } = input;
+  const sets = valueKind(input.original.trackingType) === valueKind(exercise.trackingType) ? row.sets : defaultSets(exercise, row.sets.length);
+  const template: TemplateRow = { id: row.id, exerciseId: exercise.id, sets, ...(row.rule ? { rule: row.rule } : {}) };
+  return {
+    exerciseId: exercise.id,
+    row: workoutRowFor({ row: template, blockId: input.blockId, exercise, devices: input.devices, history: input.history, firstForMuscle: input.firstForMuscle }),
+    template,
+  };
+}
+
+/**
+ * Eklenen hareketin satırı ("Hareket ekle", §2.6): yalnız bu antrenmana; egzersizin varsayılan setleri
+ * (`setCount` verilmezse türüne göre) ve dinlenmesi. `key` hareket kaydının kimliğidir (satır ve blok
+ * yerine); sunucu kaydı bilmiyorsa egzersizin kimliği, telefon kaydı açınca değiştirir (`rekeyExtra`).
+ */
+export function addedRowFor(input: {
+  key: string;
+  exercise: WorkoutExercise;
+  devices: ReadonlyMap<string, WorkoutDevice>;
+  history: readonly SessionDoc[];
+  setCount?: number | undefined;
+}): ExtraRow {
+  const { exercise } = input;
+  const template: TemplateRow = { id: input.key, exerciseId: exercise.id, sets: defaultSets(exercise, input.setCount ?? DEFAULT_SETS[exercise.category]) };
+  return {
+    exerciseId: exercise.id,
+    row: workoutRowFor({ row: template, blockId: input.key, exercise, devices: input.devices, history: input.history, firstForMuscle: false }),
+    template,
+    restSeconds: DEFAULT_REST_SECONDS[exercise.category],
+  };
+}
+
+/** Eklenen hareketin satırı yeni anahtarla (hareket kaydının kimliği). */
+export function rekeyExtra(extra: ExtraRow, key: string): ExtraRow {
+  return { ...extra, row: { ...extra.row, rowId: key, blockId: key }, template: { ...extra.template, id: key } };
+}
+
 /** İstenen gün (programda yoksa) ya da rotasyonda sıradaki gün; program boşsa null. */
 export function resolveDay(program: Program, dayId?: string | null) {
   const planned = nextDayId(program);
@@ -189,7 +314,6 @@ export function buildWorkoutDay(input: {
   const found = resolveDay(input.program, input.dayId);
   if (!found) return null;
   const { phase, day } = found;
-  const deviceIds = new Set(input.devices.keys());
   const history = input.history.filter((doc) => doc.status === 'finished');
 
   const blocks: TemplateBlock[] = day.blocks.flatMap((block) => {
@@ -201,29 +325,7 @@ export function buildWorkoutDay(input: {
   for (const block of blocks) {
     for (const row of block.rows) {
       const exercise = input.exercises.get(row.exerciseId) as WorkoutExercise;
-      const deviceId = effectiveDeviceId(row, exercise, deviceIds);
-      const device = deviceId ? input.devices.get(deviceId) : undefined;
-      const spec = loadSpecFor(exercise, device);
-      const { rule, sets } = planInputFor(row, exercise);
-      const results = exerciseHistory(history, { exerciseId: row.exerciseId, deviceId });
-      const plan = planSession({ spec, rule, sets, history: results, rowId: row.id });
-      const warmups = warmupsFor(exercise, spec, plan, first.has(row.id));
-      const setupNote = setupNoteOf(history, { rowId: row.id, exerciseId: row.exerciseId, deviceId });
-      rows[row.id] = {
-        rowId: row.id,
-        blockId: block.id,
-        exerciseId: row.exerciseId,
-        title: exercise.title,
-        trackingType: exercise.trackingType,
-        ...(deviceId ? { deviceId } : {}),
-        spec,
-        rule,
-        plan,
-        lastTime: lastTimeOf(history, { rowId: row.id, exerciseId: row.exerciseId, deviceId }),
-        ...(row.note ? { note: row.note } : {}),
-        ...(warmups.length > 0 ? { warmups } : {}),
-        ...(setupNote ? { setupNote } : {}),
-      };
+      rows[row.id] = workoutRowFor({ row, blockId: block.id, exercise, devices: input.devices, history, firstForMuscle: first.has(row.id) });
     }
   }
   return {

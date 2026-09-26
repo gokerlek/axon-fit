@@ -7,7 +7,17 @@ import type { ClientSession } from './session-core.ts';
 import { fakeSessionRepo, type FakeSessionRepo } from './testing/fake-session-repo.ts';
 import { at, DAY_A, DAY_B, programFile, sessionDoc, sessionEntry, workingSet } from './testing/session-fixtures.ts';
 import { DEVICES, EXERCISES } from './testing/workout-fixtures.ts';
-import { waterRoute, workoutRoute, type WorkoutResponse, type WorkoutRouteDeps } from './workout-routes.ts';
+import {
+  alternativesRoute,
+  exercisesRoute,
+  waterRoute,
+  workoutRoute,
+  type AddedRowResponse,
+  type AlternativesResponse,
+  type LibraryResponse,
+  type WorkoutResponse,
+  type WorkoutRouteDeps,
+} from './workout-routes.ts';
 
 const ORIGIN = 'https://pt.example.com';
 const CLIENT: Client = {
@@ -35,6 +45,7 @@ function setup(files: Record<string, unknown> = { 'program.json': programFile() 
     now: () => NOW,
     log: (message) => logs.push(message),
     catalog: async () => ({ exercises: [...EXERCISES.values()], devices: [...DEVICES.values()] }),
+    familyOf: (muscle) => muscle,
   };
   return { gh, deps, logs };
 }
@@ -128,6 +139,66 @@ describe('GET /api/me/workout', () => {
     const limited = await workoutRoute(deps, null);
     assert.equal(limited.status, 429);
     assert.equal(limited.headers?.['Retry-After'], '30');
+  });
+});
+
+describe('muadil ve eklenen hareketler', () => {
+  test('yarım antrenmandaki muadil ve eklenen hareketin planları döner; sağlık onayı yoksa "Ağrı" yok', async () => {
+    const active = sessionDoc({
+      id: 's_cccccccc',
+      startedAt: '2026-09-26T15:00:00.000Z',
+      entries: [
+        sessionEntry('e_swapxx', { swappedFrom: 'r_aaaaaa', exerciseId: 'dumbbell-press', title: 'Dumbbell Press', deviceId: 'dambil-seti' }),
+        sessionEntry('e_addedx', { added: true, plannedSets: 2, exerciseId: 'push-up', title: 'Şınav' }),
+      ],
+    });
+    const { deps } = setup({ 'program.json': programFile(), 'sessions/s_cccccccc.json': active });
+    const data = body(await workoutRoute(deps, null));
+    assert.deepEqual(Object.keys(data.extras).sort(), ['e_addedx:push-up', 'r_aaaaaa:dumbbell-press']);
+    const swap = data.extras['r_aaaaaa:dumbbell-press'];
+    assert.deepEqual([swap?.row.rowId, swap?.row.blockId, swap?.row.title, swap?.template.sets.length], ['r_aaaaaa', 'b_aaaaaa', 'Dumbbell Press', 3]);
+    const added = data.extras['e_addedx:push-up'];
+    assert.deepEqual([added?.row.rowId, added?.template.id, added?.template.sets.length, added?.restSeconds], ['e_addedx', 'e_addedx', 2, 120]);
+    assert.deepEqual(data.health, { pain: false });
+    assert.deepEqual(body(await workoutRoute(setup().deps, null)).extras, {});
+  });
+
+  test('"Değiştir": muadiller ekipmana göre (vücut ağırlığı önce), satırın set düzeniyle; bugünün hareketleri yok', async () => {
+    const { deps } = setup();
+    const result = await alternativesRoute(deps, DAY_A, 'r_aaaaaa');
+    assert.equal(result.status, 200);
+    const data = result.body as unknown as AlternativesResponse;
+    assert.deepEqual(
+      data.groups.map((group) => [group.label, group.options.map((option) => option.exerciseId)]),
+      [
+        ['Vücut ağırlığı', ['push-up']],
+        ['Dambıl', ['dumbbell-press']],
+      ],
+    );
+    const option = data.groups[1]?.options[0];
+    assert.deepEqual([option?.extra.row.rowId, option?.extra.row.deviceId, option?.extra.template.sets], ['r_aaaaaa', 'dambil-seti', [{ min: 8, max: 10 }, { min: 8, max: 10 }, { min: 8, max: 10 }]]);
+  });
+
+  test('"Değiştir": istek geçersizse 400, satır programda yoksa 404, oturum yoksa 401', async () => {
+    const { deps } = setup();
+    assert.equal((await alternativesRoute(deps, DAY_A, null)).status, 400);
+    assert.equal((await alternativesRoute(deps, '../x', 'r_aaaaaa')).status, 400);
+    assert.equal((await alternativesRoute(deps, DAY_A, 'r_zzzzzz')).status, 404);
+    assert.equal((await alternativesRoute(deps, DAY_B, 'r_aaaaaa')).status, 404);
+    assert.equal((await alternativesRoute(setup(undefined, { session: null }).deps, DAY_A, 'r_aaaaaa')).status, 401);
+  });
+
+  test('"Hareket ekle": kütüphane ada göre; seçilenin varsayılan setleri ve dinlenmesiyle planı', async () => {
+    const { deps } = setup();
+    const library = (await exercisesRoute(deps, null)).body as unknown as LibraryResponse;
+    assert.deepEqual(library.exercises.map((item) => item.title), ['Bench Press', 'Crunch', 'Dumbbell Press', 'Goblet Squat', 'Plank', 'Şınav']);
+    const added = await exercisesRoute(deps, 'push-up');
+    assert.equal(added.status, 200);
+    const { extra } = added.body as unknown as AddedRowResponse;
+    assert.deepEqual([extra.exerciseId, extra.row.rowId, extra.template.sets.length, extra.restSeconds, extra.row.plan.reason], ['push-up', 'push-up', 3, 120, 'first_time']);
+    assert.equal((await exercisesRoute(deps, 'yok-boyle')).status, 404);
+    assert.equal((await exercisesRoute(deps, '../x')).status, 400);
+    assert.equal((await exercisesRoute(setup(undefined, { session: null }).deps, null)).status, 401);
   });
 });
 

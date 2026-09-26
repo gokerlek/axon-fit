@@ -4,7 +4,7 @@ import { SESSION_ID_LENGTHS, SESSION_LIMITS, type SessionDoc, type SessionEntry,
 import { volumeOf, waterOf, workingSetCount } from './session-index.ts';
 import { normalizeSession, withDeletions } from './session-merge.ts';
 import { toSetResults } from './session-results.ts';
-import { randomId, type TemplateRow } from './template-plan.ts';
+import { randomId, ROW_ID_PATTERN, type TemplateRow } from './template-plan.ts';
 import { entryForRow, entryStatusOf, prefillSet, workoutCursor, type PreviousSet, type Stamp, type WorkoutCursor } from './workout-cursor.ts';
 import { dayBody, type WorkoutDay, type WorkoutRow } from './workout-plan.ts';
 
@@ -41,6 +41,11 @@ function takenIds(doc: SessionDoc): Set<string> {
     for (const set of entry.sets) ids.add(set.id);
   }
   return ids;
+}
+
+/** Yeni hareket kaydı kimliği (belgedeki ve silinmiş kimliklerle çakışmaz): "Değiştir", "Hareket ekle". */
+export function newEntryId(doc: SessionDoc, random?: Random): string {
+  return randomId('e', SESSION_ID_LENGTHS.e, takenIds(doc), random);
 }
 
 /** Yeni antrenman (telefonda; dosya ilk setle oluşur, tasarım §4.3). `today`: uygulamanın saat dilimindeki gün. */
@@ -190,6 +195,8 @@ function entryFor(day: WorkoutDay, doc: SessionDoc, rowId: string, stamp: Stamp,
   if (!row) throw new Error('Satır bu günün planında yok.');
   const existing = entryForRow(doc.entries, rowId);
   if (existing) return existing;
+  // Eklenen hareketin kaydı eklenirken açılır; satırı kayıtsız kalamaz (plan satırı değildir).
+  if (!ROW_ID_PATTERN.test(rowId)) throw new Error('Eklenen hareketin kaydı yok.');
   const id = randomId('e', SESSION_ID_LENGTHS.e, taken, random);
   taken.add(id);
   return {
@@ -206,6 +213,26 @@ function entryFor(day: WorkoutDay, doc: SessionDoc, rowId: string, stamp: Stamp,
     by: stamp.by,
     sets: [],
   };
+}
+
+/**
+ * Günün her satırının kaydı (henüz yoksa boş, `pending`; geçen seferki ayar notu taşınır). Yapılış sırası
+ * (`order`) hareket kimlikleriyle yazıldığı için "geç", "şimdi yap" ve "hareket ekle" önce bunu ister:
+ * kaydı olmayan hareket sırada yer tutamaz. Hepsi varsa aynı belge.
+ */
+export function ensureEntries(day: WorkoutDay, doc: SessionDoc, stamp: Stamp, random?: Random): SessionDoc {
+  const taken = takenIds(doc);
+  const created: SessionEntry[] = [];
+  const known = { ...doc, entries: doc.entries };
+  for (const block of day.blocks) {
+    for (const row of block.rows) {
+      if (!day.rows[row.id] || entryForRow(known.entries, row.id)) continue;
+      const entry = entryFor(day, known, row.id, stamp, taken, random);
+      created.push(entry);
+      known.entries = [...known.entries, entry];
+    }
+  }
+  return created.length === 0 ? doc : normalizeSession(known);
 }
 
 /** Kaydı belgeye yazar (yeniyse ekler) ve belgeyi kanonik biçime döndürür. */
@@ -483,8 +510,10 @@ export type WorkoutSummary = {
   water: number;
   doneSets: number;
   plannedSets: number;
-  /** Yapılmayanlar: planlanan seti tamamlanmamış hareketler. */
-  remaining: { rowId: string; title: string; done: number; planned: number }[];
+  /** Geçilmemiş her hareketin planlı setleri yapıldı ("Antrenman tamamlandı, bitirelim mi?"). */
+  allDone: boolean;
+  /** Yapılmayanlar: planlanan seti tamamlanmamış hareketler; geçilenler (Geçilenler'deki) işaretli. */
+  remaining: { rowId: string; title: string; done: number; planned: number; skipped: boolean }[];
 };
 
 export function workoutSummary(day: WorkoutDay, doc: SessionDoc, now: Date): WorkoutSummary {
@@ -492,11 +521,12 @@ export function workoutSummary(day: WorkoutDay, doc: SessionDoc, now: Date): Wor
   const remaining = cursor.units.flatMap((unit) =>
     unit.members.flatMap((member) =>
       member.rowId && member.done < member.planned
-        ? [{ rowId: member.rowId, title: day.rows[member.rowId]?.title ?? '', done: member.done, planned: member.planned }]
+        ? [{ rowId: member.rowId, title: day.rows[member.rowId]?.title ?? '', done: member.done, planned: member.planned, skipped: member.skipped }]
         : [],
     ),
   );
   return {
+    allDone: cursor.allDone,
     exercises: doc.entries.filter((entry) => entry.sets.some((set) => set.type === 'working')).length,
     sets: workingSetCount(doc),
     volumeKg: volumeOf(doc),

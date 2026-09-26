@@ -18,6 +18,7 @@ import { waterOf, workingSetCount } from '@/lib/session-index';
 import { randomId } from '@/lib/template-plan';
 import { WATER_BATCH_MS, WATER_LIMITS } from '@/lib/water';
 import { parseLocalWorkout } from '@/lib/workout-outbox';
+import { effectiveDay } from '@/lib/workout-flow';
 import type { WorkoutDay } from '@/lib/workout-plan';
 import type { WorkoutResponse } from '@/lib/workout-routes';
 import { cursorOf } from '@/lib/workout-session';
@@ -111,10 +112,11 @@ function ResumeCard({ progress, timeZone, clientWater }: { progress: InProgress;
 export function TodayWorkout({ clientId, children }: { clientId: string; children: React.ReactNode }) {
   const local = useLocalWorkout(clientId);
   const { data } = useWorkoutOverview(clientId);
+  // Sayılar günün etkin planından: muadiller ve eklenen hareketler dahil (`effectiveDay`).
   const progress: InProgress | null = local
-    ? { doc: local.doc, plan: local.plan }
+    ? { doc: local.doc, plan: effectiveDay(local.plan, local.doc, local.extras) }
     : data?.active
-      ? { doc: data.active, plan: data.day && data.day.dayId === data.active.program?.dayId ? data.day : null }
+      ? { doc: data.active, plan: data.day && data.day.dayId === data.active.program?.dayId ? effectiveDay(data.day, data.active, data.extras ?? {}) : null }
       : null;
   if (!progress) return <>{children}</>;
   const timeZone = data?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;

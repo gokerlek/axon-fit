@@ -3,6 +3,7 @@ import { revalidateTag } from 'next/cache';
 import { readAppConfig } from './config';
 import { listDevices } from './devices';
 import { listExercises } from './exercises';
+import { familyOf } from './muscles';
 import { clientRepoName, sessionWriter } from './github/client';
 import { commitFiles, listFolder, readBlobJson, readJson, repoHead, writeJson } from './github/files';
 import { SESSIONS_DIR } from './schemas/session';
@@ -46,8 +47,9 @@ export async function sessionRouteDeps(): Promise<SessionRouteDeps> {
 }
 
 /**
- * Antrenman ekranının gün planı ve su uçları (`workout-routes.ts`): aynı ortam + egzersiz ve cihaz
- * kataloğu (hazır kütüphane + PT'nin kayıtları; ağırlık ızgarası cihazdan).
+ * Antrenman ekranının gün planı, muadil, kütüphane ve su uçları (`workout-routes.ts`): aynı ortam +
+ * egzersiz ve cihaz kataloğu (hazır kütüphane + PT'nin kayıtları; ağırlık ızgarası cihazdan) ve kas
+ * aileleri (muadil sıralaması).
  */
 export async function workoutRouteDeps(): Promise<WorkoutRouteDeps> {
   return {
@@ -56,5 +58,6 @@ export async function workoutRouteDeps(): Promise<WorkoutRouteDeps> {
       const [exercises, devices] = await Promise.all([listExercises(), listDevices()]);
       return { exercises, devices };
     },
+    familyOf,
   };
 }

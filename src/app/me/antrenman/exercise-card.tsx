@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useIsPresent, useReducedMotion } from 'motion/react';
-import { ArrowBendUpRight, ArrowDown, ArrowUp, Check, Equals, NotePencil, Play, Plus, Sparkle, Wrench } from '@phosphor-icons/react';
+import { ArrowBendUpRight, ArrowDown, ArrowsLeftRight, ArrowUp, Check, Equals, NotePencil, Play, Plus, Sparkle, Wrench } from '@phosphor-icons/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -72,16 +72,27 @@ const MEMBER_STATUS_TEXT: Record<GroupMemberStatus, string> = {
   skipped: 'geçildi',
 };
 
+/** "Değiştir" (§2.6): başlığın sağında; set kaydedilmiş harekette yok ("Hareketi geç ›" var). */
+function SwapButton({ title, onSwap, className }: { title: string; onSwap: () => void; className?: string }) {
+  return (
+    <Button variant="ghost" aria-label={`${title}: değiştir`} className={cn('h-11 shrink-0 gap-1.5 px-2.5 text-primary hover:text-primary', className)} onClick={onSwap}>
+      <ArrowsLeftRight data-icon="inline-start" />
+      Değiştir
+    </Button>
+  );
+}
+
 /** Grubun başı (tasarım §2.4 "Gruplar"): "Süperset · Tur 2/3" ve üyeler; şu anki üye vurgulu. */
-function GroupHeader({ group }: { group: GroupView }) {
+function GroupHeader({ group, swap }: { group: GroupView; swap: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1 px-2 pt-2.5 pb-1">
-      <p className="flex h-6 items-center gap-2 px-1 text-[0.8125rem] text-muted-foreground tabular-nums">
+      <div className={cn('flex items-center gap-2 px-1 text-[0.8125rem] text-muted-foreground tabular-nums', swap ? '-my-2.5 min-h-11' : 'h-6')}>
         <Badge className="bg-primary/15 text-primary">{group.label}</Badge>
-        <span>
+        <span className="flex-1">
           Tur {group.round + 1}/{group.rounds}
         </span>
-      </p>
+        {swap}
+      </div>
       <ul className="flex flex-col">
         {group.members.map((member) => (
           <li
@@ -181,6 +192,9 @@ function SetupNoteForm({ note, onSave }: { note: string | undefined; onSave: (te
  *
  * Grupta (süperset, devre, kompleks) başlığın yerinde tur ve üyeler; altta şu anki üyenin çipleri ve
  * tablosu. Üye değişince bu kısım 12 px kayarak gelir (`WORKOUT.groupSlidePx`).
+ *
+ * "Değiştir" (§2.6) başlığın sağında (grupta tur satırında, şu anki üye için): yalnız hareketin çalışma
+ * seti kaydedilmemişken.
  */
 export function ExerciseCard({
   row,
@@ -194,6 +208,7 @@ export function ExerciseCard({
   onEditSet,
   onToggleWarmup,
   onSetupNote,
+  onSwap,
 }: {
   row: WorkoutRow;
   group: GroupView | null;
@@ -209,13 +224,16 @@ export function ExerciseCard({
   onEditSet: (setId: string) => void;
   onToggleWarmup: (index: number, done: boolean) => void;
   onSetupNote: (text: string) => void;
+  /** "Değiştir" açıksa muadil sheet'ini açar; kapalıysa null. */
+  onSwap: (() => void) | null;
 }) {
   const [open, setOpen] = useState<'reason' | 'note' | 'setup' | null>(null);
   const [warmOpen, setWarmOpen] = useState(false);
-  // Grupta üye değişince açık çip kapanır (her üyenin kendi notu var).
-  const [shownRow, setShownRow] = useState(row.rowId);
-  if (shownRow !== row.rowId) {
-    setShownRow(row.rowId);
+  // Grupta üye değişince (ya da hareket muadille değişince) açık çip kapanır (her hareketin kendi notu var).
+  const shownKey = `${row.rowId}:${row.exerciseId}`;
+  const [shownRow, setShownRow] = useState(shownKey);
+  if (shownRow !== shownKey) {
+    setShownRow(shownKey);
     setOpen(null);
     setWarmOpen(false);
   }
@@ -239,21 +257,24 @@ export function ExerciseCard({
 
   return (
     <Card className="gap-0 py-0">
-      {group ? <GroupHeader group={group} /> : null}
+      {group ? <GroupHeader group={group} swap={onSwap ? <SwapButton title={row.title} onSwap={onSwap} className="-mr-1.5" /> : null} /> : null}
       <div className="relative">
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.div
-            key={row.rowId}
+            key={shownKey}
             initial={{ opacity: 0, x: WORKOUT.groupSlidePx }}
             animate={{ opacity: 1, x: 0, transition: tween(DURATION.base) }}
             exit={{ opacity: 0, x: -WORKOUT.groupSlidePx, transition: tween(DURATION.fast, EASE.exit) }}>
             <div className={cn('flex flex-col gap-1.5 px-3 pb-2', group ? 'pt-1' : 'pt-3')}>
-              <h2
-                id={present ? 'exercise-title' : undefined}
-                tabIndex={-1}
-                className={cn(group ? 'sr-only' : 'line-clamp-2 font-heading text-[1.1875rem] leading-tight font-semibold outline-none')}>
-                {title}
-              </h2>
+              <div className={cn(!group && onSwap && '-my-1 flex min-h-11 items-center gap-2')}>
+                <h2
+                  id={present ? 'exercise-title' : undefined}
+                  tabIndex={-1}
+                  className={cn(group ? 'sr-only' : 'line-clamp-2 min-w-0 flex-1 font-heading text-[1.1875rem] leading-tight font-semibold outline-none')}>
+                  {title}
+                </h2>
+                {!group && onSwap ? <SwapButton title={row.title} onSwap={onSwap} className="-mr-2" /> : null}
+              </div>
               <div className="flex min-h-8 items-center gap-1.5 overflow-hidden">
                 <Chip open={open === 'reason'} onToggle={() => toggle('reason')} tone={UP.has(reason) ? 'up' : 'plain'} icon={<ReasonIcon reason={reason} />}>
                   {REASON_LABELS[reason] ?? ''}

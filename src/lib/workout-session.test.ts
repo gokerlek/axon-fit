@@ -15,10 +15,12 @@ import {
   easyShortcut,
   editSet,
   effortQuestions,
+  ensureEntries,
   elapsedText,
   findSet,
   logSet,
   logWarmup,
+  newEntryId,
   newSessionDoc,
   nextSet,
   nextText,
@@ -235,11 +237,29 @@ describe('antrenman belgesi: sonrası, su, özet', () => {
       water: 0,
       doneSets: 2,
       plannedSets: 5,
+      allDone: false,
       remaining: [
-        { rowId: 'r_aaaaaa', title: 'Bench Press', done: 2, planned: 3 },
-        { rowId: 'r_bbbbbb', title: 'Bench Press', done: 0, planned: 2 },
+        { rowId: 'r_aaaaaa', title: 'Bench Press', done: 2, planned: 3, skipped: false },
+        { rowId: 'r_bbbbbb', title: 'Bench Press', done: 0, planned: 2, skipped: false },
       ],
     });
+  });
+});
+
+describe('antrenman belgesi: satırların kayıtları', () => {
+  test('kaydı olmayan her satıra boş kayıt açılır (sıra kimliklerle yazılabilsin); hepsi varsa aynı belge', () => {
+    const day = workoutDay();
+    const doc = logNext(day, start(day), 1);
+    const ready = ensureEntries(day, doc, stamp(2), sequence());
+    assert.deepEqual(ready.entries.map((entry) => [entry.rowId, entry.status, entry.sets.length]), [
+      ['r_aaaaaa', 'partial', 1],
+      ['r_bbbbbb', 'pending', 0],
+    ]);
+    assert.equal(ensureEntries(day, ready, stamp(3)), ready);
+    assert.equal(v.safeParse(sessionDocSchema, ready).success, true);
+    const id = newEntryId(ready, sequence());
+    assert.match(id, /^e_[a-z0-9]{6}$/);
+    assert.equal(ready.entries.some((entry) => entry.id === id), false);
   });
 });
 
