@@ -109,6 +109,7 @@ export function fakeSessionRepo(initial: Record<string, unknown> = {}) {
       if (input.head.commit !== headId()) throw new GithubError('commit: kayıt sen çalışırken değişti.', 409);
       const files = new Map(snapshot());
       for (const file of input.files) files.set(file.path, entry(file.content));
+      for (const path of input.deletions ?? []) files.delete(path);
       const id = addCommit(files, input.message);
       return { commit: id, remaining };
     },
