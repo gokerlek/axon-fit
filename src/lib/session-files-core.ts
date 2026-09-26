@@ -61,6 +61,9 @@ export type SessionRepo = {
   log(message: string): void;
 };
 
+/** Yalnız okuyan taraf (onarılmış index): yazmayan çağıranlar (PT'nin Genel bakış özeti) bunu verir. */
+export type SessionReader = Pick<SessionRepo, 'head' | 'read' | 'readBlob' | 'listSessions' | 'log'>;
+
 export type SessionContext = { now: Date; timeZone: string };
 
 function isConflict(error: unknown): boolean {
@@ -81,7 +84,7 @@ function assertWritable(doc: SessionDoc): void {
 }
 
 /** Bozuk JSON (500) okunamayan dosya sayılır: null. Ağ ve yetki hataları yukarı çıkar. */
-async function readOrNull(repo: SessionRepo, path: string, ref: string | undefined): Promise<StoredJson | null> {
+async function readOrNull(repo: SessionReader, path: string, ref: string | undefined): Promise<StoredJson | null> {
   try {
     return await repo.read(path, ref);
   } catch (error) {
@@ -94,13 +97,13 @@ async function readOrNull(repo: SessionRepo, path: string, ref: string | undefin
 }
 
 /** Index türetilmiş: okunamıyorsa boş sayılır, satırlar dosyalardan kurulur. */
-async function readIndexFile(repo: SessionRepo, ref?: string): Promise<{ index: SessionIndex; dropped: number }> {
+async function readIndexFile(repo: SessionReader, ref?: string): Promise<{ index: SessionIndex; dropped: number }> {
   const file = await readOrNull(repo, SESSIONS_INDEX_PATH, ref);
   return parseSessionIndex(file?.content ?? null);
 }
 
 /** O commit'teki index, `sessions/` ağacıyla onarılmış. `known`: zaten okunmuş dosyalar (yeniden okunmaz). */
-async function repairedIndexAt(repo: SessionRepo, head: RepoHead, known: ReadonlyMap<string, unknown> = new Map()): Promise<RepairResult> {
+async function repairedIndexAt(repo: SessionReader, head: RepoHead, known: ReadonlyMap<string, unknown> = new Map()): Promise<RepairResult> {
   const [{ index, dropped }, files] = await Promise.all([readIndexFile(repo, head.commit), repo.listSessions(head.tree)]);
   const result = await repairIndex(index, files, async (file) => (known.has(file.path) ? known.get(file.path) : repo.readBlob(file.sha)));
   if (dropped > 0 || result.unreadable.length > 0) {
@@ -136,7 +139,7 @@ export async function readSession(repo: SessionRepo, id: string): Promise<ReadRe
 }
 
 /** Geçmiş listesi: onarılmış index (yazılmaz; onarım sonraki commit'e biner). */
-export async function readIndex(repo: SessionRepo): Promise<RepairResult> {
+export async function readIndex(repo: SessionReader): Promise<RepairResult> {
   return repairedIndexAt(repo, await repo.head());
 }
 

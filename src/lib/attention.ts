@@ -103,9 +103,13 @@ export type AttentionFacts = {
   access: AccessState;
   /** Kullanılmamış davetin son kullanma anı. */
   inviteExpiresAt?: string;
-  /** Geçerli antrenman günleri ve sayılmaya başladığı an (program, danışanın günleri, ilk giriş). */
+  /**
+   * Geçerli antrenman günleri ve sayılmaya başladığı an: programın kurulduğu, günlerin son değiştiği (PT'nin
+   * değişikliği, danışanın katmanı ya da katmanın kalkması), danışanın ilk girişi ve durumunun son değiştiği
+   * (duraklatılıp yeniden açılma) anların en yenisi.
+   */
   schedule: { weekdays: number[]; since: string } | null;
-  /** Antrenman yapılan günler (bitmiş ya da yarım), yakın geçmiş. */
+  /** Antrenman yapılan günler (bitmiş, yarım ya da hiç bitirilmemiş), yakın geçmiş. */
   sessionDays: string[];
   stalls: StallFact[];
   /** Evre sürüyor ve sonrası var: bitiş anı gelince geçiş önerilir. */
@@ -198,11 +202,12 @@ function latestIso(values: readonly (string | undefined)[]): string | undefined 
 }
 
 /**
- * Danışanın dosyalarından özet. `index` ham `sessions-index.json` (onarılmamış), `proposals` ham dosya,
- * `measurements` yalnız ölçüm onayı sürüyorsa (yoksa null). `now` davetin durumu, evre ve pencereler için.
+ * Danışanın dosyalarından özet. `index` onarılmış index (`readIndex`: başlanıp hiç bitirilmemiş antrenmanlar da
+ * satırdır, o gün kaçan sayılmaz), `proposals` ham dosya, `measurements` yalnız ölçüm onayı sürüyorsa (yoksa
+ * null). `now` davetin durumu, evre ve pencereler için.
  */
 export function attentionFactsOf(input: {
-  client: Pick<Client, 'status' | 'access'>;
+  client: Pick<Client, 'status' | 'access' | 'statusChangedAt'>;
   invite: Invite | null;
   index: Pick<SessionIndex, 'items'> | null;
   program: Program | null;
@@ -217,8 +222,14 @@ export function attentionFactsOf(input: {
   let schedule: AttentionFacts['schedule'] = null;
   if (program) {
     const days = effectiveSchedule(program);
-    // Günler programdan, danışanın katmanından ve ilk girişinden önce sayılmaz.
-    const since = latestIso([program.createdAt, days.client?.at, client.access.joinedAt ?? client.access.lastJoinAt]);
+    // Günler programdan, günlerin son değişmesinden, ilk girişten ve duraklatmadan dönüşten önce sayılmaz.
+    const since = latestIso([
+      program.createdAt,
+      program.schedule?.at,
+      days.client?.at,
+      client.access.joinedAt ?? client.access.lastJoinAt,
+      client.statusChangedAt,
+    ]);
     if (days.weekdays.length > 0 && since) schedule = { weekdays: days.weekdays, since };
   }
 

@@ -14,6 +14,7 @@ import type { Client, Invite } from './schemas/client.ts';
 import { programSchema } from './schemas/program.ts';
 import type { SessionIndexExercise, SessionIndexRow } from './schemas/session.ts';
 import { programFile, singleBlock } from './testing/session-fixtures.ts';
+import { applyClientSchedule, resetClientSchedule } from './training-days.ts';
 
 // Cumartesi 26 Eylül 2026, İstanbul'da 19:00.
 const NOW = new Date('2026-09-26T16:00:00.000Z');
@@ -87,6 +88,51 @@ describe('dikkat: kaçan antrenman günü (§2.11)', () => {
       attentionItems(facts({ access: 'pending', schedule }), ctx).map((item) => item.kind),
       ['invite'],
     );
+  });
+});
+
+describe('dikkat: kaçan gün penceresi (günler ya da durum değişince baştan)', () => {
+  // Danışan aylardır Pzt/Çar/Cum çalışıyor; son hafta da yaptı.
+  const done = { items: [row('2026-09-21'), row('2026-09-23'), row('2026-09-25')] };
+  const YESTERDAY = '2026-09-25T15:00:00.000Z';
+  const scheduled = (extra: Record<string, unknown>) => v.parse(programSchema, programFile({}, { createdAt: '2026-06-01T10:00:00.000Z', ...extra }));
+  const missedOf = (input: { program: ReturnType<typeof scheduled>; client?: Pick<Client, 'status' | 'access' | 'statusChangedAt'>; index?: typeof done }) =>
+    attentionItems(
+      attentionFactsOf({ client: input.client ?? joined, invite: null, index: input.index ?? done, program: input.program, proposals: null, measurements: null, now: NOW }),
+      ctx,
+    ).filter((item) => item.kind === 'missed');
+
+  test('PT dün günleri Sal/Per/Cmt yaptı: eski günlerde yapılanlar yeni günlerde kaçan sayılmaz', () => {
+    assert.deepEqual(missedOf({ program: scheduled({ schedule: { weekdays: [2, 4, 6], at: YESTERDAY } }) }), []);
+    // Günlerin anı yoksa (eski kayıt) pencere programdan ve girişten başlar.
+    assert.deepEqual(
+      missedOf({ program: scheduled({ schedule: { weekdays: [2, 4, 6] } }) }).map((item) => item.text),
+      ['Son 7 günde 3 antrenman günü kaçtı: 19 Eyl Cmt, 22 Eyl Sal, 24 Eyl Per'],
+    );
+  });
+
+  test('"PT\'nin günlerine dön" ve danışanın PT\'nin günlerine dönmesi pencereyi baştan başlatır', () => {
+    const own = scheduled({ schedule: { weekdays: [2, 4, 6] }, clientSchedule: { weekdays: [1, 3, 5], at: '2026-08-01T10:00:00.000Z' } });
+    assert.deepEqual(missedOf({ program: own }), []);
+    const reset = resetClientSchedule(own, new Date(YESTERDAY));
+    assert.ok(reset);
+    assert.deepEqual(missedOf({ program: reset.program }), []);
+    const back = applyClientSchedule(own, [2, 4, 6], new Date(YESTERDAY));
+    assert.ok(back);
+    assert.deepEqual(missedOf({ program: back.program }), []);
+  });
+
+  test('duraklatmadan dönüş: aradaki günler kaçan sayılmaz', () => {
+    const program = scheduled({ schedule: { weekdays: [1, 3, 5] } });
+    const empty = { items: [] };
+    assert.equal(missedOf({ program, index: empty }).length, 1);
+    assert.deepEqual(missedOf({ program, index: empty, client: { ...joined, statusChangedAt: YESTERDAY } }), []);
+  });
+
+  test('başlanıp bitirilmemiş antrenmanın günü kaçan sayılmaz (onarılmış index)', () => {
+    const program = scheduled({ schedule: { weekdays: [1, 3, 5] } });
+    const index = { items: [row('2026-09-21'), row('2026-09-23', [bench('hold')], false), row('2026-09-25')] };
+    assert.deepEqual(missedOf({ program, index }), []);
   });
 });
 

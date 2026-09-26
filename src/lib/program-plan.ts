@@ -94,8 +94,11 @@ export type ProgramChange = { scope?: string; text: string };
  * seansın kaydı ikinci kez eklenmez (bitişin yeniden denenmesi çoğaltmaz).
  */
 export type ProgramLogEntry = { at: string; revision: number; kind: LogKind; sessionId?: string; changes: ProgramChange[] };
-/** PT'nin antrenman günleri (tasarım §2.11). */
-export type ProgramSchedule = { weekdays: number[] };
+/**
+ * PT'nin antrenman günleri (tasarım §2.11). `at`: geçerli günlerin son değiştiği an (PT'nin değişikliği, "PT'nin
+ * günlerine dön", danışanın PT'nin günlerine dönmesi); kaçan gün penceresi bundan önce sayılmaz (`attention.ts`).
+ */
+export type ProgramSchedule = { weekdays: number[]; at?: string };
 /** Danışanın kendi günleri: PT'nin düzenleyicisi 412 almasın diye ayrı katman; revision artmaz, PT'nin değişikliği temizler. */
 export type ClientSchedule = { weekdays: number[]; at: string };
 /**

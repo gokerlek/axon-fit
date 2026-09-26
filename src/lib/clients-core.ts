@@ -143,6 +143,8 @@ export async function updateClient(store: ClientStore, id: string, input: Client
     // Antrenman geçmişi formda seçilmediyse (eski istemci) kayıttaki kalır.
     ...trainingOf(input, client.training),
     status: input.status,
+    // Yalnız durum gerçekten değiştiyse (duraklatmadan dönüşte kaçan gün penceresi baştan başlar).
+    ...(input.status !== client.status ? { statusChangedAt: store.now().toISOString() } : {}),
     modules: {
       ...client.modules,
       health: nextHealthModule(

@@ -139,6 +139,8 @@ describe('antrenman günleri: danışanın katmanı', () => {
     assert.ok(result);
     assert.equal('clientSchedule' in result.program, false);
     assert.equal(result.text, 'Antrenman günleri: Sal, Per → Pzt, Çar, Cum');
+    // Geçerli günler şimdi değişti: kaçan gün penceresi buradan başlar.
+    assert.deepEqual(result.program.schedule, { weekdays: [1, 3, 5], at: NOW.toISOString() });
   });
 
   test('PT gün seçmediyse danışanın seçimi katman olur', () => {
@@ -153,6 +155,7 @@ describe('antrenman günleri: danışanın katmanı', () => {
     const result = resetClientSchedule(own, NOW);
     assert.ok(result);
     assert.equal('clientSchedule' in result.program, false);
+    assert.deepEqual(result.program.schedule, { weekdays: [1, 3, 5], at: NOW.toISOString() });
     assert.equal(result.program.revision, own.revision);
     assert.equal(result.text, 'Danışanın günleri kaldırıldı (Sal, Per, Cmt); geçerli günler: Pzt, Çar, Cum');
     assert.equal(result.program.log[0]?.kind, 'edit');
@@ -162,20 +165,21 @@ describe('antrenman günleri: danışanın katmanı', () => {
 
 describe('antrenman günleri: PT\'nin kaydı', () => {
   const stored = { schedule: { weekdays: [1, 3, 5] }, clientSchedule: { weekdays: [2, 4, 6], at: '2026-09-25T10:00:00.000Z' } };
+  const AT = NOW.toISOString();
 
   test('günleri göndermeyen (eski sekme) ya da aynı günleri gönderen kayıt katmana dokunmaz', () => {
-    assert.deepEqual(ptScheduleEdit(stored, undefined), { ...stored, changes: [] });
-    assert.deepEqual(ptScheduleEdit(stored, [5, 3, 1]), { ...stored, changes: [] });
+    assert.deepEqual(ptScheduleEdit(stored, undefined, AT), { ...stored, changes: [] });
+    assert.deepEqual(ptScheduleEdit(stored, [5, 3, 1], AT), { ...stored, changes: [] });
   });
 
-  test('PT günleri değiştirince danışanın katmanı silinir (son söz PT\'nin)', () => {
-    assert.deepEqual(ptScheduleEdit(stored, [1, 4]), {
-      schedule: { weekdays: [1, 4] },
+  test('PT günleri değiştirince danışanın katmanı silinir (son söz PT\'nin); günlerin anı yazılır', () => {
+    assert.deepEqual(ptScheduleEdit(stored, [1, 4], AT), {
+      schedule: { weekdays: [1, 4], at: AT },
       clientSchedule: undefined,
       changes: ['Antrenman günleri: Pzt, Çar, Cum → Pzt, Per', 'Danışanın günleri kaldırıldı (Sal, Per, Cmt)'],
     });
-    assert.deepEqual(ptScheduleEdit({}, [2]), { schedule: { weekdays: [2] }, clientSchedule: undefined, changes: ['Antrenman günleri: Sal'] });
-    assert.deepEqual(ptScheduleEdit({ schedule: { weekdays: [2] } }, []), {
+    assert.deepEqual(ptScheduleEdit({}, [2], AT), { schedule: { weekdays: [2], at: AT }, clientSchedule: undefined, changes: ['Antrenman günleri: Sal'] });
+    assert.deepEqual(ptScheduleEdit({ schedule: { weekdays: [2] } }, [], AT), {
       schedule: undefined,
       clientSchedule: undefined,
       changes: ['Antrenman günleri kaldırıldı (önce Sal)'],

@@ -214,8 +214,9 @@ function withoutClientSchedule<P extends Scheduled>(program: P): P {
 
 /**
  * Danışanın "Günlerini değiştir"i: doğrudan uygulanır, program geçmişine `client` türünde yazılır,
- * revision artmaz. PT'nin günleriyle aynıysa danışanın katmanı kalkar (geçerli günler yine PT'ninki).
- * Geçerli günlerle aynıysa değişiklik yok (null); boş seçim de yok sayılır.
+ * revision artmaz. PT'nin günleriyle aynıysa danışanın katmanı kalkar (geçerli günler yine PT'ninki;
+ * `schedule.at` şimdi olur: kaçan gün penceresi eski katmanın anına geri açılmasın). Geçerli günlerle
+ * aynıysa değişiklik yok (null); boş seçim de yok sayılır.
  */
 export function applyClientSchedule<P extends SchedulableProgram>(program: P, weekdays: readonly number[], now: Date): { program: P; text: string } | null {
   const next = normalizeWeekdays(weekdays);
@@ -224,10 +225,12 @@ export function applyClientSchedule<P extends SchedulableProgram>(program: P, we
   const at = now.toISOString();
   const text = weekdaysChangeText(current.weekdays, next);
   const base = withoutClientSchedule(program);
+  const toPt = sameWeekdays(next, current.pt);
   return {
     program: {
       ...base,
-      ...(sameWeekdays(next, current.pt) ? {} : { clientSchedule: { weekdays: next, at } }),
+      ...(toPt && program.schedule ? { schedule: { ...program.schedule, at } } : {}),
+      ...(toPt ? {} : { clientSchedule: { weekdays: next, at } }),
       log: appendLog(program.log, { at, revision: program.revision, kind: 'client', changes: [{ text }] }),
     },
     text,
@@ -236,7 +239,8 @@ export function applyClientSchedule<P extends SchedulableProgram>(program: P, we
 
 /**
  * PT: "PT'nin günlerine dön": danışanın katmanı silinir, geçmişe PT'nin kaydı olarak yazılır; revision
- * artmaz (açık düzenleyici 412 almaz). Danışanın katmanı yoksa null.
+ * artmaz (açık düzenleyici 412 almaz). Geçerli günler değiştiği için `schedule.at` şimdi olur. Danışanın
+ * katmanı yoksa null.
  */
 export function resetClientSchedule<P extends SchedulableProgram>(program: P, now: Date): { program: P; text: string } | null {
   const current = effectiveSchedule(program);
@@ -246,18 +250,23 @@ export function resetClientSchedule<P extends SchedulableProgram>(program: P, no
     ? `Danışanın günleri kaldırıldı (${weekdaysText(current.client.weekdays)}); geçerli günler: ${weekdaysText(current.pt)}`
     : `Danışanın günleri kaldırıldı (${weekdaysText(current.client.weekdays)})`;
   return {
-    program: { ...withoutClientSchedule(program), log: appendLog(program.log, { at, revision: program.revision, kind: 'edit', changes: [{ text }] }) },
+    program: {
+      ...withoutClientSchedule(program),
+      ...(program.schedule ? { schedule: { ...program.schedule, at } } : {}),
+      log: appendLog(program.log, { at, revision: program.revision, kind: 'edit', changes: [{ text }] }),
+    },
     text,
   };
 }
 
 /**
  * PT'nin kaydında günler (`applyProgramEdit`): gövde günleri göndermediyse (eski sekme) kayıttaki kalır.
- * Değiştiyse PT'nin günleri yazılır, danışanın katmanı silinir (son söz PT'nin); cümleler geçmişe.
+ * Değiştiyse PT'nin günleri `at` anıyla yazılır, danışanın katmanı silinir (son söz PT'nin); cümleler geçmişe.
  */
 export function ptScheduleEdit(
   stored: Scheduled,
   weekdays: readonly number[] | undefined,
+  at: string,
 ): { schedule: ProgramSchedule | undefined; clientSchedule: ClientSchedule | undefined; changes: string[] } {
   const before = normalizeWeekdays(stored.schedule?.weekdays ?? []);
   const keep = { schedule: stored.schedule, clientSchedule: stored.clientSchedule, changes: [] };
@@ -266,7 +275,7 @@ export function ptScheduleEdit(
   if (sameWeekdays(before, after)) return keep;
   const client = effectiveSchedule(stored).client;
   return {
-    schedule: after.length > 0 ? { weekdays: after } : undefined,
+    schedule: after.length > 0 ? { weekdays: after, at } : undefined,
     clientSchedule: undefined,
     changes: [weekdaysChangeText(before, after), ...(client ? [`Danışanın günleri kaldırıldı (${weekdaysText(client.weekdays)})`] : [])],
   };
