@@ -51,8 +51,13 @@ export type SessionRepo = {
   listSessions(tree: string): Promise<{ path: string; sha: string }[]>;
   /** Tek dosya, `sha` kilidiyle (Contents API). */
   write(path: string, content: unknown, options: { sha?: string | undefined; message: string }): Promise<{ sha: string; remaining: number | null }>;
-  /** Birden çok dosya, tek commit; dal ilerlediyse 409. */
-  commit(input: { head: RepoHead; files: readonly { path: string; content: unknown }[]; message: string }): Promise<{ commit: string; remaining: number | null }>;
+  /** Birden çok dosya, tek commit; dal ilerlediyse 409. `deletions` aynı commit'te silinen yollar (yalnız deneme geçmişi). */
+  commit(input: {
+    head: RepoHead;
+    files: readonly { path: string; content: unknown }[];
+    deletions?: readonly string[] | undefined;
+    message: string;
+  }): Promise<{ commit: string; remaining: number | null }>;
   /** Silinen antrenmanın önbelleğini düşürür (`session:<id>` etiketi). */
   invalidate(id: string): void;
   /**

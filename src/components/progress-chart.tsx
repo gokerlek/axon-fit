@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 
 /**
  * Zaman içinde ilerleme grafiği — ölçümler, danışanın İlerleme sekmesi (hareket başına en ağır set,
- * tahmini maksimum, toplam; haftalık toplam ağırlık) bunu kullanır.
+ * tahmini maksimum, toplam; Gelişim'de kasın hareketleri; hazır oluşluk, ağrı, seans zorluğu) bunu kullanır.
  *
  * Bir ya da iki seri (ör. sol/sağ), tek eksen. Tarih ekseni gerçek zamanlıdır: ölçümler
  * düzensiz aralıklarla alındığı için noktalar eşit aralıkla dizilmez. Renkler tema
@@ -117,6 +117,7 @@ export function ProgressChart({
   dateLabel = formatDay,
   pointNoun = 'ölçüm günü',
   yAxisWidth = 40,
+  chartClassName = 'h-52',
   className,
 }: {
   /** Neyin çizildiği: ekran okuyucu özetinde ve tablo başlığında. */
@@ -144,6 +145,8 @@ export function ProgressChart({
   pointNoun?: string;
   /** Değer ekseninin genişliği (px): binlik sayılarda ("12.500") 40 dar kalır. */
   yAxisWidth?: number;
+  /** Çizim alanının yüksekliği; sheet'teki küçük grafiklerde `h-36`. */
+  chartClassName?: string;
   className?: string;
 }) {
   const projected = series.length === 1 && forecast && forecast.length > 1 ? forecast : undefined;
@@ -209,7 +212,7 @@ export function ProgressChart({
         ) : null}
       </div>
 
-      <ChartContainer config={config} className="aspect-auto h-52 w-full" role="img" aria-label={summary}>
+      <ChartContainer config={config} className={cn('aspect-auto w-full', chartClassName)} role="img" aria-label={summary}>
         <ComposedChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }} accessibilityLayer={false}>
           <CartesianGrid vertical={false} />
           <XAxis

@@ -1,8 +1,11 @@
 import { formatDay, formatDayShort, formatKg, formatNumber, formatSignedWithUnit, formatWithUnit } from './format.ts';
+import type { LineKey } from './measurement-trends.ts';
+import { MEASUREMENTS } from './measurements.ts';
+import type { CircumferenceChange, ExerciseStrength, MuscleRole, StrengthStatus } from './muscle-progress.ts';
 import { E1RM_MAX_REPS, type RecordEvent, type RecordKind, type RecordMark } from './personal-records.ts';
 import type { TrackingType } from './progression.ts';
 import type { Achievement, AchievementId, ExercisePoint, Streak } from './progress.ts';
-import { forecast, forecastAsOf, type Forecast } from './trend.ts';
+import { daysBetween, forecast, forecastAsOf, FORECAST_MIN_POINTS, FORECAST_MIN_SPAN_DAYS, shiftDay, type Forecast } from './trend.ts';
 
 /**
  * İlerleme sekmesinin metinleri ve grafik seçimleri — saf, sunucu ve telefon ortak.
@@ -109,6 +112,23 @@ export function describeTrend(result: Forecast, unit: string, today: string): st
   return `${trend} Böyle giderse ${weeks} hafta sonra (${formatDay(end.date)}) ≈ ${formatWithUnit(tenth(end.value), unit)}${range}. Tahmin eğilimin süreceğini varsayar.`;
 }
 
+/**
+ * Tahmini maksimum grafiğinin son noktasından sonraki, bütün setleri 12'den çok tekrarlı antrenman günleri
+ * (yüklü set var, tahmini maksimum yok); `from`dan itibaren. Grafik bu günleri çizmez; hareket yapılmamış
+ * sanılmasın ve "son kayıt … gün önce" denmesin diye sayılır.
+ */
+export function highRepDaysSince(points: readonly ExercisePoint[], from?: string): number {
+  const shown = points.filter((point) => !from || point.date >= from);
+  const last = shown.filter((point) => point.e1rm !== undefined).at(-1)?.date;
+  return shown.filter((point) => (!last || point.date > last) && point.e1rm === undefined && point.topKg !== undefined).length;
+}
+
+/** Grafiğin altında: son günlerin neden çizilmediği ve nereye bakılacağı. */
+export function highRepDaysText(count: number): string {
+  const days = count === 1 ? 'Son antrenman gününde' : `Son ${count} antrenman gününde`;
+  return `${days} bütün setler ${E1RM_MAX_REPS}'den çok tekrarlı; tahmini maksimum o günler için hesaplanmaz. Ağırlığın “En ağır”da, güç gelişimin Gelişim'de görünür.`;
+}
+
 /** Tahmini maksimumun açıklaması (grafiğin altında). */
 export const E1RM_NOTE = `Tek tekrarda kaldırabileceğin en ağır yükün tahmini; kaldırman gereken bir hedef değil, gidişatı gösterir. Epley formülüyle hesaplanır: ağırlık × (1 + tekrar ÷ 30). Yalnız 1–${E1RM_MAX_REPS} tekrarlı setlerden: tekrar arttıkça tahmin şaşar, en isabetlisi az tekrarlı setlerdir.`;
 
@@ -189,4 +209,101 @@ export function streakText(streak: Streak): string {
   if (streak.current === 0) return streak.best > 0 ? `${week} · en uzun seri ${streak.best} hafta` : week;
   const best = streak.best > streak.current ? ` · en uzun ${streak.best} hafta` : '';
   return `${streak.current} hafta üst üste${best} · ${week.toLocaleLowerCase('tr')}`;
+}
+
+/* --- Gelişim (güç) --- */
+
+export const STRENGTH_STATUS_LABELS: Record<StrengthStatus, string> = {
+  improved: 'Gelişti',
+  stable: 'Sabit',
+  declined: 'Geriledi',
+  insufficient: 'Veri az',
+};
+
+/** Oransal değişim: 0,084 → "+%8,4", −0,03 → "−%3"; binde bire yuvarlı. */
+export function formatChangePct(ratio: number): string {
+  return formatSignedWithUnit(Math.round(ratio * 1000) / 10, '%');
+}
+
+/** Karar yoksa ne gerektiği: pencerede en az 4 antrenman günü ve 3 hafta (`FORECAST_MIN_*`). */
+export function strengthMissingText(exercise: Pick<ExerciseStrength, 'missing'> & { points: readonly { date: string }[] }): string {
+  if (exercise.missing === 'too_short_span') {
+    const days = daysBetween(exercise.points[0]!.date, exercise.points.at(-1)!.date);
+    return `Kayıtların en az ${FORECAST_MIN_SPAN_DAYS / 7} haftaya yayılması gerekir; bu dönemde ${days} güne sığıyor.`;
+  }
+  return `Karar için bu dönemde en az ${FORECAST_MIN_POINTS} antrenman günü gerekir; şimdilik ${exercise.points.length}.`;
+}
+
+/**
+ * Hareketin satırı: çizginin başı ve sonu, değişim ve olası aralığı. "≈ 62,1 → 68,4 kg (+%10,2) · olası
+ * değişim +5,3 – +10,5 kg"; karar yoksa ne gerektiği.
+ */
+export function strengthDetail(exercise: Pick<ExerciseStrength, 'metric' | 'fit' | 'missing'> & { points: readonly { date: string }[] }): string {
+  const fit = exercise.fit;
+  if (!fit) return strengthMissingText(exercise);
+  const unit = METRICS[exercise.metric].unit;
+  const pct = fit.changePct === null ? '' : ` (${formatChangePct(fit.changePct)})`;
+  const signed = (value: number) => `${value > 0 ? '+' : value < 0 ? '−' : '±'}${formatNumber(Math.abs(value))}`;
+  const range = `${signed(tenth(fit.low))} – ${formatSignedWithUnit(tenth(fit.high), unit)}`;
+  return `≈ ${formatNumber(tenth(fit.start))} → ${formatWithUnit(tenth(fit.end), unit)}${pct} · olası değişim ${range}`;
+}
+
+/** Kasın rolü, grup satırında: hepsi aynıysa tek ad, değilse kas kas ("Hedef: alt göğüs · Yardımcı: üst göğüs"). */
+export function groupRoleText(roles: readonly { muscle: string; role: MuscleRole }[], labelOf: (muscle: string) => string): string {
+  const distinct = [...new Set(roles.map((item) => item.role))];
+  if (distinct.length === 1) return ROLE_NAMES[distinct[0]!];
+  return (['primary', 'secondary', 'stabilizer'] as const)
+    .filter((role) => distinct.includes(role))
+    .map((role) => `${ROLE_NAMES[role]}: ${roles.filter((item) => item.role === role).map((item) => labelOf(item.muscle).toLocaleLowerCase('tr')).join(', ')}`)
+    .join(' · ');
+}
+
+const ROLE_NAMES: Record<MuscleRole, string> = { primary: 'Hedef', secondary: 'Yardımcı', stabilizer: 'Dengeleyici' };
+
+/** Gelişim bölümünün yöntem notu (kas sheet'inin altında). */
+export const STRENGTH_METHOD_NOTE = [
+  `Her hareket için seçtiğin dönemdeki antrenman günlerinin en iyisi alınır: ağırlıklı harekette tahmini maksimum, vücut ağırlığıyla yaptığında en çok tekrar, süreli harekette en uzun set. Bütün setlerini ${E1RM_MAX_REPS}'den çok tekrarla yaptığın gün de sayılır: tahmini maksimum o gün en ağır setinden hesaplanır.`,
+  'Bu değerlerden tek bir kötü güne kapılmayan bir eğilim çizgisi çizilir (Theil–Sen). Çizginin değişiminin olası aralığı (≈%80) tamamen artıdaysa “gelişti”, tamamen eksideyse “geriledi”, sıfırı kapsıyorsa “sabit” denir.',
+  `Karar için dönemde en az ${FORECAST_MIN_POINTS} antrenman günü ve ${FORECAST_MIN_SPAN_DAYS / 7} hafta gerekir.`,
+  'Kas, onu çalıştıran hareketlerden hesaplanır: hedef kas tam, yardımcı kas yarım, dengeleyici kas çeyrek sayılır; yalnız dengeleyici olarak çalıştığı hareketler kasa karar vermez.',
+  'Bu güç gelişimidir: kasın büyüdüğünü tek başına göstermez, beceri ve sinir sistemi de gücü artırır.',
+];
+
+const SIDE_NAMES: Record<LineKey, string> = { value: '', left: 'sol', right: 'sağ' };
+
+/**
+ * Çevre değişimi: "Kol çevresi (kasılı), sağ: +0,6 cm". Eşiği bilinen ölçümde (kalça) hata payı içindeyse
+ * söylenir; eşiği olmayanda (kol, uyluk, baldır) yalnız fark: gelişme ya da gerileme denmez.
+ */
+export function circumferenceText(change: Pick<CircumferenceChange, 'id' | 'key' | 'delta' | 'kind'>): string {
+  const side = SIDE_NAMES[change.key];
+  const label = `${MEASUREMENTS[change.id].label}${side ? `, ${side}` : ''}`;
+  const noise = change.kind === 'no_real_change' ? ' · ölçüm hatası payı içinde' : '';
+  return `${label}: ${formatSignedWithUnit(change.delta, 'cm')}${noise}`;
+}
+
+/* --- grafik bölümü --- */
+
+/** Son `days` günün (bugün dahil) ortalaması ve nokta sayısı; nokta yoksa null. */
+export function recentAverage(points: readonly { date: string; value: number }[], today: string, days = 28): { average: number; count: number } | null {
+  const from = shiftDay(today, -(days - 1));
+  const recent = points.filter((point) => point.date >= from && point.date <= today);
+  if (recent.length === 0) return null;
+  return { average: tenth(recent.reduce((sum, point) => sum + point.value, 0) / recent.length), count: recent.length };
+}
+
+/** "Son 4 tamamlanan haftada 11/12 gün (%92)." — hafta başına plandan fazlası sayılmaz. */
+export function adherenceText(recent: { done: number; planned: number; weeks: number }): string {
+  const pct = Math.round((recent.done / recent.planned) * 100);
+  const weeks = recent.weeks === 1 ? 'Geçen hafta' : `Son ${recent.weeks} tamamlanan haftada`;
+  return `${weeks} ${recent.done}/${recent.planned} gün (%${pct}).`;
+}
+
+/** Su özeti: kayıtlı gün ve o günlerin ortalaması (bardak). */
+export function waterSummary(days: readonly { glasses: number }[]): { recorded: number; average: number | null } {
+  const recorded = days.filter((day) => day.glasses > 0);
+  return {
+    recorded: recorded.length,
+    average: recorded.length > 0 ? tenth(recorded.reduce((sum, day) => sum + day.glasses, 0) / recorded.length) : null,
+  };
 }

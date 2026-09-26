@@ -94,6 +94,13 @@ describe('antrenman özeti', () => {
     });
   });
 
+  test('seans zorluğu (CR-10) özete girer; cevaplanmadıysa alan yok', () => {
+    const effort = { sessionRpe: 7, durationMin: 55, updatedAt: at(9) };
+    assert.equal(digestSession(sessionDoc({ effort })).rpe, 7);
+    assert.equal('rpe' in digestSession(sessionDoc({ effort: { durationMin: 55, updatedAt: at(9) } })), false);
+    assert.equal('rpe' in digestSession(sessionDoc()), false);
+  });
+
   test('farklı cihazlar ayrı seri anahtarı', () => {
     assert.equal(seriesKey('bench-press', 'smith'), 'bench-press@smith');
     assert.equal(seriesKey('plank'), 'plank');
@@ -448,6 +455,35 @@ describe('sayfanın tamamı', () => {
     const list = Object.fromEntries(view.achievements.map((item) => [item.id, item.achievedOn]));
     assert.equal(list.first_workout, '2026-09-01');
     assert.equal(list.first_record, '2026-09-08');
+  });
+
+  test('hareketin kas payları (Gelişim): kütüphanedeki rolleriyle; ısınma ve kütüphanede olmayan boş', () => {
+    assert.deepEqual(
+      view.exercises.map((item) => [item.key, item.muscles]),
+      [
+        ['bench-press@olympic-bar', { abs_upper: 0.25, triceps_long: 0.5, chest_lower: 1 }],
+        ['plank', { abs_upper: 1 }],
+        ['bench-press@smith', { abs_upper: 0.25, triceps_long: 0.5, chest_lower: 1 }],
+      ],
+    );
+    const warmup = buildProgressView({
+      index: { items: [row('s_1', '2026-09-01', [{ exerciseId: 'bisiklet', sets: 1 }, { exerciseId: 'eski-hareket', sets: 1 }])] },
+      digests: [
+        digest('s_1', '2026-09-01', [
+          { exerciseId: 'bisiklet', title: 'Bisiklet', sets: kgReps(10, 10) },
+          { exerciseId: 'eski-hareket', title: 'Eski Hareket', sets: kgReps(20, 10) },
+        ]),
+      ],
+      now,
+      today,
+      exercises: CATALOG,
+      deviceNames: new Map(),
+      setWeightsOf: setWeights,
+    });
+    assert.deepEqual(
+      warmup.exercises.map((item) => item.muscles),
+      [{}, {}],
+    );
   });
 
   test('antrenman yoksa boş görünüm', () => {

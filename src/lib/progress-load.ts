@@ -1,8 +1,11 @@
+import { buildInsights, type HealthParts, type ProgressInsights } from './progress-insights.ts';
 import { buildProgressView, digestSession, PROGRESS_MAX_SESSIONS, type ProgressView, type SessionDigest } from './progress.ts';
 import type { TrainingExperience } from './schemas/client.ts';
+import type { HealthRecord } from './schemas/health.ts';
 import { parseStoredSession, type SessionIndexRow } from './schemas/session.ts';
 import { readIndex, type SessionRepo } from './session-files-core.ts';
 import type { PlanExercise } from './template-plan.ts';
+import { parseWaterFile, WATER_PATH } from './water.ts';
 
 /**
  * İlerleme sekmesinin okuma akışı — GitHub ve önbellek dışarıdan verilir (`progress-data.ts` bağlar,
@@ -13,9 +16,11 @@ import type { PlanExercise } from './template-plan.ts';
  *   önbelleğiyle (`digest`). Aynı anda en çok `concurrency` okuma (GitHub'ın ikincil sınırı).
  * - Okunamayan dosya sayfayı durdurmaz: sayılır (`skipped`), grafik ve rekorlar onsuz; sayılar ve
  *   haftalar index'ten olduğu için eksilmez. Index okunamazsa (ağ, yetki) danışana dönük hata.
+ * - Grafik bölümü (`progress-insights.ts`): `water.json` bir okuma; `health.json` yalnız onaylı parça
+ *   (hazır oluşluk, ağrı, ölçüm) varsa okunur. İkisi de okunamazsa sayfa durmaz, o grafik "okunamadı" der.
  */
 
-export type ProgressLoad = { status: 'ok'; view: ProgressView } | { status: 'error'; message: string };
+export type ProgressLoad = { status: 'ok'; view: ProgressView; insights: ProgressInsights } | { status: 'error'; message: string };
 
 export const PROGRESS_ERROR = 'İlerlemen şu an açılamıyor. Biraz sonra yeniden dene; sürerse antrenörüne haber ver.';
 
@@ -29,6 +34,10 @@ export type ProgressDeps<E extends PlanExercise> = {
   weeklyTarget(): Promise<number | undefined>;
   /** Kas payları (`muscles.ts` → `exerciseSetWeights`). */
   setWeightsOf(exercise: E): Partial<Record<string, number>>;
+  /** Haftada planlanan antrenman günü (Bugün'deki "bu hafta x/y"nin y'si); okunamazsa undefined. */
+  plannedDays?(): Promise<number | undefined>;
+  /** Sağlık kaydı (`health.json`); yoksa null. Yalnız onaylı parça varsa çağrılır. */
+  health?(): Promise<HealthRecord | null>;
   log(message: string): void;
   max?: number;
   concurrency?: number;
@@ -54,11 +63,24 @@ async function readDigest(repo: SessionRepo, row: SessionIndexRow): Promise<Sess
   return stored && stored.status === 'finished' ? digestSession(stored) : null;
 }
 
+/** `water.json`'un dokunuşları; dosya yoksa boş, okunamıyorsa `unavailable`. */
+async function readWater(repo: SessionRepo): Promise<ReturnType<typeof parseWaterFile>['file']['taps'] | 'unavailable'> {
+  try {
+    const file = await repo.read(WATER_PATH);
+    return file ? parseWaterFile(file.content).file.taps : [];
+  } catch {
+    return 'unavailable';
+  }
+}
+
+const NO_HEALTH: HealthParts = { readiness: false, pain: false, measurements: false };
+
 export async function loadProgressWith<E extends PlanExercise>(
   deps: ProgressDeps<E>,
-  client: { id: string; experience?: TrainingExperience | undefined },
+  client: { id: string; experience?: TrainingExperience | undefined; health?: HealthParts | undefined },
   now: Date,
   today: string,
+  timeZone = 'UTC',
 ): Promise<ProgressLoad> {
   const max = deps.max ?? PROGRESS_MAX_SESSIONS;
   let repaired: Awaited<ReturnType<typeof readIndex>>;
@@ -76,13 +98,28 @@ export async function loadProgressWith<E extends PlanExercise>(
     .filter((row) => row.finishedAt)
     .sort((a, b) => Date.parse(b.startedAt ?? b.date) - Date.parse(a.startedAt ?? a.date) || (a.id < b.id ? 1 : -1));
   const rows = finished.slice(0, max);
-  const digests = await mapLimit(rows, deps.concurrency ?? 6, async (row) => {
-    try {
-      return await deps.digest(row, () => readDigest(deps.repo, row));
-    } catch {
-      return null;
-    }
-  });
+  const consent = client.health ?? NO_HEALTH;
+  // Antrenman yoksa sayfa boş durumdur: grafik bölümü için hiçbir şey okunmaz. Onaylı parça yoksa sağlık
+  // kaydı hiç okunmaz (SPEC §9.4: gösterim de işlemedir).
+  const idle = finished.length === 0;
+  const wantsHealth = !idle && Boolean(deps.health) && (consent.readiness || consent.pain || consent.measurements);
+  const [digests, water, health, plannedDays] = await Promise.all([
+    mapLimit(rows, deps.concurrency ?? 6, async (row) => {
+      try {
+        return await deps.digest(row, () => readDigest(deps.repo, row));
+      } catch {
+        return null;
+      }
+    }),
+    idle ? Promise.resolve([]) : readWater(deps.repo),
+    wantsHealth
+      ? deps.health!().catch((error: unknown) => {
+          deps.log(`[ilerleme] ${client.id}: sağlık kaydı okunamadı (${error instanceof Error ? error.message : String(error)}).`);
+          return 'unavailable' as const;
+        })
+      : Promise.resolve(null),
+    !idle && deps.plannedDays ? deps.plannedDays().catch(() => undefined) : Promise.resolve(undefined),
+  ]);
   const read = digests.filter((digest): digest is SessionDigest => digest !== null);
   const skipped = rows.length - read.length;
   if (skipped > 0) deps.log(`[ilerleme] ${client.id}: ${skipped} antrenman dosyası okunamadı.`);
@@ -100,5 +137,17 @@ export async function loadProgressWith<E extends PlanExercise>(
     skipped,
     truncated: finished.length > rows.length,
   });
-  return { status: 'ok', view };
+  const insights = buildInsights({
+    weeks: view.weeks,
+    plannedDays,
+    firstDate: view.firstDate,
+    digests: read,
+    index,
+    water,
+    health,
+    consent,
+    today,
+    timeZone,
+  });
+  return { status: 'ok', view, insights };
 }

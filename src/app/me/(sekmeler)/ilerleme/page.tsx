@@ -6,28 +6,38 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { readAppConfig } from '@/lib/config';
 import { formatDay, todayIn } from '@/lib/format';
 import { currentClient } from '@/lib/guards';
+import { defaultStrengthWindow, STRENGTH_WINDOWS, type StrengthWindow } from '@/lib/muscle-progress';
 import { PROGRESS_MAX_SESSIONS } from '@/lib/progress';
 import { loadProgress } from '@/lib/progress-data';
+import { LOW_READINESS } from '@/lib/session-check';
 import { ClientHeader } from '../../client-header';
 import { AchievementsCard } from './achievements-card';
 import { ExerciseProgress } from './exercise-progress';
+import { AdherenceCard, EffortCard, PainCard, ReadinessCard, WaterCard, WeeklyLoadCard } from './insight-charts';
 import { RecordsCard } from './records-card';
+import { StrengthProgress } from './strength-progress';
 import { WeeklyProgress } from './weekly-progress';
 
 export const metadata: Metadata = { title: 'İlerleme' };
 
 /**
- * Danışanın İlerleme sekmesi (tasarım §0, §8 satır 10; SPEC §6, §7.6): üstte üç sayı (antrenman, seri,
- * rekor), hareket başına grafik (en ağır set, tahmini maksimum, toplam; seçici aranabilir), haftalık kas
- * yükü (kas haritası) ve toplam ağırlık, son rekorlar, başarılar. Veri `sessions-index.json` ve özetleri
- * önbellekli antrenman dosyalarından (`progress-data.ts`). Danışanın dilinde: "e1RM", "tonaj" yok.
- * Yalnız telefon, 375 px. Sayfa yetkiyi kendisi denetler (SPEC §5).
+ * Danışanın İlerleme sekmesi (tasarım §0, §8 satır 10; SPEC §6, §7.6): en üstte Gelişim (hangi kasında
+ * güç kazandın: kas haritası, listeler, kasın hareketleri), üç sayı (antrenman, seri, rekor), hareket
+ * başına grafik (en ağır set, tahmini maksimum, toplam; seçici aranabilir), grafikler (haftalık yük,
+ * antrenman düzeni, haftalık kas yükü, onay varsa hazır oluşluk ve ağrı, zorluk, su), son rekorlar,
+ * başarılar. Veri `sessions-index.json`, özetleri önbellekli antrenman dosyaları, `water.json` ve onay
+ * varsa `health.json`'dan (`progress-data.ts`). Danışanın dilinde: "e1RM", "tonaj" yok. Yalnız telefon,
+ * 375 px. Sayfa yetkiyi kendisi denetler (SPEC §5).
  */
-export default async function ProgressPage({ searchParams }: { searchParams: Promise<{ hareket?: string | string[] }> }) {
+export default async function ProgressPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ hareket?: string | string[]; donem?: string | string[] }>;
+}) {
   const [client, config, params] = await Promise.all([currentClient(), readAppConfig(), searchParams]);
   const now = new Date();
   const today = todayIn(config.timeZone, now);
-  const load = await loadProgress(client, now, today);
+  const load = await loadProgress(client, now, today, config.timeZone);
   const header = <ClientHeader client={client} appName={config.appName} title="İlerleme" />;
 
   if (load.status === 'error') {
@@ -43,7 +53,7 @@ export default async function ProgressPage({ searchParams }: { searchParams: Pro
     );
   }
 
-  const view = load.view;
+  const { view, insights } = load;
   if (view.workouts === 0) {
     return (
       <main className="flex flex-col gap-6">
@@ -65,6 +75,10 @@ export default async function ProgressPage({ searchParams }: { searchParams: Pro
   }
 
   const requested = typeof params.hareket === 'string' ? params.hareket : null;
+  const period: StrengthWindow =
+    typeof params.donem === 'string' && Object.hasOwn(STRENGTH_WINDOWS, params.donem)
+      ? (params.donem as StrengthWindow)
+      : defaultStrengthWindow(view.exercises, today);
   const stats = [
     { value: view.workouts, label: 'antrenman' },
     { value: view.streak.current, label: 'haftalık seri' },
@@ -74,20 +88,6 @@ export default async function ProgressPage({ searchParams }: { searchParams: Pro
   return (
     <main className="flex flex-col gap-6">
       {header}
-
-      <Card size="sm">
-        <CardContent className="flex flex-col gap-2">
-          <dl className="grid grid-cols-3 divide-x text-center">
-            {stats.map((stat) => (
-              <div key={stat.label} className="flex flex-col-reverse gap-0.5 px-1">
-                <dt className="text-xs text-muted-foreground">{stat.label}</dt>
-                <dd className="font-heading text-2xl font-semibold tabular-nums">{stat.value}</dd>
-              </div>
-            ))}
-          </dl>
-          {view.firstDate ? <p className="text-center text-xs text-muted-foreground">İlk antrenmanın {formatDay(view.firstDate)}</p> : null}
-        </CardContent>
-      </Card>
 
       {view.skipped > 0 || view.truncated ? (
         <Alert>
@@ -103,8 +103,30 @@ export default async function ProgressPage({ searchParams }: { searchParams: Pro
         </Alert>
       ) : null}
 
+      <StrengthProgress exercises={view.exercises} today={today} initialWindow={period} circumference={insights.circumference} />
+
+      <Card size="sm">
+        <CardContent className="flex flex-col gap-2">
+          <dl className="grid grid-cols-3 divide-x text-center">
+            {stats.map((stat) => (
+              <div key={stat.label} className="flex flex-col-reverse gap-0.5 px-1">
+                <dt className="text-xs text-muted-foreground">{stat.label}</dt>
+                <dd className="font-heading text-2xl font-semibold tabular-nums">{stat.value}</dd>
+              </div>
+            ))}
+          </dl>
+          {view.firstDate ? <p className="text-center text-xs text-muted-foreground">İlk antrenmanın {formatDay(view.firstDate)}</p> : null}
+        </CardContent>
+      </Card>
+
       {view.exercises.length > 0 ? <ExerciseProgress exercises={view.exercises} initialKey={requested} today={today} /> : null}
+      <WeeklyLoadCard weeks={view.weeks} today={today} />
+      <AdherenceCard adherence={insights.adherence} />
       <WeeklyProgress weeks={view.weeks} />
+      <ReadinessCard readiness={insights.readiness} today={today} low={LOW_READINESS} />
+      <PainCard pain={insights.pain} />
+      <EffortCard rpe={insights.rpe} today={today} />
+      <WaterCard water={insights.water} today={today} />
       <RecordsCard items={view.recentRecords} total={view.records} today={today} />
       <AchievementsCard achievements={view.achievements} streak={view.streak} />
     </main>

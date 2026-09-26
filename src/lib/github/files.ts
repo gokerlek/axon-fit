@@ -281,11 +281,12 @@ export type CommitFile = { path: string; content: unknown };
  * → dalın ref'i ileri sarılır (`force: false`). Arada dal ilerlediyse (başka bir yazma oldu) GitHub 422
  * verir, burada 409 olur: dosyaların hiçbiri yazılmamıştır; çağıran taze okuyup yeniden hesaplar. Yazma
  * sayısı dosya sayısından bağımsız 3'tür. Metin `writeJson`'la aynı (`jsonText`), blob kimlikleri önceden
- * hesaplanabilir.
+ * hesaplanabilir. `deletions`: aynı commit'te silinecek yollar (ağaçta `sha: null`); şimdilik yalnız
+ * geliştirmedeki deneme geçmişi kullanır (`demo-seed.ts`).
  */
 export async function commitFiles(
   repo: string,
-  input: { head: RepoHead; files: readonly CommitFile[]; message: string },
+  input: { head: RepoHead; files: readonly CommitFile[]; deletions?: readonly string[] | undefined; message: string },
   api: Octokit = gh(),
 ): Promise<{ commit: string; remaining: number | null }> {
   assertRepoAllowed(repo);
@@ -294,7 +295,10 @@ export async function commitFiles(
       owner: owner(),
       repo,
       base_tree: input.head.tree,
-      tree: input.files.map((file) => ({ path: file.path, mode: '100644' as const, type: 'blob' as const, content: jsonText(file.content) })),
+      tree: [
+        ...input.files.map((file) => ({ path: file.path, mode: '100644' as const, type: 'blob' as const, content: jsonText(file.content) })),
+        ...(input.deletions ?? []).map((path) => ({ path, mode: '100644' as const, type: 'blob' as const, sha: null })),
+      ],
     });
     const commit = await api.rest.git.createCommit({
       owner: owner(),

@@ -17,6 +17,8 @@ import type { ExerciseView } from '@/lib/progress';
 import {
   describeTrend,
   E1RM_NOTE,
+  highRepDaysSince,
+  highRepDaysText,
   METRICS,
   METRICS_OF,
   metricForecast,
@@ -29,8 +31,8 @@ import {
 import { forecastAsOf, rangeStart, type RangePreset } from '@/lib/trend';
 import { cn } from '@/lib/utils';
 
-/** Telefonda alttan açılan, ekran boyu sheet (antrenman ekranının kütüphanesiyle aynı). */
-const TALL =
+/** Telefonda alttan açılan, ekran boyu sheet (antrenman ekranının kütüphanesiyle aynı; Gelişim'in kas sheet'i de). */
+export const TALL_SHEET =
   'h-[calc(100dvh-max(1rem,env(safe-area-inset-top)))] max-h-[calc(100dvh-max(1rem,env(safe-area-inset-top)))] gap-0 rounded-t-2xl pb-[env(safe-area-inset-bottom)]';
 
 /** Grafiğin tarih aralıkları; 375 px'te tek satıra sığan kısa adlar. */
@@ -112,6 +114,8 @@ export function ExerciseProgress({ exercises, initialKey, today }: { exercises: 
   const info = METRICS[shown];
   const outlook = points.length > 1 ? metricForecast(shown, points) : null;
   const drawn = outlook ? forecastAsOf(outlook, today) : null;
+  // Son günlerin bütün setleri 12'den çok tekrarlıysa grafik orada biter: "son kayıt … gün önce" yanıltır.
+  const highRep = shown === 'e1rm' && points.length > 0 ? highRepDaysSince(exercise.points, from) : 0;
   const title = `${exercise.title} · ${info.label}`;
 
   return (
@@ -208,7 +212,10 @@ export function ExerciseProgress({ exercises, initialKey, today }: { exercises: 
                 : 'Bu dönemde bu değer için kayıt yok.'}
             </p>
           )}
-          {outlook ? <p className="text-sm text-muted-foreground">{describeTrend(outlook, info.unit, today)}</p> : null}
+          {highRep > 0 ? <p className="text-sm text-muted-foreground">{highRepDaysText(highRep)}</p> : null}
+          {outlook && !(highRep > 0 && drawn?.kind === 'stale') ? (
+            <p className="text-sm text-muted-foreground">{describeTrend(outlook, info.unit, today)}</p>
+          ) : null}
           {shown === 'e1rm' ? <p className="text-xs text-muted-foreground">{E1RM_NOTE}</p> : null}
           {shown === 'volume' ? (
             <p className="text-xs text-muted-foreground">Toplam ağırlık: ısınma hariç her setin ağırlığı × tekrarı, gün başına.</p>
@@ -306,7 +313,7 @@ function ExercisePicker({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} onOpenChangeComplete={(next) => (next ? undefined : setSearch(''))}>
-      <SheetContent side="bottom" showCloseButton={false} className={TALL} initialFocus={title}>
+      <SheetContent side="bottom" showCloseButton={false} className={TALL_SHEET} initialFocus={title}>
         <SheetHeader className="gap-1 pt-5 pb-3">
           <SheetTitle ref={title} tabIndex={-1} className="text-lg font-semibold outline-none">
             Hareket seç
