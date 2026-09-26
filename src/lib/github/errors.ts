@@ -5,13 +5,49 @@
  * gelen hatada da tutar.
  */
 
+/** GitHub'ın istek sınırı bilgisi (yanıt başlıklarından; `toGithubError`). */
+export type RateLimitInfo = {
+  /** Sınırdan dolayı reddedildi (429 ya da sınır kaynaklı 403). */
+  rateLimited?: boolean;
+  /** `retry-after` başlığı, saniye. */
+  retryAfter?: number;
+  /** `x-ratelimit-remaining`: saatlik kotadan kalan. */
+  remaining?: number;
+};
+
 export class GithubError extends Error {
   readonly status: number;
-  constructor(message: string, status: number) {
+  readonly rateLimited: boolean;
+  readonly retryAfter: number | undefined;
+  readonly remaining: number | undefined;
+  constructor(message: string, status: number, rate: RateLimitInfo = {}) {
     super(message);
     this.name = 'GithubError';
     this.status = status;
+    this.rateLimited = rate.rateLimited ?? false;
+    this.retryAfter = rate.retryAfter;
+    this.remaining = rate.remaining;
   }
+}
+
+/**
+ * Yanıt başlıklarından istek sınırı. 429 her zaman sınırdır; 403 ancak kota bittiyse
+ * (`x-ratelimit-remaining: 0`), `retry-after` geldiyse ya da ikincil sınır mesajıysa: izin 403'ü sınır değildir.
+ */
+export function rateLimitOf(status: number, headers: Record<string, unknown> | undefined, message = ''): RateLimitInfo {
+  const header = (name: string) => {
+    const value = headers?.[name];
+    const number = typeof value === 'string' || typeof value === 'number' ? Number(value) : Number.NaN;
+    return Number.isFinite(number) ? number : undefined;
+  };
+  const retryAfter = header('retry-after');
+  const remaining = header('x-ratelimit-remaining');
+  const limited = status === 429 || (status === 403 && (remaining === 0 || retryAfter !== undefined || /rate limit/i.test(message)));
+  return {
+    ...(limited ? { rateLimited: true } : {}),
+    ...(retryAfter !== undefined ? { retryAfter } : {}),
+    ...(remaining !== undefined ? { remaining } : {}),
+  };
 }
 
 /**

@@ -2,7 +2,7 @@ import 'server-only';
 import { Octokit } from 'octokit';
 import { CLIENT_REPO_PREFIX, serverEnv } from '../env';
 import { CLIENT_ID_PATTERN } from '../schemas/client';
-import { GithubError } from './errors';
+import { GithubError, rateLimitOf } from './errors';
 
 /** Hata tipi saf modülde (`errors.ts`): testlerdeki çekirdekler de aynı sınıfı kullanır. */
 export { GithubError };
@@ -23,6 +23,27 @@ let client: Octokit | null = null;
 export function gh(): Octokit {
   client ??= new Octokit({ auth: serverEnv().githubToken, userAgent: 'pulsecoach' });
   return client;
+}
+
+let sessionClient: Octokit | null = null;
+
+/**
+ * Antrenman kayıtlarının (seans, index, bitiş commit'i) GitHub istemcisi (tasarım §4.3). Aynı token ve
+ * aynı repo kapısı (`assertRepoAllowed`, çağıran dosya işlerinde); farkı yeniden deneme ve bekleme:
+ * - 409 (sha çakışması) ve 429 hiç yeniden denenmez: 409'da çekirdek taze okuyup bir kez birleştirir;
+ *   eski sha'yla üç kez daha denemek (1 + 4 + 9 sn) yalnız süre ve kota harcardı.
+ * - 5xx bir kez yeniden denenir.
+ * - Sınıra takılınca Route Handler'ın içinde `Retry-After` (ya da 60 sn) beklenmez: hata hemen döner,
+ *   uç 429 + `Retry-After` verir, telefon veriyi tutup üstel bekler.
+ */
+export function sessionWriter(): Octokit {
+  sessionClient ??= new Octokit({
+    auth: serverEnv().githubToken,
+    userAgent: 'pulsecoach',
+    retry: { doNotRetry: [400, 401, 403, 404, 409, 410, 422, 429, 451], retries: 1 },
+    throttle: { onRateLimit: () => false, onSecondaryRateLimit: () => false },
+  });
+  return sessionClient;
 }
 
 export function clientRepoName(clientId: string): string {
@@ -54,14 +75,22 @@ export function appRepo(): string {
   return serverEnv().appRepo;
 }
 
-/** Octokit hatalarını tek tipe indirger; 409/422 çakışma olarak işaretlenir. */
+/**
+ * Octokit hatalarını tek tipe indirger; 409/422 çakışma olarak işaretlenir. İstek sınırı (429 ya da
+ * sınır kaynaklı 403) 429 olur ve `retryAfter`, `remaining` başlıklarını taşır (`rateLimitOf`): uç
+ * telefona ne kadar bekleyeceğini söyleyebilsin. İzin 403'ü 403 kalır.
+ */
 export function toGithubError(error: unknown, context: string): GithubError {
   const status = typeof error === 'object' && error && 'status' in error ? Number(error.status) : 500;
+  const response = typeof error === 'object' && error && 'response' in error ? (error.response as { headers?: Record<string, unknown> }) : undefined;
+  const message = error instanceof Error ? error.message : '';
+  const rate = rateLimitOf(status, response?.headers, message);
+  if (rate.rateLimited) return new GithubError(`${context}: GitHub istek sınırı doldu; biraz sonra tekrar dene.`, 429, rate);
   if (status === 409 || status === 422) {
-    return new GithubError(`${context}: kayıt sen çalışırken değişti.`, 409);
+    return new GithubError(`${context}: kayıt sen çalışırken değişti.`, 409, rate);
   }
   if (status === 404) return new GithubError(`${context}: bulunamadı.`, 404);
-  if (status === 403) return new GithubError(`${context}: GitHub izin vermedi (yetki ya da istek sınırı).`, 403);
+  if (status === 403) return new GithubError(`${context}: GitHub izin vermedi (yetki ya da istek sınırı).`, 403, rate);
   if (status === 401) return new GithubError(`${context}: GitHub anahtarı geçersiz.`, 401);
-  return new GithubError(`${context}: GitHub'a ulaşılamadı.`, 502);
+  return new GithubError(`${context}: GitHub'a ulaşılamadı.`, 502, rate);
 }
