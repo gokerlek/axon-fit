@@ -111,6 +111,26 @@ describe('proposals.json: okuma ve yazma', () => {
     assert.equal(other.file.items.length, 2);
   });
 
+  test('set sayısında danışanın ve motorun önerisi tek kart: hangisi sonra gelirse bekleyeni günceller', () => {
+    const algo = (over: Partial<ProposalInput> = {}) =>
+      input({ kind: 'algo_sets', sessionId: 's_bbbbbbbb', text: 'Leg Press: 3 → 4 set', why: '4 haftadır bu harekette; son 2 haftada ilerliyor.', ...over });
+    for (const [first, second] of [[input(), algo()], [algo({ sessionId: 's_k2m9x4qa' }), input({ sessionId: 's_bbbbbbbb' })]] as const) {
+      const one = upsertProposals(parseProposals(null), [first], sequence());
+      const two = upsertProposals(one.file, [second], sequence(50));
+      assert.equal(two.file.items.length, 1);
+      assert.equal(two.file.items[0]?.id, one.file.items[0]?.id);
+      assert.equal(two.file.items[0]?.kind, second.kind);
+      assert.deepEqual(two.ids, one.ids);
+      // Aynı seansın yeniden denemesi yine aynı kart.
+      assert.equal(upsertProposals(two.file, [second], sequence(80)).changed, false);
+    }
+    // Karar verilmişse yeni öneri ayrı kart.
+    const first = upsertProposals(parseProposals(null), [input()], sequence());
+    const decided = decideProposal(first.file, first.file.items[0]?.id ?? '', { status: 'declined', at: new Date('2026-09-27T10:00:00.000Z') });
+    assert.ok(decided);
+    assert.equal(upsertProposals(decided, [algo()], sequence(50)).file.items.length, 2);
+  });
+
   test('karar verilmiş öneri yeniden denemede değişmez; yeni seansın önerisi yeni kayıt olur', () => {
     const first = upsertProposals(parseProposals(null), [input()], sequence());
     const id = first.file.items[0]?.id ?? '';

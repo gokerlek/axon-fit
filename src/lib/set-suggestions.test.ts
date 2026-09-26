@@ -39,7 +39,7 @@ const weights = (exercise: SuggestionExercise) => ({
   ...Object.fromEntries(exercise.primaryMuscles.map((muscle) => [muscle, 1])),
 });
 
-function suggestions(input: { day?: WorkoutDay; items?: SessionIndex; readinessScore?: number; proposals?: Parameters<typeof algoProposalsThisWeek>[0]; sessionId?: string } = {}) {
+function suggestions(input: { day?: WorkoutDay; items?: SessionIndex; readinessScore?: number; proposals?: Parameters<typeof setSuggestionsFor>[0]['proposals']; sessionId?: string } = {}) {
   return setSuggestionsFor({
     day: input.day ?? workoutDay(),
     exercises: EXERCISES,
@@ -64,10 +64,19 @@ describe('set artışı adayları: günün satırları (§5.6)', () => {
   test('hazır oluşluk 60\'ın altı ya da bu hafta kasa 2 öneri verildiyse aday yok', () => {
     assert.deepEqual(suggestions({ readinessScore: 55 }), []);
     assert.equal(suggestions({ readinessScore: 60 }).length, 1);
-    const proposal = (sessionId: string) => ({ kind: 'algo_sets' as const, at: ago(2), exerciseId: 'bench-press', sessionId });
+    const proposal = (sessionId: string) => ({ kind: 'algo_sets' as const, at: ago(2), exerciseId: 'bench-press', sessionId, status: 'pending' as const });
     assert.deepEqual(suggestions({ proposals: [proposal('s_aaaaaaaa'), proposal('s_bbbbbbbb')] }), []);
     // Aynı seansın önerileri sayılmaz (bitişin yeniden denenmesi).
     assert.equal(suggestions({ proposals: [proposal('s_aaaaaaaa'), proposal('s_bbbbbbbb')], sessionId: 's_bbbbbbbb' }).length, 1);
+  });
+
+  test('satıra başka seanstan bekleyen set sayısı önerisi varsa aday yok; karar verilmiş ya da aynı seansınki engellemez', () => {
+    const pending = (kind: 'sets' | 'algo_sets', status: 'pending' | 'declined' = 'pending', sessionId = 's_aaaaaaaa') =>
+      ({ kind, at: ago(3), exerciseId: 'bench-press', sessionId, rowId: 'r_aaaaaa', status });
+    assert.deepEqual(suggestions({ proposals: [pending('sets')] }), []);
+    assert.deepEqual(suggestions({ proposals: [pending('algo_sets')] }), []);
+    assert.equal(suggestions({ proposals: [pending('sets', 'declined')] }).length, 1);
+    assert.equal(suggestions({ proposals: [pending('sets', 'pending', 's_bbbbbbbb')], sessionId: 's_bbbbbbbb' }).length, 1);
   });
 
   test('bugünün planı "aynı ağırlık" ya da hafif günse ilerleme yok', () => {

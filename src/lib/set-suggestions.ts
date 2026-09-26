@@ -91,6 +91,8 @@ function todayRow(day: Pick<WorkoutDay, 'blocks' | 'rows'>, now: Date): SessionI
  * Günün set artışı adayları (§5.6): `setIncreaseCandidates`'ın girdileri toplanır, sonuç bitiş maddesine
  * (`SetSuggestion`) çevrilir. `readinessScore` yalnız sağlık onayı varken verilir (yoksa koşul atlanır).
  * `setWeightsOf`: hareketin setinin kaslara payı (`muscles.ts` → `exerciseSetWeights`; kesirli set).
+ * Satıra başka bir seanstan bekleyen set sayısı önerisi (danışanın `sets`'i ya da `algo_sets`) varsa aday
+ * olmaz: PT aynı artışı iki kart olarak görmesin, birini onaylayınca öteki "Program değişti" olmasın.
  */
 export function setSuggestionsFor(input: {
   day: Pick<WorkoutDay, 'blocks' | 'rows'>;
@@ -100,12 +102,18 @@ export function setSuggestionsFor(input: {
   now: Date;
   experience?: TrainingExperience | undefined;
   readinessScore?: number | undefined;
-  proposals: readonly Pick<Proposal, 'kind' | 'at' | 'exerciseId' | 'sessionId'>[];
+  proposals: readonly Pick<Proposal, 'kind' | 'at' | 'exerciseId' | 'sessionId' | 'rowId' | 'status'>[];
   setWeightsOf: (exercise: SuggestionExercise) => Readonly<Partial<Record<string, number>>>;
   sessionId?: string | undefined;
 }): SetSuggestion[] {
   const { day, exercises, now } = input;
+  const pendingRows = new Set(
+    input.proposals.flatMap((item) =>
+      item.status === 'pending' && (item.kind === 'sets' || item.kind === 'algo_sets') && item.rowId && item.sessionId !== input.sessionId ? [item.rowId] : [],
+    ),
+  );
   const rows: SetIncreaseRow[] = programRows(day).flatMap(({ rowId, exerciseId, setCount }) => {
+    if (pendingRows.has(rowId)) return [];
     const exercise = exercises.get(exerciseId);
     const row = day.rows[rowId];
     // Bugün "aynı ağırlık", iniş ya da hafif gün: satır ilerlemiyor.

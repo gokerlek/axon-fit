@@ -337,14 +337,17 @@ export function restoreUnit(plan: TemplateBody, doc: SessionDoc, entryId: string
   );
 }
 
-/** "Şimdi yap": birim, kalanların başına alınır (geçilmişse geri gelir); sıra oradan sürer. */
+/**
+ * "Şimdi yap": birim, kalanların başına alınır (geçilmişse geri gelir); sıra oradan sürer. Bekleyen
+ * "+ Set ekle" seti de kalan iştir: yalnız o kalan birim açık sayılır, yeni birim onun önüne girer.
+ */
 export function doNow(plan: TemplateBody, doc: SessionDoc, entryId: string, stamp: Stamp, overrides: PlanOverrides = {}): SessionDoc {
   const restored = restoreUnit(plan, doc, entryId, stamp, overrides);
   const units = workoutUnits(plan, restored, overrides);
   const unit = unitOfEntry(units, entryId);
   if (!unit) return doc;
   const rest = units.filter((item) => item !== unit);
-  const firstOpen = rest.findIndex((item) => !unitSkipped(item) && remaining(item));
+  const firstOpen = rest.findIndex((item) => !unitSkipped(item) && item.slots.some((slot) => !slotDone(item, slot)));
   const at = firstOpen < 0 ? rest.length : firstOpen;
   return withOrder(restored, [...rest.slice(0, at), unit, ...rest.slice(at)], stamp);
 }

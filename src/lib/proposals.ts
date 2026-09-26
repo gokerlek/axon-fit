@@ -16,7 +16,8 @@ import { countRows, randomId, ROW_ID_PATTERN, settleKind, TEMPLATE_LIMITS, type 
  * hedefi doğrudan uygulanır (`client-targets.ts`), buraya girmez.
  *
  * - **Upsert:** öneriler `sessionId` + satır + tür ile eşlenir: bitişin yeniden denenmesi çoğaltmaz. Aynı
- *   satıra aynı türde bekleyen öneri varsa yenisi onu günceller (kimliği aynı kalır).
+ *   satıra aynı türde bekleyen öneri varsa yenisi onu günceller (kimliği aynı kalır); set sayısının iki
+ *   türü (danışanın `sets`'i, motorun `algo_sets`'i) burada tek tür sayılır.
  * - **Karar:** PT onaylar (`approved`, program `saveProgram` yolundan geçer: fark yazılır, revision +1,
  *   log türü `edit`) ya da reddeder (`declined`, isteğe bağlı notla). Satır o arada silindiyse ya da
  *   önerinin dayandığı hâl değiştiyse uygulanmaz: `stale` ("Program değişti; öneri uygulanamadı").
@@ -162,6 +163,10 @@ function capItems(items: Proposal[]): Proposal[] {
  * Bitişin önerileri dosyaya: aynı seans + satır + tür güncellenir (karar verilmişse dokunulmaz); aynı satıra
  * aynı türde bekleyen öneri varsa yenisi onu günceller; yoksa yeni kimlikle eklenir. `ids`: yeni ya da
  * güncellenen önerilerin kimlikleri. Değişiklik yoksa `changed` false.
+ *
+ * Bekleyen set sayısı önerisi `sets` ile `algo_sets` arasında ayrılmaz: pazartesinin "4/3 set"i bekliyorken
+ * perşembenin algoritmik artışı (ya da tersi) ikinci kart açmaz, ötekini günceller. İkisi aynı satıra aynı
+ * artışı ister; PT biri onaylayınca öteki "Program değişti" olurdu.
  */
 export function upsertProposals(
   file: ProposalsFile,
@@ -172,10 +177,11 @@ export function upsertProposals(
   const ids: string[] = [];
   let changed = false;
   const taken = new Set(items.map((item) => item.id));
+  const countKey = (item: Pick<Proposal, 'kind' | 'rowId' | 'dayId' | 'exerciseId'>) => rowKey({ ...item, kind: item.kind === 'algo_sets' ? 'sets' : item.kind });
   for (const input of inputs) {
     const key = rowKey(input);
     const same = items.find((item) => item.sessionId === input.sessionId && rowKey(item) === key);
-    const pending = same ?? items.find((item) => item.status === 'pending' && rowKey(item) === key);
+    const pending = same ?? items.find((item) => item.status === 'pending' && countKey(item) === countKey(input));
     if (pending && pending.status !== 'pending') continue;
     if (pending) {
       const next: Proposal = { ...contentOf(input), id: pending.id, status: 'pending' };
