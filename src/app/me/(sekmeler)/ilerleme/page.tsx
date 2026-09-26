@@ -1,22 +1,20 @@
 import type { Metadata } from 'next';
-import { ChartLineUp, WarningCircle } from '@phosphor-icons/react/dist/ssr';
+import { WarningCircle } from '@phosphor-icons/react/dist/ssr';
+import { AchievementsCard } from '@/components/progress/achievements-card';
+import { ExerciseProgress } from '@/components/progress/exercise-progress';
+import { AdherenceCard, EffortCard, PainCard, ReadinessCard, WaterCard, WeeklyLoadCard } from '@/components/progress/insight-charts';
+import { ProgressEmpty, ProgressNotice, ProgressStats } from '@/components/progress/progress-summary';
+import { RecordsCard } from '@/components/progress/records-card';
+import { StrengthProgress } from '@/components/progress/strength-progress';
+import { WeeklyProgress } from '@/components/progress/weekly-progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Card, CardContent } from '@/components/ui/card';
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { readAppConfig } from '@/lib/config';
-import { formatDay, todayIn } from '@/lib/format';
+import { todayIn } from '@/lib/format';
 import { currentClient } from '@/lib/guards';
 import { defaultStrengthWindow, STRENGTH_WINDOWS, type StrengthWindow } from '@/lib/muscle-progress';
-import { PROGRESS_MAX_SESSIONS } from '@/lib/progress';
 import { loadProgress } from '@/lib/progress-data';
 import { LOW_READINESS } from '@/lib/session-check';
 import { ClientHeader } from '../../client-header';
-import { AchievementsCard } from './achievements-card';
-import { ExerciseProgress } from './exercise-progress';
-import { AdherenceCard, EffortCard, PainCard, ReadinessCard, WaterCard, WeeklyLoadCard } from './insight-charts';
-import { RecordsCard } from './records-card';
-import { StrengthProgress } from './strength-progress';
-import { WeeklyProgress } from './weekly-progress';
 
 export const metadata: Metadata = { title: 'İlerleme' };
 
@@ -27,7 +25,8 @@ export const metadata: Metadata = { title: 'İlerleme' };
  * antrenman düzeni, haftalık kas yükü, onay varsa hazır oluşluk ve ağrı, zorluk, su), son rekorlar,
  * başarılar. Veri `sessions-index.json`, özetleri önbellekli antrenman dosyaları, `water.json` ve onay
  * varsa `health.json`'dan (`progress-data.ts`). Danışanın dilinde: "e1RM", "tonaj" yok. Yalnız telefon,
- * 375 px. Sayfa yetkiyi kendisi denetler (SPEC §5).
+ * 375 px. Bölümler PT'nin danışan sayfasındaki İlerleme sekmesiyle ortak (`src/components/progress`,
+ * `viewer="client"`). Sayfa yetkiyi kendisi denetler (SPEC §5).
  */
 export default async function ProgressPage({
   searchParams,
@@ -58,18 +57,7 @@ export default async function ProgressPage({
     return (
       <main className="flex flex-col gap-6">
         {header}
-        <Empty className="border">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <ChartLineUp weight="fill" />
-            </EmptyMedia>
-            <EmptyTitle>İlerlemen burada görünecek</EmptyTitle>
-            <EmptyDescription>
-              İlk antrenmanını bitirdiğinde her hareket için kaldırdığın ağırlığın grafiği, hangi kasları ne kadar çalıştırdığın,
-              rekorların ve başarıların burada birikmeye başlar.
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        <ProgressEmpty viewer="client" />
       </main>
     );
   }
@@ -79,56 +67,23 @@ export default async function ProgressPage({
     typeof params.donem === 'string' && Object.hasOwn(STRENGTH_WINDOWS, params.donem)
       ? (params.donem as StrengthWindow)
       : defaultStrengthWindow(view.exercises, today);
-  const stats = [
-    { value: view.workouts, label: 'antrenman' },
-    { value: view.streak.current, label: 'haftalık seri' },
-    { value: view.records, label: 'rekor' },
-  ];
 
   return (
     <main className="flex flex-col gap-6">
       {header}
-
-      {view.skipped > 0 || view.truncated ? (
-        <Alert>
-          <WarningCircle weight="fill" />
-          <AlertDescription>
-            {[
-              view.skipped > 0 ? `${view.skipped} antrenmanın kaydı şu an okunamadı; grafikler ve rekorlar onlarsız.` : null,
-              view.truncated ? `Grafikler ve rekorlar son ${PROGRESS_MAX_SESSIONS} antrenmandan.` : null,
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      <StrengthProgress exercises={view.exercises} today={today} initialWindow={period} circumference={insights.circumference} />
-
-      <Card size="sm">
-        <CardContent className="flex flex-col gap-2">
-          <dl className="grid grid-cols-3 divide-x text-center">
-            {stats.map((stat) => (
-              <div key={stat.label} className="flex flex-col-reverse gap-0.5 px-1">
-                <dt className="text-xs text-muted-foreground">{stat.label}</dt>
-                <dd className="font-heading text-2xl font-semibold tabular-nums">{stat.value}</dd>
-              </div>
-            ))}
-          </dl>
-          {view.firstDate ? <p className="text-center text-xs text-muted-foreground">İlk antrenmanın {formatDay(view.firstDate)}</p> : null}
-        </CardContent>
-      </Card>
-
-      {view.exercises.length > 0 ? <ExerciseProgress exercises={view.exercises} initialKey={requested} today={today} /> : null}
-      <WeeklyLoadCard weeks={view.weeks} today={today} />
-      <AdherenceCard adherence={insights.adherence} />
-      <WeeklyProgress weeks={view.weeks} />
-      <ReadinessCard readiness={insights.readiness} today={today} low={LOW_READINESS} />
-      <PainCard pain={insights.pain} />
-      <EffortCard rpe={insights.rpe} today={today} />
-      <WaterCard water={insights.water} today={today} />
-      <RecordsCard items={view.recentRecords} total={view.records} today={today} />
-      <AchievementsCard achievements={view.achievements} streak={view.streak} />
+      <ProgressNotice view={view} />
+      <StrengthProgress viewer="client" exercises={view.exercises} today={today} initialWindow={period} circumference={insights.circumference} />
+      <ProgressStats viewer="client" view={view} />
+      {view.exercises.length > 0 ? <ExerciseProgress viewer="client" exercises={view.exercises} initialKey={requested} today={today} /> : null}
+      <WeeklyLoadCard viewer="client" weeks={view.weeks} today={today} />
+      <AdherenceCard viewer="client" adherence={insights.adherence} />
+      <WeeklyProgress viewer="client" weeks={view.weeks} />
+      <ReadinessCard viewer="client" readiness={insights.readiness} today={today} low={LOW_READINESS} />
+      <PainCard viewer="client" pain={insights.pain} />
+      <EffortCard viewer="client" rpe={insights.rpe} today={today} />
+      <WaterCard viewer="client" water={insights.water} today={today} />
+      <RecordsCard viewer="client" items={view.recentRecords} total={view.records} today={today} />
+      <AchievementsCard viewer="client" achievements={view.achievements} streak={view.streak} />
     </main>
   );
 }

@@ -56,10 +56,19 @@ export function demoSeedGate(input: {
   return { ok: true };
 }
 
+/** Onay kutusu ("on") ya da JSON'da `true`; başka her değer kapalı. */
+const flag = v.pipe(
+  v.unknown(),
+  v.transform((value) => value === true || value === 'on' || value === 'true' || value === '1'),
+  v.boolean(),
+);
+
 export const seedRequestSchema = v.object({
   clientId: v.pipe(v.string(), v.regex(/^c_[a-z0-9]{6,24}$/, 'Danışan kimliği geçersiz.')),
   weeks: v.optional(v.pipe(v.unknown(), v.transform(Number), v.number(), v.integer(), v.minValue(1), v.maxValue(52))),
   seed: v.optional(v.pipe(v.unknown(), v.transform(String), v.string(), v.maxLength(40))),
+  /** Gerileme senaryosu (`demo-history.ts`); verilmezse kapalı. */
+  declining: v.optional(flag),
 });
 export type SeedRequest = v.InferOutput<typeof seedRequestSchema>;
 

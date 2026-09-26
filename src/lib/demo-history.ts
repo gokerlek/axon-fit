@@ -1,5 +1,6 @@
 import { todayIn } from './format.ts';
 import { gitBlobSha, jsonText } from './github/blob.ts';
+import { E1RM_MAX_REPS } from './personal-records.ts';
 import { completeDay, currentPhaseOf, mondayOf, nextDayId } from './program-plan.ts';
 import { deloadWeight, gridOf, LIGHTEN_FACTOR, isOverload, percentOfTop, type Effort } from './progression.ts';
 import { seriesKey } from './progress.ts';
@@ -49,6 +50,14 @@ import { addWaterTap, cursorOf, logSet, logWarmup, newSessionDoc, nextSet, setEn
  * hareket geçilir (bitişte neden); antrenman içinde ve dışında (`water.json`) su. Seans zorluğu (CR-10)
  * antrenman verisidir, onay istemez (SPEC §7.5); sağlık yoklaması (hazır oluşluk, ağrı) yalnız o parçanın
  * onayı varsa ve iyi huyludur: kural hiçbir antrenmanı durdurmaz ya da geri çekmez.
+ *
+ * İsteğe bağlı gerileme (`declining`, varsayılan kapalı): tıkanandan başka bir ağırlıklı harekette son
+ * ~5 haftada kapasite her antrenmanda ~%2 düşer (uyku, stres, kalori açığı ya da küçük bir sakatlıkla
+ * görülebilecek kadar; toplam ~%8–12) [sentez]. Düşüş başlarken kapasite son antrenmanda gösterilen tahmini
+ * maksimumun biraz üstüne iner (yedekteki pay düşüşü gizlemesin): tekrarlar her antrenmanda biraz azalır,
+ * motor kendi kuralıyla tutar, azaltır, hafifletir. Gelişim'in
+ * "Gerileme" durumu ve Genel bakış'ın "geriliyor" maddesi gerçek bir danışan beklemeden gözden geçirilsin
+ * diye. Kapalıyken üretim birebir aynıdır (tohumdan fazladan sayı çekilmez).
  *
  * Tanıma: seans kimlikleri `s_demo` + 4, su dokunuşları `wt_demo` + 4, yazan cihaz `w_demo01`. Şema aynı
  * olduğu için uygulama bunları sıradan kayıt gibi okur; yeniden tohumlama yalnız bunları değiştirir
@@ -236,6 +245,29 @@ function startCapacity(row: WorkoutRow, exercise: WorkoutExercise, aimMin: numbe
   return { kind: 'reps', value: aimMin + 1 + random.int(0, 2), exposures: 0 };
 }
 
+/** Gerilemede antrenman başına kapasite kaybı (~%2, ±%25) [sentez]. */
+const DECLINE_RATE = 0.02;
+/** Gerileme son bu kadar haftada (yolun yarısından önce başlamaz). */
+export const DECLINE_WEEKS = 5;
+
+/** Gerileme başlarken kapasite son gösterilenin en çok bu kadar üstünde [sentez]. */
+const DECLINE_ANCHOR = 1.03;
+
+function fade(capacity: Capacity, random: Random): Capacity {
+  return { ...capacity, value: capacity.value * (1 - DECLINE_RATE * (0.75 + random.next() * 0.5)) };
+}
+
+/** Serinin son antrenmanında gösterilen tahmini maksimum (Epley, 1–12 tekrarlı yüklü çalışma setleri); yoksa undefined. */
+function shownMax(sessions: readonly SessionDoc[], key: string): number | undefined {
+  for (let position = sessions.length - 1; position >= 0; position--) {
+    const sets = sessions[position]!.entries
+      .filter((entry) => seriesKey(entry.exerciseId, entry.deviceId) === key)
+      .flatMap((entry) => entry.sets.filter((set) => set.type === 'working' && (set.kg ?? 0) > 0 && (set.reps ?? 0) >= 1 && (set.reps ?? 0) <= E1RM_MAX_REPS));
+    if (sets.length > 0) return Math.max(...sets.map((set) => set.kg! * (1 + set.reps! / 30)));
+  }
+  return undefined;
+}
+
 /** Antrenmandan sonra uyum: başta hızlı, sonra yavaş [sentez; Rhea 2003 yeni başlayanda hızlı artış]. */
 function grow(capacity: Capacity, random: Random): Capacity {
   const jitter = 0.6 + random.next() * 0.8;
@@ -272,6 +304,8 @@ export type DemoInput = {
   timeZone: string;
   weeks?: number | undefined;
   seed?: string | number | undefined;
+  /** Gerileme senaryosu: bir hareket son haftalarda geriler; varsayılan kapalı. */
+  declining?: boolean | undefined;
 };
 
 export type DemoSummary = {
@@ -283,6 +317,8 @@ export type DemoSummary = {
   missedWeek: string | null;
   lighter: { sessionId: string; date: string; via: 'readiness' | 'weight' } | null;
   stall: { exerciseId: string; title: string; from: string; deload: string | null } | null;
+  /** Gerileme senaryosu: geriyen hareket ve düşüşün başladığı antrenman günü; kapalıysa ya da hareket yoksa null. */
+  decline: { exerciseId: string; title: string; from: string } | null;
   /** Hareketi geçilen antrenman sayısı. */
   skipped: number;
   /** Seans zorluğu cevaplanmayan antrenman sayısı. */
@@ -321,12 +357,20 @@ function startingRotation(program: Program, sessions: number): Program {
   return { ...program, rotation: lastDayId ? { lastDayId } : {} };
 }
 
-/** Tıkanma yaşayacak hareket: günlerin sırasıyla ilk ağırlıklı, en az iki tam yük setli bileşik (yoksa ağırlıklı) satır. */
-function stallCandidate(program: Program, exercises: ReadonlyMap<string, WorkoutExercise>): string | null {
+/**
+ * Tıkanma (ya da gerileme) yaşayacak hareket: günlerin sırasıyla ilk ağırlıklı, en az iki tam yük setli bileşik
+ * (yoksa ağırlıklı) satır; `except` dışında (gerileme tıkanandan başka harekette).
+ */
+function stallCandidate(program: Program, exercises: ReadonlyMap<string, WorkoutExercise>, except: string | null = null): string | null {
   const rows = (currentPhaseOf(program)?.phase.days ?? []).flatMap((day) => day.blocks.flatMap((block) => block.rows));
   const weighted = rows.filter((row) => {
     const exercise = exercises.get(row.exerciseId);
-    return exercise?.trackingType === 'weight_reps' && (exercise.loadStepKg > 0 || exercise.deviceId) && row.sets.filter((set) => (set.loadPct ?? 100) >= 100).length >= 2;
+    return (
+      row.exerciseId !== except &&
+      exercise?.trackingType === 'weight_reps' &&
+      (exercise.loadStepKg > 0 || exercise.deviceId) &&
+      row.sets.filter((set) => (set.loadPct ?? 100) >= 100).length >= 2
+    );
   });
   const compound = weighted.find((row) => exercises.get(row.exerciseId)?.category === 'compound');
   return (compound ?? weighted[0])?.exerciseId ?? null;
@@ -349,6 +393,8 @@ function lighterSession(program: Program, sessions: number, stallExercise: strin
 }
 
 type Stall = { exerciseId: string; key: string | null; active: boolean; done: boolean; count: number; saved: number; from: string | null; deload: string | null; title: string };
+/** `start`: düşüşün en erken günü; `key`: hareket (ve cihaz) serisi; `from`: ilk düşen antrenman günü. */
+type Decline = { exerciseId: string; title: string; start: string; key: string | null; from: string | null };
 
 const SKIP_REASONS: readonly Exclude<SkipReason, 'other'>[] = ['no_time', 'tired', 'busy', 'no_equipment'];
 /** Tıkanmayı başlatabilen plan gerekçeleri (hafifletme ve ilk antrenman değil). */
@@ -371,6 +417,18 @@ export function generateDemoHistory(input: DemoInput): DemoHistory {
   const stallExercise = stallCandidate(input.program, exercises);
   const lighterAt = lighterSession(program, dates.length, stallExercise);
   const stallFrom = Math.floor(dates.length * 0.4);
+  const declineExercise = input.declining ? stallCandidate(input.program, exercises, stallExercise) : null;
+  const decline: Decline | null =
+    declineExercise && dates.length > 0
+      ? {
+          exerciseId: declineExercise,
+          title: exercises.get(declineExercise)?.title ?? declineExercise,
+          // Son `DECLINE_WEEKS` hafta; kısa geçmişte yolun yarısından (önce bir yükseliş olsun).
+          start: [addDays(today, -7 * DECLINE_WEEKS), dates[Math.floor(dates.length / 2)]!].sort().at(-1)!,
+          key: null,
+          from: null,
+        }
+      : null;
   const skipSessions = new Set<number>();
   for (let n = 3; n < dates.length; n += random.int(6, 10)) if (n !== lighterAt) skipSessions.add(n);
 
@@ -444,6 +502,7 @@ export function generateDemoHistory(input: DemoInput): DemoHistory {
     const last = new Map<string, { margin: number; at: number }>();
     const performed = new Set<string>();
     let stalledToday = false;
+    let decliningToday = false;
     let deloadToday = false;
     let skippedToday = false;
     for (let guard = 0; guard < 500; guard++) {
@@ -489,6 +548,18 @@ export function generateDemoHistory(input: DemoInput): DemoHistory {
         }
       }
       const stalling = Boolean(stall?.active && stall.key === key);
+
+      // Gerileme: pencerede her antrenmanın başında kapasite biraz düşer (büyüme yok, aşağıda).
+      if (decline && k === 0 && row.exerciseId === decline.exerciseId && capacity.kind === 'weight' && date >= decline.start) {
+        decline.key ??= key;
+        if (decline.key === key) {
+          const shown = decline.from === null ? shownMax(sessions, key) : undefined;
+          if (shown !== undefined) capacity = { ...capacity, value: Math.min(capacity.value, shown * DECLINE_ANCHOR) };
+          capacity = fade(capacity, random);
+          decline.from ??= date;
+          decliningToday = true;
+        }
+      }
 
       if (k === 0) {
         for (const [position] of (row.warmups ?? []).entries()) {
@@ -544,11 +615,12 @@ export function generateDemoHistory(input: DemoInput): DemoHistory {
       t += Math.max(0, next.restAfterSeconds + random.int(-10, 30)) * 1000;
     }
 
-    // Uyum: yapılan her hareket (tıkanmada büyüme yok).
+    // Uyum: yapılan her hareket (tıkanmada ve gerilemede büyüme yok).
     for (const key of performed) {
       const capacity = capacities.get(key);
       if (!capacity) continue;
-      capacities.set(key, stall?.active && stall.key === key ? { ...capacity, exposures: capacity.exposures + 1 } : grow(capacity, random));
+      const held = (stall?.active && stall.key === key) || (decliningToday && decline?.key === key);
+      capacities.set(key, held ? { ...capacity, exposures: capacity.exposures + 1 } : grow(capacity, random));
     }
 
     // Zorluk: hareket başına bir cevap (son tam yük setindeki paydan); onda biri cevapsız.
@@ -586,7 +658,7 @@ export function generateDemoHistory(input: DemoInput): DemoHistory {
 
     // Antrenman sonrası kart (10 dk – 24 saat): seans zorluğu ve süre; ağrı takibi onaylıysa en yüksek ağrı.
     if (random.chance(0.88)) {
-      const base = readinessLighter || weightLighter || deloadToday ? 4 : stalledToday ? 8 : n < 3 ? 5 : 6;
+      const base = readinessLighter || weightLighter || deloadToday ? 4 : stalledToday ? 8 : decliningToday ? 7 : n < 3 ? 5 : 6;
       const sessionRpe = Math.min(10, Math.max(1, base + random.int(-1, 1)));
       const durationMin = durationOf(finished);
       const answeredAt = new Date(finishedAt.getTime() + random.int(12, 90) * MINUTE);
@@ -622,6 +694,7 @@ export function generateDemoHistory(input: DemoInput): DemoHistory {
       missedWeek,
       lighter,
       stall: stall?.from ? { exerciseId: stall.exerciseId, title: stall.title, from: stall.from, deload: stall.deload } : null,
+      decline: decline?.from ? { exerciseId: decline.exerciseId, title: decline.title, from: decline.from } : null,
       skipped,
       unanswered,
       checkIns: health.checkIns.length,

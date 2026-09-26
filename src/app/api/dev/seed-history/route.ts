@@ -23,8 +23,9 @@ import { origin } from '@/lib/urls';
  * `demo-history.ts`'te.
  *
  * - `GET`: küçük yardım sayfası: deneme danışanları ve "Geçmiş üret" formu.
- * - `POST` (JSON ya da form): `{ clientId, weeks?, seed? }` → tek commit; yeniden çalıştırmak yalnız deneme
- *   kayıtlarını değiştirir. Form gönderiminde sonuç sayfası, JSON'da sonuç nesnesi.
+ * - `POST` (JSON ya da form): `{ clientId, weeks?, seed?, declining? }` → tek commit; yeniden çalıştırmak yalnız
+ *   deneme kayıtlarını değiştirir. `declining`: bir hareket son haftalarda geriler (Gelişim'in "Gerileme"
+ *   durumu canlı gözden geçirilsin diye; varsayılan kapalı). Form gönderiminde sonuç sayfası, JSON'da sonuç nesnesi.
  */
 
 const production = () => process.env.NODE_ENV === 'production';
@@ -60,6 +61,7 @@ export async function GET() {
 <label>Danışan<select name="clientId" required>${options}</select></label>
 <label>Hafta (1–${DEMO_MAX_WEEKS})<input name="weeks" type="number" min="1" max="${DEMO_MAX_WEEKS}" value="${DEMO_DEFAULT_WEEKS}"></label>
 <label>Tohum (aynı tohum, aynı geçmiş)<input name="seed" value="1" maxlength="40"></label>
+<label style="display:flex;align-items:center;gap:.5rem"><input name="declining" type="checkbox" style="min-height:24px;width:24px">Gerileme senaryosu: bir hareket son ~5 haftada geriler (en iyi ${DEMO_DEFAULT_WEEKS} hafta ve üstünde)</label>
 <button type="submit">Geçmiş üret</button></form>`
     : `<p>Adı "${escapeHtml(DEMO_CLIENT_PREFIX)}" ile başlayan danışan yok. Önce öyle bir danışan aç ve programını yaz.</p>`;
   return page(
@@ -67,7 +69,7 @@ export async function GET() {
     `<p>Yalnız geliştirmede. Seçilen deneme danışanının programından bugünden önceki haftalara bitmiş antrenmanlar, su ve (onay varsa) yoklamalar yazılır; tek commit. Yeniden çalıştırmak yalnız deneme kayıtlarını değiştirir.</p>
 ${form}
 ${others > 0 ? `<p>Adı "${escapeHtml(DEMO_CLIENT_PREFIX)}" ile başlamayan ${others} danışan listelenmedi: onların repo'suna yazılmaz.</p>` : ''}
-<p>JSON: <code>POST /api/dev/seed-history {"clientId":"c_…","weeks":12,"seed":"1"}</code> (PT oturum çerezi ve bu sitenin <code>Origin</code> başlığıyla).</p>`,
+<p>JSON: <code>POST /api/dev/seed-history {"clientId":"c_…","weeks":12,"seed":"1","declining":false}</code> (PT oturum çerezi ve bu sitenin <code>Origin</code> başlığıyla).</p>`,
   );
 }
 
@@ -78,6 +80,7 @@ function resultText(result: SeedResult): string {
     `${summary.sessions} antrenman · ${escapeHtml(summary.from)} – ${escapeHtml(summary.to)} · ${result.written} dosya yazıldı, ${result.removed} eski deneme antrenmanı silindi`,
     summary.missedWeek ? `Boş hafta: ${escapeHtml(summary.missedWeek)} haftası` : '',
     summary.stall ? `Tıkanma: ${escapeHtml(summary.stall.title)} (${escapeHtml(summary.stall.from)}'den, hafifletme ${escapeHtml(summary.stall.deload ?? 'yok')})` : 'Tıkanma yok (ağırlıklı bileşik hareket bulunamadı).',
+    summary.decline ? `Gerileme: ${escapeHtml(summary.decline.title)} (${escapeHtml(summary.decline.from)}'den; Gelişim'de 8 hafta)` : '',
     summary.lighter ? `Hafif gün: ${escapeHtml(summary.lighter.date)} (${summary.lighter.via === 'readiness' ? 'hazır oluşluk' : 'plandan hafif ağırlık'})` : '',
     `Geçilen hareketli antrenman: ${summary.skipped} · seans zorluğu cevapsız: ${summary.unanswered}`,
     `Su: ${summary.waterTaps} dokunuş (water.json: ${result.water === 'broken' ? 'bozuk, yazılmadı' : result.water === 'written' ? 'yazıldı' : 'değişmedi'})`,
@@ -97,7 +100,7 @@ export async function POST(request: Request) {
 
   const raw: unknown = form ? Object.fromEntries((await request.formData()).entries()) : await request.json().catch(() => null);
   const input = raw && typeof raw === 'object' ? parseSeedRequest(raw as Record<string, unknown>) : null;
-  if (!input) return blocked(400, 'İstek geçersiz: clientId (c_…), weeks (1–52), seed.', form);
+  if (!input) return blocked(400, 'İstek geçersiz: clientId (c_…), weeks (1–52), seed, declining.', form);
 
   try {
     const stored = await readClient(input.clientId);
@@ -117,6 +120,7 @@ export async function POST(request: Request) {
       timeZone: config.timeZone,
       weeks: input.weeks,
       seed: input.seed,
+      declining: input.declining,
     });
     if (history.sessions.length === 0) return blocked(409, 'Üretilecek antrenman yok: programın şu anki evresinde kütüphanede olan hareket yok.', form);
 

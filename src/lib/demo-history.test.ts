@@ -4,6 +4,7 @@ import * as v from 'valibot';
 import {
   chooseValue,
   clampWeeks,
+  DECLINE_WEEKS,
   DEMO_DEFAULT_WEEKS,
   DEMO_WRITER,
   demoCalendar,
@@ -20,15 +21,19 @@ import {
 } from './demo-history.ts';
 import { todayIn } from './format.ts';
 import { gitBlobSha, jsonText } from './github/blob.ts';
+import { exerciseStrength } from './muscle-progress.ts';
 import { mondayOf, nextDayId } from './program-plan.ts';
+import { buildProgressView, digestSession } from './progress.ts';
 import type { HealthField } from './schemas/client.ts';
 import { healthCheckInSchema } from './schemas/health.ts';
 import { parseStoredSession, SESSION_ID_PATTERN, sessionIndexRowSchema, waterTapSchema, type SessionDoc } from './schemas/session.ts';
 import { indexRowOf } from './session-index.ts';
-import { isoWeekdayOf } from './training-days.ts';
+import { addDays, isoWeekdayOf } from './training-days.ts';
 import { DEMO_DEVICES, DEMO_EXERCISES, DEMO_NOW, DEMO_TODAY, DEMO_TZ, demoClient, demoProgram } from './testing/demo-fixtures.ts';
 
-function generate(options: { fields?: HealthField[]; seed?: string | number; weeks?: number; program?: ReturnType<typeof demoProgram> } = {}) {
+function generate(
+  options: { fields?: HealthField[]; seed?: string | number; weeks?: number; program?: ReturnType<typeof demoProgram>; declining?: boolean } = {},
+) {
   return generateDemoHistory({
     program: options.program ?? demoProgram(),
     exercises: DEMO_EXERCISES,
@@ -38,6 +43,7 @@ function generate(options: { fields?: HealthField[]; seed?: string | number; wee
     timeZone: DEMO_TZ,
     seed: options.seed ?? 1,
     weeks: options.weeks,
+    ...(options.declining !== undefined ? { declining: options.declining } : {}),
   });
 }
 
@@ -306,6 +312,53 @@ describe('deneme geçmişi: üretim', () => {
       assert.ok(v.is(waterTapSchema, tap) && isDemoTapId(tap.id));
       assert.ok(Date.parse(tap.at) < DEMO_NOW.getTime());
     }
+  });
+});
+
+describe('deneme geçmişi: gerileme senaryosu (isteğe bağlı)', () => {
+  const declining = generate({ declining: true });
+  const decline = declining.summary.decline;
+
+  /** Hareketin İlerleme'deki serisi ve Gelişim kararı (danışan ekranıyla aynı hesap). */
+  function strengthOf(history: typeof declining, exerciseId: string, window: '4h' | '8h') {
+    const view = buildProgressView({
+      index: history.index,
+      digests: history.sessions.map((doc) => digestSession(doc)),
+      now: DEMO_NOW,
+      today: DEMO_TODAY,
+      exercises: DEMO_EXERCISES,
+      deviceNames: new Map(),
+      setWeightsOf: (exercise) => Object.fromEntries(exercise.primaryMuscles.map((muscle) => [muscle, 1])),
+    });
+    const source = view.exercises.find((item) => item.exerciseId === exerciseId);
+    assert.ok(source, exerciseId);
+    return exerciseStrength(source, { today: DEMO_TODAY, window });
+  }
+
+  test('kapalıyken (varsayılan) üretim birebir aynı; gerileme yok', () => {
+    assert.equal(full.summary.decline, null);
+    assert.deepEqual(generate({ declining: false }), full);
+  });
+
+  test('açıkken: tıkanandan başka ağırlıklı hareket son haftalarda geriler; Gelişim "Geriledi" der', () => {
+    assert.ok(decline);
+    assert.notEqual(decline.exerciseId, declining.summary.stall?.exerciseId);
+    assert.ok(decline.from >= addDays(DEMO_TODAY, -7 * DECLINE_WEEKS) && decline.from < DEMO_TODAY, decline.from);
+    for (const window of ['4h', '8h'] as const) {
+      const strength = strengthOf(declining, decline.exerciseId, window);
+      assert.equal(strength.status, 'declined', window);
+      // Gerçekçi: birkaç haftada tahmini maksimumun ~%5–15'i, çöküş değil.
+      assert.ok(strength.fit && strength.fit.changePct !== null && strength.fit.changePct > -0.2 && strength.fit.changePct < -0.03, String(strength.fit?.changePct));
+    }
+    // Kapalıyken aynı hareket gerilemez.
+    assert.notEqual(strengthOf(full, decline.exerciseId, '8h').status, 'declined');
+  });
+
+  test('açıkken de geçmiş şemaya uyar ve öteki senaryolar sürer', () => {
+    for (const doc of declining.sessions) assert.ok(parseStoredSession(doc), doc.id);
+    assert.ok(declining.summary.stall?.deload);
+    assert.ok(declining.summary.lighter);
+    assert.equal(declining.sessions.length, full.sessions.length);
   });
 });
 

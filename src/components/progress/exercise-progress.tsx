@@ -4,11 +4,10 @@ import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { CaretDown, Check, MagnifyingGlass } from '@phosphor-icons/react';
 import { ProgressChart } from '@/components/progress-chart';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Sheet, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { fold } from '@/lib/exercise-search';
 import { formatDay, formatDayShort, formatWithUnit } from '@/lib/format';
@@ -16,24 +15,23 @@ import type { RecordMark } from '@/lib/personal-records';
 import type { ExerciseView } from '@/lib/progress';
 import {
   describeTrend,
-  E1RM_NOTE,
   highRepDaysSince,
-  highRepDaysText,
   METRICS,
   METRICS_OF,
   metricForecast,
   metricMinSpan,
   metricPoints,
+  progressCopy,
   recordLabel,
   recordValue,
   type Metric,
+  type ProgressCopy,
+  type ProgressViewer,
 } from '@/lib/progress-text';
 import { forecastAsOf, rangeStart, type RangePreset } from '@/lib/trend';
 import { cn } from '@/lib/utils';
-
-/** Telefonda alttan açılan, ekran boyu sheet (antrenman ekranının kütüphanesiyle aynı; Gelişim'in kas sheet'i de). */
-export const TALL_SHEET =
-  'h-[calc(100dvh-max(1rem,env(safe-area-inset-top)))] max-h-[calc(100dvh-max(1rem,env(safe-area-inset-top)))] gap-0 rounded-t-2xl pb-[env(safe-area-inset-bottom)]';
+import { ProgressCard, SubHeading } from './progress-card';
+import { ProgressSheetContent } from './progress-sheet';
 
 /** Grafiğin tarih aralıkları; 375 px'te tek satıra sığan kısa adlar. */
 const RANGES = [
@@ -81,8 +79,22 @@ function defaultRange(exercise: ExerciseView, today: string): Range {
  * maksimum ve toplam ağırlık; vücut ağırlığında tekrar; sürelide süre. Grafik ölçümlerinkiyle aynı
  * bileşen (dokununca değer, "tablo olarak göster"); ilerleme değerlerinde eğilim ve tahmin (Theil–Sen).
  * Altında o hareketin rekorları. Seçim adreste (`?hareket=`): sayfa yenilenince aynı hareket açılır.
+ *
+ * Danışan ve PT aynı bileşeni kullanır (`viewer`); kart geniş olunca (PT masaüstü, kap sorgusu) rekorlar
+ * grafiğin sağında.
  */
-export function ExerciseProgress({ exercises, initialKey, today }: { exercises: ExerciseView[]; initialKey: string | null; today: string }) {
+export function ExerciseProgress({
+  viewer,
+  exercises,
+  initialKey,
+  today,
+}: {
+  viewer: ProgressViewer;
+  exercises: ExerciseView[];
+  initialKey: string | null;
+  today: string;
+}) {
+  const copy = progressCopy(viewer);
   const [key, setKey] = useState(() => (exercises.some((item) => item.key === initialKey) ? initialKey! : (exercises[0]?.key ?? '')));
   const exercise = exercises.find((item) => item.key === key) ?? exercises[0];
   const [metric, setMetric] = useState<Metric>(() => METRICS_OF[exercise?.trackingType ?? 'weight_reps'][0]!);
@@ -119,130 +131,137 @@ export function ExerciseProgress({ exercises, initialKey, today }: { exercises: 
   const title = `${exercise.title} · ${info.label}`;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2 id="hareketler" className="font-heading text-lg font-semibold">
-            Hareketler
-          </h2>
-        </CardTitle>
-        <CardDescription>Bir hareket seç: ağırlığının, tekrarlarının ve rekorlarının gidişatı.</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-haspopup="dialog"
-          className="flex min-h-14 w-full items-center gap-3 rounded-lg border border-input bg-transparent px-3 py-2 text-left outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30">
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-base font-medium">{exercise.title}</span>
-            <span className="truncate text-xs text-muted-foreground">{subtitle(exercise, today)}</span>
-          </span>
-          <CaretDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="sr-only">, hareketi değiştir</span>
-        </button>
+    <ProgressCard viewer={viewer} title="Hareketler" titleId="hareketler" description={copy.exerciseIntro} contentClassName="@container">
+      <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] @3xl:gap-x-8">
+        <div className="flex min-w-0 flex-col gap-4">
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-haspopup="dialog"
+            className="flex min-h-14 w-full items-center gap-3 rounded-lg border border-input bg-transparent px-3 py-2 text-left outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30">
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-base font-medium">{exercise.title}</span>
+              <span className="truncate text-xs text-muted-foreground">{subtitle(exercise, today)}</span>
+            </span>
+            <CaretDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="sr-only">, hareketi değiştir</span>
+          </button>
 
-        {exercise.stage ? (
-          <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <Badge variant="secondary">{exercise.stage}</Badge>
-            <span>bu hareketteki deneyimin</span>
-          </p>
-        ) : null}
+          {exercise.stage ? (
+            <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <Badge variant="secondary">{exercise.stage}</Badge>
+              <span>{copy.stageNote}</span>
+            </p>
+          ) : null}
 
-        {metrics.length > 1 ? (
-          <ToggleGroup
-            variant="outline"
-            spacing={0}
-            value={[shown]}
-            onValueChange={(value) => {
-              const next = value[0] as Metric | undefined;
-              if (next) setMetric(next);
-            }}
-            aria-label="Grafikte ne gösterilsin"
-            className="w-full">
-            {metrics.map((item) => (
-              <ToggleGroupItem key={item} value={item} className="h-10 flex-1" aria-label={METRICS[item].label}>
-                {METRICS[item].short}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        ) : null}
+          {metrics.length > 1 ? (
+            <ToggleGroup
+              variant="outline"
+              spacing={0}
+              value={[shown]}
+              onValueChange={(value) => {
+                const next = value[0] as Metric | undefined;
+                if (next) setMetric(next);
+              }}
+              aria-label="Grafikte ne gösterilsin"
+              className="w-full">
+              {metrics.map((item) => (
+                <ToggleGroupItem key={item} value={item} className="h-10 flex-1" aria-label={METRICS[item].label}>
+                  {METRICS[item].short}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          ) : null}
 
-        <section aria-label={title} className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <h3 className="text-sm font-medium">{info.label}</h3>
-            {ranges.length > 0 ? (
-              <ToggleGroup
-                size="sm"
-                spacing={2}
-                value={[activeRange]}
-                onValueChange={(value) => {
-                  const next = value[0] as Range | undefined;
-                  if (next) setRange(next);
-                }}
-                aria-label="Tarih aralığı">
-                {RANGES.filter(([item]) => ranges.includes(item)).map(([item, label]) => (
-                  <ToggleGroupItem key={item} value={item} className="px-2">
-                    {label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
+          <section aria-label={title} className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <SubHeading viewer={viewer} className="text-sm font-medium">
+                {info.label}
+              </SubHeading>
+              {ranges.length > 0 ? (
+                <ToggleGroup
+                  size="sm"
+                  spacing={2}
+                  value={[activeRange]}
+                  onValueChange={(value) => {
+                    const next = value[0] as Range | undefined;
+                    if (next) setRange(next);
+                  }}
+                  aria-label="Tarih aralığı">
+                  {RANGES.filter(([item]) => ranges.includes(item)).map(([item, label]) => (
+                    <ToggleGroupItem key={item} value={item} className="px-2">
+                      {label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              ) : null}
+            </div>
+
+            {points.length > 1 ? (
+              <ProgressChart
+                title={title}
+                unit={info.unit}
+                series={[{ key: 'value', label: info.label, points }]}
+                minSpan={metricMinSpan(shown, points.map((point) => point.value))}
+                forecast={drawn?.kind === 'current' ? drawn.forecast.points : undefined}
+                pointNoun="antrenman günü"
+                yAxisWidth={shown === 'volume' ? 48 : 40}
+              />
+            ) : points.length === 1 ? (
+              <p className="rounded-lg bg-muted px-3 py-2.5 text-sm">
+                İlk kayıt: <span className="font-medium tabular-nums">{formatWithUnit(points[0]!.value, info.unit)}</span> ·{' '}
+                {formatDay(points[0]!.date)}. Grafik ikinci antrenman gününden sonra çizilir.
+              </p>
+            ) : (
+              <p className="rounded-lg bg-muted px-3 py-2.5 text-sm text-muted-foreground">
+                {shown === 'e1rm'
+                  ? 'Bu dönemde 1–12 tekrarlı set yok; tahmini maksimum hesaplanamıyor.'
+                  : 'Bu dönemde bu değer için kayıt yok.'}
+              </p>
+            )}
+            {highRep > 0 ? <p className="text-sm text-muted-foreground">{copy.highRepDays(highRep)}</p> : null}
+            {outlook && !(highRep > 0 && drawn?.kind === 'stale') ? (
+              <p className="text-sm text-muted-foreground">{describeTrend(outlook, info.unit, today)}</p>
             ) : null}
-          </div>
+            {shown === 'e1rm' ? <p className="text-xs text-muted-foreground">{copy.e1rmNote}</p> : null}
+            {shown === 'volume' ? (
+              <p className="text-xs text-muted-foreground">Toplam ağırlık: ısınma hariç her setin ağırlığı × tekrarı, gün başına.</p>
+            ) : null}
+          </section>
+        </div>
 
-          {points.length > 1 ? (
-            <ProgressChart
-              title={title}
-              unit={info.unit}
-              series={[{ key: 'value', label: info.label, points }]}
-              minSpan={metricMinSpan(shown, points.map((point) => point.value))}
-              forecast={drawn?.kind === 'current' ? drawn.forecast.points : undefined}
-              pointNoun="antrenman günü"
-              yAxisWidth={shown === 'volume' ? 48 : 40}
-            />
-          ) : points.length === 1 ? (
-            <p className="rounded-lg bg-muted px-3 py-2.5 text-sm">
-              İlk kayıt: <span className="font-medium tabular-nums">{formatWithUnit(points[0]!.value, info.unit)}</span> ·{' '}
-              {formatDay(points[0]!.date)}. Grafik ikinci antrenman gününden sonra çizilir.
-            </p>
-          ) : (
-            <p className="rounded-lg bg-muted px-3 py-2.5 text-sm text-muted-foreground">
-              {shown === 'e1rm'
-                ? 'Bu dönemde 1–12 tekrarlı set yok; tahmini maksimum hesaplanamıyor.'
-                : 'Bu dönemde bu değer için kayıt yok.'}
-            </p>
-          )}
-          {highRep > 0 ? <p className="text-sm text-muted-foreground">{highRepDaysText(highRep)}</p> : null}
-          {outlook && !(highRep > 0 && drawn?.kind === 'stale') ? (
-            <p className="text-sm text-muted-foreground">{describeTrend(outlook, info.unit, today)}</p>
-          ) : null}
-          {shown === 'e1rm' ? <p className="text-xs text-muted-foreground">{E1RM_NOTE}</p> : null}
-          {shown === 'volume' ? (
-            <p className="text-xs text-muted-foreground">Toplam ağırlık: ısınma hariç her setin ağırlığı × tekrarı, gün başına.</p>
-          ) : null}
-        </section>
+        <ExerciseRecords viewer={viewer} copy={copy} exercise={exercise} />
+      </div>
 
-        <ExerciseRecords exercise={exercise} />
-      </CardContent>
-
-      <ExercisePicker open={open} onOpenChange={setOpen} exercises={exercises} selected={exercise.key} today={today} onPick={pick} />
-    </Card>
+      <ExercisePicker
+        viewer={viewer}
+        copy={copy}
+        open={open}
+        onOpenChange={setOpen}
+        exercises={exercises}
+        selected={exercise.key}
+        today={today}
+        onPick={pick}
+      />
+    </ProgressCard>
   );
 }
 
 /** Seçili hareketin en iyileri: tür başına bir satır; ağırlıkta tekrarda en ağır birkaç ağırlık. */
-function ExerciseRecords({ exercise }: { exercise: ExerciseView }) {
+function ExerciseRecords({ viewer, copy, exercise }: { viewer: ProgressViewer; copy: ProgressCopy; exercise: ExerciseView }) {
   const singles = exercise.best.filter((mark) => mark.kind !== 'reps_at_weight');
   const atWeight = exercise.best.filter((mark) => mark.kind === 'reps_at_weight').slice(0, REPS_AT_WEIGHT_ROWS);
   // Hareket başına bir kutlama: aynı antrenmandaki rekorlar bir sayılır.
   const broken = new Set(exercise.events.map((event) => event.sessionId)).size;
   return (
-    <section aria-labelledby="hareket-rekorlari" className="flex flex-col gap-2 border-t pt-4">
+    <section
+      aria-labelledby="hareket-rekorlari"
+      className="flex min-w-0 flex-col gap-2 border-t pt-4 @3xl:self-start @3xl:border-t-0 @3xl:border-l @3xl:pt-0 @3xl:pl-6">
       <div className="flex items-baseline justify-between gap-3">
-        <h3 id="hareket-rekorlari" className="text-sm font-medium">
-          En iyilerin
-        </h3>
-        <span className="text-xs text-muted-foreground">{broken > 0 ? `${broken} antrenmanda rekor kırdın` : 'İlk kayıt başlangıç noktası'}</span>
+        <SubHeading viewer={viewer} id="hareket-rekorlari" className="text-sm font-medium">
+          {copy.bestTitle}
+        </SubHeading>
+        <span className="text-xs text-muted-foreground">{broken > 0 ? copy.recordSessions(broken) : 'İlk kayıt başlangıç noktası'}</span>
       </div>
       <dl className="flex flex-col divide-y">
         {singles.map((mark) => (
@@ -285,6 +304,8 @@ function RecordRow({ label, mark }: { label: string; mark: RecordMark }) {
  * "Göğüs"). Sıra en son yapılan önce. Seçili satırda ✓.
  */
 function ExercisePicker({
+  viewer,
+  copy,
   open,
   onOpenChange,
   exercises,
@@ -292,6 +313,8 @@ function ExercisePicker({
   today,
   onPick,
 }: {
+  viewer: ProgressViewer;
+  copy: ProgressCopy;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   exercises: ExerciseView[];
@@ -313,12 +336,12 @@ function ExercisePicker({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} onOpenChangeComplete={(next) => (next ? undefined : setSearch(''))}>
-      <SheetContent side="bottom" showCloseButton={false} className={TALL_SHEET} initialFocus={title}>
+      <ProgressSheetContent viewer={viewer} showCloseButton={false} initialFocus={title}>
         <SheetHeader className="gap-1 pt-5 pb-3">
           <SheetTitle ref={title} tabIndex={-1} className="text-lg font-semibold outline-none">
             Hareket seç
           </SheetTitle>
-          <SheetDescription>Yaptığın hareketler, en son yaptığın önce.</SheetDescription>
+          <SheetDescription>{copy.pickerDescription}</SheetDescription>
           <InputGroup className="mt-2 h-11">
             <InputGroupAddon>
               <MagnifyingGlass />
@@ -347,7 +370,7 @@ function ExercisePicker({
               </EmptyHeader>
             </Empty>
           ) : (
-            <div role="list" aria-label="Yaptığın hareketler">
+            <div role="list" aria-label={copy.pickerList}>
               {results.map((item) => {
                 const current = item.key === selected;
                 return (
@@ -375,7 +398,7 @@ function ExercisePicker({
             </div>
           )}
         </div>
-      </SheetContent>
+      </ProgressSheetContent>
     </Sheet>
   );
 }

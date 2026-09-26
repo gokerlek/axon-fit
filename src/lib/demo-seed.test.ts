@@ -89,6 +89,11 @@ describe('deneme geçmişi: kapı', () => {
       [{ clientId: 'c_test0001', weeks: 8, seed: 3 }, { clientId: 'c_test0001', weeks: 8, seed: '3' }],
       [{ clientId: 'c_test0001', weeks: '12', seed: 'Ali' }, { clientId: 'c_test0001', weeks: 12, seed: 'Ali' }],
       [{ clientId: 'c_test0001', weeks: '', seed: '' }, { clientId: 'c_test0001' }],
+      // Gerileme senaryosu: form onay kutusu "on", JSON'da true; başka değer kapalı.
+      [{ clientId: 'c_test0001', declining: 'on' }, { clientId: 'c_test0001', declining: true }],
+      [{ clientId: 'c_test0001', declining: true }, { clientId: 'c_test0001', declining: true }],
+      [{ clientId: 'c_test0001', declining: false }, { clientId: 'c_test0001', declining: false }],
+      [{ clientId: 'c_test0001', declining: 'evet' }, { clientId: 'c_test0001', declining: false }],
       [{ clientId: 'c_test0001', weeks: '0' }, null],
       [{ clientId: 'c_test0001', weeks: 53 }, null],
       [{ clientId: 'c_test0001', weeks: 'on iki' }, null],

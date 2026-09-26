@@ -4,47 +4,36 @@ import { useState } from 'react';
 import { WarningCircle } from '@phosphor-icons/react';
 import { ProgressBars } from '@/components/progress-bars';
 import { ProgressChart, type ProgressSeries } from '@/components/progress-chart';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { formatDay, formatKg, formatNumber } from '@/lib/format';
 import type { WeekView } from '@/lib/progress';
 import type { Gated, ProgressInsights } from '@/lib/progress-insights';
-import { adherenceText, recentAverage, waterSummary, weekLabel } from '@/lib/progress-text';
+import { adherenceText, progressCopy, recentAverage, waterSummary, weekLabel, type ProgressViewer } from '@/lib/progress-text';
+import { ProgressCard } from './progress-card';
 
 /**
  * İlerleme'nin grafik bölümü (SPEC §7.6): haftalık toplam ağırlık ve çalışma seti, antrenman düzeni
  * (haftada gün ve plan), onay varsa hazır oluşluk ve ağrı, seans zorluğu, son 30 günün suyu. Noktalar
  * sunucuda hesaplanır (`progress-insights.ts`); sağlık grafikleri onay yoksa hiç gelmez (`off`). Her
- * grafiğin boş durumu ne kadar veri gerektiğini söyler. Telefon, 375 px: dokununca değer, altında tablo.
+ * grafiğin boş durumu ne kadar veri gerektiğini söyler. Dokununca değer, altında tablo. Danışan ve PT
+ * aynı kartları kullanır (`viewer`, metinler `progressCopy`'den).
  */
 
-/** Grafik için en az bu kadar nokta (`CHART_MIN_POINTS`; sunucu modülü telefona taşınmasın diye burada da). */
+/** Grafik için en az bu kadar nokta (`CHART_MIN_POINTS`; sunucu modülü tarayıcıya taşınmasın diye burada da). */
 const MIN_POINTS = 2;
+
+type Audience = { viewer: ProgressViewer; name?: string };
 
 function Note({ children }: { children: React.ReactNode }) {
   return <p className="rounded-lg bg-muted px-3 py-2.5 text-sm text-muted-foreground">{children}</p>;
 }
 
-function Unavailable({ what }: { what: string }) {
+function Unavailable({ text }: { text: string }) {
   return (
     <p className="flex items-start gap-2 rounded-lg bg-muted px-3 py-2.5 text-sm text-muted-foreground">
       <WarningCircle weight="fill" className="mt-0.5 size-4 shrink-0" aria-hidden />
-      {what} şu an okunamadı. Biraz sonra yeniden dene; sürerse antrenörüne haber ver.
+      {text}
     </p>
-  );
-}
-
-function ChartCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2 className="font-heading text-lg font-semibold">{title}</h2>
-        </CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">{children}</CardContent>
-    </Card>
   );
 }
 
@@ -56,7 +45,8 @@ const weekName = (weeks: readonly Pick<WeekView, 'weekStart' | 'weekEnd'>[]) => 
 type LoadMetric = 'volume' | 'sets';
 
 /** Haftalık yük: toplam ağırlık ya da çalışma seti, son 12 hafta; bu hafta sürüyor. */
-export function WeeklyLoadCard({ weeks, today }: { weeks: WeekView[]; today: string }) {
+export function WeeklyLoadCard({ viewer, weeks, today }: Audience & { weeks: WeekView[]; today: string }) {
+  const copy = progressCopy(viewer);
   const [metric, setMetric] = useState<LoadMetric>('volume');
   const current = weeks.at(-1);
   if (!current) return null;
@@ -65,7 +55,7 @@ export function WeeklyLoadCard({ weeks, today }: { weeks: WeekView[]; today: str
   const label = metric === 'volume' ? 'Toplam ağırlık' : 'Çalışma seti';
 
   return (
-    <ChartCard title="Haftalık yük" description="Hafta başına kaldırdığın toplam ağırlık ya da yaptığın çalışma seti; ısınma setleri hariç.">
+    <ProgressCard viewer={viewer} title="Haftalık yük" description={copy.weeklyLoadIntro}>
       <ToggleGroup
         variant="outline"
         spacing={0}
@@ -103,20 +93,21 @@ export function WeeklyLoadCard({ weeks, today }: { weeks: WeekView[]; today: str
       <p className="text-xs text-muted-foreground">
         {metric === 'volume'
           ? 'Toplam ağırlık: her çalışma setinin ağırlığı × tekrarı. Set sayısıyla da artar; güç gelişimini Gelişim bölümü gösterir.'
-          : 'Çalışma seti: ısınma hariç yaptığın bütün setler (fazladan setler dahil).'}{' '}
+          : copy.workingSetsNote}{' '}
         Bu hafta sürüyor: soluk sütun.
       </p>
-    </ChartCard>
+    </ProgressCard>
   );
 }
 
 /** Antrenman düzeni: haftada antrenman günü ve plan (kesikli çizgi). */
-export function AdherenceCard({ adherence }: { adherence: ProgressInsights['adherence'] }) {
+export function AdherenceCard({ viewer, adherence }: Audience & { adherence: ProgressInsights['adherence'] }) {
+  const copy = progressCopy(viewer);
   const weeks = adherence.weeks;
   if (weeks.length === 0) return null;
   const target = adherence.planned === null ? undefined : { value: adherence.planned, label: `Plan: haftada ${adherence.planned} gün` };
   return (
-    <ChartCard title="Antrenman düzeni" description="Haftada kaç gün antrenman yaptığın ve planın.">
+    <ProgressCard viewer={viewer} title="Antrenman düzeni" description={copy.adherenceIntro}>
       {adherence.recent ? <p className="text-sm font-medium tabular-nums">{adherenceText(adherence.recent)}</p> : null}
       {weeks.length < MIN_POINTS ? (
         <Note>
@@ -137,31 +128,30 @@ export function AdherenceCard({ adherence }: { adherence: ProgressInsights['adhe
         />
       )}
       <p className="text-xs text-muted-foreground">
-        {adherence.planned === null
-          ? 'Programında haftalık gün sayısı yok; yalnız yaptığın günler gösteriliyor.'
-          : 'Plan bugünkü planındır, geçmiş haftalara da uygulanır. Aynı gün iki antrenman bir gün sayılır.'}{' '}
-        Bu hafta sürüyor; ilk haftan (başlangıç) özete girmez.
+        {adherence.planned === null ? copy.adherenceNoPlan : copy.adherencePlanNote} {copy.adherenceWeeksNote}
       </p>
-    </ChartCard>
+    </ProgressCard>
   );
 }
 
-function healthNote<T>(section: Gated<T>, what: string): React.ReactNode | null {
-  return section.state === 'unavailable' ? <Unavailable what={what} /> : null;
+function healthNote<T>(section: Gated<T>, text: string): React.ReactNode | null {
+  return section.state === 'unavailable' ? <Unavailable text={text} /> : null;
 }
 
 /** Hazır oluşluk puanı (20–100), onay varsa. */
-export function ReadinessCard({ readiness, today, low }: { readiness: ProgressInsights['readiness']; today: string; low: number }) {
+export function ReadinessCard({ viewer, readiness, today, low }: Audience & { readiness: ProgressInsights['readiness']; today: string; low: number }) {
+  const copy = progressCopy(viewer);
   if (readiness.state === 'off') return null;
   const points = readiness.state === 'ok' ? readiness.points : [];
   const recent = recentAverage(points, today);
   return (
-    <ChartCard
+    <ProgressCard
+      viewer={viewer}
       title="Hazır oluşluk"
       description="Antrenman başındaki dört sorudan (uyku, enerji, kas ağrısı, stres) puan: 20 en düşük, 100 en iyi.">
-      {healthNote(readiness, 'Hazır oluşluk cevapların') ??
+      {healthNote(readiness, copy.unavailable(copy.readinessWhat)) ??
         (points.length < MIN_POINTS ? (
-          <Note>Grafik iki cevaptan sonra çizilir{points.length === 1 ? `; ilk puanın ${formatNumber(points[0]!.value)}` : ''}.</Note>
+          <Note>Grafik iki cevaptan sonra çizilir{points.length === 1 ? `; ${copy.readinessFirst(points[0]!.value)}` : ''}.</Note>
         ) : (
           <>
             {recent ? (
@@ -179,12 +169,13 @@ export function ReadinessCard({ readiness, today, low }: { readiness: ProgressIn
           </>
         ))}
       <p className="text-xs text-muted-foreground">Düşük gün sınırı {low}: altında o günün antrenmanını hafifletmek önerilir.</p>
-    </ChartCard>
+    </ProgressCard>
   );
 }
 
 /** Ağrı (0–10): antrenman öncesi son 24 saat ve antrenmandaki en yüksek; onay varsa. */
-export function PainCard({ pain }: { pain: ProgressInsights['pain'] }) {
+export function PainCard({ viewer, name, pain }: Audience & { pain: ProgressInsights['pain'] }) {
+  const copy = progressCopy(viewer, name);
   if (pain.state === 'off') return null;
   const before = pain.state === 'ok' ? pain.before : [];
   const peak = pain.state === 'ok' ? pain.peak : [];
@@ -194,8 +185,8 @@ export function PainCard({ pain }: { pain: ProgressInsights['pain'] }) {
   ] as ProgressSeries[];
   const enough = before.length >= MIN_POINTS || peak.length >= MIN_POINTS;
   return (
-    <ChartCard title="Ağrı" description="0 ağrı yok, 10 dayanılmaz. Antrenman öncesi: son 24 saatteki ağrın; antrenmanda: en yüksek ağrın.">
-      {healthNote(pain, 'Ağrı cevapların') ??
+    <ProgressCard viewer={viewer} title="Ağrı" description={copy.painIntro}>
+      {healthNote(pain, copy.unavailable(copy.painWhat)) ??
         (!enough || series.length === 0 ? (
           <Note>Ağrı soruları antrenman başında ve sonunda sorulur; grafik iki cevaptan sonra çizilir.</Note>
         ) : (
@@ -207,18 +198,19 @@ export function PainCard({ pain }: { pain: ProgressInsights['pain'] }) {
             pointNoun="antrenman günü"
           />
         ))}
-      <p className="text-xs text-muted-foreground">Ağrın artıyorsa ya da geçmiyorsa antrenörüne söyle.</p>
-    </ChartCard>
+      <p className="text-xs text-muted-foreground">{copy.painFootnote}</p>
+    </ProgressCard>
   );
 }
 
 /** Seans zorluğu (CR-10): antrenman verisi, onaya bağlı değil. */
-export function EffortCard({ rpe, today }: { rpe: ProgressInsights['rpe']; today: string }) {
+export function EffortCard({ viewer, name, rpe, today }: Audience & { rpe: ProgressInsights['rpe']; today: string }) {
+  const copy = progressCopy(viewer, name);
   const recent = recentAverage(rpe, today);
   return (
-    <ChartCard title="Antrenman zorluğu" description="Antrenmandan yaklaşık 10 dakika sonra sorulan zorluk: 0 dinlenme, 10 en zor.">
+    <ProgressCard viewer={viewer} title="Antrenman zorluğu" description="Antrenmandan yaklaşık 10 dakika sonra sorulan zorluk: 0 dinlenme, 10 en zor.">
       {rpe.length < MIN_POINTS ? (
-        <Note>Antrenman sonrası “Nasıl geçti?” sorusunu cevapladıkça burada birikir; grafik iki cevaptan sonra çizilir.</Note>
+        <Note>{copy.effortEmpty}</Note>
       ) : (
         <>
           {recent ? (
@@ -235,24 +227,25 @@ export function EffortCard({ rpe, today }: { rpe: ProgressInsights['rpe']; today
           />
         </>
       )}
-    </ChartCard>
+    </ProgressCard>
   );
 }
 
 /** Su: son 30 gün, günde bardak; bugün sürüyor. */
-export function WaterCard({ water, today }: { water: ProgressInsights['water']; today: string }) {
+export function WaterCard({ viewer, name, water, today }: Audience & { water: ProgressInsights['water']; today: string }) {
+  const copy = progressCopy(viewer, name);
   const days = water.state === 'ok' ? water.days : [];
   const summary = waterSummary(days);
   return (
-    <ChartCard title="Su" description="Son 30 günde günde kaç bardak içtiğin: Bugün'deki bardaklar ve antrenmandakiler.">
+    <ProgressCard viewer={viewer} title="Su" description={copy.waterIntro}>
       {water.state === 'unavailable' ? (
-        <Unavailable what="Su kaydın" />
+        <Unavailable text={copy.unavailable(copy.waterWhat)} />
       ) : summary.recorded === 0 ? (
-        <Note>Bugün ekranındaki su düğmesiyle ya da antrenmanda eklediğin bardaklar burada günlük birikir.</Note>
+        <Note>{copy.waterEmpty}</Note>
       ) : (
         <>
           <p className="text-sm tabular-nums">
-            Su girdiğin {summary.recorded} günde ortalama <span className="font-medium">{formatNumber(summary.average ?? 0)} bardak</span>.
+            {copy.waterDays(summary.recorded)} <span className="font-medium">{formatNumber(summary.average ?? 0)} bardak</span>.
           </p>
           <ProgressBars
             title="Günlük su"
@@ -265,6 +258,6 @@ export function WaterCard({ water, today }: { water: ProgressInsights['water']; 
           />
         </>
       )}
-    </ChartCard>
+    </ProgressCard>
   );
 }
