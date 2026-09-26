@@ -4,6 +4,7 @@ import { describeDeviceLoads, deviceLoads, effectiveLoadKg, loadSpecFor, type De
 import {
   decreaseWeight,
   deloadWeight,
+  LIGHTEN_FACTOR,
   nextSession,
   nextSet,
   nextSetInPlan,
@@ -103,9 +104,10 @@ describe('öneriler cihazın ağırlıklarından seçilir', () => {
     assert.equal(decreaseWeight(10, spec(dumbbells)), 10); // daha hafifi yok
   });
 
-  test('hafifletme %15, listede altındaki ağırlık (50 → 42,5)', () => {
-    assert.equal(deloadWeight(50, spec({ ...stack, addOnsKg: [2.5] })), 42.5);
-    assert.equal(deloadWeight(10, spec(dumbbells)), 10); // 8,5 setin altında: korunur
+  test('hafifletme %10, listede altındaki ağırlık (50 → 45; ağrıda %15: 42,5)', () => {
+    assert.equal(deloadWeight(50, spec({ ...stack, addOnsKg: [2.5] })), 45);
+    assert.equal(deloadWeight(50, spec({ ...stack, addOnsKg: [2.5] }), LIGHTEN_FACTOR), 42.5);
+    assert.equal(deloadWeight(10, spec(dumbbells)), 10); // 9 setin altında: korunur
   });
 
   test('set arası: kolay ve tepede → bir sonraki ağırlık', () => {
@@ -147,7 +149,7 @@ describe('bar ve plaka yüklemeli: adımlar bar/kızak ağırlığından sayıl�
       percentOfTop(102, 85, spec),
       ...plan.sets.map((set) => set.weightKg),
     ];
-    assert.deepEqual(suggested, [97, 97, 82, 82, 102, 82]);
+    assert.deepEqual(suggested, [97, 97, 87, 82, 102, 82]);
     const loadable = new Set(deviceLoads(legPress));
     assert.ok(suggested.every((kg) => loadable.has(kg)));
   });
@@ -159,7 +161,7 @@ describe('bar ve plaka yüklemeli: adımlar bar/kızak ağırlığından sayıl�
       { weightKg: 49.5, target: 5 },
       { weightKg: 74.5, target: 3 },
     ]);
-    assert.equal(deloadWeight(102, smith), 84.5);
+    assert.equal(deloadWeight(102, smith), 89.5); // 91,8
   });
 
   test('plaka yüklemelide üst sınır geçilmez (hack squat 150)', () => {

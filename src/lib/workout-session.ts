@@ -6,7 +6,7 @@ import { normalizeSession, withDeletions } from './session-merge.ts';
 import { toSetResults } from './session-results.ts';
 import { randomId, ROW_ID_PATTERN, type TemplateRow } from './template-plan.ts';
 import { entryForRow, entryStatusOf, prefillSet, workoutCursor, type PreviousSet, type Stamp, type WorkoutCursor } from './workout-cursor.ts';
-import { dayBody, type WorkoutDay, type WorkoutRow } from './workout-plan.ts';
+import { dayBody, entryPlanOf, type WorkoutDay, type WorkoutRow } from './workout-plan.ts';
 
 /**
  * Antrenman ekranının telefondaki işleri (tasarım §2.4, §2.5, §4.2) — saf: yeni belge, sıradaki set ve
@@ -221,7 +221,7 @@ function entryFor(day: WorkoutDay, doc: SessionDoc, rowId: string, stamp: Stamp,
     title: row.title,
     ...(row.deviceId ? { deviceId: row.deviceId } : {}),
     status: 'pending',
-    plan: { topWeightKg: row.plan.topWeightKg, reason: row.plan.reason },
+    plan: entryPlanOf(row),
     ...(row.setupNote ? { setupNote: row.setupNote } : {}),
     updatedAt: stamp.at,
     by: stamp.by,

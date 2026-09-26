@@ -1,4 +1,4 @@
-import { deloadWeight, type LoadSpec, type Plan, type Suggestion } from './progression.ts';
+import { deloadWeight, LIGHTEN_FACTOR, type LoadSpec, type Plan, type Suggestion } from './progression.ts';
 
 /**
  * Seans yoklaması ve yük toleransı — "ağrı izleme" kuralı.
@@ -199,7 +199,7 @@ export function assessTolerance({
 }
 
 /** Artış sayılan öneriler: "hold" bunları geri çeker (gerekçesi ne olursa olsun son ağırlıktan ağır öneriyle birlikte). */
-const RAISES = new Set<Suggestion['reason']>(['increase', 'range_increase', 'add_rep', 'add_time', 'harder_variant', 'device_max']);
+const RAISES = new Set<Suggestion['reason']>(['increase', 'range_increase', 'add_rep', 'add_time', 'reps_first', 'harder_variant', 'device_max']);
 
 /**
  * İlerleme önerisini tolerans kararına göre düzeltir. `last` son yapılan plandır
@@ -215,7 +215,8 @@ export function applyTolerance(
     case 'stop':
       return { ...last, reason: 'paused' };
     case 'reduce': {
-      const weightKg = deloadWeight(last.weightKg, spec);
+      // Ağrı azaltması %15'te kalır (tıkanma hafifletmesi %10'a indi, `DELOAD_FACTOR`).
+      const weightKg = deloadWeight(last.weightKg, spec, LIGHTEN_FACTOR);
       return { weightKg, target: last.target, reason: weightKg < last.weightKg ? 'pain_reduce' : 'pain_reduce_unavailable' };
     }
     case 'hold':

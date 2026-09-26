@@ -193,6 +193,17 @@ describe('danışan listesi: durum kayıtla aynı kalır', () => {
     await updateClient(w.store, client.id, form(client, { note: 'Hedef: 5 km' }));
     assert.equal(w.gh.count(`write ${APP_REPO}/${INDEX_PATH}`), 0);
   });
+
+  test('antrenman geçmişi kayda yazılır; formda gelmezse kayıttaki kalır (öneri tabanı, açık soru 4)', async () => {
+    const w = world();
+    const client = seedClient(w.gh, w.clock);
+    await updateClient(w.store, client.id, form(client, { trainingExperience: 'six_months' }));
+    assert.deepEqual((await w.record(client.id)).training, { experience: 'six_months' });
+    await updateClient(w.store, client.id, form(client, { name: 'Ayşe Demir-Kaya' }));
+    assert.deepEqual((await w.record(client.id)).training, { experience: 'six_months' });
+    await updateClient(w.store, client.id, form(client, { trainingExperience: 'new' }));
+    assert.deepEqual((await w.record(client.id)).training, { experience: 'new' });
+  });
 });
 
 describe('sağlık onayı: modül kapatılıp açılınca yeniden sorulur (SPEC §4, §9.4)', () => {

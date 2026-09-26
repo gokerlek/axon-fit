@@ -6,6 +6,7 @@ import { todayIn } from './format.ts';
 import { GithubError } from './github/errors.ts';
 import { currentPhaseOf, DAY_ID_PATTERN, nextDayId } from './program-plan.ts';
 import type { TrackingType } from './progression.ts';
+import type { Client } from './schemas/client.ts';
 import { EQUIPMENT_LABELS, type Category, type Equipment } from './schemas/exercise.ts';
 import { programSchema, type Program } from './schemas/program.ts';
 import { parseStoredSession, type SessionDoc, type SessionIndex } from './schemas/session.ts';
@@ -30,6 +31,7 @@ import {
   type WorkoutDay,
   type WorkoutDevice,
   type WorkoutExercise,
+  type WorkoutInsight,
 } from './workout-plan.ts';
 
 /**
@@ -38,7 +40,9 @@ import {
  * - `GET /api/me/workout?day=`: günün planı (`buildWorkoutDay`), Bugün'ün sayıları ("bu hafta x/3",
  *   bugünkü su) ve sunucudaki yarım antrenman. Gün: istenen → yarım antrenmanın günü → sıradaki gün.
  *   Index her okumada onarılır (`readIndex`); geçmiş yalnız bugünkü egzersizleri içeren son bitmiş
- *   antrenmanlardan (blob kimliğiyle, önbellekli). Okunamayan geçmiş dosyası planı durdurmaz.
+ *   antrenmanlardan (blob kimliğiyle, önbellekli). Okunamayan geçmiş dosyası planı durdurmaz. Öneri
+ *   katmanı (§5) bütün uçlarda aynı girdiyle: onarılmış index, şimdi, danışanın antrenman geçmişi
+ *   (`insightOf`).
  *   Yarım antrenmanda muadil ve eklenen hareketlerin planları da (`extras`): başka cihazda ya da
  *   silinmiş tarayıcı verisiyle sürdürülen antrenman aynı hareketlerle açılır.
  * - `GET /api/me/workout/alternatives?day=&row=`: satırın muadilleri ("Değiştir", §2.6), ekipmana göre
@@ -135,6 +139,11 @@ function parseProgram(file: StoredJson | null | 'broken'): { program: Program | 
 
 type Catalog = { exercises: ReadonlyMap<string, WorkoutExercise>; devices: ReadonlyMap<string, WorkoutDevice> };
 
+/** Öneri katmanının girdisi: hareket deneyimi bütün index'ten, taban danışanın antrenman geçmişinden. */
+function insightOf(index: SessionIndex, now: Date, client: Pick<Client, 'training'>): WorkoutInsight {
+  return { index, now, experience: client.training?.experience };
+}
+
 async function catalogOf(deps: WorkoutRouteDeps): Promise<Catalog & { list: readonly WorkoutExercise[] }> {
   const catalog = await deps.catalog();
   return {
@@ -149,7 +158,13 @@ async function catalogOf(deps: WorkoutRouteDeps): Promise<Catalog & { list: read
  * geçmişleriyle). Başka günün antrenmanıysa ya da egzersiz kütüphanede yoksa o hareket atlanır
  * (telefon asıl satırın düzeniyle sürdürür).
  */
-export function sessionExtras(input: { day: WorkoutDay; doc: SessionDoc; catalog: Catalog; history: readonly SessionDoc[] }): ExtraRows {
+export function sessionExtras(input: {
+  day: WorkoutDay;
+  doc: SessionDoc;
+  catalog: Catalog;
+  history: readonly SessionDoc[];
+  insight?: WorkoutInsight | undefined;
+}): ExtraRows {
   const { day, doc, catalog } = input;
   if (doc.program?.dayId !== day.dayId) return {};
   const first = firstForMuscleRowIds(dayBody(day), catalog.exercises);
@@ -170,9 +185,17 @@ export function sessionExtras(input: { day: WorkoutDay; doc: SessionDoc; catalog
         devices: catalog.devices,
         history: input.history,
         firstForMuscle: first.has(row.id),
+        insight: input.insight,
       });
     } else if (entry.added && !entry.rowId) {
-      extras[extraKey(entry.id, exercise.id)] = addedRowFor({ key: entry.id, exercise, devices: catalog.devices, history: input.history, setCount: entry.plannedSets });
+      extras[extraKey(entry.id, exercise.id)] = addedRowFor({
+        key: entry.id,
+        exercise,
+        devices: catalog.devices,
+        history: input.history,
+        setCount: entry.plannedSets,
+        insight: input.insight,
+      });
     }
   }
   return extras;
@@ -204,8 +227,9 @@ export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null): P
       // Yarım antrenmanın muadil ve eklenen hareketlerinin geçmişi de okunur.
       const ids = new Set([...dayExerciseIds(program, dayId), ...(current?.entries.map((entry) => entry.exerciseId) ?? [])]);
       const history = await readHistory(repo, index, ids);
-      day = buildWorkoutDay({ program, dayId, exercises: catalog.exercises, devices: catalog.devices, history });
-      if (day && current) extras = sessionExtras({ day, doc: current, catalog, history });
+      const insight = insightOf(index, now, client);
+      day = buildWorkoutDay({ program, dayId, exercises: catalog.exercises, devices: catalog.devices, history, insight });
+      if (day && current) extras = sessionExtras({ day, doc: current, catalog, history, insight });
     }
 
     const phase = program ? currentPhaseOf(program)?.phase : undefined;
@@ -241,7 +265,7 @@ const ROW_GONE = { status: 404, body: { error: 'Bu hareket programında artık y
  */
 export function alternativesRoute(deps: WorkoutRouteDeps, dayParam: string | null, rowParam: string | null): Promise<SessionRouteResult> {
   if (!dayParam || !DAY_ID_PATTERN.test(dayParam) || !rowParam || !ROW_ID_PATTERN.test(rowParam)) return Promise.resolve(BAD_REQUEST);
-  return run(deps, null, 'workout-alternatives', async ({ repo }) => {
+  return run(deps, null, 'workout-alternatives', async ({ client, repo }) => {
     const [repaired, programFile, catalog] = await Promise.all([readIndex(repo), readTolerant(repo, 'program.json'), catalogOf(deps)]);
     const { program } = parseProgram(programFile);
     const found = program ? resolveDay(program, dayParam) : null;
@@ -260,6 +284,7 @@ export function alternativesRoute(deps: WorkoutRouteDeps, dayParam: string | nul
       return rows.length > 0 ? [{ ...item, rows }] : [];
     });
     const firstForMuscle = firstForMuscleRowIds({ blocks: kept }, catalog.exercises).has(row.id);
+    const insight = insightOf(repaired.index, deps.now(), client);
     const groups: SwapGroup[] = groupByEquipment(ranked).map(([equipment, list]) => ({
       equipment,
       label: EQUIPMENT_LABELS[equipment as Equipment] ?? equipment,
@@ -267,7 +292,7 @@ export function alternativesRoute(deps: WorkoutRouteDeps, dayParam: string | nul
         exerciseId: exercise.id,
         title: exercise.title,
         pinned,
-        extra: swapRowFor({ row, blockId: block.id, original: source, exercise, devices: catalog.devices, history, firstForMuscle }),
+        extra: swapRowFor({ row, blockId: block.id, original: source, exercise, devices: catalog.devices, history, firstForMuscle, insight }),
       })),
     }));
     const body: AlternativesResponse = { rowId: row.id, exerciseId: source.id, groups };
@@ -282,7 +307,7 @@ export function alternativesRoute(deps: WorkoutRouteDeps, dayParam: string | nul
  */
 export function exercisesRoute(deps: WorkoutRouteDeps, addParam: string | null): Promise<SessionRouteResult> {
   if (addParam !== null && !/^[a-z0-9-]{2,60}$/.test(addParam)) return Promise.resolve(BAD_REQUEST);
-  return run(deps, null, 'workout-exercises', async ({ repo }) => {
+  return run(deps, null, 'workout-exercises', async ({ client, repo }) => {
     const catalog = await catalogOf(deps);
     if (addParam === null) {
       const exercises: LibraryItem[] = [...catalog.list]
@@ -303,7 +328,8 @@ export function exercisesRoute(deps: WorkoutRouteDeps, addParam: string | null):
     if (!exercise) return { status: 404, body: { error: 'Bu hareket kütüphanede yok.' } };
     const repaired = await readIndex(repo);
     const history = await readHistory(repo, repaired.index, new Set([exercise.id]));
-    const body: AddedRowResponse = { extra: addedRowFor({ key: exercise.id, exercise, devices: catalog.devices, history }) };
+    const insight = insightOf(repaired.index, deps.now(), client);
+    const body: AddedRowResponse = { extra: addedRowFor({ key: exercise.id, exercise, devices: catalog.devices, history, insight }) };
     return { status: 200, body };
   });
 }

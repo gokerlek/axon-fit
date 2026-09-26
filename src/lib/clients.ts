@@ -14,7 +14,7 @@ import { clientRepoExists, createClientRepo, deleteClientRepo } from './github/r
 import { commitMessage } from './program-diff';
 import type { ProgramState } from './program-plan';
 import { writeProgramFile } from './programs';
-import type { Client, ClientInput, ClientStatus, HealthField, Invite } from './schemas/client';
+import { trainingOf, type Client, type ClientInput, type ClientStatus, type HealthField, type Invite } from './schemas/client';
 
 /**
  * Danışanlar (SPEC §3, §5) — GitHub'a ve Next'e bağlama. Akışlar (düzenleme, davet, erişim, onay)
@@ -171,6 +171,7 @@ export async function createClient(input: ClientInput, options: { program?: Prog
     id,
     name: input.name,
     ...(input.note ? { note: input.note } : {}),
+    ...trainingOf(input),
     createdAt: now,
     status: 'active',
     modules: { health: nextHealthModule(null, { enabled: input.healthEnabled, fields: input.healthFields }, now) },

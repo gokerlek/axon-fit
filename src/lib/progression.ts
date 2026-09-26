@@ -22,8 +22,12 @@ import type { Category, Equipment } from '@/lib/schemas/exercise';
  *   ulaşmadıysa yaklaşık %5 (en az bir adım) iner; 3 antrenman üst üste tıkanırsa hafifletilir.
  * - Yarıda bırakılan antrenman (planın tam yük setlerinden biri yapılmadı) artış getirmez,
  *   ağırlık korunur; tıkanma serisinde nötrdür (ne sıfırlar ne artırır).
- * - Hafifletme ve ısınma v1 kararlarıyla aynı (K16, §7.8); yalnız %15'i tabanın altına düşen
- *   hafifletme tabana iner (v1'de ağırlık korunurdu).
+ * - Hafifletme ve ısınma v1 kararlarıyla aynı (K16, §7.8); yalnız tabanın altına düşen hafifletme
+ *   tabana iner (v1'de ağırlık korunurdu). Tıkanma hafifletmesi %10'dur (StrongLifts; tasarım açık
+ *   soru 2, v1 ve SPEC'in ilk hâli %15); ağrı ve hazır oluşluk hafifletmesi %15'te kalır.
+ * - Hafif yapılan seans (`lighter`, tasarım §5.5) motordan saklanmaz: ilk kez nötrdür (sonraki seans
+ *   planın ağırlığıyla), üst üste ikincisi kaçırmadır. Tanışma ve ayar seansının (`noStall`) kaçırması
+ *   tıkanma sayılmaz. Aşamaya göre katman (onay, artış miktarı) `recommend.ts`'te.
  * - Set başına hedef (`planSession`): her setin kendi aralığı, yük yüzdesi ve AMRAP'ı olur;
  *   kararı tam yükteki setler verir, yüzdeli setler üst ağırlığı izler. Isınma setleri
  *   ilk çalışma setinin ağırlığına göre hesaplanır (piramitte en hafif set).
@@ -134,6 +138,13 @@ export type SetResult = {
    * (hafifletme, sonradan set eklenen satır) yarıda bırakılmış sayılmasın diye. Yoksa güncel plana bakılır.
    */
   plannedSetCount?: number;
+  /**
+   * Plandan hafif yapıldı, programa yazılmadı (tasarım §5.5): ilk kez nötr (sonraki seans planın üst
+   * ağırlığıyla, `topWeightKg`), serideki bir önceki seans da hafifse kaçırma.
+   */
+  lighter?: boolean;
+  /** Tanışma ya da ayar seansında planlandı (§5.2–5.3): kaçırması tıkanma serisine girmez. */
+  noStall?: boolean;
 };
 /** Bir antrenmandaki çalışma setleri (ısınma hariç), yapılış sırasıyla. */
 export type SessionResult = readonly SetResult[];
@@ -162,6 +173,12 @@ export type SuggestionReason =
   | 'harder_variant'
   | 'device_max'
   | 'no_progression'
+  // Öneri katmanı (`src/lib/recommend.ts`): aşamaya göre onay, ara sonrası ayar, büyük adımda önce tekrar.
+  | 'confirm_increase'
+  | 'calibrate'
+  | 'reps_first'
+  // Hafif seans ilk kez: plan bir kez daha (§5.5).
+  | 'lighter_retry'
   // Yük toleransı (ağrı izleme) öneriyi geri çektiğinde — `src/lib/check-in.ts`.
   | 'pain_hold'
   | 'pain_reduce'
@@ -183,6 +200,10 @@ export const REASON_LABELS: Record<SuggestionReason, string> = {
   harder_variant: 'Aralığın tepesine ulaşıldı: ağırlık ekle ya da zor bir varyasyona geç.',
   device_max: 'Cihazın en ağır ayarındasın: tekrarları artır ya da zor bir varyasyona geç.',
   no_progression: 'Bu hareket için ilerleme yok.',
+  confirm_increase: 'Tepeye ulaştın; bir kez daha yap, sonra artır.',
+  calibrate: 'Aradan sonra ilk antrenman: son ağırlığın biraz altında ayar.',
+  reps_first: 'Sonraki ağırlık büyük bir sıçrama: önce tekrar ekle.',
+  lighter_retry: 'Geçen sefer plandan hafifti: planı bir kez daha dene.',
   pain_hold: 'Ağrı ya da irritabilite yükselmiş: artırma yok, aynı yükte kal.',
   pain_reduce: 'Ağrı eşiği aşıldı ya da 24 saatte geçmedi: yük %15 azaldı.',
   pain_reduce_unavailable:
@@ -192,8 +213,13 @@ export const REASON_LABELS: Record<SuggestionReason, string> = {
 
 /** Kaç antrenman üst üste tıkanınca hafifletilir. */
 export const DELOAD_AFTER_FAILED = 3;
-/** Hafifletmede ağırlık çarpanı (v1 K16: %15 düşür). */
-export const DELOAD_FACTOR = 0.85;
+/**
+ * Tıkanma hafifletmesinde ağırlık çarpanı: %10 düşür (StrongLifts "failure"; tasarım açık soru 2 kabul).
+ * v1 K16 ve SPEC'in ilk hâli %15'ti. Tek sabit: PT fork'unda buradan değiştirir.
+ */
+export const DELOAD_FACTOR = 0.9;
+/** Ağrı (`applyTolerance` "reduce") ve hazır oluşluk hafifletmesi: %15 (SPEC §7.5, tasarım §2.2). */
+export const LIGHTEN_FACTOR = 0.85;
 /** Azaltma oranı: en yakın adıma yuvarlanır, en az bir adım. */
 export const DECREASE_RATIO = 0.05;
 /** Süreli harekette antrenman başına eklenen süre (sn). */
@@ -440,16 +466,17 @@ function failedStreak<T>(chain: readonly T[], failed: (session: T) => boolean, s
 }
 
 /**
- * Hafifletme ağırlığı (v1 K16): %15 düşür, ızgaraya (tabandan sayılan adım ya da cihazın
- * listesi) aşağı yuvarla. Tabanın altına düşerse tabana (bar, kızak, en hafif ayar) iner:
- * halter 22,5 → 20 (v1'de 22,5 kalırdı; 25'in hafifletmesi 20 iken). Sıfıra inmez; inecek yer
- * yoksa ağırlık korunur (hafifletme o zaman yalnız set sayısındadır).
+ * Hafifletme ağırlığı: `factor` kadarına düşür (tıkanmada %10, `DELOAD_FACTOR`; ağrıda ve hazır
+ * oluşlukta %15, `LIGHTEN_FACTOR`), ızgaraya (tabandan sayılan adım ya da cihazın listesi) aşağı
+ * yuvarla. Tabanın altına düşerse tabana (bar, kızak, en hafif ayar) iner: halter 22,5 → 20 (v1'de
+ * 22,5 kalırdı). Sıfıra inmez; inecek yer yoksa ağırlık korunur (hafifletme o zaman yalnız set
+ * sayısındadır).
  */
-export function deloadWeight(weightKg: number, spec: LoadSpec): number {
+export function deloadWeight(weightKg: number, spec: LoadSpec, factor: number = DELOAD_FACTOR): number {
   const grid = gridOf(spec);
   if (!grid) return weightKg;
   // `floor` tabanın altındaki değeri tabana çeker: max(taban, aşağı yuvarlanmış değer).
-  const reduced = grid.floor(weightKg * DELOAD_FACTOR);
+  const reduced = grid.floor(weightKg * factor);
   return reduced <= 0 || reduced < spec.minLoadKg || reduced >= weightKg ? weightKg : reduced;
 }
 
@@ -721,7 +748,8 @@ function deloadIndexes(sets: readonly SetTarget[]): number[] {
   return order.slice(0, keep).sort((a, b) => a - b);
 }
 
-function plannedSets(
+/** Planın setleri: üst ağırlık yüzdelerle dağılır; `indexes` verilirse yalnız o setler (hafifletme). */
+export function plannedSets(
   sets: readonly SetTarget[],
   spec: LoadSpec,
   topWeightKg: number,
@@ -745,6 +773,75 @@ function plannedSets(
 }
 
 /**
+ * Geçmişteki bir antrenman, satırın setleriyle eşlenmiş. `short`: yarıda bırakıldı (bugünkü planın
+ * tam yük setlerinden biri yapılmadı; kayıtta varsa o günkü plan da eksik). Hafif seans (§5.5)
+ * seride işaretlenir: serideki bir önceki seans hafif değilse nötr (`lighterNeutral`), hafifse
+ * kaçırma (`lighterMiss`).
+ */
+type Analyzed = {
+  results: SessionResult;
+  pairs: Pair[];
+  short: boolean;
+  lighter: boolean;
+  noStall: boolean;
+  lighterNeutral: boolean;
+  lighterMiss: boolean;
+};
+
+/** `planSession`'ın serisi (bkz. dosya başı): eşlenmiş antrenmanlar, en yenisi sonda; `latest` çeviri kaynağı. */
+function analyzeSeries(
+  sets: readonly SetTarget[],
+  history: readonly SessionResult[],
+  rowId: string | undefined,
+): { chain: Analyzed[]; latest: Analyzed | undefined } {
+  const full = topSetIndexes(sets);
+  const sessions: Analyzed[] = history.flatMap((results) => {
+    const pairs = pairsOf(results, sets);
+    if (pairs.length === 0) return [];
+    return [
+      {
+        results,
+        pairs,
+        short: isShort(results, (done) => full.some((index) => !done.has(index))),
+        lighter: results.some((set) => set.lighter === true),
+        noStall: results.some((set) => set.noStall === true),
+        lighterNeutral: false,
+        lighterMiss: false,
+      },
+    ];
+  });
+  const { chain, latest } = seriesOf(
+    sessions,
+    ({ pairs }) => pairs.every((pair) => pair.fits),
+    rowId === undefined ? undefined : ({ results }) => results.every((set) => inRow(set, rowId)),
+  );
+  const marked = chain.map((session, index) => {
+    const repeat = session.lighter && Boolean(chain[index - 1]?.lighter);
+    return { ...session, lighterNeutral: session.lighter && !repeat, lighterMiss: repeat };
+  });
+  return { chain: marked, latest };
+}
+
+/** Tıkanma serisine giren kaçırma: Tanışma ve ayar seansı saymaz; ilk hafif seans nötr, ikincisi kaçırma. */
+function stalled(session: Analyzed): boolean {
+  if (session.noStall) return false;
+  return session.lighterMiss || (!session.lighterNeutral && deciding(session.pairs).some(missedPair));
+}
+
+/** Tıkanma serisinde nötr: yarıda bırakılan ve ilk kez hafif yapılan antrenman. */
+function neutralSession(session: Analyzed): boolean {
+  return session.short || session.lighterNeutral;
+}
+
+/** Hafif seansın referansı planın üst ağırlığıdır (kayıttaki `topWeightKg`); yoksa yapılan. */
+function referenceOf(session: Analyzed, spec: LoadSpec): { light: number; heavy: number } {
+  const reference = referenceWeights(session.pairs, spec);
+  if (!session.lighter) return reference;
+  const planned = session.results.flatMap((set) => (set.topWeightKg === undefined ? [] : [set.topWeightKg]));
+  return planned.length > 0 ? { light: Math.max(...planned), heavy: Math.max(...planned) } : reference;
+}
+
+/**
  * Set başına hedefli bir sonraki antrenman. Kararı tam yükteki (üst) setler verir;
  * yüzdeli setler (back-off, piramidin alt basamakları) üst ağırlığı yüzdeleriyle izler.
  * AMRAP sette zorluk düğmesi tıkanma sayılmaz: alt sınırın altı tıkanma, tepe ulaşma;
@@ -754,6 +851,11 @@ function plannedSets(
  * kesintisiz antrenmanlardır; kayıt kendi hedefiyle değerlendirilir; seri boşsa ağırlık tam yükteki
  * setlerin hedefine çevrilir. Planın tam yük setlerinden biri yapılmadıysa antrenman yarıda
  * bırakılmıştır: artış yok, tıkanma serisinde nötr.
+ *
+ * Hafif seans (`SetResult.lighter`, tasarım §5.5): ilk kez nötrdür, sonraki seans planın üst
+ * ağırlığıyla kurulur (`lighter_retry`); üst üste ikincisi bütün setleri kaçırılmış sayılır (planın
+ * ağırlığından ~%5 iniş, tıkanma serisine girer). Tanışma ve ayar seansının (`noStall`) kaçırması
+ * tıkanma serisine girmez.
  *
  * Bütün setleri aynı (aralık aynı, yüzde ve AMRAP yok) satırda sonuç `nextSession` ile
  * aynıdır (testte karşılaştırılır; `nextSession`'a satırın set sayısı verilir). Tek bilinçli
@@ -783,21 +885,11 @@ export function planSession({
     reason,
   });
 
-  // Yarıda bırakıldı mı: bugünkü planın tam yük setlerinden biri yapılmadı (kayıtta varsa o günkü plan da eksik).
-  const full = topSetIndexes(sets);
-  const sessions = history.flatMap((results) => {
-    const pairs = pairsOf(results, sets);
-    if (pairs.length === 0) return [];
-    return [{ results, pairs, short: isShort(results, (done) => full.some((index) => !done.has(index))) }];
-  });
-  const { chain, latest } = seriesOf(
-    sessions,
-    ({ pairs }) => pairs.every((pair) => pair.fits),
-    rowId === undefined ? undefined : ({ results }) => results.every((set) => inRow(set, rowId)),
-  );
-  const last = chain.at(-1)?.pairs;
+  const { chain, latest } = analyzeSeries(sets, history, rowId);
+  const lastSession = chain.at(-1);
+  const last = lastSession?.pairs;
 
-  if (!last) {
+  if (!lastSession || !last) {
     // Seri yok. PT'nin başlangıç ağırlığı çeviriden önce gelir; hiç geçmiş yoksa taban.
     if (startWeightKg !== undefined || !latest) {
       const start = startWeightKg ?? grid?.min ?? spec.minLoadKg;
@@ -817,14 +909,12 @@ export function planSession({
     return build(topWeightKg, mins, topWeightKg > workWeight(source) ? 'range_increase' : 'first_time');
   }
 
-  const { light, heavy } = referenceWeights(last, spec);
+  const { light, heavy } = referenceOf(lastSession, spec);
   // Cihazın en ağır ayarının üstündeki kayıt en ağır ayara çekilir (bkz. `nextSession`).
   const kept = grid ? Math.min(light, grid.max) : light;
   if (rule.scheme === 'none') return build(kept, mins, 'no_progression');
 
-  const failed = (session: { pairs: Pair[] }) => deciding(session.pairs).some(missedPair);
-  const short = (session: { short: boolean }) => session.short;
-  if (failedStreak(chain, failed, short) >= DELOAD_AFTER_FAILED) {
+  if (failedStreak(chain, stalled, neutralSession) >= DELOAD_AFTER_FAILED) {
     const topWeightKg = deloadWeight(light, spec);
     return {
       sets: plannedSets(sets, spec, topWeightKg, mins, { indexes: deloadIndexes(sets), amrap: false }),
@@ -832,8 +922,15 @@ export function planSession({
       reason: 'deload',
     };
   }
+  // Hafif seans: ilk kez planın ağırlığıyla bir kez daha; üst üste ikincisi bütün setleri kaçırmış sayılır.
+  if (lastSession.lighterNeutral) return build(kept, mins, 'lighter_retry');
+  if (lastSession.lighterMiss) {
+    if (!grid) return build(light, mins, 'hold');
+    const lowered = Math.min(decreaseWeight(light, spec), grid.max);
+    return build(lowered, mins, lowered < light ? 'decrease' : 'hold');
+  }
   // Yarıda bırakıldı (hafifletme antrenmanı değil): yapılmayan tam yük seti tepeye ulaşmadı sayılır, tıkanma değil.
-  const incomplete = (chain.at(-1)?.short ?? false) && failedStreak(chain.slice(0, -1), failed, short) < DELOAD_AFTER_FAILED;
+  const incomplete = lastSession.short && failedStreak(chain.slice(0, -1), stalled, neutralSession) < DELOAD_AFTER_FAILED;
 
   const decisive = deciding(last);
   if (grid) {
@@ -867,6 +964,77 @@ export function planSession({
   if (incomplete) return build(light, mins, 'incomplete');
   if (decisive.every(reachedPair)) return build(light, sets.map((set) => set.max), 'harder_variant');
   return build(light, groupTargets(sets, last, isDuration ? DURATION_STEP_SECONDS : 1), isDuration ? 'add_time' : 'add_rep');
+}
+
+/**
+ * Serinin bir antrenmanı, öneri katmanının okuduğu biçimde (`recommend.ts`: aşama kuralları, 2-for-2,
+ * önce tekrar). Hesap `planSession`'la aynı eşleme ve seriyle yapılır; öneri katmanı geçmişi kendisi
+ * yorumlamaz.
+ */
+export type SeriesSession = {
+  /** Referans (üst) ağırlık: koruma ve iniş için (`light`); hafif seansta planın üst ağırlığı. */
+  weightKg: number;
+  /** Artışta çıkılabilecek en ağır üst ağırlık (yüzdeli setlerden geri hesapta `heavy`). */
+  heavyKg: number;
+  /** Karar setlerinin hepsi tepede (hafif seansta hiçbir zaman). */
+  reached: boolean;
+  /** Karar setlerinden biri alt sınırın altında; hafif seansta ilk kez hayır, üst üste ikincisinde evet. */
+  missed: boolean;
+  /** Yarıda bırakıldı ya da ilk kez hafif: tıkanma serisinde nötr. */
+  neutral: boolean;
+  lighter: boolean;
+  noStall: boolean;
+  /** Karar setlerinin (AMRAP hariç) zorlukları. */
+  efforts: Effort[];
+  /** Karar setlerinin değerleri (tekrar ya da saniye) ve tepeleri, aynı sırayla. */
+  values: number[];
+  tops: number[];
+  /** AMRAP sette aralığın `AMRAP_EXTRA_REPS` üstü. */
+  beyond: boolean;
+  /**
+   * Motor bu antrenmandan tek başına ilerleme verirdi: kaçırma ve eksik yok; ağırlıklıda doğrusal
+   * ya da tepede, ağırlıksızda tepede ("zor varyasyon").
+   */
+  advanced: boolean;
+};
+
+/** `planSession`'ın serisi, eskiden yeniye (seri boşsa boş). */
+export function sessionSeries({
+  spec,
+  rule,
+  sets,
+  history,
+  rowId,
+}: {
+  spec: LoadSpec;
+  rule: Pick<ProgressionRule, 'scheme'>;
+  sets: readonly SetTarget[];
+  history: readonly SessionResult[];
+  rowId?: string;
+}): SeriesSession[] {
+  const weighted = usesWeight(spec);
+  return analyzeSeries(sets, history, rowId).chain.map((session) => {
+    const decisive = deciding(session.pairs);
+    const { light, heavy } = referenceOf(session, spec);
+    const reached = !session.lighter && decisive.every(reachedPair);
+    const missed = session.lighterMiss || (!session.lighterNeutral && decisive.some(missedPair));
+    const neutral = neutralSession(session);
+    const progressed = weighted && rule.scheme === 'linear' ? true : reached;
+    return {
+      weightKg: light,
+      heavyKg: heavy,
+      reached,
+      missed,
+      neutral,
+      lighter: session.lighter,
+      noStall: session.noStall,
+      efforts: decisive.filter((pair) => !pair.set.amrap).map((pair) => pair.result.effort),
+      values: decisive.map((pair) => pair.result.value),
+      tops: decisive.map(topOf),
+      beyond: session.pairs.some((pair) => pair.set.amrap && pair.result.value >= topOf(pair) + AMRAP_EXTRA_REPS),
+      advanced: rule.scheme !== 'none' && !missed && !neutral && !session.lighter && progressed,
+    };
+  });
 }
 
 /**

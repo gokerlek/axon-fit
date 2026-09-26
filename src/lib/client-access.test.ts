@@ -22,6 +22,7 @@ import {
   CLIENT_ID_PATTERN,
   clientFormSchema,
   HEALTH_CONSENT_VERSION,
+  trainingOf,
   type Client,
   type ClientIndexEntry,
 } from './schemas/client.ts';
@@ -297,5 +298,16 @@ describe('danışan formu', () => {
     assert.equal(v.safeParse(clientFormSchema, { ...temel, name: '   ' }).success, false);
     const sonuc = v.safeParse(clientFormSchema, { ...temel, name: '  Ayşe  ' });
     assert.equal(sonuc.success && sonuc.output.name, 'Ayşe');
+  });
+
+  test('antrenman geçmişi isteğe bağlı: yeni / 6 ay+ / 1 yıl+ (açık soru 4)', () => {
+    for (const trainingExperience of ['new', 'six_months', 'one_year']) {
+      assert.equal(v.safeParse(clientFormSchema, { ...temel, trainingExperience }).success, true);
+    }
+    assert.equal(v.safeParse(clientFormSchema, { ...temel, trainingExperience: 'iki_yil' }).success, false);
+    assert.deepEqual(trainingOf({ trainingExperience: 'one_year' }), { training: { experience: 'one_year' } });
+    assert.deepEqual(trainingOf({}, { experience: 'six_months' }), { training: { experience: 'six_months' } });
+    assert.deepEqual(trainingOf({ trainingExperience: 'new' }, { experience: 'six_months' }), { training: { experience: 'new' } });
+    assert.deepEqual(trainingOf({}), {});
   });
 });

@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatNumber } from '@/lib/format';
 import { DURATION, EASE, tween, WORKOUT } from '@/lib/motion';
 import { REASON_LABELS, type SuggestionReason } from '@/lib/progression';
+import type { Why } from '@/lib/recommend';
 import { SESSION_LIMITS } from '@/lib/schemas/session';
 import { isStraight } from '@/lib/set-plan';
 import { cn } from '@/lib/utils';
@@ -19,12 +20,13 @@ import type { WorkoutRow } from '@/lib/workout-plan';
 import { previousText, setValueText, targetCell, type SetView, type WarmupView } from '@/lib/workout-session';
 
 const UP = new Set<string>(['increase', 'range_increase']);
-const DOWN = new Set<string>(['decrease', 'deload', 'pain_reduce']);
+const DOWN = new Set<string>(['decrease', 'deload', 'calibrate', 'pain_reduce']);
 
-function ReasonIcon({ reason }: { reason: string }) {
-  if (reason === 'first_time') return <Sparkle />;
-  if (UP.has(reason)) return <ArrowUp />;
-  if (DOWN.has(reason)) return <ArrowDown />;
+/** Gerekçenin ikonu: öneri katmanının tonu (`why.tone`), yoksa gerekçeden. */
+function ReasonIcon({ reason, tone }: { reason: string; tone: Why['tone'] | undefined }) {
+  if (tone ? tone === 'new' : reason === 'first_time') return <Sparkle />;
+  if (tone ? tone === 'up' : UP.has(reason)) return <ArrowUp />;
+  if (tone ? tone === 'down' : DOWN.has(reason)) return <ArrowDown />;
   return <Equals />;
 }
 
@@ -245,6 +247,10 @@ export function ExerciseCard({
   const showTarget = !isStraight(sets.map((set) => set.target));
   const valueHead = row.trackingType === 'duration' ? 'Süre' : 'Tekrar';
   const reason = row.plan.reason as SuggestionReason;
+  // Öneri katmanının gerekçesi (§5.7): kısa çip ve tamamı; eski anlık görüntüde gerekçenin genel metni.
+  const reasonChip = row.why?.chip ?? REASON_LABELS[reason] ?? '';
+  const reasonDetail = row.why?.detail ?? REASON_LABELS[reason] ?? '';
+  const reasonUp = row.why ? row.why.tone === 'up' : UP.has(reason);
   const warmDone = warmups.length > 0 && warmups.every((warmup) => warmup.logged);
   const toggle = (chip: 'reason' | 'note' | 'setup') => setOpen(open === chip ? null : chip);
 
@@ -276,8 +282,8 @@ export function ExerciseCard({
                 {!group && onSwap ? <SwapButton title={row.title} onSwap={onSwap} className="-mr-2" /> : null}
               </div>
               <div className="flex min-h-8 items-center gap-1.5 overflow-hidden">
-                <Chip open={open === 'reason'} onToggle={() => toggle('reason')} tone={UP.has(reason) ? 'up' : 'plain'} icon={<ReasonIcon reason={reason} />}>
-                  {REASON_LABELS[reason] ?? ''}
+                <Chip open={open === 'reason'} onToggle={() => toggle('reason')} tone={reasonUp ? 'up' : 'plain'} icon={<ReasonIcon reason={reason} tone={row.why?.tone} />}>
+                  {reasonChip}
                 </Chip>
                 {setupNote ? (
                   <Chip open={open === 'setup'} onToggle={() => toggle('setup')} tone="plain" icon={<Wrench />} label={`Ayar notun: ${setupNote}. Düzelt`} className="max-w-[45%]">
@@ -298,7 +304,7 @@ export function ExerciseCard({
                   <Chip open={open === 'setup'} onToggle={() => toggle('setup')} tone="muted" icon={<Plus weight="bold" />} label="Ayar notu ekle" className="shrink-0 px-2" />
                 )}
               </div>
-              {open === 'reason' ? <p className="text-[0.8125rem] text-muted-foreground">{REASON_LABELS[reason]}</p> : null}
+              {open === 'reason' ? <p className="text-[0.8125rem] text-muted-foreground">{reasonDetail}</p> : null}
               {open === 'note' ? <p className="text-[0.8125rem] text-muted-foreground">Antrenörünün notu: {row.note ?? ''}</p> : null}
               {open === 'setup' ? (
                 <SetupNoteForm

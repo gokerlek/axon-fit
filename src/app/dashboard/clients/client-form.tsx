@@ -34,6 +34,7 @@ import {
   clientFormSchema,
   HEALTH_FIELD_INFO,
   HEALTH_FIELDS,
+  TRAINING_EXPERIENCE_LABELS,
   type Client,
   type ClientInput,
   type HealthField,
@@ -51,7 +52,8 @@ const HEALTH_FIELD_ICONS: Record<HealthField, PhosphorIcon> = {
 };
 
 /**
- * Danışan ekleme/düzenleme: yalnız kişisel bilgiler ve izinler (sağlık modülü). Yeni danışan
+ * Danışan ekleme/düzenleme: kişisel bilgiler, antrenman geçmişi (öneri motorunun aşama tabanı,
+ * `exposure.ts`) ve izinler (sağlık modülü). Yeni danışan
  * kaydedilince sunucu özel repo'sunu açar ve PT davet ekranına geçer. Program ve ölçümler
  * danışanın bir özelliği değil, yapılan iştir: danışanın sayfasından yönetilir.
  */
@@ -65,6 +67,7 @@ export function ClientForm({ editing }: { editing: Client | null }) {
       status: editing?.status ?? 'active',
       healthEnabled: editing?.modules.health.enabled ?? false,
       healthFields: editing?.modules.health.fields ?? [],
+      trainingExperience: editing?.training?.experience ?? 'new',
     },
   });
   const consented = editing?.consents.health?.granted ? editing.consents.health.fields : null;
@@ -134,6 +137,25 @@ export function ClientForm({ editing }: { editing: Client | null }) {
                 )}
               </FormField>
             ) : null}
+
+            <FormField of={form} path={['trainingExperience']}>
+              {(field) => (
+                <Field data-invalid={Boolean(field.errors) || undefined} className="max-w-sm">
+                  <FieldLabel htmlFor="training-experience">Antrenman geçmişi</FieldLabel>
+                  <LabeledSelect
+                    id="training-experience"
+                    value={field.input}
+                    labels={TRAINING_EXPERIENCE_LABELS}
+                    onChange={(value) => setInput(form, { path: ['trainingExperience'], input: value })}
+                  />
+                  <FieldDescription>
+                    Ağırlık önerileri buna göre başlar: deneyimli danışan her yeni harekette tanışma adımlarını tek
+                    antrenmanda geçer.
+                  </FieldDescription>
+                  <FieldError>{field.errors?.[0]}</FieldError>
+                </Field>
+              )}
+            </FormField>
           </div>
 
           <FormField of={form} path={['note']}>

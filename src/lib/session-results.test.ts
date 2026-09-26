@@ -33,6 +33,19 @@ describe('toSetResults', () => {
   test('"bir defalık" hareket karara hiç girmez', () => {
     assert.deepEqual(toSetResults(sessionEntry('e_aaaaaa', { oneOff: true, sets: [workingSet('st_aaaaaaaa', 2)] })), []);
   });
+
+  test('hafif hareket motorda kalır ve işaretlenir (§5.5)', () => {
+    const [set] = toSetResults(sessionEntry('e_aaaaaa', { lighter: true, sets: [workingSet('st_aaaaaaaa', 2, { topWeightKg: 65 })] }));
+    assert.deepEqual(set, { weightKg: 60, value: 10, effort: 'good', topWeightKg: 65, lighter: true });
+  });
+
+  test('Tanışma\'da ya da ayar seansında planlanan: kaçırması tıkanma sayılmaz (`noStall`)', () => {
+    const results = (plan: { reason?: string; stage?: string }) => toSetResults(sessionEntry('e_aaaaaa', { plan, sets: [workingSet('st_aaaaaaaa', 2)] }))[0]?.noStall;
+    assert.equal(results({ reason: 'first_time', stage: 'intro' }), true);
+    assert.equal(results({ reason: 'calibrate', stage: 'novice' }), true);
+    assert.equal(results({ reason: 'increase', stage: 'novice' }), undefined);
+    assert.equal(results({ reason: 'hold' }), undefined);
+  });
 });
 
 describe('hareket geçmişi → planSession', () => {
