@@ -10,7 +10,7 @@ import { appendLog, mondayOf, type ClientSchedule, type ProgramLogEntry, type Pr
  * - Günler yalnız "ne zaman" sorusunu cevaplar: sıradaki antrenmanın içeriği yine rotasyondan
  *   (`nextDayId`, A → B → C). Kaçan gün içeriği atlatmaz; dinlenme gününde de başlatılabilir.
  * - "Bu hafta x/y": y seçili gün sayısı (yoksa haftalık sıklık); hafta pazartesi başlar, uygulamanın
- *   saat diliminde (`weekProgress`).
+ *   saat diliminde (`weekOf`).
  * - Danışanın değişikliği program geçmişine `client` türünde yazılır ("Antrenman günleri: Pzt, Çar,
  *   Cum → Sal, Per, Cmt"); PT'nin bildirimleri bu kayıttan türetilir (`notices.ts`).
  *
@@ -126,7 +126,7 @@ export type StripDay = {
 
 /**
  * Bugün kartının 7 günlük şeridi (pazartesi başlar): seçili günler halkalı, yapılanlar dolu, kaçanlar
- * soluk. `doneDays`: bu hafta antrenman yapılan günler (`weekProgress().days`).
+ * soluk. `doneDays`: bu hafta antrenman yapılan günler (`weekOf().days`).
  */
 export function weekStrip(input: { today: string; weekdays: readonly number[]; doneDays: Iterable<string> }): StripDay[] {
   const selected = new Set(normalizeWeekdays(input.weekdays));

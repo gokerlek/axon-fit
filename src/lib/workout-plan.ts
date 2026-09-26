@@ -1,7 +1,8 @@
 import type { AlternativeCandidate } from './alternatives.ts';
 import { withClientTargets } from './client-targets.ts';
 import { loadSpecFor, type DeviceLoadSettings } from './device-loads.ts';
-import { currentPhaseOf, nextDayId, weekProgress } from './program-plan.ts';
+import { todayIn } from './format.ts';
+import { currentPhaseOf, mondayOf, nextDayId } from './program-plan.ts';
 import { planSession, warmupSets, type LoadSpec, type ProgressionRule, type SessionPlan, type TrackingType } from './progression.ts';
 import type { Program } from './schemas/program.ts';
 import { effectiveSchedule, weekTarget, type EffectiveSchedule } from './training-days.ts';
@@ -36,7 +37,7 @@ import type { PreviousSet } from './workout-cursor.ts';
  *   da aynı kayıttan gelir (`setupNote`); hareketin kaydı açılınca ona taşınır.
  * - Isınma setleri saklanmaz, burada hesaplanır (`warmupSets`, v1 §7.8): halterle bileşik hareket, kas
  *   grubunun gündeki ilk hareketi, en hafif çalışma seti 40 kg ve üstü (piramitte ilk basamak).
- * - Bugün'ün sayıları index'ten: "bu hafta x/3" (`weekProgress`), yarım antrenman, bitmiş
+ * - Bugün'ün sayıları index'ten: "bu hafta x/3" (`weekOf`), yarım antrenman, bitmiş
  *   antrenmanların bugünkü suyu.
  * - Muadil ("Değiştir") ve eklenen hareket ("Hareket ekle", §2.6) aynı motorla, kendi geçmişiyle
  *   planlanır (`swapRowFor`, `addedRowFor`): muadil satırın set düzenini (hedefleri) ve kuralını
@@ -429,15 +430,17 @@ export type WeekCount = {
 };
 
 /**
- * "Bu hafta x/y" (tasarım §2.11): bitmiş antrenmanların bitiş anlarından, pazartesi başlayan hafta,
+ * "Bu hafta x/y" (tasarım §2.11): bitmiş antrenmanların günlerinden (`date`: başlangıç günü; gece yarısını
+ * geçen ya da ertesi gün bitirilen antrenman başladığı günde, Geçmiş'le aynı), pazartesi başlayan hafta,
  * uygulamanın saat diliminde; y seçili gün sayısı, yoksa şu anki evrenin sıklığı.
  */
 export function weekOf(index: SessionIndex, program: Program | null, now: Date, timeZone: string): WeekCount {
-  const completedAt = index.items.flatMap((row) => (row.finishedAt ? [row.finishedAt] : []));
+  const today = todayIn(timeZone, now);
+  const start = mondayOf(today);
+  const days = [...new Set(index.items.flatMap((row) => (row.finishedAt && row.date >= start && row.date <= today ? [row.date] : [])))].sort();
   const daysPerWeek = program ? currentPhaseOf(program)?.phase.daysPerWeek : undefined;
   const weekdays = program ? effectiveSchedule(program).weekdays : [];
-  const { done, days, weekStart } = weekProgress({ completedAt, now, timeZone });
-  return { done, target: weekTarget(weekdays, daysPerWeek), days, start: weekStart };
+  return { done: days.length, target: weekTarget(weekdays, daysPerWeek), days, start };
 }
 
 /** Bugün'ün ve Ayarlar'ın "Günlerini değiştir"i için: geçerli günler, PT'ninkiler, danışanınki ve sıklık. */

@@ -18,6 +18,8 @@ import { programSchema } from './schemas/program';
  *   (kütüphane denetimi, fark, revision +1, log `edit`) ve öneri `approved` olur: iki dosya TEK commit'te
  *   (Git Data API). Arada dal ilerlediyse (antrenman yazımı, başka kayıt) bir kez baştan.
  * - **Reddet:** yalnız `proposals.json` (isteğe bağlı notla), `sha` kilidiyle; çakışmada bir kez daha.
+ * - PT'nin gördüğü sürüm (`sessionId`) değiştiyse (başka bir seans öneriyi güncelledi) karar uygulanmaz:
+ *   `changed`; yeniden denemede de bakılır.
  * - Her kararda PT'nin bildirim özeti düşer (bekleyen öneri sayısı değişti).
  */
 
@@ -39,9 +41,9 @@ export async function readProposals(clientId: string): Promise<{ file: Proposals
 export type ApproveResult =
   | { status: 'approved'; revision: number }
   | { status: 'stale'; reason: string }
-  | { status: 'missing' | 'decided' | 'no_program' | 'invalid_program' };
+  | { status: 'missing' | 'decided' | 'changed' | 'no_program' | 'invalid_program' };
 
-export async function approveProposal(clientId: string, id: string): Promise<ApproveResult> {
+export async function approveProposal(clientId: string, id: string, sessionId: string): Promise<ApproveResult> {
   const repo = clientRepoName(clientId);
   // Kütüphane yalnız bekleyen bir öneri uygulanacaksa okunur (bir kez).
   let catalog: { library: Parameters<typeof planApproval>[0]['library']; ctx: Parameters<typeof planApproval>[0]['ctx'] } | null = null;
@@ -66,6 +68,7 @@ export async function approveProposal(clientId: string, id: string): Promise<App
     const item = file.items.find((entry) => entry.id === id);
     if (!item) return { status: 'missing' };
     if (item.status !== 'pending') return { status: 'decided' };
+    if (item.sessionId !== sessionId) return { status: 'changed' };
     catalog ??= await loadCatalog();
     const plan = planApproval({ program: program.output, file, id, library: catalog.library, ctx: catalog.ctx, now: new Date() });
     if (plan.status !== 'approved' && plan.status !== 'stale') return { status: plan.status };
@@ -91,9 +94,9 @@ export async function approveProposal(clientId: string, id: string): Promise<App
   }
 }
 
-export type DeclineResult = { status: 'declined' } | { status: 'missing' | 'decided' };
+export type DeclineResult = { status: 'declined' } | { status: 'missing' | 'decided' | 'changed' };
 
-export async function declineProposal(clientId: string, id: string, note: string | undefined): Promise<DeclineResult> {
+export async function declineProposal(clientId: string, id: string, sessionId: string, note: string | undefined): Promise<DeclineResult> {
   const repo = clientRepoName(clientId);
   for (let attempt = 0; ; attempt += 1) {
     const stored = await readJson<unknown>(repo, PROPOSALS_PATH);
@@ -101,6 +104,8 @@ export async function declineProposal(clientId: string, id: string, note: string
     const file = parseProposals(stored.content);
     const item = file.items.find((entry) => entry.id === id);
     if (!item) return { status: 'missing' };
+    if (item.status !== 'pending') return { status: 'decided' };
+    if (item.sessionId !== sessionId) return { status: 'changed' };
     const next = decideProposal(file, id, { status: 'declined', at: new Date(), note });
     if (!next) return { status: 'decided' };
     try {

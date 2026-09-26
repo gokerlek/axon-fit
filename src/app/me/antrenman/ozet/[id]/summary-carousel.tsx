@@ -138,6 +138,8 @@ export function SummaryCarousel({ summary, firstName, from }: { summary: Session
     <MusclesCard key="muscles" summary={summary} />,
     <ExercisesCard key="exercises" summary={summary} />,
   ];
+  // Kartın okunan adı görünen başlıkla aynı: yarım bırakılan antrenmanın ilk kartı "kaydedildi" der.
+  const titles = CARDS.map((card, position) => (position === 0 && summary.unfinished ? 'Antrenman kaydedildi' : card));
 
   return (
     <div className="mx-auto flex h-dvh w-full max-w-md flex-col overflow-hidden bg-background">
@@ -165,7 +167,7 @@ export function SummaryCarousel({ summary, firstName, from }: { summary: Session
         className="min-h-0 flex-1 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&>[data-slot=carousel-content]]:h-full">
         <CarouselContent className="h-full">
           {cards.map((card, position) => (
-            <CarouselItem key={CARDS[position]} className="h-full" aria-label={`${position + 1} / ${CARDS.length}, ${CARDS[position]}`} aria-hidden={position !== index}>
+            <CarouselItem key={CARDS[position]} className="h-full" aria-label={`${position + 1} / ${CARDS.length}, ${titles[position]}`} aria-hidden={position !== index}>
               <div className="flex h-full flex-col gap-3 overflow-y-auto overscroll-contain px-4 pt-1 pb-4">{card}</div>
             </CarouselItem>
           ))}

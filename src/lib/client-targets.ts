@@ -1,6 +1,6 @@
 import type { ClientTarget, ClientTargets, ProgramChange, ProgramPhase } from './program-plan.ts';
 import type { TrackingType } from './progression.ts';
-import { isStraight, setShape, setsText, type SetSpec } from './set-plan.ts';
+import { isStraight, resizeSets, setShape, setsText, type SetSpec } from './set-plan.ts';
 import type { TemplateBlock, TemplateRow } from './template-plan.ts';
 
 /**
@@ -163,7 +163,8 @@ export function ptTargetsEdit(
     }
     const title = ctx.titleOf(old.row.exerciseId);
     const scope = ctx.multiPhase ? `${next.phaseName} · ${next.dayName}` : next.dayName;
-    const adopted = next.row.exerciseId === old.row.exerciseId && sameSets(next.row.sets, target.sets);
+    // Yalnız set sayısı değişen hedef de programa alınmıştır (önerinin set artışı geçerli setleri büyütür).
+    const adopted = next.row.exerciseId === old.row.exerciseId && sameSets(next.row.sets, resizeSets(target.sets, next.row.sets.length));
     changes.push({
       scope,
       text: adopted

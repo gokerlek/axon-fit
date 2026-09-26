@@ -41,10 +41,18 @@ export const PROPOSAL_OUTCOME_DAYS = 14;
 
 export const PROPOSAL_ID_PATTERN = /^pr_[a-z0-9]{6}$/;
 
-/** PT'nin kararı (program sayfasındaki kart): uygula ya da isteğe bağlı notla reddet. */
+/**
+ * PT'nin kararı (program sayfasındaki kart): uygula ya da isteğe bağlı notla reddet. `sessionId` önerinin
+ * sürümüdür: aynı seansta içerik değişmez, bekleyen öneriyi güncelleyen hep başka bir seanstır; PT'nin
+ * gördüğü sürüm değiştiyse karar uygulanmaz.
+ */
 export const proposalActionSchema = v.variant('action', [
-  v.object({ action: v.literal('approve') }),
-  v.object({ action: v.literal('decline'), note: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(300, 'Not en fazla 300 karakter.'))) }),
+  v.object({ action: v.literal('approve'), sessionId: v.pipe(v.string(), v.regex(SESSION_ID_PATTERN)) }),
+  v.object({
+    action: v.literal('decline'),
+    sessionId: v.pipe(v.string(), v.regex(SESSION_ID_PATTERN)),
+    note: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(300, 'Not en fazla 300 karakter.'))),
+  }),
 ]);
 
 export const PROPOSAL_KIND_LABELS: Record<ProposalKind, string> = {
@@ -290,7 +298,8 @@ function removeRow(phases: readonly ProgramPhase[], rowId: string): ProgramPhase
 /**
  * Onaylanan öneriyi programın evrelerine uygular (sonra `saveProgram` yolu: kütüphane denetimi, fark,
  * revision +1). Önerinin dayandığı hâl değiştiyse uygulanmaz (`stale`):
- * - `sets` / `algo_sets`: satırın set sayısı hâlâ `from` olmalı; `resizeSets` (son set kopyalanır).
+ * - `sets` / `algo_sets`: satırın set sayısı hâlâ `from` olmalı; geçerli setler (danışanın hedefi dahil)
+ *   `resizeSets` ile büyür/küçülür (son set kopyalanır): danışanın hedefi yeni set sayısıyla programa alınır.
  * - `target`: satırın geçerli setleri (danışanın hedefi dahil) hâlâ `target.from` olmalı; satırın setleri
  *   `target.to` olur (danışanın hedefi PT'nin kaydında düşer ya da "programa alındı").
  * - `swap`: satır hâlâ eski harekette olmalı; hareket değişir, cihaz egzersizinkine döner, kural ve not kalır.
@@ -325,7 +334,8 @@ export function applyProposal(program: Program, proposal: Proposal, ids: Program
     case 'sets':
     case 'algo_sets': {
       if (proposal.from === undefined || proposal.to === undefined || row.sets.length !== proposal.from) return { status: 'stale', reason: STALE.changed };
-      return { status: 'applied', phases: mapRow(phases, rowId, (item) => ({ ...item, sets: resizeSets(item.sets, proposal.to as number) })) };
+      const current = effectiveSets(row, program.clientTargets);
+      return { status: 'applied', phases: mapRow(phases, rowId, (item) => ({ ...item, sets: resizeSets(current, proposal.to as number) })) };
     }
     case 'target': {
       if (!proposal.target || !sameSets(effectiveSets(row, program.clientTargets), proposal.target.from) || row.sets.length !== proposal.target.to.length) {

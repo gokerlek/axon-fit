@@ -234,6 +234,22 @@ describe('Bugün: index\'ten', () => {
     assert.deepEqual(weekOf(index(), null, now, TZ), { done: 2, target: null, ...week });
   });
 
+  test('"bu hafta": ertesi gün bitirilen antrenman başladığı günde sayılır (Geçmiş\'le aynı)', () => {
+    const now = new Date('2026-09-22T16:00:00.000Z');
+    const late = sessionDoc({
+      id: 's_eeeeeeee',
+      status: 'finished',
+      date: '2026-09-21',
+      startedAt: '2026-09-21T16:00:00.000Z',
+      finishedAt: '2026-09-22T05:00:00.000Z',
+      entries: [sessionEntry('e_eeeeee', { rowId: 'r_aaaaaa', sets: [workingSet(setId(), 1)] })],
+    });
+    const week = weekOf({ version: 1, items: [row(late, 5)], deleted: [] }, null, now, TZ);
+    assert.deepEqual(week.days, ['2026-09-21']);
+    assert.ok(!week.days.includes('2026-09-22'));
+    assert.equal(week.done, 1);
+  });
+
   test('bugünkü su: yalnız bitmiş antrenmanlar (etkinin suyu telefondaki belgeden)', () => {
     assert.equal(sessionWaterOn(index(), '2026-09-26'), 2);
     assert.equal(sessionWaterOn(index(), '2026-09-22'), 0);

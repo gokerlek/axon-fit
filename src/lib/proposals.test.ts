@@ -249,6 +249,20 @@ describe('onay: kayıt yolu', () => {
     );
   });
 
+  test('set artışı danışanın hedefini korur: geçerli setler büyür, hedef programa alınır', () => {
+    const at = '2026-09-25T10:00:00.000Z';
+    const program: ProgramState = { ...stored(), clientTargets: { r_aaaaaa: { sets: sets(3, 10, 14), baseSets: sets(3, 8, 12), at } } };
+    const pushUp = proposal({ rowId: 'r_aaaaaa', exerciseId: 'push-up', title: 'Şınav', text: 'Şınav 3 → 4 set' });
+    const plan = planApproval({ program, file: parseProposals({ version: 1, items: [pushUp] }), id: 'pr_aaaaaa', library, ctx, now, random: sequence() });
+    assert.equal(plan.status, 'approved');
+    if (plan.status !== 'approved' || !plan.program) return;
+    assert.deepEqual(rowOf(plan.program.phases, 'r_aaaaaa')?.sets, sets(4, 10, 14));
+    assert.equal(plan.program.clientTargets, undefined);
+    const texts = plan.changes.map((change) => change.text);
+    assert.ok(texts.includes('Şınav: danışanın hedefi programa alındı'), texts.join(' | '));
+    assert.ok(texts.includes('Şınav 3×8–12 → 4×10–14'), texts.join(' | '));
+  });
+
   test('satır o arada değişti: program değişmez, öneri stale', () => {
     const plan = planApproval({ program: stored(), file: parseProposals({ version: 1, items: [proposal({ from: 4, to: 5 })] }), id: 'pr_aaaaaa', library, ctx, now });
     assert.equal(plan.status, 'stale');

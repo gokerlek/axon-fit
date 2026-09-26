@@ -29,6 +29,8 @@ import { cn } from '@/lib/utils';
 /** Kartın satırı (sunucuda hazırlanır). */
 export type ProposalView = {
   id: string;
+  /** Önerinin sürümü: kararla gönderilir, o arada değiştiyse sunucu reddeder. */
+  sessionId: string;
   text: string;
   why?: string;
   /** "Gün A · 26 Eylül 2026". */
@@ -75,10 +77,13 @@ export function ProposalsCard({ clientId, items }: { clientId: string; items: Pr
   const [busy, setBusy] = useState<string | null>(null);
 
   const approve = useServiceMutation({
-    fn: (id: string) =>
-      fetchJson<{ revision: number }>(`/api/clients/${clientId}/proposals/${id}`, { method: 'POST', body: JSON.stringify({ action: 'approve' }) }),
+    fn: (item: ProposalView) =>
+      fetchJson<{ revision: number }>(`/api/clients/${clientId}/proposals/${item.id}`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'approve', sessionId: item.sessionId }),
+      }),
     notify: { success: 'Öneri programa yazıldı.' },
-    onMutate: (id) => setBusy(id),
+    onMutate: (item) => setBusy(item.id),
     onSettled: () => {
       setBusy(null);
       setConfirm(null);
@@ -88,13 +93,13 @@ export function ProposalsCard({ clientId, items }: { clientId: string; items: Pr
   });
 
   const decline = useServiceMutation({
-    fn: (input: { id: string; note: string }) =>
-      fetchJson(`/api/clients/${clientId}/proposals/${input.id}`, {
+    fn: (input: { item: ProposalView; note: string }) =>
+      fetchJson(`/api/clients/${clientId}/proposals/${input.item.id}`, {
         method: 'POST',
-        body: JSON.stringify({ action: 'decline', ...(input.note.trim() ? { note: input.note.trim() } : {}) }),
+        body: JSON.stringify({ action: 'decline', sessionId: input.item.sessionId, ...(input.note.trim() ? { note: input.note.trim() } : {}) }),
       }),
     notify: { success: 'Öneri reddedildi; danışan görecek.' },
-    onMutate: (input) => setBusy(input.id),
+    onMutate: (input) => setBusy(input.item.id),
     onSettled: () => {
       setBusy(null);
       setDeclining(null);
@@ -105,7 +110,7 @@ export function ProposalsCard({ clientId, items }: { clientId: string; items: Pr
 
   const onApprove = (item: ProposalView) => {
     if (draft) setConfirm(item);
-    else approve.mutate(item.id);
+    else approve.mutate(item);
   };
 
   return (
@@ -159,7 +164,7 @@ export function ProposalsCard({ clientId, items }: { clientId: string; items: Pr
             <Button variant="outline" nativeButton={false} render={<Link href={`/dashboard/clients/${clientId}/program/edit`} />}>
               Düzenleyiciyi aç
             </Button>
-            <Button disabled={approve.isPending} onClick={() => confirm && approve.mutate(confirm.id)}>
+            <Button disabled={approve.isPending} onClick={() => confirm && approve.mutate(confirm)}>
               {approve.isPending ? <Spinner data-icon="inline-start" /> : null}
               Yine de uygula
             </Button>
@@ -194,7 +199,7 @@ export function ProposalsCard({ clientId, items }: { clientId: string; items: Pr
             <Button variant="outline" onClick={() => setDeclining(null)}>
               Vazgeç
             </Button>
-            <Button variant="destructive" disabled={decline.isPending} onClick={() => declining && decline.mutate({ id: declining.id, note })}>
+            <Button variant="destructive" disabled={decline.isPending} onClick={() => declining && decline.mutate({ item: declining, note })}>
               {decline.isPending ? <Spinner data-icon="inline-start" /> : null}
               Reddet
             </Button>

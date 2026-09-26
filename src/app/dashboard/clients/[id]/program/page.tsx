@@ -161,6 +161,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
   const proposalViews: ProposalView[] = proposals
     ? pendingProposals(proposals.file).map((item) => ({
         id: item.id,
+        sessionId: item.sessionId,
         text: item.text,
         ...(item.why ? { why: item.why } : {}),
         meta: [dayNames.get(item.dayId), formatDate(item.at, timeZone)].filter(Boolean).join(' · '),

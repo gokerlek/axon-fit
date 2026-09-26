@@ -7,9 +7,10 @@ import { clientIdSchema } from '@/lib/schemas/client';
 import { readPtSession } from '@/lib/session';
 
 /**
- * PT: danışanın önerisine karar (tasarım §6.4). `{ action: 'approve' }` öneriyi programa uygular (`saveProgram`
- * yolu: fark, revision +1, log `edit`; program ve öneri tek commit'te); önerinin dayandığı hâl değiştiyse
- * program değişmez, öneri `stale` olur (409). `{ action: 'decline', note? }` yalnız öneriyi reddeder.
+ * PT: danışanın önerisine karar (tasarım §6.4). `{ action: 'approve', sessionId }` öneriyi programa uygular
+ * (`saveProgram` yolu: fark, revision +1, log `edit`; program ve öneri tek commit'te); önerinin dayandığı hâl
+ * değiştiyse program değişmez, öneri `stale` olur (409). `{ action: 'decline', sessionId, note? }` yalnız öneriyi
+ * reddeder. `sessionId` PT'nin gördüğü sürüm: öneri o arada başka bir seansla güncellendiyse karar uygulanmaz (409).
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string; pid: string }> }) {
   if ((await readPtSession())?.role !== 'pt') return NextResponse.json({ error: 'Bu işlem için yetkin yok.' }, { status: 403 });
@@ -20,7 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     if (parsed.output.action === 'decline') {
-      const result = await declineProposal(id, pid, parsed.output.note);
+      const result = await declineProposal(id, pid, parsed.output.sessionId, parsed.output.note);
       switch (result.status) {
         case 'declined':
           return NextResponse.json({ status: 'declined' });
@@ -28,9 +29,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           return NextResponse.json({ error: 'Öneri bulunamadı.' }, { status: 404 });
         case 'decided':
           return NextResponse.json({ error: 'Bu öneri zaten karara bağlanmış.' }, { status: 409 });
+        case 'changed':
+          return NextResponse.json({ error: 'Öneri değişti; sayfayı yenile.' }, { status: 409 });
       }
     }
-    const result = await approveProposal(id, pid);
+    const result = await approveProposal(id, pid, parsed.output.sessionId);
     switch (result.status) {
       case 'approved':
         return NextResponse.json({ status: 'approved', revision: result.revision });
@@ -40,6 +43,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         return NextResponse.json({ error: 'Öneri bulunamadı.' }, { status: 404 });
       case 'decided':
         return NextResponse.json({ error: 'Bu öneri zaten karara bağlanmış.' }, { status: 409 });
+      case 'changed':
+        return NextResponse.json({ error: 'Öneri değişti; sayfayı yenile.' }, { status: 409 });
       case 'no_program':
         return NextResponse.json({ error: 'Program bulunamadı; silinmiş olabilir.' }, { status: 404 });
       case 'invalid_program':
