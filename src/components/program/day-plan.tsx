@@ -21,19 +21,22 @@ import { cn } from '@/lib/utils';
  * 1 dk 30 sn dinlenme", AMRAP "yapabildiğin kadar"). Kancasız: sunucu bileşenlerinde de çalışır.
  *
  * Kütüphanede olmayan egzersiz: `missing="show"` (PT) "Silinmiş egzersiz" olarak
- * kimliğiyle görünür; `missing="hide"` (danışan) satır hiç çizilmez.
+ * kimliğiyle görünür; `missing="hide"` (danışan) satır hiç çizilmez. `rowNotes`: satır kimliğiyle kısa not;
+ * PT'nin programında danışanın geçerli hedefi ("Danışan güncelledi · hedef 10–14 · 26 Eyl", tasarım §6.2).
  */
 export function DayPlan({
   blocks,
   exercises,
   missing,
   audience = 'pt',
+  rowNotes,
   className,
 }: {
   blocks: readonly TemplateBlock[];
   exercises: ReadonlyMap<string, Pick<PlanExercise, 'title' | 'trackingType'>>;
   missing: 'show' | 'hide';
   audience?: 'pt' | 'client';
+  rowNotes?: Readonly<Record<string, string>>;
   className?: string;
 }) {
   const labels = rowLabels({ blocks });
@@ -77,6 +80,12 @@ export function DayPlan({
                       </span>
                     )}
                     <span className="text-sm tabular-nums text-muted-foreground">{work}</span>
+                    {rowNotes?.[row.id] ? (
+                      <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground tabular-nums">
+                        <Badge variant="secondary">Danışan güncelledi</Badge>
+                        {rowNotes[row.id]}
+                      </span>
+                    ) : null}
                     {row.note ? <span className="text-xs italic text-muted-foreground">{row.note}</span> : null}
                   </div>
                 </div>

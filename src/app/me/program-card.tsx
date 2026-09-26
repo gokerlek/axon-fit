@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Item, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item';
+import { withClientTargets } from '@/lib/client-targets';
 import { listExercises } from '@/lib/exercises';
 import { currentPhaseOf, frequencyLabel, nextDayId, phaseStatus } from '@/lib/program-plan';
 import { readProgramFile } from '@/lib/programs';
@@ -75,7 +76,9 @@ export async function ProgramCard({ clientId, children }: { clientId: string; ch
   if (!phase || !day) return <Unavailable>{children}</Unavailable>;
 
   const byId = new Map(exercises.map((exercise) => [exercise.id, exercise]));
-  const summary = templateSummary({ blocks: day.blocks }, byId);
+  // Danışanın kendi tekrar hedefleri (bitişte "Evet, güncelle", tasarım §6.2) günün satırlarında.
+  const blocks = withClientTargets(day.blocks, program.clientTargets);
+  const summary = templateSummary({ blocks }, byId);
   const status = phaseStatus(program, new Date());
   const frequency = frequencyLabel(phase.daysPerWeek);
   const context = program.phased
@@ -112,7 +115,7 @@ export async function ProgramCard({ clientId, children }: { clientId: string; ch
         <CardContent className="flex flex-col gap-4">
           <WeekStrip clientId={clientId} />
           {summary.rows > 0 ? (
-            <ClientDayPlan blocks={day.blocks} exercises={byId} />
+            <ClientDayPlan blocks={blocks} exercises={byId} />
           ) : (
             <p className="text-sm text-muted-foreground">Bu günün hareketleri şu an açılamıyor. Antrenörüne haber ver.</p>
           )}

@@ -10,8 +10,9 @@ import {
   upgradeProgram,
   upgradeProgramBody,
 } from '../program-plan.ts';
-import { TEMPLATE_ID_PATTERN, TEMPLATE_LIMITS, countRows } from '../template-plan.ts';
-import { templateBlockSchema } from './template.ts';
+import { ROW_ID_PATTERN, TEMPLATE_ID_PATTERN, TEMPLATE_LIMITS, countRows } from '../template-plan.ts';
+import { SESSION_ID_PATTERN } from './session.ts';
+import { rowSetsSchema, templateBlockSchema } from './template.ts';
 
 /**
  * Danışana özel program şeması — sunucu ve istemci ortak (SPEC §4, §7.4).
@@ -160,8 +161,35 @@ export const programLogEntrySchema = v.object({
   at: timestamp,
   revision: positive,
   kind: v.picklist(LOG_KINDS),
+  /** Bitişte yazılan danışan kaydının seansı: aynı seansın kaydı ikinci kez eklenmez. */
+  sessionId: v.optional(v.pipe(v.string(), v.regex(SESSION_ID_PATTERN))),
   changes: v.pipe(v.array(programChangeSchema), v.minLength(1), v.maxLength(L.changesPerEntry)),
 });
+
+/** Danışanın satır hedefi (tasarım §6.2): `baseSets` PT'nin o anki setleri; satır onlara eşitken `sets` geçerli. */
+export const clientTargetSchema = v.object({
+  sets: rowSetsSchema,
+  baseSets: rowSetsSchema,
+  sessionId: v.optional(v.pipe(v.string(), v.regex(SESSION_ID_PATTERN))),
+  at: timestamp,
+});
+
+/**
+ * `clientTargets` hoşgörüyle okunur: satır kimliği ya da içeriği bozuk hedef düşer, program yine okunur
+ * (danışanın tek bozuk hedefi PT'nin programını ve antrenmanı kilitlemesin). Boşsa alan yok.
+ */
+const clientTargetsSchema = v.pipe(
+  v.unknown(),
+  v.transform((raw): Record<string, v.InferOutput<typeof clientTargetSchema>> | undefined => {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
+    const targets: Record<string, v.InferOutput<typeof clientTargetSchema>> = {};
+    for (const [rowId, value] of Object.entries(raw)) {
+      const parsed = v.safeParse(clientTargetSchema, value);
+      if (ROW_ID_PATTERN.test(rowId) && parsed.success) targets[rowId] = parsed.output;
+    }
+    return Object.keys(targets).length > 0 ? targets : undefined;
+  }),
+);
 
 /** Repo'daki dosya: sürüm 1 önce çevrilir. Bilinmeyen alanlar atılır (`v.object`). */
 export const programSchema = v.pipe(
@@ -183,6 +211,8 @@ export const programSchema = v.pipe(
     schedule: v.optional(v.object({ weekdays: weekdaysSchema })),
     /** Danışanın değiştirdiği günler: revision artmaz, PT günleri değiştirince silinir. Geçerli = bu ?? PT'ninki. */
     clientSchedule: v.optional(v.object({ weekdays: clientWeekdaysSchema, at: timestamp })),
+    /** Danışanın satır hedefleri (bitişte "Evet, güncelle"): revision artmaz, PT satırı değiştirince düşer. */
+    clientTargets: v.optional(clientTargetsSchema),
     /** En yenisi üstte. */
     log: v.pipe(v.array(programLogEntrySchema), v.maxLength(L.log)),
   }),

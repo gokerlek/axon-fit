@@ -65,7 +65,11 @@ import {
   type BlocksPath,
   type Editor,
   type ItemActions,
+  type RowClientTarget,
 } from './editor-context';
+
+/** Şablonda danışan hedefi yok. */
+const NO_TARGETS: Readonly<Record<string, RowClientTarget>> = {};
 import { SaveButton } from './editor-save';
 import { ExerciseSheet, type PickerState } from './exercise-sheet';
 
@@ -227,6 +231,7 @@ export function BlockEditor({
   notice,
   listLabel = 'Şablondaki hareketler',
   addLabel = 'Hareket ekle',
+  clientTargets = NO_TARGETS,
 }: {
   form: BlocksFormStore;
   path: BlocksPath;
@@ -249,6 +254,8 @@ export function BlockEditor({
   listLabel?: string;
   /** Alt çubuktaki "+ Hareket ekle"nin erişilebilir adı (programda "Hareket ekle: Gün A"). */
   addLabel?: string;
+  /** Programda danışanın satır hedefleri: kartta "Danışan güncelledi" rozeti (tasarım §6.2). */
+  clientTargets?: Readonly<Record<string, RowClientTarget>>;
 }) {
   const exerciseById = useMemo(() => new Map(exercises.map((exercise) => [exercise.id, exercise])), [exercises]);
   const deviceById = useMemo(() => new Map(devices.map((device) => [device.id, device])), [devices]);
@@ -727,6 +734,7 @@ export function BlockEditor({
     openAddToGroup,
     nudgeId,
     onNudged,
+    clientTargets,
   };
 
   return (

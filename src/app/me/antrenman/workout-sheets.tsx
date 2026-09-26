@@ -101,7 +101,8 @@ function RotationPicker({ rotation, value, onChange }: { rotation: FinishRotatio
 }
 
 /**
- * Bitirme soruları (tasarım §2.7 a/b; program soruları sonraki fazda):
+ * Bitirme soruları (tasarım §2.7 a/b; plandan sapma varsa ardından "Programını güncelleyelim mi?",
+ * `program-update-sheet.tsx`):
  * - hepsi bitti: "Antrenman tamamlandı, bitirelim mi?" ve özet satırı; son hareketin dinlenmesi
  *   olmadığı için onun "nasıldı?" sorusu (ve AMRAP'la bittiyse "Kaç tekrar yaptın?") burada. Geçilen
  *   hareket kaldıysa "1 hareket geçildi: Plank" [Geçileni yap];

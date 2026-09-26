@@ -1,10 +1,11 @@
 import type { AlternativeCandidate } from './alternatives.ts';
+import { withClientTargets } from './client-targets.ts';
 import { loadSpecFor, type DeviceLoadSettings } from './device-loads.ts';
 import { currentPhaseOf, nextDayId, weekProgress } from './program-plan.ts';
 import { planSession, warmupSets, type LoadSpec, type ProgressionRule, type SessionPlan, type TrackingType } from './progression.ts';
 import type { Program } from './schemas/program.ts';
 import { effectiveSchedule, weekTarget, type EffectiveSchedule } from './training-days.ts';
-import type { SessionDoc, SessionEntry, SessionIndex, SessionIndexRow } from './schemas/session.ts';
+import type { SessionDoc, SessionEntry, SessionIndex, SessionIndexRow, SkipReason } from './schemas/session.ts';
 import { exerciseHistory } from './session-results.ts';
 import {
   DEFAULT_REST_SECONDS,
@@ -53,6 +54,24 @@ export type WorkoutDevice = DeviceLoadSettings & { id: string };
 /** Isınma seti: ağırlık ve tekrar (hacme ve rekora girmez). */
 export type WarmupSet = { kg: number; reps: number };
 
+/**
+ * Aynı günün önceki bitmiş antrenmanında satırın kaydı: bitişteki "üst üste 2 antrenman" kuralları
+ * (tasarım §6.1: tekrar hedefi, set sayısı, geçme; `program-feedback.ts`).
+ */
+export type RowPrevious = {
+  /** Çalışma setleri (fazladan hariç): satırdaki yeri ve değeri (tekrar ya da saniye). */
+  values: { setIndex: number; value: number }[];
+  /** Yapılan çalışma seti (fazladan dahil) ve o günkü planlanan (bilinmiyorsa 0). */
+  done: number;
+  planned: number;
+  /**
+   * Bilerek geçildi: Geçilenler'de ya da sona alınıp yapılmadı ("Hareketi geç"). Erken bitişte yalnız
+   * yapılmadan kalan (nedeni bitişte sorulan) hareket geçilmiş sayılmaz.
+   */
+  skipped: boolean;
+  reason?: SkipReason;
+};
+
 export type WorkoutRow = {
   rowId: string;
   blockId: string;
@@ -73,6 +92,8 @@ export type WorkoutRow = {
   warmups?: WarmupSet[];
   /** Danışanın geçen seferki ayar notu ("Sehpa 3. delik"). */
   setupNote?: string;
+  /** Aynı günün önceki antrenmanında bu satır; kaydı yoksa (ya da eski anlık görüntüde) yok. */
+  previous?: RowPrevious;
 };
 
 export type WorkoutDay = {
@@ -182,6 +203,30 @@ export function setupNoteOf(
   return entry?.setupNote || undefined;
 }
 
+/**
+ * Satırın önceki antrenmandaki kaydı: aynı günün en yeni bitmiş antrenmanında satırın kendi kaydı (aynı
+ * hareketle; muadille yapıldıysa karşılaştırılamaz). Kaydı yoksa undefined.
+ */
+export function previousRowOf(
+  history: readonly Pick<SessionDoc, 'status' | 'startedAt' | 'entries' | 'program'>[],
+  select: { dayId: string; rowId: string; exerciseId: string },
+): RowPrevious | undefined {
+  const doc = history
+    .filter((item) => item.status === 'finished' && item.program?.dayId === select.dayId)
+    .sort((a, b) => time(b.startedAt) - time(a.startedAt))[0];
+  const entry = doc?.entries.find((item) => item.rowId === select.rowId && !item.added && !item.swappedFrom);
+  if (!doc || !entry || entry.exerciseId !== select.exerciseId || doc.entries.some((item) => item.swappedFrom === select.rowId)) return undefined;
+  const working = entry.sets.filter((set) => set.type === 'working');
+  const counted = working.filter((set) => !set.extra);
+  return {
+    values: counted.map((set, position) => ({ setIndex: set.setIndex ?? position, value: set.reps ?? set.seconds ?? 0 })),
+    done: working.length,
+    planned: working.reduce((max, set) => Math.max(max, set.plannedSetCount ?? 0), 0),
+    skipped: entry.status === 'skipped' || entry.skip?.moved === true,
+    ...(entry.skip?.reason ? { reason: entry.skip.reason } : {}),
+  };
+}
+
 /** Isınma setleri: yalnız ağırlıklı harekette; en hafif çalışma setine göre (piramitte ilk basamak). */
 export function warmupsFor(
   exercise: Pick<PlanExercise, 'trackingType' | 'equipment' | 'category'>,
@@ -211,6 +256,8 @@ export function workoutRowFor(input: {
   devices: ReadonlyMap<string, WorkoutDevice>;
   history: readonly SessionDoc[];
   firstForMuscle: boolean;
+  /** Programın günü: satırın önceki antrenmandaki kaydı (`previous`) bununla bulunur; muadil ve eklenende yok. */
+  dayId?: string;
 }): WorkoutRow {
   const { row, exercise } = input;
   const deviceId = effectiveDeviceId(row, exercise, new Set(input.devices.keys()));
@@ -221,6 +268,7 @@ export function workoutRowFor(input: {
   const plan = planSession({ spec, rule, sets, history: results, rowId: row.id });
   const warmups = warmupsFor(exercise, spec, plan, input.firstForMuscle);
   const setupNote = setupNoteOf(input.history, { rowId: row.id, exerciseId: row.exerciseId, deviceId });
+  const previous = input.dayId ? previousRowOf(input.history, { dayId: input.dayId, rowId: row.id, exerciseId: row.exerciseId }) : undefined;
   return {
     rowId: row.id,
     blockId: input.blockId,
@@ -235,6 +283,7 @@ export function workoutRowFor(input: {
     ...(row.note ? { note: row.note } : {}),
     ...(warmups.length > 0 ? { warmups } : {}),
     ...(setupNote ? { setupNote } : {}),
+    ...(previous ? { previous } : {}),
   };
 }
 
@@ -309,7 +358,8 @@ export function dayExerciseIds(program: Program, dayId?: string | null): Set<str
 
 /**
  * Günün planı. `dayId` yoksa (ya da programda yoksa) rotasyonda sıradaki gün; program boşsa null.
- * `history` bitmiş antrenmanlar (sıra önemsiz); etkin ve silinmiş belgeler yok sayılır.
+ * `history` bitmiş antrenmanlar (sıra önemsiz); etkin ve silinmiş belgeler yok sayılır. Satırların
+ * setleri danışanın geçerli hedefleriyle (`clientTargets`, tasarım §6.2): antrenman ve bitişin farkı onlarla.
  */
 export function buildWorkoutDay(input: {
   program: Program;
@@ -326,7 +376,7 @@ export function buildWorkoutDay(input: {
   const current = currentPhaseOf(input.program)?.phase;
   const plannedName = planned ? current?.days.find((item) => item.id === planned)?.name : undefined;
 
-  const blocks: TemplateBlock[] = day.blocks.flatMap((block) => {
+  const blocks: TemplateBlock[] = withClientTargets(day.blocks, input.program.clientTargets).flatMap((block) => {
     const kept = block.rows.filter((row) => input.exercises.has(row.exerciseId));
     return kept.length > 0 ? [{ ...block, rows: kept }] : [];
   });
@@ -335,7 +385,7 @@ export function buildWorkoutDay(input: {
   for (const block of blocks) {
     for (const row of block.rows) {
       const exercise = input.exercises.get(row.exerciseId) as WorkoutExercise;
-      rows[row.id] = workoutRowFor({ row, blockId: block.id, exercise, devices: input.devices, history, firstForMuscle: first.has(row.id) });
+      rows[row.id] = workoutRowFor({ row, blockId: block.id, exercise, devices: input.devices, history, firstForMuscle: first.has(row.id), dayId: day.id });
     }
   }
   return {
@@ -402,7 +452,9 @@ export function scheduleOf(program: Program): WorkoutSchedule {
  * (revision, updatedAt), evre, rotasyon (başka cihazda bitirilen antrenman) ve günler değişince değişir;
  * Bugün sunucuda taze okunan programın damgasını verir, eskiyen plan "Antrenmana başla"da kullanılmaz.
  */
-export function programStamp(program: Pick<Program, 'revision' | 'createdAt' | 'updatedAt' | 'current' | 'rotation' | 'schedule' | 'clientSchedule'>): string {
+export function programStamp(
+  program: Pick<Program, 'revision' | 'createdAt' | 'updatedAt' | 'current' | 'rotation' | 'schedule' | 'clientSchedule' | 'clientTargets'>,
+): string {
   return [
     program.revision,
     program.createdAt,
@@ -412,6 +464,11 @@ export function programStamp(program: Pick<Program, 'revision' | 'createdAt' | '
     program.rotation.lastCompletedAt ?? '',
     (program.schedule?.weekdays ?? []).join(''),
     program.clientSchedule?.at ?? '',
+    // Danışanın hedefi değişince (bitişte "Evet, güncelle") saklanan plan eskir.
+    Object.entries(program.clientTargets ?? {})
+      .map(([rowId, target]) => `${rowId}@${target.at}`)
+      .sort()
+      .join(','),
   ].join('|');
 }
 

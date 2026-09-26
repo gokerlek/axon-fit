@@ -2,7 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GithubError } from './github/errors.ts';
 import { HEALTH_CONSENT_VERSION, type Client } from './schemas/client.ts';
-import type { SessionDoc, SessionIndex } from './schemas/session.ts';
+import type { FinishFeedback, SessionDoc, SessionIndex } from './schemas/session.ts';
 import { deleteSession, finishSession, patchSession, putSession, readIndex, readSession } from './session-files-core.ts';
 import { tombstoneOf, withDeletions } from './session-merge.ts';
 import { fakeSessionRepo } from './testing/fake-session-repo.ts';
@@ -207,6 +207,38 @@ describe('bitiş', () => {
     assert.equal(gh.sha('health.json'), before);
     assert.deepEqual(gh.lastChanged(), [PATH, INDEX].sort());
     assert.equal((gh.get(PATH) as SessionDoc).status, 'finished');
+  });
+
+  const decisions = (): FinishFeedback => ({
+    answer: 'yes',
+    items: [
+      { kind: 'weight_up', apply: true, entryId: 'e_aaaaaa', rowId: 'r_aaaaaa', dayId: DAY_A, exerciseId: 'bench-press', title: 'Bench Press', trackingType: 'weight_reps', kg: { from: 57.5, to: 60 } },
+      { kind: 'sets', apply: true, entryId: 'e_bbbbbb', rowId: 'r_bbbbbb', dayId: DAY_A, exerciseId: 'leg-press', title: 'Leg Press', trackingType: 'weight_reps', count: { from: 2, to: 3 } },
+    ],
+  });
+
+  test('program güncelleme: danışan kaydı ve öneri aynı commit\'te; yanıtta sayılar', async () => {
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
+    const result = await finishSession(gh.repo, { ...ctx, client }, { doc: doc([s1, s2, s3], [l1, l2]), feedback: decisions() });
+    assert.equal(result.status, 'finished');
+    if (result.status === 'finished') assert.deepEqual(result.plan.feedback, { direct: 1, proposals: 1, converted: 0 });
+    assert.deepEqual(gh.lastChanged(), [PATH, 'program.json', 'proposals.json', INDEX].sort());
+    assert.equal(gh.commitCount(), 1);
+    const program = gh.get('program.json') as { revision: number; log: { kind: string; sessionId: string }[] };
+    assert.equal(program.revision, 7);
+    assert.deepEqual([program.log[0]?.kind, program.log[0]?.sessionId], ['client', 's_k2m9x4qa']);
+    const proposals = gh.get('proposals.json') as { items: { kind: string; text: string; status: string }[] };
+    assert.deepEqual(proposals.items.map((item) => [item.kind, item.text, item.status]), [['sets', 'Leg Press 2 → 3 set', 'pending']]);
+  });
+
+  test('bozuk proposals.json ezilmez: öneri yazılmaz, danışan kaydı yine yazılır', async () => {
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
+    gh.putText('proposals.json', '{"items":[');
+    const before = gh.sha('proposals.json');
+    const result = await finishSession(gh.repo, { ...ctx, client }, { doc: doc([s1, s2, s3], [l1, l2]), feedback: decisions() });
+    if (result.status === 'finished') assert.deepEqual(result.plan.feedback, { direct: 1, proposals: 0, converted: 0 });
+    assert.equal(gh.sha('proposals.json'), before);
+    assert.deepEqual(gh.lastChanged(), [PATH, 'program.json', INDEX].sort());
   });
 });
 

@@ -2,13 +2,16 @@ import * as v from 'valibot';
 import { canRecordHealth } from './client-status.ts';
 import { todayIn } from './format.ts';
 import { gitBlobSha, jsonText } from './github/blob.ts';
-import { completeDay } from './program-plan.ts';
+import { planProgramFeedback, withFeedbackFlags, type FeedbackOutcome } from './program-feedback.ts';
+import { completeDay, type ProgramChange } from './program-plan.ts';
+import { PROPOSALS_PATH } from './proposals.ts';
 import type { Client } from './schemas/client.ts';
 import { healthRecordSchema, type HealthRecord } from './schemas/health.ts';
 import { programSchema, type Program } from './schemas/program.ts';
 import {
   SESSIONS_INDEX_PATH,
   sessionPath,
+  type FinishFeedback,
   type FinishHealth,
   type PatchBody,
   type RotationChoice,
@@ -136,6 +139,8 @@ export function withSessionCheckIn(record: HealthRecord, input: { sessionId: str
 
 /** Bozuk health.json yeni kayıtla ezilmesin: okunamayan dosyanın işareti, `planFinish` 'broken' der. */
 export const BROKEN_HEALTH = Symbol('broken-health');
+/** Bozuk proposals.json da ezilmez: öneriler yazılmaz (danışanın kilo ve hedef kaydı yine yazılır). */
+export const BROKEN_PROPOSALS = Symbol('broken-proposals');
 
 export type FinishInput = {
   /** Kayıttaki etkin belge; dosya yoksa null (çevrimdışı bitiş: ilk yazma bitiş). */
@@ -143,10 +148,14 @@ export type FinishInput = {
   incoming: SessionDoc;
   rotation?: RotationChoice | undefined;
   health?: FinishHealth | undefined;
+  /** "Programını güncelleyelim mi?"nin kararları (§6); yoksa programa bir şey yazılmaz. */
+  feedback?: FinishFeedback | undefined;
   /** Onarılmış index. */
   index: SessionIndex;
   /** `program.json`'un ham içeriği (yoksa null). */
   program: unknown;
+  /** `proposals.json`'un ham içeriği: yalnız uygulanacak karar varken okunur (yoksa null; bozuksa `BROKEN_PROPOSALS`). */
+  proposalsFile?: unknown;
   /** `health.json`'un ham içeriği: yalnız onaylı ayrıntı varsa okunur (yoksa ya da okunmadıysa null; bozuk JSON'sa `BROKEN_HEALTH`). */
   healthFile: unknown;
   client: Pick<Client, 'modules' | 'consents'>;
@@ -161,6 +170,10 @@ export type FinishPlan = {
   rotation: { choice: RotationChoice; applied: boolean };
   /** Sağlık ayrıntısı: yazıldı, onay olmadığı için atıldı, yoktu, `health.json` okunamadığı için yazılamadı. */
   health: 'written' | 'dropped' | 'none' | 'broken';
+  /** Program güncelleme (§6): doğrudan yazılan, öneriye giden, öneriye dönen madde sayıları. */
+  feedback: FeedbackOutcome;
+  /** `proposals.json` okunamadığı için öneriler yazılamadı. */
+  proposalsBroken: boolean;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -171,14 +184,24 @@ function withNotice(notices: readonly SessionNotice[], notice: SessionNotice): S
   return notices.some((item) => item.kind === notice.kind) ? [...notices] : [...notices, notice];
 }
 
+/** Commit mesajı: "Antrenman bitti · Gün A · 17 set", program değiştiyse "· Program (danışan)" ve gövdede cümleler. */
+function finishCommitMessage(doc: SessionDoc, changes: readonly ProgramChange[], proposals: number): string {
+  const parts = [finishMessage(doc), ...(changes.length > 0 ? ['Program (danışan)'] : []), ...(proposals > 0 ? [`${proposals} öneri`] : [])];
+  const subject = parts.join(' · ');
+  if (changes.length === 0) return subject;
+  return `${subject}\n\n${changes.map((change) => `- ${change.scope ? `${change.scope}: ` : ''}${change.text}`).join('\n')}`;
+}
+
 /**
- * Bitişin tek commit'i (§4.7): seans `finished` + index satırı + (rotasyon ilerlediyse) `program.json` +
- * (onaylı sağlık ayrıntısı varsa) `health.json`. Dört dosya ya birlikte yazılır ya hiçbiri.
+ * Bitişin tek commit'i (§4.7): seans `finished` + index satırı + (rotasyon ilerlediyse ya da danışan
+ * programını güncellediyse) `program.json` + (öneri varsa) `proposals.json` + (onaylı sağlık ayrıntısı
+ * varsa) `health.json`. Dosyalar ya birlikte yazılır ya hiçbiri.
  *
  * Rotasyon zamanla korunur: `completeDay` yalnız seansın başlangıcı programdaki son tamamlanmadan
  * sonraysa uygulanır; çevrimdışı kuyrukta bekleyip sonraki antrenmandan sonra gelen bitiş sırayı geri
- * almaz. Program dosyası ham hâliyle korunur, yalnız `rotation` değişir (revision artmaz; bilinmeyen
- * alanlar düşmez).
+ * almaz. Program dosyası ham hâliyle korunur, yalnız `rotation`, danışanın hedefleri (`clientTargets`) ve
+ * geçmiş değişir (revision artmaz; bilinmeyen alanlar düşmez). "Programını güncelleyelim mi?"nin kararları
+ * `program-feedback.ts`'te (`planProgramFeedback`): uygulanmayan ağırlık seansa `oneOff`/`lighter` izi bırakır.
  */
 export function planFinish(input: FinishInput): FinishPlan {
   const { now } = input;
@@ -188,10 +211,24 @@ export function planFinish(input: FinishInput): FinishPlan {
 
   const programParsed = input.program === null ? null : v.safeParse(programSchema, input.program);
   const program = programParsed?.success ? programParsed.output : null;
+  const rawProgram = program ? (isRecord(input.program) && input.program.version === 2 ? input.program : (program as unknown as Record<string, unknown>)) : null;
   const { done, planned } = completion(doc, dayOf(program, doc.program?.dayId));
 
   const choice = input.rotation ?? doc.rotation?.value ?? defaultRotation(done, planned);
   if (input.rotation || !doc.rotation) doc = { ...doc, rotation: { value: choice, updatedAt: now.toISOString(), by: doc.writer } };
+
+  // Program güncelleme (§6): uygulanmayan ağırlığın izi seansa, kararlar programa ve önerilere.
+  const decisions = input.feedback?.items ?? [];
+  doc = withFeedbackFlags(doc, decisions, { at: now.toISOString(), by: doc.writer });
+  const proposalsBroken = input.proposalsFile === BROKEN_PROPOSALS;
+  const feedback = planProgramFeedback({
+    doc,
+    feedback: input.feedback,
+    program,
+    rawProgram,
+    proposals: proposalsBroken ? null : (input.proposalsFile ?? null),
+    now,
+  });
 
   let notices = doc.notices;
   // Yarım antrenman: PT'nin bildirimi yapılan ve planlanan seti söyler ("12/17 set").
@@ -199,24 +236,31 @@ export function planFinish(input: FinishInput): FinishPlan {
   if (doc.program?.plannedDayId && doc.program.plannedDayId !== doc.program.dayId) {
     notices = withNotice(notices, { kind: 'other_day', at: doc.startedAt });
   }
+  for (const kind of feedback.notices) {
+    if (kind === 'proposal' && proposalsBroken) continue;
+    notices = withNotice(notices, { kind, at: doc.finishedAt as string });
+  }
   doc = normalizeSession({ ...doc, notices });
 
   const files: { path: string; content: unknown }[] = [{ path: sessionPath(doc.id), content: doc }];
   const sha = gitBlobSha(jsonText(doc));
   files.push({ path: SESSIONS_INDEX_PATH, content: upsertIndexRow(input.index, indexRowOf(doc, sha)) });
 
+  // Program dosyası: danışanın güncellemesi (varsa) ve üstüne rotasyon.
+  let programContent: Record<string, unknown> | null = feedback.program;
   let applied = false;
-  if (choice === 'advance' && program && doc.program) {
+  if (choice === 'advance' && program && rawProgram && doc.program) {
     const last = program.rotation.lastCompletedAt;
     if (!last || time(doc.startedAt) > time(last)) {
       const next = completeDay(program, doc.program.dayId, new Date(doc.finishedAt as string));
       if (next !== program) {
-        const raw = isRecord(input.program) && input.program.version === 2 ? input.program : program;
-        files.push({ path: PROGRAM_PATH, content: { ...raw, rotation: next.rotation } });
+        programContent = { ...(programContent ?? rawProgram), rotation: next.rotation };
         applied = true;
       }
     }
   }
+  if (programContent) files.push({ path: PROGRAM_PATH, content: programContent });
+  if (feedback.proposals && !proposalsBroken) files.push({ path: PROPOSALS_PATH, content: feedback.proposals });
 
   let health: FinishPlan['health'] = input.health ? 'dropped' : 'none';
   const allowed = allowedHealth(input.client, input.health);
@@ -231,7 +275,16 @@ export function planFinish(input: FinishInput): FinishPlan {
     }
   }
 
-  return { doc, files, message: finishMessage(doc), rotation: { choice, applied }, health };
+  const outcome = proposalsBroken ? { ...feedback.outcome, proposals: 0, converted: 0 } : feedback.outcome;
+  return {
+    doc,
+    files,
+    message: finishCommitMessage(doc, feedback.program ? feedback.changes : [], outcome.proposals),
+    rotation: { choice, applied },
+    health,
+    feedback: outcome,
+    proposalsBroken: proposalsBroken && feedback.outcome.proposals > 0,
+  };
 }
 
 /* --- geçmişte düzeltme --- */

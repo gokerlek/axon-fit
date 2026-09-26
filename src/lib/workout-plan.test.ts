@@ -4,7 +4,7 @@ import type { SessionDoc, SessionIndex } from './schemas/session.ts';
 import { indexRowOf } from './session-index.ts';
 import { at, DAY_A, DAY_B, PHASE, programFile, sessionDoc, sessionEntry, singleBlock, workingSet } from './testing/session-fixtures.ts';
 import { BENCH, GOBLET, parsedProgram, workoutDay } from './testing/workout-fixtures.ts';
-import { activeRow, dayExerciseIds, historyRows, lastTimeOf, sessionWaterOn, setupNoteOf, warmupsFor, weekOf } from './workout-plan.ts';
+import { activeRow, dayExerciseIds, historyRows, lastTimeOf, previousRowOf, programStamp, sessionWaterOn, setupNoteOf, warmupsFor, weekOf } from './workout-plan.ts';
 
 let counter = 0;
 const setId = () => `st_${(++counter).toString(36).padStart(8, '0')}`;
@@ -135,6 +135,48 @@ describe('günün planı: ısınma ve ayar notu', () => {
     assert.equal(setupNoteOf([noted('s_aaaaaaaa', -3000, 'Sehpa 3'), noted('s_bbbbbbbb', -1000)], select), undefined);
     assert.equal(setupNoteOf([noted('s_aaaaaaaa', -3000, 'Sehpa 3')], { ...select, rowId: 'r_baskaaa' }), 'Sehpa 3');
     assert.equal(workoutDay({ history: [noted('s_aaaaaaaa', -1000, 'Sehpa 3')] }).rows.r_aaaaaa?.setupNote, 'Sehpa 3');
+  });
+});
+
+describe('günün planı: danışanın hedefi ve önceki antrenman', () => {
+  test('geçerli danışan hedefi günün satırına; PT satırı değiştirdiyse yok sayılır; damga değişir', () => {
+    const target = { sets: [{ min: 10, max: 12 }, { min: 10, max: 12 }, { min: 10, max: 12 }], baseSets: [{ min: 8, max: 10 }, { min: 8, max: 10 }, { min: 8, max: 10 }], at: at(0) };
+    const day = workoutDay({ raw: programFile({}, { clientTargets: { r_aaaaaa: target } }) });
+    assert.deepEqual(day.blocks[0]?.rows[0]?.sets, target.sets);
+    assert.deepEqual(day.blocks[1]?.rows[0]?.sets.length, 2);
+    const stale = workoutDay({ raw: programFile({}, { clientTargets: { r_aaaaaa: { ...target, baseSets: [{ min: 6, max: 8 }] } } }) });
+    assert.deepEqual(stale.blocks[0]?.rows[0]?.sets[0], { min: 8, max: 10 });
+    assert.notEqual(programStamp(parsedProgram(programFile({}, { clientTargets: { r_aaaaaa: target } }))), programStamp(parsedProgram()));
+  });
+
+  test('önceki antrenman: aynı günün en yeni bitmiş antrenmanında satırın kaydı', () => {
+    const older = finished('s_aaaaaaaa', 0, three(60, 8));
+    const newer = finished('s_bbbbbbbb', 100, [...three(60, 10), { kg: 60, reps: 8 }].map((set) => set), {});
+    const extra = newer.entries[0]?.sets[3];
+    if (extra) Object.assign(extra, { extra: true });
+    const previous = previousRowOf([older, newer], { dayId: DAY_A, rowId: 'r_aaaaaa', exerciseId: 'bench-press' });
+    assert.deepEqual(previous?.values, [
+      { setIndex: 0, value: 10 },
+      { setIndex: 1, value: 10 },
+      { setIndex: 2, value: 10 },
+    ]);
+    assert.equal(previous?.done, 4);
+    assert.equal(previous?.skipped, false);
+    assert.equal(previousRowOf([older], { dayId: DAY_B, rowId: 'r_aaaaaa', exerciseId: 'bench-press' }), undefined);
+    assert.equal(previousRowOf([older], { dayId: DAY_A, rowId: 'r_aaaaaa', exerciseId: 'push-up' }), undefined);
+  });
+
+  test('önceki antrenmanda geçildi: nedeniyle; plan satırında `previous`', () => {
+    const skipped = sessionDoc({
+      id: 's_cccccccc',
+      status: 'finished',
+      startedAt: at(0),
+      finishedAt: at(30),
+      entries: [sessionEntry('e_cccccc', { rowId: 'r_aaaaaa', status: 'skipped', skip: { reason: 'busy', moved: true } })],
+    });
+    assert.deepEqual(previousRowOf([skipped], { dayId: DAY_A, rowId: 'r_aaaaaa', exerciseId: 'bench-press' }), { values: [], done: 0, planned: 0, skipped: true, reason: 'busy' });
+    const day = workoutDay({ history: [finished('s_aaaaaaaa', 0, three(60, 8))] });
+    assert.equal(day.rows.r_aaaaaa?.previous?.done, 3);
   });
 });
 

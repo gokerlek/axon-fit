@@ -7,6 +7,7 @@ import { ClientHeader } from '../client-header';
 import { ConsentCard } from '../consent-card';
 import { PasswordCard } from '../password-card';
 import { ProgramCard } from '../program-card';
+import { ProposalOutcomes } from '../proposal-outcomes';
 import { RememberClient } from '../remember-client';
 import { TodayWorkout, WaterCard } from '../today-workout';
 
@@ -18,7 +19,8 @@ export const metadata: Metadata = { title: 'Bugün' };
  * okunur ve her açılışta kayıtla karşılaştırılır: PT erişimi kapattıysa ya da danışanı arşivlediyse
  * buraya giremez. Sağ üstte avatar menüsü (ayarlar, çıkış); ana sayfada yalnız karar bekleyenler
  * durur, verilmiş sağlık onayı Ayarlar'da. Altında sıradaki antrenman ("Antrenmana başla", "bu hafta
- * x/3") ya da yarım kalan antrenman, ve bugünkü su (tasarım §0, §2.1).
+ * x/3") ya da yarım kalan antrenman, ve bugünkü su (tasarım §0, §2.1); antrenörünün önerilerine kararı
+ * (tasarım §6.4).
  */
 export default async function MePage() {
   const [client, config, session] = await Promise.all([currentClient(), readAppConfig(), readClientSession()]);
@@ -45,6 +47,8 @@ export default async function MePage() {
           <WaterCard clientId={client.id} />
         </ProgramCard>
       </TodayWorkout>
+
+      <ProposalOutcomes clientId={client.id} timeZone={config.timeZone} />
     </main>
   );
 }

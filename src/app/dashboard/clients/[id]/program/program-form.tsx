@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Form, getDeepErrorEntry, getInput, setErrors, setInput, useField, useForm, type FormStore } from '@formisch/react';
 import { ArrowClockwise, ArrowSquareOut, WarningCircle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
+import type { RowClientTarget } from '@/components/block-editor/editor-context';
 import { DraftAutosave, DraftNotice, useEditorDraft } from '@/components/block-editor/editor-draft';
 import { EditorSaveProvider, FloatingSaveButton, SaveButton } from '@/components/block-editor/editor-save';
 import { LabeledSelect } from '@/components/labeled-select';
@@ -116,6 +117,7 @@ export function ProgramForm({
   now,
   timeZone,
   clientDays = null,
+  clientTargets,
 }: {
   clientId: string;
   mode: 'create' | 'edit';
@@ -132,6 +134,8 @@ export function ProgramForm({
   timeZone: string;
   /** Danışanın değiştirdiği antrenman günleri (düzenlemede); yoksa null. */
   clientDays?: ClientDays;
+  /** Danışanın satır hedefleri (düzenlemede): satırda "Danışan güncelledi" rozeti (tasarım §6.2). */
+  clientTargets?: Readonly<Record<string, RowClientTarget>>;
 }) {
   const router = useRouter();
   const exerciseById = useMemo(() => new Map(exercises.map((exercise) => [exercise.id, exercise])), [exercises]);
@@ -643,6 +647,7 @@ export function ProgramForm({
             timeZone={timeZone}
             actions={actions}
             footer={formEnd}
+            clientTargets={clientTargets}
           />
         ) : (
           <>

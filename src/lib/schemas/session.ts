@@ -2,7 +2,7 @@ import * as v from 'valibot';
 import { EFFORTS } from '../progression.ts';
 import { DAY_ID_PATTERN, PHASE_ID_PATTERN } from '../program-plan.ts';
 import { BLOCK_ID_PATTERN, ROW_ID_PATTERN, TEMPLATE_LIMITS } from '../template-plan.ts';
-import { setSpecSchema } from './template.ts';
+import { rowSetsSchema, setSpecSchema } from './template.ts';
 
 /**
  * Antrenman kaydı (seans) şeması — sunucu ve telefon ortak (SPEC §4, tasarım `docs/design/antrenman-ekrani.md` §4.2).
@@ -373,11 +373,60 @@ export const finishHealthSchema = v.object({
 });
 export type FinishHealth = v.InferOutput<typeof finishHealthSchema>;
 
+/**
+ * "Programını güncelleyelim mi?" (tasarım §2.7 c, §6): plan ile yapılanın farkının maddeleri
+ * (`program-feedback.ts`). Kilo ve düz setlerde tekrar/süre hedefi doğrudan, set sayısı ve yapı PT'ye öneri.
+ */
+export const FEEDBACK_KINDS = ['weight_up', 'weight_down', 'target', 'sets', 'swap', 'remove', 'add', 'algo_sets'] as const;
+export type FeedbackKind = (typeof FEEDBACK_KINDS)[number];
+/** Evet, güncelle · Hayır, aynı kalsın · Tek tek seç · cevapsız (sheet kapandı). */
+export const FEEDBACK_ANSWERS = ['yes', 'no', 'pick', 'none'] as const;
+export type FeedbackAnswer = (typeof FEEDBACK_ANSWERS)[number];
+
+const titleSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(SESSION_LIMITS.title));
+
+/**
+ * Bitişte bir madde ve danışanın kararı (`apply`). Sunucu telefona güvenmez: maddeyi seans belgesiyle ve
+ * programla yeniden denetler, doğrudan mı öneri mi olacağına kendisi karar verir; adlar yalnız metin için.
+ */
+export const feedbackDecisionSchema = v.object({
+  kind: v.picklist(FEEDBACK_KINDS),
+  apply: v.boolean(),
+  entryId: entryIdSchema,
+  /** Programın satırı; eklenen harekette yok. */
+  rowId: v.optional(rowIdSchema),
+  dayId: id(DAY_ID_PATTERN, 'Gün kimliği geçersiz.'),
+  /** Satırın (muadilde asıl satırın) hareketi. */
+  exerciseId: slugSchema,
+  title: titleSchema,
+  trackingType: v.picklist(['weight_reps', 'bodyweight_reps', 'duration'] as const),
+  /** Kilo: planın üst ağırlığı ve yapılan; `overload` onaylı aşırı yük ("Bir defalık" hazır). */
+  kg: v.optional(v.object({ from: kg, to: kg, overload: v.optional(v.boolean()) })),
+  /** Tekrar/süre hedefi: danışanın gördüğü setler ve yenisi. */
+  target: v.optional(v.object({ from: rowSetsSchema, to: rowSetsSchema })),
+  /** Set sayısı. */
+  count: v.optional(v.object({ from: int(1, TEMPLATE_LIMITS.sets), to: int(1, TEMPLATE_LIMITS.sets) })),
+  /** "Değiştir" ile gelen hareket; kayıt türü farklıysa setleri. */
+  swap: v.optional(v.object({ exerciseId: slugSchema, title: titleSchema, sets: v.optional(rowSetsSchema) })),
+  /** "Hareket ekle": setleri ve dinlenmesi. */
+  add: v.optional(v.object({ sets: rowSetsSchema, restSeconds: int(0, TEMPLATE_LIMITS.restSeconds) })),
+  why: v.optional(v.pipe(v.string(), v.maxLength(300))),
+});
+export type FeedbackDecision = v.InferOutput<typeof feedbackDecisionSchema>;
+
+export const finishFeedbackSchema = v.object({
+  answer: v.picklist(FEEDBACK_ANSWERS),
+  items: v.pipe(v.array(feedbackDecisionSchema), v.maxLength(SESSION_LIMITS.entries * 3)),
+});
+export type FinishFeedback = v.InferOutput<typeof finishFeedbackSchema>;
+
 export const finishBodySchema = v.object({
   doc: sessionDocSchema,
   /** Hazır seçilen "Sıradaki antrenman" satırı; yoksa planın yarısı yapıldıysa `advance`. */
   rotation: v.optional(v.picklist(ROTATION_CHOICES)),
   health: v.optional(finishHealthSchema),
+  /** "Programını güncelleyelim mi?"nin maddeleri ve kararlar; yoksa programa bir şey yazılmaz. */
+  feedback: v.optional(finishFeedbackSchema),
 });
 export type FinishBody = v.InferOutput<typeof finishBodySchema>;
 

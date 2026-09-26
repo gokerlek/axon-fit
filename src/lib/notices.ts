@@ -7,8 +7,8 @@ import type { SessionIndex } from './schemas/session.ts';
  * kayıtlardan türetilir:
  * - antrenmanların index satırları (`sessions-index.json`): başka gün seçildi, yarım bırakıldı, aşırı
  *   yük onaylandı, hafifletildi (nötr: `lighter` ağrı ya da hazır oluşluk demez);
- * - program geçmişindeki danışan kayıtları (`client`): antrenman günleri (ve sonra tekrar hedefi);
- * - `proposals.json`'daki bekleyen öneriler (PT onaylar; dosyanın biçimi öneri fazında, burada hoşgörülü);
+ * - program geçmişindeki danışan kayıtları (`client`): antrenman günleri, bitişte kilo ve tekrar hedefi;
+ * - `proposals.json`'daki bekleyen öneriler (PT onaylar; burada hoşgörüyle okunur);
  * - sağlık ayrıntısı ("ağrı nedeniyle geçti", hafifletmenin nedeni) yalnız `health.json`'dan ve onay
  *   sürdükçe (çağıran onayı denetleyip süzer).
  *
@@ -110,16 +110,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * `proposals.json`'daki bekleyen öneriler (öneri fazı dosyanın biçimini kurar; burada yalnız `status` ve
- * `at` okunur, bilinmeyen türler de sayılır): tek bildirim, en yeni önerinin anında. Bekleyen öneri pencere
- * dışında da görünür (PT'nin kararını bekliyor).
+ * `proposals.json`'daki bekleyen öneriler (`proposals.ts`; burada hoşgörüyle yalnız `status`, `at` ve `text`
+ * okunur, bilinmeyen türler de sayılır): tek bildirim, en yeni önerinin anında; tek öneri varsa metniyle
+ * ("Öneri: Leg Press 3 → 4 set"). Bekleyen öneri pencere dışında da görünür (PT'nin kararını bekliyor).
  */
 export function proposalNotices(raw: unknown): PtNotice[] {
   const items = isRecord(raw) && Array.isArray(raw.items) ? raw.items : [];
   const pending = items.filter((item): item is Record<string, unknown> => isRecord(item) && item.status === 'pending' && typeof item.at === 'string');
   if (pending.length === 0) return [];
   const at = pending.map((item) => item.at as string).sort((a, b) => time(b) - time(a))[0] as string;
-  return [{ key: `proposal:${at}`, kind: 'proposal', at, text: `${formatNumber(pending.length)} değişiklik önerisi bekliyor`, target: 'program' }];
+  const only = pending.length === 1 && typeof pending[0]?.text === 'string' ? pending[0].text : null;
+  return [{ key: `proposal:${at}`, kind: 'proposal', at, text: only ? `Öneri: ${only}` : `${formatNumber(pending.length)} değişiklik önerisi bekliyor`, target: 'program' }];
 }
 
 /** Bir danışanın bildirimleri, en yeniden eskiye; pencere `windowDays`, en çok `limit`. */

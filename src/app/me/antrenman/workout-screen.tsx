@@ -15,7 +15,8 @@ import { formatKg } from '@/lib/format';
 import { DRAG, DURATION, EASE, tween, WORKOUT } from '@/lib/motion';
 import { EFFORT_LABELS } from '@/lib/progression';
 import { ApiError, fetchJson } from '@/lib/query/errors';
-import type { FinishHealth, RotationChoice, SessionDoc } from '@/lib/schemas/session';
+import { feedbackItems, feedbackMessage, resolveFeedback, withFeedbackFlags, type FeedbackItem, type FeedbackOutcome } from '@/lib/program-feedback';
+import type { FinishFeedback, FinishHealth, RotationChoice, SessionDoc } from '@/lib/schemas/session';
 import { waterOf } from '@/lib/session-index';
 import { cn } from '@/lib/utils';
 import { rowKeyOf } from '@/lib/workout-cursor';
@@ -77,6 +78,7 @@ import { clearLocalWorkout, clearWorkoutCache, readLocalWorkout, readWorkoutCach
 import { EntryPanel, type TimerView, type TransitionView } from './entry-panel';
 import { ExerciseCard } from './exercise-card';
 import { AddExerciseSheet, FlowSheet, SwapSheet, type SwapTarget } from './flow-sheets';
+import { ProgramUpdateSheet, type ProgramAnswer } from './program-update-sheet';
 import { RestPanel, RestStrip, type EffortPromptView, type RestView } from './rest-panel';
 import { useWorkoutOutbox } from './use-workout-outbox';
 import { beep, isIOS, unlockAudio, useWakeLock, vibrate } from './workout-feedback';
@@ -93,6 +95,9 @@ const NEXT_SLIDE_MS = 260;
 const NEXT_REST_MS = 700;
 
 type LoadState = { phase: 'loading' } | { phase: 'ready' } | { phase: 'empty'; problem?: string | undefined } | { phase: 'error'; message: string };
+
+/** Bitiş sorusu cevaplandı, "Programını güncelleyelim mi?" bekliyor: maddeler ve bitişin öteki seçimleri. */
+type PendingUpdate = { items: FeedbackItem[]; rotation: RotationChoice | null; health: FinishHealth | undefined };
 
 /** Az önce kaydedilen set: panel değişene kadar gösterilir. */
 type Saving = { next: NextSet };
@@ -173,7 +178,9 @@ function lastWorkingSetId(doc: SessionDoc): string | null {
  * (`?day=`) "Gün C seçildi · Antrenörüne bildirilecek".
  *
  * Bitiş (§2.7): "Antrenman tamamlandı, bitirelim mi?" ya da erken bitişte yapılmayanlar, hazır seçilmiş
- * "Sıradaki antrenman: Gün B · Değiştir" (`finishRotation`) ve bir kez sorulan isteğe bağlı neden.
+ * "Sıradaki antrenman: Gün B · Değiştir" (`finishRotation`) ve bir kez sorulan isteğe bağlı neden; plandan
+ * sapma ya da öneri varsa ardından "Programını güncelleyelim mi?" (`program-feedback.ts`), kararlar bitişin
+ * tek commit'ine biner.
  *
  * "Set bitti": önce ✓ satıra düşer ve düğme "Kaydedildi" der; 220 ms sonra panel dinlenmeye döner.
  * Hareket bittiyse kart sola çıkar, sıradaki sağdan gelir, dinlenme onun üstünde açılır; son setten sonra
@@ -208,6 +215,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
   const [undoWater, setUndoWater] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [update, setUpdate] = useState<PendingUpdate | null>(null);
   const [editing, setEditing] = useState<EditTarget | null>(null);
   const [deleting, setDeleting] = useState<(EditTarget & { text: string }) | null>(null);
   const [elsewhere, setElsewhere] = useState<{ server: SessionDoc; count: number } | null>(null);
@@ -806,44 +814,91 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
   }, [commit, deleting, outbox, announce, guard]);
 
   /**
-   * Bitir; `reason`: yapılmayanların isteğe bağlı nedeni (ağrı yalnız onayla, ayrıntısı `health.json`'a);
-   * `rotation`: "Sıradaki antrenman" satırındaki seçim (gösterilmediyse sunucunun hazır seçimi).
+   * Bitişi gönderir (tek commit): `feedback` "Programını güncelleyelim mi?"nin kararları; uygulanmayan ağırlık
+   * önce seansa işlenir (`oneOff` / `lighter`). Başarılıysa program güncellemesi ayrı bir bildirimle söylenir.
    */
-  const onFinish = useCallback(async (reason: FinishReason | null, rotation: RotationChoice | null) => {
-    let current = localRef.current;
-    if (!current) return;
-    let health: FinishHealth | undefined;
-    if (reason) {
-      const result = withFinishReason(planOf(current), current.doc, reason, stampOf(current));
-      if (result.skippedRows.length > 0) health = { skippedRows: result.skippedRows };
-      current = withChange(current, result.doc, { send: false });
-      commit(current);
-    }
-    setFinishing(true);
-    outbox.stop();
-    const doc: SessionDoc = { ...current.doc, status: 'finished', finishedAt: new Date().toISOString() };
-    try {
-      await fetchJson(`/api/me/sessions/${current.doc.id}/finish`, {
-        method: 'POST',
-        body: JSON.stringify({ doc, ...(rotation ? { rotation } : {}), ...(health ? { health } : {}) }),
-      });
-      leave('Antrenman kaydedildi. Antrenörün görecek.');
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 410) {
-        leave('Bu antrenman silinmiş.', 'info');
+  const submitFinish = useCallback(
+    async (rotation: RotationChoice | null, health: FinishHealth | undefined, feedback: FinishFeedback | undefined) => {
+      let current = localRef.current;
+      if (!current) return;
+      if (feedback) {
+        const flagged = withFeedbackFlags(current.doc, feedback.items, stampOf(current));
+        if (flagged !== current.doc) {
+          current = withChange(current, flagged, { send: false });
+          commit(current);
+        }
+      }
+      setFinishing(true);
+      outbox.stop();
+      const doc: SessionDoc = { ...current.doc, status: 'finished', finishedAt: new Date().toISOString() };
+      try {
+        const result = await fetchJson<{ feedback?: FeedbackOutcome }>(`/api/me/sessions/${current.doc.id}/finish`, {
+          method: 'POST',
+          body: JSON.stringify({ doc, ...(rotation ? { rotation } : {}), ...(health ? { health } : {}), ...(feedback ? { feedback } : {}) }),
+        });
+        leave('Antrenman kaydedildi. Antrenörün görecek.');
+        const message = result.feedback ? feedbackMessage(result.feedback) : null;
+        // Sayfa değişirken ikinci bildirim bir an sonra (prototip): ilki okunsun.
+        if (message) window.setTimeout(() => toast(message.title, { description: message.description }), 450);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 410) {
+          leave('Bu antrenman silinmiş.', 'info');
+          return;
+        }
+        outbox.resume();
+        setFinishing(false);
+        setUpdate(null);
+        toast.error(
+          error instanceof ApiError && error.status === 0
+            ? 'Bağlantı yok; antrenmanın bu telefonda duruyor. Bağlantı gelince yeniden bitir.'
+            : error instanceof ApiError
+              ? error.message
+              : 'Antrenman bitirilemedi. Biraz sonra tekrar dene.',
+        );
+      }
+    },
+    [outbox, leave, commit],
+  );
+
+  /**
+   * Bitir; `reason`: yapılmayanların isteğe bağlı nedeni (ağrı yalnız onayla, ayrıntısı `health.json`'a);
+   * `rotation`: "Sıradaki antrenman" satırındaki seçim (gösterilmediyse sunucunun hazır seçimi). Plandan
+   * sapma ya da öneri varsa önce "Programını güncelleyelim mi?" (§2.7 c), özetten önce.
+   */
+  const onFinish = useCallback(
+    (reason: FinishReason | null, rotation: RotationChoice | null) => {
+      let current = localRef.current;
+      if (!current) return;
+      let health: FinishHealth | undefined;
+      if (reason) {
+        const result = withFinishReason(planOf(current), current.doc, reason, stampOf(current));
+        if (result.skippedRows.length > 0) health = { skippedRows: result.skippedRows };
+        current = withChange(current, result.doc, { send: false });
+        commit(current);
+      }
+      const items = feedbackItems({ day: current.plan, doc: current.doc, extras: current.extras });
+      if (items.length === 0) {
+        void submitFinish(rotation, health, undefined);
         return;
       }
-      outbox.resume();
-      setFinishing(false);
-      toast.error(
-        error instanceof ApiError && error.status === 0
-          ? 'Bağlantı yok; antrenmanın bu telefonda duruyor. Bağlantı gelince yeniden bitir.'
-          : error instanceof ApiError
-            ? error.message
-            : 'Antrenman bitirilemedi. Biraz sonra tekrar dene.',
-      );
-    }
-  }, [outbox, leave, commit]);
+      setFinishOpen(false);
+      setUpdate({ items, rotation, health });
+    },
+    [commit, submitFinish],
+  );
+
+  /** "Programını güncelleyelim mi?"nin cevabı; sheet kararsız kapandıysa cevapsız (`none`). */
+  const onProgramAnswer = useCallback(
+    (answer: ProgramAnswer | null) => {
+      const pending = update;
+      if (!pending) return;
+      // Kararsız kapandı: sheet kapanır, bitiş arkada gider; cevapta sheet düğmesinde bekler.
+      if (!answer) setUpdate(null);
+      const feedback = resolveFeedback(pending.items, answer?.answer ?? 'none', answer?.picked);
+      void submitFinish(pending.rotation, pending.health, feedback);
+    },
+    [update, submitFinish],
+  );
 
   /* --- akış: geç, sona al, şimdi yap, değiştir, hareket ekle (§2.6) --- */
 
@@ -1360,6 +1415,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
       <AddExerciseSheet open={addOpen} onOpenChange={setAddOpen} todayIds={todayIds} busyId={addBusy} onPick={(item) => void onPickAdd(item)} />
       <EditSetSheet target={editing} onClose={() => setEditing(null)} onSave={onSaveEdit} onDelete={onAskDelete} />
       <DeleteSetDialog target={deleting} onCancel={() => setDeleting(null)} onConfirm={onConfirmDelete} />
+      <ProgramUpdateSheet items={update?.items ?? null} busy={finishing} onAnswer={onProgramAnswer} onDismiss={() => onProgramAnswer(null)} />
       <FinishedElsewhereDialog count={elsewhere?.count ?? null} busy={elsewhereBusy} onAdd={onAddElsewhere} onSkip={() => leave('Bu antrenman başka bir cihazda bitirildi.', 'info')} />
       <p aria-live="polite" className="sr-only">
         {announcement}

@@ -1,5 +1,6 @@
 import * as v from 'valibot';
 import { groupByEquipment, rankAlternatives } from './alternatives.ts';
+import { effectiveSets } from './client-targets.ts';
 import { postGuard } from './client-auth-routes.ts';
 import { canRecordHealth } from './client-status.ts';
 import { todayIn } from './format.ts';
@@ -273,7 +274,9 @@ export function alternativesRoute(deps: WorkoutRouteDeps, dayParam: string | nul
     const found = program ? resolveDay(program, dayParam) : null;
     if (!found || found.day.id !== dayParam) return ROW_GONE;
     const block = found.day.blocks.find((item) => item.rows.some((row) => row.id === rowParam));
-    const row = block?.rows.find((item) => item.id === rowParam);
+    const stored = block?.rows.find((item) => item.id === rowParam);
+    // Muadil satırın geçerli hedefiyle (danışanın hedefi dahil, §6.2) planlanır: günün planıyla aynı.
+    const row = stored ? { ...stored, sets: effectiveSets(stored, program?.clientTargets) } : undefined;
     const source = row ? catalog.exercises.get(row.exerciseId) : undefined;
     if (!block || !row || !source) return ROW_GONE;
 

@@ -6,6 +6,7 @@ import { getInput, useField } from '@formisch/react';
 import { ArrowLeft, ArrowRight, ArrowSquareRight, Copy, DotsThreeVertical, FloppyDisk, Trash } from '@phosphor-icons/react';
 import { BlockEditor, useBlocks } from '@/components/block-editor/block-editor';
 import type { BlocksFormStore } from '@/components/block-editor/block-items';
+import type { RowClientTarget } from '@/components/block-editor/editor-context';
 import { keepLineEnter } from '@/components/block-editor/enter-key';
 import { TemplateMuscleMap } from '@/components/muscle-map/template-muscle-map';
 import { Button } from '@/components/ui/button';
@@ -64,6 +65,7 @@ export function DayEditor({
   timeZone,
   actions,
   footer,
+  clientTargets,
 }: {
   form: ProgramFormStore;
   phases: ProgramPhase[];
@@ -81,6 +83,8 @@ export function DayEditor({
   actions: PhaseActions;
   /** Formun uyarıları: hareket listesinin hemen altında. */
   footer?: React.ReactNode;
+  /** Danışanın satır hedefleri (satır kimliğiyle). */
+  clientTargets?: Readonly<Record<string, RowClientTarget>> | undefined;
 }) {
   const nameField = useField(form, { path: ['phases', phaseIndex, 'days', dayIndex, 'name'] });
   const path = ['phases', phaseIndex, 'days', dayIndex, 'blocks'] as const;
@@ -218,6 +222,7 @@ export function DayEditor({
         libraryDescription="Ada ya da kasa göre ara; dokununca günün sonuna eklenir."
         listLabel={`${day.name} hareketleri`}
         addLabel={`Hareket ekle: ${day.name}`}
+        {...(clientTargets ? { clientTargets } : {})}
       />
 
       {footer}

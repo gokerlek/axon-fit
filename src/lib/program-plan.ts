@@ -1,4 +1,5 @@
 import { todayIn } from './format.ts';
+import type { SetSpec } from './set-plan.ts';
 import { prepareForEditing, type IdSource } from './template-edit.ts';
 import {
   normalizeTemplate,
@@ -47,7 +48,7 @@ export const PROGRAM_LIMITS = {
   changeText: 300,
 } as const;
 
-/** `client`: danışanın kendi değişikliği (antrenman günleri; sonra tekrar hedefi); revision artmaz. */
+/** `client`: danışanın kendi değişikliği (antrenman günleri, bitişte kilo ve tekrar hedefi); revision artmaz. */
 export const LOG_KINDS = ['create', 'edit', 'phase', 'client'] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
 export const LOG_KIND_LABELS: Record<LogKind, string> = {
@@ -88,11 +89,21 @@ export type ProgramBody = {
 };
 export type ProgramRotation = { lastDayId?: string; lastCompletedAt?: string };
 export type ProgramChange = { scope?: string; text: string };
-export type ProgramLogEntry = { at: string; revision: number; kind: LogKind; changes: ProgramChange[] };
+/**
+ * Geçmiş kaydı. `sessionId`: antrenman bitişinde yazılan danışan kaydının seansı (tasarım §6.3); aynı
+ * seansın kaydı ikinci kez eklenmez (bitişin yeniden denenmesi çoğaltmaz).
+ */
+export type ProgramLogEntry = { at: string; revision: number; kind: LogKind; sessionId?: string; changes: ProgramChange[] };
 /** PT'nin antrenman günleri (tasarım §2.11). */
 export type ProgramSchedule = { weekdays: number[] };
 /** Danışanın kendi günleri: PT'nin düzenleyicisi 412 almasın diye ayrı katman; revision artmaz, PT'nin değişikliği temizler. */
 export type ClientSchedule = { weekdays: number[]; at: string };
+/**
+ * Danışanın tekrar/süre hedefi (tasarım §6.2, `client-targets.ts`): satırın setleri hâlâ `baseSets`'e
+ * (PT'nin o anki setleri) eşitse `sets` geçerlidir; PT satırı değiştirince düşer. Revision artmaz.
+ */
+export type ClientTarget = { sets: SetSpec[]; baseSets: SetSpec[]; sessionId?: string; at: string };
+export type ClientTargets = Record<string, ClientTarget>;
 export type ProgramState = {
   version: 2;
   /** Evrelere bölündü mü (açık karar: tek süresiz evreli ama bölünmüş program da olur). */
@@ -108,6 +119,8 @@ export type ProgramState = {
   schedule?: ProgramSchedule;
   /** Danışanın değiştirdiği günler; varsa geçerli olan bu (`effectiveSchedule`). */
   clientSchedule?: ClientSchedule;
+  /** Danışanın satır başına tekrar/süre hedefi (satır kimliğiyle); PT'nin setleri değişince geçersiz. */
+  clientTargets?: ClientTargets;
   /** En yenisi üstte. */
   log: ProgramLogEntry[];
 };

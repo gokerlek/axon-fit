@@ -134,6 +134,8 @@ describe('PT bildirimleri: program ve öneriler', () => {
     assert.deepEqual(proposalNotices(raw), [{ key: `proposal:${ago(1)}`, kind: 'proposal', at: ago(1), text: '2 değişiklik önerisi bekliyor', target: 'program' }]);
     assert.deepEqual(proposalNotices(null), []);
     assert.deepEqual(proposalNotices({ items: 'x' }), []);
+    const one = { items: [{ id: 'pr_aaaaaa', at: ago(2), kind: 'sets', status: 'pending', text: 'Leg Press 3 → 4 set' }] };
+    assert.equal(proposalNotices(one)[0]?.text, 'Öneri: Leg Press 3 → 4 set');
   });
 
   test('danışanın bildirimleri en yeniden eskiye, sınırlı', () => {
