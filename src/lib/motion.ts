@@ -40,6 +40,15 @@ export const SWIPE = {
   nudge: 40, // px: ilk kullanımda ilk kartın bir kez sola "göz kırpması"
 } as const;
 
+/**
+ * Danışanın sekmeleri (dock: Bugün · Geçmiş · İlerleme; `(sekmeler)/template.tsx`). Yeni sekmenin
+ * içeriği dock'taki yönden kayarak gelir (`DURATION.base`, `EASE.enter`); sekme dışı sayfada
+ * (Ayarlar) yalnız saydamlık. Hareket azaltma tercihinde kayma yok (`MotionConfig`).
+ */
+export const TABS = {
+  slidePx: 16, // px: sağdaki sekmeye geçince içerik sağdan, soldakine geçince soldan
+} as const;
+
 /** motion/react geçişi: süre ms verilir. */
 export function tween(ms: number, ease: readonly [number, number, number, number] = EASE.enter) {
   return { type: 'tween' as const, duration: ms / 1000, ease };

@@ -7,7 +7,7 @@
  *
  * Uyarlamalar (gezinme için):
  * - Öğeler `div role="button"` yerine gerçek bağlantı (Next `Link`): Cmd+tık, sağ tık, ön yükleme çalışır.
- * - Aktif sayfa `aria-current="page"` + altta nokta.
+ * - Aktif sayfa `aria-current="page"` + altta nokta; renk değişimi `fast` (160 ms, `src/lib/motion.ts`).
  * - Renkler tasarım tokenlarından; PT'nin vurgu rengi dock'a da yansır. Etkin sayfanın ikonu, kenarı
  *   ve noktası vurgunun yüzey üstünde okunan tonunda (`*-primary-text`, .omc/research/ui-fix/TOKENS.md).
  * - Hareket azaltma tercihinde büyüme kapalı.
@@ -107,7 +107,7 @@ function DockItem({
         ref={ref}
         style={{ width: size, height: size }}
         className={cn(
-          'relative flex shrink-0 items-center justify-center rounded-lg border bg-muted text-muted-foreground transition-colors',
+          'relative flex shrink-0 items-center justify-center rounded-lg border bg-muted text-muted-foreground transition-colors duration-160',
           'group-hover/dock-item:text-foreground',
           // Aktif sayfa: ana renk tonu + altta nokta (macOS dock'taki gibi). Telefonda nokta yerine etiket.
           'group-aria-[current=page]/dock-item:border-primary-text group-aria-[current=page]/dock-item:bg-primary/15 group-aria-[current=page]/dock-item:text-primary-text',
@@ -120,7 +120,7 @@ function DockItem({
       </motion.span>
       <span
         aria-hidden
-        className="hidden text-[0.6875rem] leading-none font-medium whitespace-nowrap text-muted-foreground touch:block group-aria-[current=page]/dock-item:font-semibold group-aria-[current=page]/dock-item:text-foreground">
+        className="hidden text-[0.6875rem] leading-none font-medium whitespace-nowrap text-muted-foreground transition-colors duration-160 touch:block group-aria-[current=page]/dock-item:font-semibold group-aria-[current=page]/dock-item:text-foreground">
         {item.shortLabel ?? item.label}
       </span>
       <AnimatePresence>

@@ -26,8 +26,11 @@ function initials(name: string): string {
 }
 
 /**
- * Danışanın sağ üstteki avatar menüsü (PT'ninkiyle aynı yerde): ana sayfa, ayarlar (sağlık takibi,
- * şifre) ve çıkış. Yalnız telefon: düğme ve öğeler 44 px. Çıkış onay penceresiyle.
+ * Danışanın sağ üstteki avatar menüsü (PT'ninkiyle aynı yerde): programı, ayarlar (sağlık takibi,
+ * şifre) ve çıkış. Yalnız telefon: düğme ve öğeler 44 px. Çıkış onay penceresiyle. Gezinme alttaki
+ * dock'ta (`client-dock.tsx`); Ayarlar ve Çıkış yalnız burada. "Programım" şimdilik `/me`'yi (dock'taki
+ * Bugün) açar; programın bütün günlerini ve geçmişini gösteren `/me/program` gelince oraya bağlanır
+ * (docs/design/antrenman-ekrani.md, açık soru 12).
  */
 export function ClientMenu({ name, appName, hasPassword }: { name: string; appName: string; hasPassword: boolean }) {
   const [leaving, setLeaving] = useState(false);

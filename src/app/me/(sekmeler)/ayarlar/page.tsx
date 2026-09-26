@@ -5,15 +5,16 @@ import { canSetPassword, hasPassword, healthConsentState } from '@/lib/client-st
 import { readAppConfig } from '@/lib/config';
 import { currentClient } from '@/lib/guards';
 import { readClientSession } from '@/lib/session';
-import { ClientHeader } from '../client-header';
-import { ConsentCard } from '../consent-card';
-import { PasswordCard } from '../password-card';
+import { ClientHeader } from '../../client-header';
+import { ConsentCard } from '../../consent-card';
+import { PasswordCard } from '../../password-card';
 
 export const metadata: Metadata = { title: 'Ayarlar' };
 
 /**
- * Danışanın ayarları (avatar menüsünden): sağlık takibi onayı (ver / geri çek) ve şifre. Ana sayfada
- * yalnız karar bekleyenler durur (onay sorusu, şifresi olmayana şifre kartı); verilmiş kararlar burada.
+ * Danışanın ayarları (avatar menüsünden; dock'ta yok, dock'ta etkin sekme de yok): sağlık takibi onayı
+ * (ver / geri çek) ve şifre. Ana sayfada yalnız karar bekleyenler durur (onay sorusu, şifresi olmayana
+ * şifre kartı); verilmiş kararlar burada.
  * Sayfa yetkiyi kendisi denetler (SPEC §5): kapatılmış erişim, arşiv ya da eski kuşak giremez.
  */
 export default async function ClientSettingsPage() {
@@ -22,8 +23,8 @@ export default async function ClientSettingsPage() {
   const passwordSet = hasPassword(client.access);
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-6 px-4 py-8">
-      <ClientHeader client={client} appName={config.appName} title="Ayarlar" back={{ href: '/me', label: 'Programım' }} />
+    <main className="flex flex-col gap-6">
+      <ClientHeader client={client} appName={config.appName} title="Ayarlar" back={{ href: '/me', label: 'Bugün' }} />
 
       {health === 'off' ? (
         <Card size="sm">
