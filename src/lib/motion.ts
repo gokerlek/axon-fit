@@ -49,6 +49,23 @@ export const TABS = {
   slidePx: 16, // px: sağdaki sekmeye geçince içerik sağdan, soldakine geçince soldan
 } as const;
 
+/**
+ * Antrenman ekranı (`/me/antrenman`, tasarım §3). Yeni sayılar yalnız burada; süreler yine `DURATION`'dan.
+ * Hareket azaltma tercihinde kaymalar yerine saydamlık (`MotionConfig`), halka yerine saniyede bir sayı.
+ */
+export const WORKOUT = {
+  slidePx: 24, // px: hareket değişiminde yatay kayma (eski kart sola çıkar, yenisi sağdan gelir)
+  groupSlidePx: 12, // px: grup üyeleri arası
+  countUpMs: 700, // ms: özet sayılarının sayarak gelmesi
+  waterUndoMs: 3000, // ms: "+1 · Geri al" hapı
+  skipToastMs: 5000, // ms: "sona alındı · Bugün yapma · Geri al"
+  tapGuardMs: 400, // ms: durum değişiminden sonra alt panelin dokunuş kilidi (çift dokunuş ikinci set yazmasın)
+  restWarnSeconds: 10, // sn: son 10 saniyede renk + tek bip
+  alarmRepeatMs: 15_000, // ms: dinlenme bitişinin 3 bipi, dokunulana kadar bu aralıkla…
+  alarmRepeats: 3, // …en çok bu kadar yinelenir
+  restRingPx: 208, // px: dinlenme halkası
+} as const;
+
 /** motion/react geçişi: süre ms verilir. */
 export function tween(ms: number, ease: readonly [number, number, number, number] = EASE.enter) {
   return { type: 'tween' as const, duration: ms / 1000, ease };

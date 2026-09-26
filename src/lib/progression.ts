@@ -274,8 +274,9 @@ export function roundDownToStep(kg: number, stepKg: number, baseKg = 0): number 
  * Ağırlık ızgarası: sabit adım (halter 2,5 kg) ya da cihazın ağırlık listesi. Bütün
  * yuvarlama ve adım hareketleri buradan geçer; ikisi aynı kurallarla davranır. Sabit adım
  * tabandan sayılır (37 kg kızak, 5 kg adım → 37, 42, 47…), üst sınır varsa orada biter.
+ * Antrenman ekranının ağırlık stepper'ı da bununla adımlar (bir sonraki/önceki ayar).
  */
-type Grid = {
+export type Grid = {
   /** `kg`'ye eşit ya da altındaki en büyük ağırlık (yoksa en küçük). */
   floor(kg: number): number;
   /** `kg`'nin üstündeki `n`'inci ağırlık (liste bitince en büyüğü). */
@@ -290,7 +291,8 @@ type Grid = {
 
 const EPSILON = 1e-9;
 
-function gridOf(spec: LoadSpec): Grid | null {
+/** Ağırlıksız (vücut ağırlığı, süre) ya da adımı 0 olan alette `null`. */
+export function gridOf(spec: LoadSpec): Grid | null {
   const loads = spec.loadsKg?.length ? [...new Set(spec.loadsKg.map(clean))].sort((a, b) => a - b) : null;
   if (loads) {
     const first = loads[0] as number;

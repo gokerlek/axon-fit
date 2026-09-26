@@ -124,7 +124,7 @@ function unitSkipped(unit: CursorUnit): boolean {
 }
 
 /** Plan satırının kaydı: muadille değiştirildiyse yenisi, yoksa satırın kendi kaydı. */
-function entryForRow(entries: readonly SessionEntry[], rowId: string): SessionEntry | undefined {
+export function entryForRow(entries: readonly SessionEntry[], rowId: string): SessionEntry | undefined {
   return entries.find((entry) => entry.swappedFrom === rowId) ?? entries.find((entry) => entry.rowId === rowId && !entry.added);
 }
 
