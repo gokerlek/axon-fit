@@ -136,6 +136,9 @@ export function withSessionCheckIn(record: HealthRecord, input: { sessionId: str
   };
 }
 
+/** Bozuk health.json yeni kayıtla ezilmesin: okunamayan dosyanın işareti, `planFinish` 'broken' der. */
+export const BROKEN_HEALTH = Symbol('broken-health');
+
 export type FinishInput = {
   /** Kayıttaki etkin belge; dosya yoksa null (çevrimdışı bitiş: ilk yazma bitiş). */
   stored: SessionDoc | null;
@@ -146,7 +149,7 @@ export type FinishInput = {
   index: SessionIndex;
   /** `program.json`'un ham içeriği (yoksa null). */
   program: unknown;
-  /** `health.json`'un ham içeriği: yalnız onaylı ayrıntı varsa okunur (yoksa ya da okunmadıysa null). */
+  /** `health.json`'un ham içeriği: yalnız onaylı ayrıntı varsa okunur (yoksa ya da okunmadıysa null; bozuk JSON'sa `BROKEN_HEALTH`). */
   healthFile: unknown;
   client: Pick<Client, 'modules' | 'consents'>;
   now: Date;
@@ -219,8 +222,9 @@ export function planFinish(input: FinishInput): FinishPlan {
   let health: FinishPlan['health'] = input.health ? 'dropped' : 'none';
   const allowed = allowedHealth(input.client, input.health);
   if (allowed) {
-    const parsed = input.healthFile === null ? null : v.safeParse(healthRecordSchema, input.healthFile);
-    if (parsed && !parsed.success) health = 'broken';
+    const unreadable = input.healthFile === BROKEN_HEALTH;
+    const parsed = input.healthFile === null || unreadable ? null : v.safeParse(healthRecordSchema, input.healthFile);
+    if (unreadable || (parsed && !parsed.success)) health = 'broken';
     else {
       const record = parsed?.output ?? { conditions: [], checkIns: [], measurements: [], movementScreens: [] };
       files.push({ path: HEALTH_PATH, content: withSessionCheckIn(record, { sessionId: doc.id, date: doc.date, health: allowed }) });

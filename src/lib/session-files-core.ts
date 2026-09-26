@@ -12,7 +12,7 @@ import {
   type StoredSession,
 } from './schemas/session.ts';
 import { gitBlobSha, jsonText } from './github/blob.ts';
-import { allowedHealth, applyPatch, planFinish, planPut, type FinishPlan } from './session-finish.ts';
+import { allowedHealth, applyPatch, BROKEN_HEALTH, planFinish, planPut, type FinishPlan } from './session-finish.ts';
 import { indexRowOf, isDeletedInIndex, removeIndexRow, repairIndex, upsertIndexRow, type RepairResult } from './session-index.ts';
 import { tombstoneOf } from './session-merge.ts';
 import { DELETE_MESSAGE } from './session-messages.ts';
@@ -30,6 +30,8 @@ import { DELETE_MESSAGE } from './session-messages.ts';
  *   okunur, dosyalar o commit'ten okunur, yeni hâller hesaplanır, commit dal ileri sarılarak yazılır.
  *   Arada dal ilerlediyse bir kez baştan; ikincisi de olmazsa 409 (telefon üstel bekler).
  * - Index her okumada `sessions/` ağacıyla onarılır; onarım bir sonraki commit'e biner.
+ * - Birleşik belge yazılmadan önce şemadan yeniden geçer: sınırı aşan ya da kimliği çoğaltan birleşim 422
+ *   alır, dosya okunabilir kalır. Silme eski içeriğe bakmaz; şemaya uymayan dosya da iz dosyasına döner.
  */
 
 export type StoredJson = { content: unknown; sha: string };
@@ -65,6 +67,11 @@ function parseFile(file: StoredJson | null, id: string): StoredSession | null {
   const parsed = parseStoredSession(file.content);
   if (!parsed || parsed.id !== id) throw new GithubError(`${sessionPath(id)} beklenen biçimde değil.`, 500);
   return parsed;
+}
+
+/** Birleşim şemayı bozuyorsa (sınır aşımı, iki harekette aynı set kimliği) yazılmaz: dosya okunamaz hâle gelmesin. */
+function assertWritable(doc: SessionDoc): void {
+  if (!parseStoredSession(doc)) throw new GithubError('Kayıt sınırları aşıyor; gönderilen değişiklik kabul edilmedi.', 422);
 }
 
 /** Bozuk JSON (500) okunamayan dosya sayılır: null. Ağ ve yetki hataları yukarı çıkar. */
@@ -150,6 +157,7 @@ export async function putSession(repo: SessionRepo, ctx: SessionContext, incomin
     }
     const plan = planPut(stored, incoming, ctx);
     if (!plan.changed) return { status: 'unchanged', doc: stored as SessionDoc, remaining: null };
+    assertWritable(plan.doc);
     try {
       const written = await repo.write(path, plan.doc, { sha: file?.sha, message: plan.message });
       return { status: stored ? 'saved' : 'created', doc: plan.doc, remaining: written.remaining };
@@ -187,8 +195,16 @@ export async function finishSession(
     const { index } = await repairedIndexAt(repo, head, known);
     if (!stored && isDeletedInIndex(index, id)) return { status: 'deleted' };
 
-    // Sağlık dosyası yalnız yazılacak onaylı bir ayrıntı varken okunur.
-    const healthFile = allowedHealth(ctx.client, body.health) ? ((await readOrNull(repo, 'health.json', head.commit))?.content ?? null) : null;
+    // Sağlık dosyası yalnız yazılacak onaylı bir ayrıntı varken okunur. Yoksa boş kayıt; bozuksa hiç yazılmaz.
+    let healthFile: unknown = null;
+    if (allowedHealth(ctx.client, body.health)) {
+      try {
+        healthFile = (await repo.read('health.json', head.commit))?.content ?? null;
+      } catch (error) {
+        if (!(error instanceof GithubError && error.status === 500)) throw error;
+        healthFile = BROKEN_HEALTH;
+      }
+    }
     const plan = planFinish({
       stored,
       incoming: body.doc,
@@ -202,6 +218,7 @@ export async function finishSession(
       timeZone: ctx.timeZone,
     });
     if (plan.health === 'broken') repo.log(`[seans] ${id}: health.json okunamadı; sağlık ayrıntısı yazılmadı.`);
+    assertWritable(plan.doc);
     const written = await repo.commit({ head, files: plan.files, message: plan.message });
     return { status: 'finished', doc: plan.doc, plan: { rotation: plan.rotation, health: plan.health }, remaining: written.remaining };
   });
@@ -228,6 +245,7 @@ async function patchActive(repo: SessionRepo, ctx: SessionContext, id: string, b
     if (stored.status === 'finished') return 'finished';
     const next = applyPatch(stored, body, ctx.now);
     if (!next.changed) return { status: 'unchanged', doc: stored, remaining: null };
+    assertWritable(next.doc);
     try {
       const written = await repo.write(path, next.doc, { sha: file?.sha, message: next.message });
       return { status: 'saved', doc: next.doc, remaining: written.remaining };
@@ -252,6 +270,7 @@ export async function patchSession(repo: SessionRepo, ctx: SessionContext, id: s
     if (stored.status === 'deleted') return { status: 'deleted' };
     const next = applyPatch(stored, body, ctx.now);
     if (!next.changed) return { status: 'unchanged', doc: stored, remaining: null };
+    assertWritable(next.doc);
     const { index } = await repairedIndexAt(repo, head, new Map([[path, file?.content]]));
     const row = indexRowOf(next.doc, gitBlobSha(jsonText(next.doc)));
     const written = await repo.commit({
@@ -280,7 +299,8 @@ export async function deleteSession(repo: SessionRepo, ctx: SessionContext, id: 
   const result = await withRetry(async (): Promise<DeleteResult> => {
     const head = await repo.head();
     const file = await repo.read(path, head.commit);
-    const stored = parseFile(file, id);
+    // İz eski içeriğe bakmaz: şemaya uymayan dosya da silinebilir (bozuk kayıt antrenmanı kilitlemesin).
+    const stored = file ? parseStoredSession(file.content) : null;
     if (stored?.status === 'deleted') return { status: 'already' };
     const { index } = await repairedIndexAt(repo, head, new Map(file ? [[path, file.content]] : []));
     await repo.commit({

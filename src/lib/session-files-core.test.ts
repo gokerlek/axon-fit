@@ -193,6 +193,59 @@ describe('bitiş', () => {
     assert.equal(other.commitCount(), 1);
     assert.deepEqual((other.get('health.json') as { checkIns: unknown[] }).checkIns, [{ date: '2026-09-26', sessionId: 's_k2m9x4qa', adjustReason: 'pain' }]);
   });
+
+  test('bozuk JSON health.json boş kayıtla ezilmez: sağlık ayrıntısı yazılmaz, seans yine biter', async () => {
+    const consenting: Pick<Client, 'modules' | 'consents'> = {
+      modules: { health: { enabled: true, fields: ['check_in'] } },
+      consents: { health: { granted: true, version: HEALTH_CONSENT_VERSION, fields: ['check_in'], at: at(-100) } },
+    };
+    const gh = fakeSessionRepo();
+    gh.putText('health.json', '{"conditions":[');
+    const before = gh.sha('health.json');
+    const result = await finishSession(gh.repo, { ...ctx, client: consenting }, { doc: doc([s1]), health: { adjustReason: 'pain' } });
+    assert.equal(result.status === 'finished' && result.plan.health, 'broken');
+    assert.equal(gh.sha('health.json'), before);
+    assert.deepEqual(gh.lastChanged(), [PATH, INDEX].sort());
+    assert.equal((gh.get(PATH) as SessionDoc).status, 'finished');
+  });
+});
+
+describe('birleşim şemayı bozarsa yazılmaz (422)', () => {
+  const rejected = (error: unknown) => error instanceof GithubError && error.status === 422;
+  /** Bench'in `count` ayrı seti; kimlikler `prefix` harfiyle ayrışır. */
+  const many = (prefix: string, count: number) =>
+    Array.from({ length: count }, (_, i) => workingSet(`st_${prefix}${String(i).padStart(7, '0')}`, i, { setIndex: i }));
+
+  test('var olan set kimliği başka harekette gelirse 422; dosya değişmez', async () => {
+    const gh = fakeSessionRepo();
+    await putSession(gh.repo, ctx, doc([s1]));
+    const before = gh.sha(PATH);
+    await assert.rejects(putSession(gh.repo, ctx, doc([], [{ ...s1 }])), rejected);
+    assert.equal(gh.sha(PATH), before);
+    assert.equal(gh.commitCount(), 1);
+    assert.equal((await readSession(gh.repo, 's_k2m9x4qa')).status, 'ok');
+  });
+
+  test('iki anlık görüntü bir harekette 60 set eder (sınır 40): ikincisi 422', async () => {
+    const gh = fakeSessionRepo();
+    assert.equal((await putSession(gh.repo, ctx, doc(many('c', 30)))).status, 'created');
+    await assert.rejects(putSession(gh.repo, ctx, doc(many('d', 30))), rejected);
+    assert.equal((gh.get(PATH) as SessionDoc).entries[0]?.sets.length, 30);
+    assert.equal((await readSession(gh.repo, 's_k2m9x4qa')).status, 'ok');
+  });
+
+  test('silinen hareket izleri 200\'ü aşarsa PATCH 422; önceki düzeltmeler kalır', async () => {
+    const gh = fakeSessionRepo();
+    await putSession(gh.repo, ctx, doc([s1]));
+    const entryIds = (batch: number) => Array.from({ length: 60 }, (_, i) => `e_${batch}${String(i).padStart(5, '0')}`);
+    for (const batch of [1, 2, 3]) {
+      assert.equal((await patchSession(gh.repo, ctx, 's_k2m9x4qa', { writer: W1, deleteEntryIds: entryIds(batch) })).status, 'saved');
+    }
+    const before = gh.sha(PATH);
+    await assert.rejects(patchSession(gh.repo, ctx, 's_k2m9x4qa', { writer: W1, deleteEntryIds: entryIds(4) }), rejected);
+    assert.equal(gh.sha(PATH), before);
+    assert.equal((gh.get(PATH) as SessionDoc).deletedEntryIds.length, 180);
+  });
 });
 
 describe('geçmişte düzeltme ve silme', () => {
@@ -244,6 +297,14 @@ describe('geçmişte düzeltme ve silme', () => {
     assert.equal(gh.commitCount(), before + 1);
     // Silinmiş antrenmanın değerleri dosyada yok (git geçmişinde kalır; metin bunu söyler).
     assert.equal(JSON.stringify(gh.get(PATH)).includes('Bench'), false);
+  });
+
+  test('şemaya uymayan dosya da silinir: iz dosyası yazılır', async () => {
+    const gh = fakeSessionRepo({ [PATH]: { id: 's_k2m9x4qa', status: 'active' } });
+    assert.deepEqual(await deleteSession(gh.repo, ctx, 's_k2m9x4qa'), { status: 'deleted' });
+    assert.deepEqual(gh.get(PATH), { version: 1, id: 's_k2m9x4qa', status: 'deleted', deletedAt: at(60) });
+    assert.deepEqual((gh.get(INDEX) as SessionIndex).deleted, [{ id: 's_k2m9x4qa', at: at(60) }]);
+    assert.deepEqual(await readSession(gh.repo, 's_k2m9x4qa'), { status: 'deleted' });
   });
 
   test('geçmiş listesi onarılır ama yazılmaz', async () => {
