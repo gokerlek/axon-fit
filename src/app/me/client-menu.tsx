@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { GearSix, SignOut } from '@phosphor-icons/react';
+import { FirstAidKit, GearSix, SignOut } from '@phosphor-icons/react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -26,12 +26,25 @@ function initials(name: string): string {
 }
 
 /**
- * Danışanın sağ üstteki avatar menüsü (PT'ninkiyle aynı yerde): ayarlar (sağlık takibi, şifre) ve
- * çıkış. Yalnız telefon: düğme ve öğeler 44 px. Çıkış onay penceresiyle. Gezinme alttaki dock'ta
+ * Danışanın sağ üstteki avatar menüsü (PT'ninkiyle aynı yerde): Sağlık (kısıtlar ya da tarama onaylıysa),
+ * ayarlar (sağlık takibi, şifre) ve çıkış. Yalnız telefon: düğme ve öğeler 44 px. Çıkış onay penceresiyle. Gezinme alttaki dock'ta
  * (`client-dock.tsx`); Ayarlar ve Çıkış yalnız burada. Programlar dock'un 4. sekmesi olunca "Programım"
  * kalktı (docs/design/kendi-program.md, karar 1; antrenman-ekrani.md açık soru 12).
  */
-export function ClientMenu({ clientId, name, appName, hasPassword }: { clientId: string; name: string; appName: string; hasPassword: boolean }) {
+export function ClientMenu({
+  clientId,
+  name,
+  appName,
+  hasPassword,
+  health = false,
+}: {
+  clientId: string;
+  name: string;
+  appName: string;
+  hasPassword: boolean;
+  /** Kısıtlar ya da tarama onaylı: "Sağlık" (tasarım `kisit-tarama.md` §5.2). */
+  health?: boolean;
+}) {
   const [leaving, setLeaving] = useState(false);
   return (
     <>
@@ -52,6 +65,12 @@ export function ClientMenu({ clientId, name, appName, hasPassword }: { clientId:
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
+            {health ? (
+              <DropdownMenuItem className="min-h-11" render={<Link href="/me/saglik" />}>
+                <FirstAidKit />
+                Sağlık
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem className="min-h-11" render={<Link href="/me/ayarlar" />}>
               <GearSix />
               Ayarlar

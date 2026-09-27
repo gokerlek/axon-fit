@@ -7,6 +7,7 @@ import { requirePt } from '@/lib/guards';
 import { loadMeasurements } from '@/lib/health';
 import { readAppConfig } from '@/lib/config';
 import { todayIn } from '@/lib/format';
+import { HealthStrip } from '../health-page';
 import { MeasurementOverview } from './measurement-overview';
 import { parseRange, RangeFilter } from './range-filter';
 import { MeasurementLockAlert, MeasurementProblemAlert, measurementClient } from './measurement-page';
@@ -46,6 +47,7 @@ export default async function MeasurementsPage({
 
   return (
     <div className="flex flex-col gap-6">
+      <HealthStrip client={client} record={view.state === 'ok' ? view.record : null} />
       <SectionHeader
         title="Ölçümler"
         description="Periyodik ölçümlerin seyri. Ölçüm hatasının altındaki değişim gelişme sayılmaz."

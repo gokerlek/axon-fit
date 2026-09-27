@@ -7,22 +7,27 @@ import { TabsNav, TabsNavLink } from '@/components/ui/tabs';
 type Tab = { key: string; label: string; href: string; active: (pathname: string) => boolean; ready: boolean };
 
 /**
- * Danışanın sekmeleri: Genel · Program · Ölçümler · İlerleme · Antrenmanlar · Davet. Her sekme kendi
+ * Danışanın sekmeleri: Genel · Program · Sağlık · İlerleme · Antrenmanlar · Davet. Her sekme kendi
  * sayfasıdır (adres değişir, geri tuşu çalışır): gezinme, `tablist` değil (`TabsNav`). Alt sayfalar
  * (programı düzenle, ölçüm gir, antrenmanın detayı) kendi sekmesinde açık görünür. Henüz hazır olmayan
  * bir sekme (`ready: false`) pasif ve "yakında" yazar.
  *
+ * "Sağlık" (tasarım `kisit-tarama.md` §1) Kısıtlar, Ölçümler ve Tarama'nın çatısıdır: üç adresin birindeyken
+ * etkin; bağlantısı modülde seçili ilk parça (layout hesaplar, `healthHref`). İçindeki ikinci şerit
+ * `HealthTabs`.
+ *
  * Telefonda (375 px) altı sekme sığmaz: şerit yatay kayar, taşan kenar solar. Pasif sekme telefonda
  * görsel olarak sona alınır ki "Davet" ekran dışında kalmasın; okuma sırası (DOM) SPEC'teki gibi.
  */
-export function ClientTabs({ clientId }: { clientId: string }) {
+export function ClientTabs({ clientId, healthHref }: { clientId: string; healthHref: string }) {
   const pathname = usePathname();
   const base = `/dashboard/clients/${clientId}`;
   const under = (path: string) => (pathname: string) => pathname === path || pathname.startsWith(`${path}/`);
+  const health = ['measurements', 'constraints', 'screening'].map((part) => under(`${base}/${part}`));
   const tabs: Tab[] = [
     { key: 'genel', label: 'Genel', href: base, active: (p) => p === base || p === `${base}/edit`, ready: true },
     { key: 'program', label: 'Program', href: `${base}/program`, active: under(`${base}/program`), ready: true },
-    { key: 'olcumler', label: 'Ölçümler', href: `${base}/measurements`, active: under(`${base}/measurements`), ready: true },
+    { key: 'saglik', label: 'Sağlık', href: healthHref, active: (p) => health.some((match) => match(p)), ready: true },
     { key: 'ilerleme', label: 'İlerleme', href: `${base}/ilerleme`, active: under(`${base}/ilerleme`), ready: true },
     { key: 'antrenmanlar', label: 'Antrenmanlar', href: `${base}/sessions`, active: under(`${base}/sessions`), ready: true },
     { key: 'davet', label: 'Davet', href: `${base}/invite`, active: under(`${base}/invite`), ready: true },

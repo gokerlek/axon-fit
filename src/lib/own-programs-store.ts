@@ -1,9 +1,10 @@
 import 'server-only';
-import { canRecordHealth } from './client-status';
+import { loadCareInput } from './client-care';
+import { readAppConfig } from './config';
 import { listDevices } from './devices';
 import { cautionIds } from './exercise-caution';
 import { listExercises } from './exercises';
-import { readHealth } from './health';
+import { todayIn } from './format';
 import { readOwnProgram, readOwnState, saveOwnProgram, type OwnProgramRead, type OwnSaveResult, type OwnState } from './own-program-files';
 import type { OwnRouteDeps } from './own-program-routes';
 import { programDiffContext, readProgramFile, type ProgramFile } from './programs';
@@ -56,13 +57,14 @@ export async function readOwnOverview(clientId: string): Promise<OwnOverview> {
 }
 
 /**
- * Danışanın düzenleyicisinin kütüphanesi (§2.5): hazır kütüphane + PT'nin kayıtları, cihazlar. Sağlık onayı ve kısıt
- * varken uymayan harekette "Kısıtına uymayabilir" (`caution`, engel değil); onay yoksa sağlık kaydı okunmaz.
+ * Danışanın düzenleyicisinin kütüphanesi (§2.5): hazır kütüphane + PT'nin kayıtları, cihazlar. Kısıtlar onaylıyken
+ * süzgecin yaptırma ya da dikkat dediği harekette "Kısıtına uymayabilir" (`caution`, engel değil; tasarım
+ * `kisit-tarama.md`); onay yoksa sağlık kaydı okunmaz (`loadCareInput`).
  */
 export async function ownEditorLibrary(client: Client): Promise<{ exercises: PickerExercise[]; devices: EditorDevice[] }> {
-  const [exercises, devices] = await Promise.all([listExercises(), listDevices()]);
-  const conditions = canRecordHealth(client, 'conditions') ? ((await readHealth(client.id).catch(() => null))?.record.conditions ?? []) : [];
-  const caution = cautionIds(exercises, conditions);
+  const [exercises, devices, config] = await Promise.all([listExercises(), listDevices(), readAppConfig()]);
+  const care = await loadCareInput(client, todayIn(config.timeZone, new Date()));
+  const caution = care ? cautionIds(exercises, care) : new Set<string>();
   return {
     exercises: pickerExercises(exercises).map((exercise) => (caution.has(exercise.id) ? { ...exercise, caution: true as const } : exercise)),
     devices: pickerDevices(devices),

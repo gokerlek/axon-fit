@@ -2,10 +2,12 @@ import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { EditorBackLink } from '@/components/block-editor/editor-back-link';
 import { SectionHeader } from '@/components/section-header';
+import { loadEditorCare } from '@/lib/client-care';
 import { loadClient } from '@/lib/clients';
 import { readAppConfig } from '@/lib/config';
 import { listDevices } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
+import { todayIn } from '@/lib/format';
 import { requirePt } from '@/lib/guards';
 import { blankProgramBody, programIdSource } from '@/lib/program-plan';
 import { readProgramFile } from '@/lib/programs';
@@ -35,6 +37,8 @@ export default async function NewProgramPage({ params }: { params: Promise<{ id:
   const templates = templateFiles.flatMap((file) =>
     file.template ? [{ id: file.template.id, name: file.template.name, blocks: file.template.blocks }] : [],
   );
+  // Danışanın kısıtları (tasarım `kisit-tarama.md` §3.2): sheet'te işaret; onay yoksa yalnız durum.
+  const care = await loadEditorCare(loaded.client, exercises, todayIn(config.timeZone));
 
   return (
     <div className="flex flex-col gap-6">
@@ -57,6 +61,7 @@ export default async function NewProgramPage({ params }: { params: Promise<{ id:
         devices={pickerDevices(devices)}
         now={new Date().toISOString()}
         timeZone={config.timeZone}
+        care={care}
       />
     </div>
   );

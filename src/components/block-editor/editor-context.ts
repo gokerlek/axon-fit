@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from 'react';
 import type { FormStore } from '@formisch/react';
+import type { EditorCare } from '@/lib/constraint-filter';
 import type { ReorderTarget } from '@/lib/reorder';
 import type { blocksHostSchema } from '@/lib/schemas/template';
 import type { SetSpec } from '@/lib/set-plan';
@@ -155,6 +156,8 @@ export type Editor = {
   clientTargets: Readonly<Record<string, RowClientTarget>>;
   /** Düzenleyicinin kipi: `simple` danışanın kendi programı (kural, RIR ve yüzdeli set düzeni yok). */
   variant: EditorVariant;
+  /** Danışanın kısıtları (yalnız programda): kart yüzünde rozet, egzersiz kimliğiyle. */
+  care: EditorCare | null;
 };
 
 /** `full`: PT (şablon, program); `simple`: danışanın kendi programı (`docs/design/kendi-program.md` §2.5). */

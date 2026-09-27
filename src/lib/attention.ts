@@ -1,4 +1,17 @@
 import { accessState, type AccessState } from './client-status.ts';
+import type { Conflict } from './constraint-filter.ts';
+import {
+  constraintsOf,
+  constraintTitle,
+  EMERGENCY_TEXT,
+  isActive,
+  isEmergency,
+  isPendingReport,
+  isRedFlag,
+  regionText,
+  type Severity,
+} from './constraints.ts';
+import { cellTitle, constraintSuppress, majorAsymmetry, newestFirst, painCells, SCREENING_ALERT_DAYS, testName } from './screening.ts';
 import { formatDayShort, formatNumber, formatSignedWithUnit, todayIn } from './format.ts';
 import { SIDE_LABELS } from './measurement-log.ts';
 import { measurementAlerts, type LineKey } from './measurement-trends.ts';
@@ -8,7 +21,7 @@ import { currentPhaseOf, phaseStatus } from './program-plan.ts';
 import { parseProposals, pendingProposals } from './proposals.ts';
 import { stallCounts } from './recommend.ts';
 import type { Client, Invite } from './schemas/client.ts';
-import type { MeasurementEntry } from './schemas/health.ts';
+import type { HealthRecord, MeasurementEntry } from './schemas/health.ts';
 import type { Program } from './schemas/program.ts';
 import type { SessionIndex } from './schemas/session.ts';
 import { addDays, effectiveSchedule, isoWeekdayOf, normalizeWeekdays, scheduleSince } from './training-days.ts';
@@ -51,11 +64,13 @@ export const ATTENTION_TUNING = {
   sessionDaysKept: 35,
 } as const;
 
-export const ATTENTION_KINDS = ['missed', 'stalled', 'phase', 'proposals', 'measurement', 'invite'] as const;
+export const ATTENTION_KINDS = ['constraint', 'missed', 'screening', 'stalled', 'phase', 'proposals', 'measurement', 'invite'] as const;
 export type AttentionKind = (typeof ATTENTION_KINDS)[number];
 
 export const ATTENTION_LABELS: Record<AttentionKind, string> = {
+  constraint: 'Kısıt',
   missed: 'Kaçan gün',
+  screening: 'Tarama',
   stalled: 'İlerleme',
   phase: 'Evre',
   proposals: 'Öneri',
@@ -70,15 +85,31 @@ export const ATTENTION_LABELS: Record<AttentionKind, string> = {
  * ama acil değildir (kilitli ya da süresi dolmuş davet danışanı dışarıda bırakır).
  */
 export const ATTENTION_URGENCY = {
+  /** Kırmızı bayrak, yönlendirme yok (kauda ekinada acil metin) — tasarım `kisit-tarama.md` §3.6. */
+  redFlag: 95,
   missedMany: 90,
+  /** Kısıtla çelişen satır danışanın sıradaki gününde. */
+  conflictNext: 85,
+  /** Danışan kısıt bildirdi, karar bekliyor. */
+  report: 80,
+  /** Taramada ağrı, gözden geçirilmedi. */
+  screeningPain: 78,
   proposals: 75,
+  /** Danışan kötüleşti ya da düzeldi dedi. */
+  constraintChange: 72,
   deload: 70,
   declining: 65,
   phase: 65,
+  /** Programda kısıtla çelişen hareket (sıradaki günde değil). */
+  conflict: 66,
   missedOne: 60,
   inviteBlocked: 55,
   stalled: 50,
   measurement: 45,
+  /** Yönlendirildi, sağlık profesyonelinin görüşü bekleniyor. */
+  referralWaiting: 40,
+  /** Taramada büyük asimetri (tarama başına tek madde). */
+  asymmetry: 38,
   inviteNone: 35,
   invitePending: 25,
 } as const;
@@ -97,6 +128,85 @@ export type StallFact = {
 };
 
 export type MeasurementDecline = { id: MeasurementId; key: LineKey; change: number; lastDate: string };
+
+/**
+ * Kısıtların özeti (tasarım `kisit-tarama.md` §3.6), yalnız `conditions` onayı sürdükçe: kırmızı bayrakta
+ * yönlendirme ve görüş, danışanın bildirimleri ve güncellemeleri, programdaki izinsiz yasaklar.
+ */
+export type ConstraintFacts = {
+  /** Kauda ekina şüphesi, yönlendirme yok: acil metin. */
+  urgent: { id: string; label: string }[];
+  /** Kırmızı bayrak, yönlendirme yok ("Sol diz (ACL erken dönem)"). */
+  refer: { id: string; title: string }[];
+  /** Yönlendirildi, görüş yok. */
+  waiting: { id: string; label: string; referredAt: string }[];
+  /** Danışanın karar bekleyen bildirimleri. */
+  reports: { id: string; label: string; severity?: Severity }[];
+  /** Onaylı kısıtta danışanın bekleyen güncellemesi. */
+  changes: { id: string; label: string; kind: 'worse' | 'better'; from?: Severity; to?: Severity }[];
+  /** İzinsiz yasaklar (şu anki evre); `next`: danışanın sıradaki gününde. */
+  conflicts: { dayName: string; title: string; next: boolean }[];
+};
+
+/** Son taramanın özeti, yalnız `screening` onayı sürdükçe. */
+export type ScreeningFacts = {
+  date: string;
+  /** Gözden geçirilmemiş ağrılar ("Kol kaldırma (sağ)"). */
+  pain: string[];
+  /** Tarama başına tek büyük asimetri (ağrılı, yapılmamış ve etkin kısıtlı taraf hariç). */
+  asymmetry: string | null;
+};
+
+const SEVERITY_TEXT: Record<Severity, string> = { mild: 'hafif', moderate: 'orta', severe: 'şiddetli' };
+
+/** Kayıttan kısıt özeti; çelişkiler çağırandan (program ve kütüphane gerekir). */
+export function constraintFactsOf(
+  record: Pick<HealthRecord, 'constraints' | 'conditions' | 'surgeryDate'>,
+  conflicts: readonly Conflict[],
+): ConstraintFacts {
+  const list = constraintsOf(record);
+  const active = list.filter(isActive);
+  return {
+    urgent: active.filter((item) => isEmergency(item) && !item.referredAt).map((item) => ({ id: item.id, label: regionText(item) })),
+    refer: active
+      .filter((item) => isRedFlag(item) && !isEmergency(item) && !item.referredAt && !item.clearance)
+      .map((item) => ({ id: item.id, title: constraintTitle(item) })),
+    waiting: active
+      .filter((item) => isRedFlag(item) && item.referredAt && !item.clearance)
+      .map((item) => ({ id: item.id, label: regionText(item), referredAt: item.referredAt as string })),
+    reports: list.filter(isPendingReport).map((item) => ({ id: item.id, label: regionText(item), ...(item.severity ? { severity: item.severity } : {}) })),
+    changes: active.flatMap((item) => {
+      const change = item.clientChange;
+      if (!change) return [];
+      return [
+        change.resolved
+          ? { id: item.id, label: regionText(item), kind: 'better' as const }
+          : {
+              id: item.id,
+              label: regionText(item),
+              kind: 'worse' as const,
+              ...(change.previousSeverity ? { from: change.previousSeverity } : {}),
+              ...(change.severity ? { to: change.severity } : {}),
+            },
+      ];
+    }),
+    conflicts: conflicts.map((item) => ({ dayName: item.dayName, title: item.title, next: item.next })),
+  };
+}
+
+/** Son taramadan özet: gözden geçirilmemiş ağrı ve tek büyük asimetri (etkin kısıtlı taraf bastırılır). */
+export function screeningFactsOf(record: Pick<HealthRecord, 'screenings' | 'constraints' | 'conditions' | 'surgeryDate'>): ScreeningFacts | null {
+  const latest = newestFirst(record.screenings ?? [])[0];
+  if (!latest) return null;
+  const asymmetry = majorAsymmetry(latest, constraintSuppress(constraintsOf(record)));
+  return {
+    date: latest.date,
+    pain: painCells(latest)
+      .filter((cell) => !cell.reviewed)
+      .map((cell) => cellTitle(cell.testId, cell.side)),
+    asymmetry: asymmetry ? testName(asymmetry.testId) : null,
+  };
+}
 
 /** Danışanın özeti (önbellekte): kararlar sayfa açılınca `attentionItems`'ta. */
 export type AttentionFacts = {
@@ -120,6 +230,10 @@ export type AttentionFacts = {
   phase: { name: string; next: string; endsAt: string; own?: string } | null;
   proposals: { count: number; at: string; text?: string } | null;
   measurements: MeasurementDecline[];
+  /** Kısıtlar (onay yoksa yok). */
+  constraints?: ConstraintFacts | null;
+  /** Son tarama (onay yoksa yok). */
+  screening?: ScreeningFacts | null;
 };
 
 /* --- özet --- */
@@ -217,6 +331,8 @@ export function attentionFactsOf(input: {
   program: Program | null;
   proposals: unknown;
   measurements: readonly MeasurementEntry[] | null;
+  constraints?: ConstraintFacts | null;
+  screening?: ScreeningFacts | null;
   now: Date;
   own?: OwnIndex | null | undefined;
 }): AttentionFacts {
@@ -267,12 +383,14 @@ export function attentionFactsOf(input: {
     phase,
     proposals,
     measurements: input.measurements ? measurementDeclines(input.measurements) : [],
+    ...(input.constraints ? { constraints: input.constraints } : {}),
+    ...(input.screening ? { screening: input.screening } : {}),
   };
 }
 
 /* --- kararlar --- */
 
-export type AttentionTarget = 'client' | 'sessions' | 'program' | 'measurements' | 'invite';
+export type AttentionTarget = 'client' | 'sessions' | 'program' | 'measurements' | 'constraints' | 'screening' | 'invite';
 export type AttentionItem = { key: string; kind: AttentionKind; urgency: number; text: string; target: AttentionTarget };
 
 /**
@@ -425,7 +543,93 @@ export function attentionItems(
   const measurement = measurementItem(facts.measurements, today);
   if (measurement) items.push(measurement);
 
+  if (facts.constraints) items.push(...constraintItems(facts.constraints, today));
+  if (facts.screening) items.push(...screeningItems(facts.screening, today));
+
   return items.sort((a, b) => b.urgency - a.urgency || ATTENTION_KINDS.indexOf(a.kind) - ATTENTION_KINDS.indexOf(b.kind));
+}
+
+/** En çok bu kadar ad yazılır, gerisi "+n". */
+const LIST_NAMES = 2;
+
+function listText(parts: readonly string[]): string {
+  const more = parts.length - LIST_NAMES;
+  return parts.slice(0, LIST_NAMES).join(' · ') + (more > 0 ? ` · +${formatNumber(more)}` : '');
+}
+
+function daysBetween(from: string, to: string): number {
+  return Math.max(0, Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000));
+}
+
+/** Kısıt maddeleri (tasarım `kisit-tarama.md` §3.6). */
+export function constraintItems(facts: ConstraintFacts, today: string): AttentionItem[] {
+  const items: AttentionItem[] = [];
+  const item = (key: string, urgency: number, text: string, target: AttentionTarget = 'constraints'): AttentionItem => ({
+    key: `constraint:${key}`,
+    kind: 'constraint',
+    urgency,
+    text,
+    target,
+  });
+  for (const urgent of facts.urgent) {
+    items.push(item(`urgent:${urgent.id}`, ATTENTION_URGENCY.redFlag, `${EMERGENCY_TEXT.replace(/\.$/, '')} (${urgent.label})`));
+  }
+  if (facts.refer.length > 0) {
+    items.push(item('refer', ATTENTION_URGENCY.redFlag, `Sağlık profesyoneline yönlendir: ${listText(facts.refer.map((entry) => entry.title))}`));
+  }
+  const next = facts.conflicts.filter((conflict) => conflict.next);
+  if (next.length > 0) {
+    items.push(
+      item('conflict', ATTENTION_URGENCY.conflictNext, `Sıradaki günde kısıtla çelişen hareket: ${listText(next.map((conflict) => `${conflict.dayName} · ${conflict.title}`))}`, 'program'),
+    );
+  } else if (facts.conflicts.length > 0) {
+    items.push(
+      item(
+        'conflict',
+        ATTENTION_URGENCY.conflict,
+        facts.conflicts.length === 1
+          ? `Programda kısıtla çelişen hareket: ${facts.conflicts[0]!.dayName} · ${facts.conflicts[0]!.title}`
+          : `Programda kısıtla çelişen ${formatNumber(facts.conflicts.length)} hareket`,
+        'program',
+      ),
+    );
+  }
+  if (facts.reports.length > 0) {
+    const parts = facts.reports.map((report) => (report.severity ? `${report.label} (${SEVERITY_TEXT[report.severity]})` : report.label));
+    items.push(item('report', ATTENTION_URGENCY.report, `Danışan kısıt bildirdi: ${listText(parts)}`));
+  }
+  if (facts.changes.length > 0) {
+    const parts = facts.changes.map((change) =>
+      change.kind === 'better'
+        ? `${change.label} · düzeldi dedi`
+        : `${change.label}${change.from && change.to ? ` ${SEVERITY_TEXT[change.from]} → ${SEVERITY_TEXT[change.to]}` : ' · kötüleşti'}`,
+    );
+    const worse = facts.changes.some((change) => change.kind === 'worse');
+    items.push(item('change', ATTENTION_URGENCY.constraintChange, `${worse ? 'Kısıt kötüleşti' : 'Kısıt güncellendi'}: ${listText(parts)}`));
+  }
+  if (facts.waiting.length > 0) {
+    const parts = facts.waiting.map((entry) => `${entry.label} · ${formatNumber(daysBetween(entry.referredAt, today))} gün`);
+    items.push(item('waiting', ATTENTION_URGENCY.referralWaiting, `Profesyonel görüşü bekleniyor · ${listText(parts)}`));
+  }
+  return items;
+}
+
+/** Tarama maddeleri: gözden geçirilmemiş ağrı; son 28 gündeki taramada tek büyük asimetri. */
+export function screeningItems(facts: ScreeningFacts, today: string): AttentionItem[] {
+  const items: AttentionItem[] = [];
+  if (facts.pain.length > 0) {
+    items.push({ key: 'screening:pain', kind: 'screening', urgency: ATTENTION_URGENCY.screeningPain, text: `Taramada ağrı: ${listText(facts.pain)}`, target: 'screening' });
+  }
+  if (facts.asymmetry && facts.date >= addDays(today, -SCREENING_ALERT_DAYS)) {
+    items.push({
+      key: 'screening:asymmetry',
+      kind: 'screening',
+      urgency: ATTENTION_URGENCY.asymmetry,
+      text: `Taramada büyük asimetri: ${facts.asymmetry}`,
+      target: 'screening',
+    });
+  }
+  return items;
 }
 
 /** Genel bakış listesinin uzunluğu. */

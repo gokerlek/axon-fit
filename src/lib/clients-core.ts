@@ -27,6 +27,7 @@ import { passwordProblem } from './password-rules.ts';
 import {
   clientIndexSchema,
   HEALTH_CONSENT_VERSION,
+  HEALTH_FIELD_VERSIONS,
   inviteSchema,
   trainingOf,
   type Client,
@@ -467,6 +468,8 @@ export async function setHealthConsent(
       throw new GithubError('Antrenörün sorulan bilgileri değiştirdi. Sayfayı yenileyip yeniden bak.', 409);
     }
   }
+  // Onay parça başına o parçanın güncel sürümünü yazar (tasarım `kisit-tarama.md` §5.1).
+  const fields = decision.granted ? healthModule.fields : [];
   const next: Client = {
     ...client,
     consents: {
@@ -474,7 +477,8 @@ export async function setHealthConsent(
       health: {
         granted: decision.granted,
         version: HEALTH_CONSENT_VERSION,
-        fields: decision.granted ? healthModule.fields : [],
+        ...(fields.length > 0 ? { versions: Object.fromEntries(fields.map((field) => [field, HEALTH_FIELD_VERSIONS[field]])) } : {}),
+        fields,
         at: store.now().toISOString(),
       },
     },

@@ -1181,11 +1181,13 @@ export function WorkoutScreen({
         });
       } catch (error) {
         toast.error(error instanceof ApiError && error.status === 0 ? 'Bağlantı yok; hareket eklenemedi.' : error instanceof ApiError ? error.message : 'Hareket eklenemedi.');
+        // Kısıt değişmiş (409): önbellekteki kütüphane tazelenir, hareket listeden düşer.
+        if (error instanceof ApiError && error.status === 409) void queryClient.invalidateQueries({ queryKey: ['me', 'workout', 'library'] });
       } finally {
         setAddBusy(null);
       }
     },
-    [addBusy, commitFlow, announce, onJump],
+    [addBusy, commitFlow, announce, onJump, queryClient],
   );
 
   /**

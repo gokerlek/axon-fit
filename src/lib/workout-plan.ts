@@ -1,6 +1,8 @@
 import type { AlternativeCandidate } from './alternatives.ts';
 import { withClientTargets } from './client-targets.ts';
+import type { RowCare } from './constraint-filter.ts';
 import { loadSpecFor, type DeviceLoadSettings } from './device-loads.ts';
+import type { ExerciseTags } from './exercise-filter.ts';
 import { exposureOf, type Stage } from './exposure.ts';
 import { todayIn } from './format.ts';
 import type { SetSuggestion } from './program-feedback.ts';
@@ -74,8 +76,12 @@ export type PlanProgram = Pick<Program, 'revision' | 'createdAt' | 'updatedAt' |
 /** Planın sahibi: kendi programda kimliği ve adı; yoksa PT'nin programı. */
 export type PlanOwner = { programId: string; name: string } | null;
 
-/** Plan için egzersiz alanları: kural, yük, kaslar, başlık; muadil sıralaması için kalıp, tutuş, PT'nin sabitledikleri. */
-export type WorkoutExercise = PlanExercise & { loadStepKg: number; minLoadKg: number } & Pick<AlternativeCandidate, 'pattern' | 'grip' | 'alternatives'>;
+/**
+ * Plan için egzersiz alanları: kural, yük, kaslar, başlık; muadil sıralaması için kalıp, tutuş, PT'nin sabitledikleri;
+ * danışanın kısıtları için medikal etiketler (hepsi isteğe bağlı).
+ */
+export type WorkoutExercise = PlanExercise & { loadStepKg: number; minLoadKg: number } & Pick<AlternativeCandidate, 'pattern' | 'grip' | 'alternatives'> &
+  Omit<ExerciseTags, 'primaryMuscles' | 'secondaryMuscles'>;
 export type WorkoutDevice = DeviceLoadSettings & { id: string };
 
 /** Isınma seti: ağırlık ve tekrar (hacme ve rekora girmez). */
@@ -130,6 +136,11 @@ export type WorkoutRow = {
    * için antrenman içinde de "kolay ve tepede" adımı yok (§5.5).
    */
   adjusted?: 'pain' | 'readiness';
+  /**
+   * Danışanın kısıtlarından kart notu (tasarım `kisit-tarama.md` §3.5): yalnız `conditions` onayı varken; tanı adı
+   * yok, bölge ve taraf var. Eski anlık görüntüde ve onay yokken yok.
+   */
+  care?: RowCare;
 };
 
 /** Öneri katmanının girdisi: onarılmış index, şimdi ve danışanın antrenman geçmişi. */

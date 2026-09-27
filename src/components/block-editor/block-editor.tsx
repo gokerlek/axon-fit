@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { getInput, setInput, useField, useFieldArray } from '@formisch/react';
 import { CheckSquare, LinkSimple, Plus, Trash } from '@phosphor-icons/react';
+import type { EditorCare } from '@/lib/constraint-filter';
 import { AnimatePresence, motion, type Variants } from 'motion/react';
 import { toast } from 'sonner';
 import { SwipeGroup } from '@/components/swipe/swipe-row';
@@ -234,6 +235,7 @@ export function BlockEditor({
   addLabel = 'Hareket ekle',
   clientTargets = NO_TARGETS,
   variant = 'full',
+  care = null,
 }: {
   form: BlocksFormStore;
   path: BlocksPath;
@@ -263,6 +265,8 @@ export function BlockEditor({
    * düzeni yok; set sayısı, tekrar ya da süre, dinlenme, cihaz, not ve süperset kalır.
    */
   variant?: EditorVariant;
+  /** Programda danışanın kısıtları (`kisit-tarama.md` §3.2, §3.3): sheet'te işaret, kartta rozet. Şablonda yok. */
+  care?: EditorCare | null;
 }) {
   const exerciseById = useMemo(() => new Map(exercises.map((exercise) => [exercise.id, exercise])), [exercises]);
   const deviceById = useMemo(() => new Map(devices.map((device) => [device.id, device])), [devices]);
@@ -272,6 +276,12 @@ export function BlockEditor({
   const wide = useMediaQuery('(min-width: 64rem)');
 
   const [picker, setPicker] = useState<PickerState | null>(null);
+  // Bu oturumda verilen izinler ("Yine de ekle"): sayfa yenilenmeden kart ve sheet izinli görsün.
+  const [allowed, setAllowed] = useState<ReadonlySet<string>>(() => new Set());
+  const effectiveCare = useMemo(() => {
+    if (!care || allowed.size === 0) return care;
+    return { ...care, map: Object.fromEntries(Object.entries(care.map).filter(([exerciseId]) => !allowed.has(exerciseId))) };
+  }, [care, allowed]);
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
   const [setsOpen, setSetsOpenState] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const [detailsOpen, setDetailsOpen] = useState<ReadonlySet<string>>(() => new Set());
@@ -743,6 +753,7 @@ export function BlockEditor({
     onNudged,
     clientTargets,
     variant,
+    care: effectiveCare,
   };
 
   return (
@@ -936,6 +947,8 @@ export function BlockEditor({
         onPick={pick}
         finalFocus={sheetFinalFocus}
         onClosed={sheetClosed}
+        care={effectiveCare}
+        onAllowed={(exerciseId) => setAllowed((current) => new Set([...current, exerciseId]))}
       />
     </EditorContext.Provider>
   );

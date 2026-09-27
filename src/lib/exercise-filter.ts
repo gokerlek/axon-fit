@@ -174,10 +174,10 @@ type Rule = {
   when?: { needs: TimedContext; test: (context: FilterContext, condition: ClientCondition) => boolean | null };
 };
 
-const has = (windows: readonly JointWindow[] | undefined, window: JointWindow) =>
+export const has = (windows: readonly JointWindow[] | undefined, window: JointWindow) =>
   windows === undefined ? null : windows.includes(window);
 
-const loaded = (tags: ExerciseTags) =>
+export const loaded = (tags: ExerciseTags) =>
   tags.axialLoading === undefined ? null : tags.axialLoading === 'moderate' || tags.axialLoading === 'high';
 
 const KNEE_MUSCLES = ['quadriceps', 'hamstrings_medial', 'hamstrings_lateral', 'gastroc_medial', 'gastroc_lateral'];
@@ -187,7 +187,7 @@ const SHOULDER_MUSCLES = ['delt_front', 'delt_side', 'delt_rear', 'chest_upper',
  * Kural ilgili eklemi tutuyor mu? Diz kuralı face pull'u, omuz kuralı squat'ı
  * yasaklamasın diye. Bilgi yoksa `null` → kural atlanır (sessiz yanlış karar yok).
  */
-function touches(tags: ExerciseTags, joint: 'knee' | 'shoulder'): boolean | null {
+export function touches(tags: ExerciseTags, joint: 'knee' | 'shoulder'): boolean | null {
   const windows = tags.jointWindows;
   const muscles = [...(tags.primaryMuscles ?? []), ...(tags.secondaryMuscles ?? [])];
   const onar = joint === 'knee' ? KNEE_MUSCLES : SHOULDER_MUSCLES;
@@ -201,11 +201,11 @@ function touches(tags: ExerciseTags, joint: 'knee' | 'shoulder'): boolean | null
  * Üç değerli (Kleene) VE: biri yanlışsa kural işlemez, öbürü bilinmese de (diz çalıştırmayan
  * face pull ACL kuralında "atlandı" sayılmaz); yanlış yoksa ve biri bilinmiyorsa kural atlanır.
  */
-const and = (...values: (boolean | null)[]): boolean | null =>
+export const and = (...values: (boolean | null)[]): boolean | null =>
   values.includes(false) ? false : values.includes(null) ? null : true;
 
 /** Üç değerli VEYA: biri doğruysa doğru; doğru yoksa biri bilinmiyorsa bilinmiyor (yanlış ∨ bilinmeyen = bilinmeyen). */
-const or = (...values: (boolean | null)[]): boolean | null =>
+export const or = (...values: (boolean | null)[]): boolean | null =>
   values.includes(true) ? true : values.includes(null) ? null : false;
 
 /**
@@ -562,7 +562,7 @@ function manualMatch(list: readonly string[] | undefined, condition: ClientCondi
   return unknown ? null : false;
 }
 
-const isTagged = (tags: ExerciseTags) =>
+export const isTagged = (tags: ExerciseTags) =>
   Boolean(
     tags.kineticChain ||
       tags.axialLoading ||

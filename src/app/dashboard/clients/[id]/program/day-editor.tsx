@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { getInput, useField } from '@formisch/react';
 import { ArrowLeft, ArrowRight, ArrowSquareRight, Copy, DotsThreeVertical, FloppyDisk, Trash } from '@phosphor-icons/react';
 import { BlockEditor, useBlocks } from '@/components/block-editor/block-editor';
+import type { EditorCare } from '@/lib/constraint-filter';
 import type { BlocksFormStore } from '@/components/block-editor/block-items';
 import type { RowClientTarget } from '@/components/block-editor/editor-context';
 import { keepLineEnter } from '@/components/block-editor/enter-key';
@@ -66,6 +67,7 @@ export function DayEditor({
   actions,
   footer,
   clientTargets,
+  care = null,
 }: {
   form: ProgramFormStore;
   phases: ProgramPhase[];
@@ -85,6 +87,8 @@ export function DayEditor({
   footer?: React.ReactNode;
   /** Danışanın satır hedefleri (satır kimliğiyle). */
   clientTargets?: Readonly<Record<string, RowClientTarget>> | undefined;
+  /** Danışanın kısıtları: sheet'te işaret, kartta rozet. */
+  care?: EditorCare | null;
 }) {
   const nameField = useField(form, { path: ['phases', phaseIndex, 'days', dayIndex, 'name'] });
   const path = ['phases', phaseIndex, 'days', dayIndex, 'blocks'] as const;
@@ -223,6 +227,7 @@ export function DayEditor({
         listLabel={`${day.name} hareketleri`}
         addLabel={`Hareket ekle: ${day.name}`}
         {...(clientTargets ? { clientTargets } : {})}
+        care={care}
       />
 
       {footer}

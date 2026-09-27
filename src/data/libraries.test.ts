@@ -4,7 +4,9 @@ import { ATTACHMENT_LIBRARY } from './attachment-library.ts';
 import { DEVICE_LIBRARY } from './device-library.ts';
 import { EXERCISE_LIBRARY } from './exercise-library.ts';
 import { parseCondition } from '../lib/conditions.ts';
+import { AVOID_TAG_IDS, AVOID_TAGS } from '../lib/constraints.ts';
 import { isDeepMuscle } from '../lib/deep-muscles.ts';
+import { SCREENING_TESTS } from '../lib/screening.ts';
 
 /** Hazır kataloglar birbirine kimlikle bağlı; kopuk bağ sessizce boş liste demek. */
 describe('hazır kataloglardaki bağlar', () => {
@@ -59,6 +61,37 @@ describe('hazır kataloglardaki bağlar', () => {
       for (const value of exercise.safeFor ?? []) {
         assert.ok(!yasak.has(value.split(':')[0]), `${exercise.id} → ${value} iki listede birden`);
       }
+    }
+  });
+});
+
+/**
+ * Kaçınılacak hareketlerin kalıp aileleri (tasarım `kisit-tarama.md` §2.2, faz 3'ün ön koşulu): ailedeki her hazır
+ * hareket, kaçınmanın okuduğu etiketleri taşır. Eksik etiket "Değiştir"de kaçınılan hareketi geri önerirdi.
+ */
+describe('kaçınma aileleri etiketli', () => {
+  for (const tag of AVOID_TAG_IDS) {
+    const { families, reads } = AVOID_TAGS[tag];
+    if (families.length === 0) continue;
+    test(`${tag}: ${families.join(', ')} → ${reads.join(', ')}`, () => {
+      const members = EXERCISE_LIBRARY.filter((exercise) => exercise.pattern && families.includes(exercise.pattern));
+      assert.ok(members.length > 0, `${tag}: ailede hareket yok`);
+      for (const exercise of members) {
+        for (const field of reads) {
+          assert.ok((exercise as Record<string, unknown>)[field] !== undefined, `${exercise.id}: ${field} eksik (${tag})`);
+        }
+      }
+    });
+  }
+});
+
+/** Taramanın gerileme ve ilerleme listeleri paketteki kütüphanenin kimlikleri (§4.6). */
+describe('tarama listeleri kütüphanede', () => {
+  const ids = new Set(EXERCISE_LIBRARY.map((exercise) => exercise.id));
+  test('her testin gerileme ve ilerleme hareketleri var', () => {
+    for (const test of Object.values(SCREENING_TESTS)) {
+      for (const id of [...test.regress, ...test.progress]) assert.ok(ids.has(id), `${test.id} → ${id} kütüphanede yok`);
+      assert.ok(test.regress.length > 0 && test.progress.length > 0, test.id);
     }
   });
 });

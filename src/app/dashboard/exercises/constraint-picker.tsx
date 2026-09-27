@@ -9,6 +9,7 @@ import {
   conditionInfo,
   conditionLabel,
   parseCondition,
+  RETIRED_CONDITION_IDS,
   type ClientCondition,
   type ConditionId,
   type ConditionQualifier,
@@ -70,7 +71,8 @@ function groups() {
   return CONDITION_REGIONS.map((region) => ({
     label: REGION_LABELS[region],
     options: (Object.keys(CONDITIONS) as ConditionId[])
-      .filter((id) => conditionInfo(id).region === region)
+      // Emekli kimlik (taramadaki eski ağrı işareti) hiçbir seçicide çıkmaz (`kisit-tarama.md` §2.1).
+      .filter((id) => conditionInfo(id).region === region && !RETIRED_CONDITION_IDS.has(id))
       .flatMap((id) => {
         const info = conditionInfo(id);
         return [

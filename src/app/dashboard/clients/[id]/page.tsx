@@ -10,20 +10,23 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { loadClient, readInvite } from '@/lib/clients';
-import { healthConsentState } from '@/lib/client-status';
+import { healthConsentState, healthFieldState } from '@/lib/client-status';
 import { readAppConfig } from '@/lib/config';
+import { constraintCounts } from '@/lib/constraints';
 import { serverEnv } from '@/lib/env';
 import { listExercises, type ExerciseWithSource } from '@/lib/exercises';
-import { formatDate, formatNumber, todayIn } from '@/lib/format';
+import { formatDate, formatDayShort, formatNumber, todayIn } from '@/lib/format';
+import type { HealthRecord } from '@/lib/schemas/health';
+import { newestFirst, painCells } from '@/lib/screening';
 import { clientRepoName } from '@/lib/github/client';
 import { countDays, currentPhaseOf, frequencyLabel, nextDayId, phaseStatus, phaseStatusLabel } from '@/lib/program-plan';
 import { readProgramFile, type ProgramFile } from '@/lib/programs';
-import { CLIENT_ID_PATTERN, CLIENT_STATUS_LABELS, HEALTH_FIELD_INFO, TRAINING_EXPERIENCE_LABELS } from '@/lib/schemas/client';
+import { CLIENT_ID_PATTERN, CLIENT_STATUS_LABELS, HEALTH_FIELD_INFO, TRAINING_EXPERIENCE_LABELS, type HealthField } from '@/lib/schemas/client';
 import { templateSummary } from '@/lib/template-plan';
 import { HEALTH_STATE_DETAILS, HEALTH_STATE_LABELS } from '../health-state';
 import { AccessBadge, accessDetail, accessOf, passwordOf } from '../invite-state';
 import { requirePt } from '@/lib/guards';
-import { loadMeasurements } from '@/lib/health';
+import { loadMeasurements, readHealthIfAllowed } from '@/lib/health';
 import { loadHistory } from '@/lib/history-store';
 import { readLiveResponse } from '@/lib/live-store';
 import type { HistoryList } from '@/lib/session-history';
@@ -33,6 +36,30 @@ import { SessionRow } from './sessions/session-list';
 
 /** Genel'in Antrenmanlar kartında en çok bu kadar son antrenman; gerisi sekmesinde. */
 const RECENT_SESSIONS = 3;
+
+/**
+ * Sağlık modülü kartındaki parçanın özeti (tasarım `kisit-tarama.md` §1): "2 etkin · 1 bildirim bekliyor",
+ * "son 12 Eyl · 1 ağrı". Yalnız onaylı parçada ve kayıt okunduysa; yoksa null.
+ */
+function healthSummary(field: HealthField, record: HealthRecord | null): string | null {
+  if (!record) return null;
+  if (field === 'conditions') {
+    const counts = constraintCounts(record);
+    const parts = [
+      `${formatNumber(counts.active)} etkin`,
+      counts.pending ? `${formatNumber(counts.pending)} bildirim bekliyor` : null,
+      counts.awaiting ? `${formatNumber(counts.awaiting)} görüş bekliyor` : null,
+    ];
+    return parts.filter(Boolean).join(' · ');
+  }
+  if (field === 'screening') {
+    const latest = newestFirst(record.screenings ?? [])[0];
+    if (!latest) return 'henüz tarama yok';
+    const pain = painCells(latest).filter((cell) => !cell.reviewed).length;
+    return `son ${formatDayShort(latest.date)}${pain ? ` · ${formatNumber(pain)} ağrı` : ''}`;
+  }
+  return null;
+}
 
 /**
  * Genel'in Antrenmanlar kartı: son antrenmanlar ve Antrenmanlar sekmesine geçiş (açık antrenman sayfanın
@@ -231,7 +258,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   }
 
   const { client } = loaded;
-  const [invite, programFile, exercises, measurements, history, live] = await Promise.all([
+  const [invite, programFile, exercises, measurements, history, live, healthRecord] = await Promise.all([
     readInvite(id),
     // undefined: GitHub'dan okunamadı; sayfa yine açılır.
     readProgramFile(id).catch(() => undefined),
@@ -239,6 +266,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     loadMeasurements(client).catch(() => undefined),
     loadHistory(id, config.timeZone).catch(() => null),
     readLiveResponse(id),
+    // Kısıt ve tarama özeti yalnız o parçanın onayı sürdükçe (onay yoksa dosya okunmaz).
+    readHealthIfAllowed(client, ['conditions', 'screening']).catch(() => null),
   ]);
   const exerciseById = new Map(exercises.map((exercise) => [exercise.id, exercise]));
   const repo = clientRepoName(id);
@@ -350,14 +379,25 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             {client.modules.health.enabled ? (
               <CardContent>
                 <ul className="flex flex-col gap-2 text-sm">
-                  {client.modules.health.fields.map((field) => (
-                    <li key={field} className="flex items-baseline justify-between gap-3">
-                      <span>{HEALTH_FIELD_INFO[field].label}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {consent?.granted && consent.fields.includes(field) ? 'onaylı' : 'onay yok'}
-                      </span>
-                    </li>
-                  ))}
+                  {client.modules.health.fields.map((field) => {
+                    const state = healthFieldState(client, field);
+                    const summary = state === 'granted' ? healthSummary(field, healthRecord) : null;
+                    const path = field === 'conditions' ? 'constraints' : field === 'screening' ? 'screening' : field === 'measurements' ? 'measurements' : null;
+                    return (
+                      <li key={field} className="flex items-baseline justify-between gap-3">
+                        {path ? (
+                          <Link href={`/dashboard/clients/${id}/${path}`} className="underline-offset-4 hover:underline">
+                            {HEALTH_FIELD_INFO[field].label}
+                          </Link>
+                        ) : (
+                          <span>{HEALTH_FIELD_INFO[field].label}</span>
+                        )}
+                        <span className="text-right text-xs text-muted-foreground">
+                          {state === 'granted' ? (summary ?? 'onaylı') : state === 'outdated' && consent?.granted ? 'yeni onay bekleniyor' : 'onay yok'}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               </CardContent>
             ) : null}

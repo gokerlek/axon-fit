@@ -86,6 +86,17 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       "stabilizerMuscles": [],
       "loadStepKg": 2.0,
       "minLoadKg": 0.0,
+      "kineticChain": "open",
+      "axialLoading": "none",
+      "shearForce": "low",
+      "spinalAlignment": "neutral",
+      "jointWindows": [
+        "glenohumeral_extension_beyond_neutral",
+        "shoulder_elevation_60_90"
+      ],
+      "loadVector": "horizontal_adduction",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "free_weight",
       "video": {
         "provider": "youtube",
         "id": "8iPEnn-ltC8"
@@ -115,6 +126,16 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       "stabilizerMuscles": [],
       "loadStepKg": 2.0,
       "minLoadKg": 0.0,
+      "kineticChain": "open",
+      "axialLoading": "none",
+      "shearForce": "low",
+      "spinalAlignment": "neutral",
+      "jointWindows": [
+        "glenohumeral_extension_beyond_neutral"
+      ],
+      "loadVector": "horizontal_adduction",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "free_weight",
       "video": {
         "provider": "youtube",
         "id": "eozdVDA78K0"
@@ -149,6 +170,16 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       ],
       "loadStepKg": 0.0,
       "minLoadKg": 0.0,
+      "kineticChain": "closed",
+      "axialLoading": "none",
+      "shearForce": "low",
+      "spinalAlignment": "neutral",
+      "jointWindows": [
+        "glenohumeral_extension_beyond_neutral"
+      ],
+      "loadVector": "horizontal_adduction",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "bodyweight",
       "video": {
         "provider": "youtube",
         "id": "IODxDxX7oi4"
@@ -180,6 +211,16 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       "stabilizerMuscles": [],
       "loadStepKg": 0.0,
       "minLoadKg": 0.0,
+      "kineticChain": "closed",
+      "axialLoading": "none",
+      "shearForce": "low",
+      "spinalAlignment": "neutral",
+      "jointWindows": [
+        "glenohumeral_extension_beyond_neutral"
+      ],
+      "loadVector": "vertical_axial",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "bodyweight",
       "video": {
         "provider": "youtube",
         "id": "2z8JmcrW-As"
@@ -268,6 +309,16 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       "stabilizerMuscles": [],
       "loadStepKg": 2.0,
       "minLoadKg": 0.0,
+      "kineticChain": "open",
+      "axialLoading": "moderate",
+      "shearForce": "low",
+      "spinalAlignment": "neutral",
+      "jointWindows": [
+        "shoulder_elevation_over_90"
+      ],
+      "loadVector": "vertical_axial",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "free_weight",
       "video": {
         "provider": "youtube",
         "id": "qEwKCR5JCog"
@@ -384,6 +435,16 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       ],
       "loadStepKg": 0.0,
       "minLoadKg": 0.0,
+      "kineticChain": "closed",
+      "axialLoading": "none",
+      "shearForce": "low",
+      "spinalAlignment": "neutral",
+      "jointWindows": [
+        "shoulder_elevation_over_90"
+      ],
+      "loadVector": "vertical_axial",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "bodyweight",
       "video": {
         "provider": "youtube",
         "id": "eGo4IYlbE5g"
@@ -849,6 +910,17 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       ],
       "loadStepKg": 2.0,
       "minLoadKg": 0.0,
+      "kineticChain": "closed",
+      "axialLoading": "low",
+      "shearForce": "low",
+      "spinalAlignment": "neutral",
+      "jointWindows": [
+        "knee_flexion_45_90",
+        "knee_flexion_over_90"
+      ],
+      "loadVector": "vertical_axial",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "free_weight",
       "video": {
         "provider": "youtube",
         "id": "2C-uNgKwPLE"
@@ -882,6 +954,16 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       ],
       "loadStepKg": 2.0,
       "minLoadKg": 0.0,
+      "kineticChain": "closed",
+      "axialLoading": "low",
+      "shearForce": "low",
+      "spinalAlignment": "neutral",
+      "jointWindows": [
+        "knee_flexion_45_90"
+      ],
+      "loadVector": "vertical_axial",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "free_weight",
       "video": {
         "provider": "youtube",
         "id": "D7KaRcUTQeE"
@@ -1634,7 +1716,17 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       ],
       "stabilizerMuscles": [],
       "loadStepKg": 5,
-      "minLoadKg": 0
+      "minLoadKg": 0,
+      "kineticChain": "open",
+      "axialLoading": "none",
+      "shearForce": "low",
+      "spinalAlignment": "neutral",
+      "jointWindows": [
+        "glenohumeral_extension_beyond_neutral"
+      ],
+      "loadVector": "horizontal_adduction",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "machine_guided"
     },
     {
       "id": "pec-deck",
@@ -1659,7 +1751,17 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       ],
       "stabilizerMuscles": [],
       "loadStepKg": 5,
-      "minLoadKg": 0
+      "minLoadKg": 0,
+      "kineticChain": "open",
+      "axialLoading": "none",
+      "shearForce": "low",
+      "spinalAlignment": "neutral",
+      "jointWindows": [
+        "glenohumeral_extension_beyond_neutral"
+      ],
+      "loadVector": "horizontal_adduction",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "machine_guided"
     },
     {
       "id": "kablo-crossover",
@@ -1689,7 +1791,15 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
         "abs_lower"
       ],
       "loadStepKg": 2.5,
-      "minLoadKg": 0
+      "minLoadKg": 0,
+      "kineticChain": "open",
+      "axialLoading": "none",
+      "shearForce": "low",
+      "spinalAlignment": "neutral",
+      "jointWindows": [],
+      "loadVector": "horizontal_adduction",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "constant_resistance"
     },
     {
       "id": "smith-bench-press",
@@ -1716,7 +1826,17 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       ],
       "stabilizerMuscles": [],
       "loadStepKg": 5,
-      "minLoadKg": 0
+      "minLoadKg": 0,
+      "kineticChain": "open",
+      "axialLoading": "none",
+      "shearForce": "moderate",
+      "spinalAlignment": "extension",
+      "jointWindows": [
+        "glenohumeral_extension_beyond_neutral"
+      ],
+      "loadVector": "horizontal_adduction",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "machine_guided"
     },
     {
       "id": "makine-omuz-press",
@@ -1742,7 +1862,17 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       ],
       "stabilizerMuscles": [],
       "loadStepKg": 5,
-      "minLoadKg": 0
+      "minLoadKg": 0,
+      "kineticChain": "open",
+      "axialLoading": "moderate",
+      "shearForce": "low",
+      "spinalAlignment": "neutral",
+      "jointWindows": [
+        "shoulder_elevation_over_90"
+      ],
+      "loadVector": "vertical_axial",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "machine_guided"
     },
     {
       "id": "makine-yana-acis",
@@ -1884,7 +2014,16 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
         "abs_lower"
       ],
       "loadStepKg": 2.5,
-      "minLoadKg": 0
+      "minLoadKg": 0,
+      "kineticChain": "open",
+      "axialLoading": "none",
+      "shearForce": "low",
+      "spinalAlignment": "neutral",
+      "jointWindows": [
+        "shoulder_elevation_over_90"
+      ],
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "constant_resistance"
     },
     {
       "id": "hiperekstansiyon",
@@ -1910,7 +2049,15 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       ],
       "stabilizerMuscles": [],
       "loadStepKg": 0,
-      "minLoadKg": 0
+      "minLoadKg": 0,
+      "kineticChain": "open",
+      "axialLoading": "low",
+      "shearForce": "moderate",
+      "spinalAlignment": "extension",
+      "jointWindows": [],
+      "loadVector": "anterior_posterior_shear",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "bodyweight"
     },
     {
       "id": "makine-preacher-curl",
@@ -2037,7 +2184,18 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       ],
       "stabilizerMuscles": [],
       "loadStepKg": 5,
-      "minLoadKg": 0
+      "minLoadKg": 0,
+      "kineticChain": "closed",
+      "axialLoading": "moderate",
+      "shearForce": "low",
+      "spinalAlignment": "neutral",
+      "jointWindows": [
+        "knee_flexion_over_90",
+        "hip_flexion_over_90"
+      ],
+      "loadVector": "vertical_axial",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "machine_guided"
     },
     {
       "id": "smith-squat",
@@ -2066,7 +2224,18 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
         "abs_lower"
       ],
       "loadStepKg": 5,
-      "minLoadKg": 0
+      "minLoadKg": 0,
+      "kineticChain": "closed",
+      "axialLoading": "high",
+      "shearForce": "moderate",
+      "spinalAlignment": "neutral",
+      "jointWindows": [
+        "knee_flexion_over_90",
+        "hip_flexion_over_90"
+      ],
+      "loadVector": "vertical_axial",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "machine_guided"
     },
     {
       "id": "oturarak-leg-curl",
@@ -2239,7 +2408,13 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       ],
       "stabilizerMuscles": [],
       "loadStepKg": 5,
-      "minLoadKg": 0
+      "minLoadKg": 0,
+      "kineticChain": "open",
+      "axialLoading": "none",
+      "shearForce": "moderate",
+      "spinalAlignment": "neutral",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "machine_guided"
     },
     {
       "id": "kablo-woodchop",
@@ -2269,7 +2444,13 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
         "glutes"
       ],
       "loadStepKg": 2.5,
-      "minLoadKg": 0
+      "minLoadKg": 0,
+      "kineticChain": "closed",
+      "axialLoading": "low",
+      "shearForce": "moderate",
+      "spinalAlignment": "flexion_with_rotation",
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "constant_resistance"
     },
     {
       "id": "kosu-bandi",
@@ -2413,7 +2594,16 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       ],
       "stabilizerMuscles": [],
       "loadStepKg": 5,
-      "minLoadKg": 0
+      "minLoadKg": 0,
+      "kineticChain": "open",
+      "axialLoading": "none",
+      "shearForce": "low",
+      "spinalAlignment": "neutral",
+      "jointWindows": [
+        "shoulder_elevation_over_90"
+      ],
+      "contractionType": "isotonic_balanced",
+      "resistanceProfile": "constant_resistance"
     },
     {
       "id": "destekli-sandalye-squat",
@@ -2445,6 +2635,9 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       "axialLoading": "none",
       "shearForce": "low",
       "spinalAlignment": "neutral",
+      "jointWindows": [
+        "knee_flexion_45_90"
+      ],
       "contractionType": "isotonic_balanced",
       "resistanceProfile": "bodyweight",
       "contraindications": [
@@ -2619,6 +2812,7 @@ export const EXERCISE_LIBRARY: readonly Exercise[] =  [
       "axialLoading": "none",
       "shearForce": "low",
       "spinalAlignment": "neutral",
+      "jointWindows": [],
       "loadVector": "horizontal_adduction",
       "contractionType": "isotonic_balanced",
       "resistanceProfile": "free_weight",

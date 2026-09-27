@@ -31,6 +31,7 @@ import { Toggle } from '@/components/ui/toggle';
 import { ConstraintPicker, formatConstraints, parseConstraints } from './constraint-picker';
 import { TOUCH_TARGETS } from './touch-targets';
 import { conditionLabel } from '@/lib/conditions';
+import { careSummary, type EditorCare } from '@/lib/constraint-filter';
 import {
   CONTEXT_LABELS,
   DECISION_LABELS,
@@ -72,17 +73,24 @@ export function ExerciseList({
   initial,
   deviceNames,
   notice,
+  clientCare = null,
 }: {
   initial: ExerciseWithSource[];
   /** Cihaz kimliği → adı: kartta ekipman yerine cihaz yazar. */
   deviceNames: Record<string, string>;
   /** Başlığın altındaki uyarı (ör. okunamayan PT kayıtları); sunucuda hazırlanır. */
   notice?: React.ReactNode;
+  /**
+   * `?client=c_…` (tasarım `kisit-tarama.md` §2.3): danışanın kayıtlı kısıtlarıyla önizleme, sunucuda hesaplanmış.
+   * Adreste yalnız danışan kimliği durur, sağlık verisi değil.
+   */
+  clientCare?: { name: string; care: EditorCare } | null;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const selected = useMemo(() => parseMuscles(searchParams.get('muscle')), [searchParams]);
-  const constraints = useMemo(() => parseConstraints(searchParams.get('limit')), [searchParams]);
+  const clientMode = Boolean(clientCare && !clientCare.care.unavailable);
+  const constraints = useMemo(() => (clientCare ? [] : parseConstraints(searchParams.get('limit'))), [searchParams, clientCare]);
   const [search, setSearch] = useState('');
   // Kısıt süzgecinin görünümü: hepsi, yasak dışı ya da tek küme (çip, "Yalnız uygunları göster").
   const [view, setView] = useState<FilterView>('all');
@@ -102,8 +110,10 @@ export function ExerciseList({
     const params = new URLSearchParams();
     const muscles = next.muscle ?? selected;
     const limits = next.limit ?? constraints;
+    const client = searchParams.get('client');
     if (muscles.length > 0) params.set('muscle', muscles.join(','));
-    if (limits.length > 0) params.set('limit', formatConstraints(limits));
+    if (client && clientCare) params.set('client', client);
+    else if (limits.length > 0) params.set('limit', formatConstraints(limits));
     const query = params.toString();
     window.history.replaceState(null, '', query ? `${pathname}?${query}` : pathname);
   }
@@ -131,14 +141,15 @@ export function ExerciseList({
   // edilmedi, eksik bilgi); karar, eksik bilgi ve "kontrol edilmedi" kartta rozet, sayılar özet çiplerinde.
   // Yalnız danışan bağlamı (ameliyat haftası…) eksikse özet satırında bir kez söylenir.
   const summary = useMemo(
-    () => summarizeFilter(constraints.length === 0 ? [] : exercises, constraints),
-    [exercises, constraints],
+    () => (clientMode && clientCare ? careSummary(exercises, clientCare.care.map) : summarizeFilter(constraints.length === 0 ? [] : exercises, constraints)),
+    [exercises, constraints, clientMode, clientCare],
   );
   const clearance = requiresClearance(constraints);
+  const filterOn = clientMode || constraints.length > 0;
 
   const selectedBody = selected.filter(isBodyMuscle);
   // Görünüm yalnız listeyi daraltır; sayım hep tam liste üstünden. Kısıt yoksa süzgeç yok.
-  const activeView: FilterView = constraints.length === 0 ? 'all' : view;
+  const activeView: FilterView = !filterOn ? 'all' : view;
   const shown = activeView === 'all' ? visible : visible.filter((item) => inFilterView(summary.groups.get(item.id), activeView));
   const filtering = selected.length > 0 || search.trim().length > 0 || activeView !== 'all';
   const showOnly = (next: FilterView) => (pressed: boolean) => setView(pressed ? next : 'all');
@@ -230,11 +241,33 @@ export function ExerciseList({
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              <div className="max-w-sm">
-                <ConstraintPicker value={constraints} onChange={(next) => setParams({ limit: next })} />
-              </div>
+              {clientCare ? (
+                <div className="flex flex-col gap-1 text-sm">
+                  <p>
+                    <span className="font-medium">{clientCare.name}</span>
+                    {clientCare.care.unavailable
+                      ? ` · ${clientCare.care.unavailable}`
+                      : clientCare.care.summary.length > 0
+                        ? ` · kayıtlı kısıtları: ${clientCare.care.summary.join(' · ')}`
+                        : ' · etkin kısıt yok'}
+                    {clientCare.care.pending.length > 0 ? ` · karar bekleyen bildirim: ${clientCare.care.pending.join(' · ')}` : ''}
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <Link href={`/dashboard/clients/${clientCare.care.clientId}/constraints`} className="underline-offset-4 hover:underline">
+                      Kısıtlar ›
+                    </Link>
+                    <Link href="/dashboard/exercises" className="text-muted-foreground underline-offset-4 hover:underline">
+                      Danışansız göster
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <div className="max-w-sm">
+                  <ConstraintPicker value={constraints} onChange={(next) => setParams({ limit: next })} />
+                </div>
+              )}
 
-              {constraints.length > 0 ? (
+              {filterOn ? (
                 <div className="flex flex-col gap-3 text-sm">
                   {/* Her hareket tek kümede; çipe dokununca liste o kümeye süzülür, yeniden dokununca hepsi. */}
                   <div className="flex flex-wrap gap-1.5" role="group" aria-label="Kısıt özeti: dokununca liste o kümeye süzülür">
@@ -279,7 +312,7 @@ export function ExerciseList({
                       <WarningCircle aria-hidden className="mt-0.5 size-4 shrink-0" />
                       <span>
                         Kırmızı bayrak: {clearance.map((condition) => conditionLabel(condition)).join(', ')} için program
-                        yazmadan önce tıbbi izin gerekir.
+                        yazmadan önce danışanı bir sağlık profesyoneline yönlendir ve görüşünü al.
                       </span>
                     </p>
                   ) : null}

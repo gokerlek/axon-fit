@@ -7,6 +7,7 @@ import { CLIENT_ID_PATTERN } from '@/lib/schemas/client';
 import { StatusDot } from '../status-dot';
 import { ClientTabs } from './client-tabs';
 import { clientTitle } from './client-title';
+import { HEALTH_PARTS } from './health-parts';
 
 /**
  * Sekmenin başlığı: Genel'de danışanın adı, alt sayfalarda "Ölçümler · Ayşe · Uygulama" (`clientTitle`):
@@ -38,6 +39,10 @@ export default async function ClientLayout({ children, params }: { children: Rea
   if (!loaded) notFound();
 
   const name = loaded.ok ? loaded.client.name : id;
+  // "Sağlık" sekmesinin bağlantısı: modülde seçili ilk parça (Kısıtlar → Ölçümler → Tarama); yoksa Kısıtlar.
+  const fields = loaded.ok && loaded.client.modules.health.enabled ? loaded.client.modules.health.fields : [];
+  const healthPart = HEALTH_PARTS.find((part) => fields.includes(part.field)) ?? HEALTH_PARTS[0]!;
+  const healthHref = `/dashboard/clients/${id}/${healthPart.path}`;
   // Durum adın sağ üstünde nokta; eklenme tarihi Genel sekmesinin profil tablosunda.
   const title = loaded.ok ? (
     <span className="inline-flex items-start gap-1.5">
@@ -56,7 +61,7 @@ export default async function ClientLayout({ children, params }: { children: Rea
           title={title}
           description={loaded.ok ? undefined : 'Kayıt okunamadı'}
         />
-        <ClientTabs clientId={id} />
+        <ClientTabs clientId={id} healthHref={healthHref} />
       </div>
       {children}
     </div>

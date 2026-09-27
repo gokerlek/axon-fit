@@ -4,6 +4,19 @@ import { effectiveSets } from './client-targets.ts';
 import { postGuard } from './client-auth-routes.ts';
 import { canRecordHealth } from './client-status.ts';
 import { HEALTH_PATH } from './check-in-routes.ts';
+import {
+  careInputOf,
+  careStampOf,
+  EMPTY_CARE,
+  evaluateCare,
+  hasCare,
+  optionCareText,
+  orderByCare,
+  rowCareOf,
+  type CareInput,
+  type CareResult,
+} from './constraint-filter.ts';
+import { healthRecordSchema, type HealthRecord } from './schemas/health.ts';
 import { todayIn } from './format.ts';
 import { GithubError } from './github/errors.ts';
 import { currentPhaseOf, DAY_ID_PATTERN, nextDayId } from './program-plan.ts';
@@ -73,6 +86,7 @@ import {
  *   gruplu (`alternatives.ts`); her biri kendi geçmişiyle planlı. Bugünün öteki hareketleri önerilmez.
  * - `GET /api/me/workout/exercises[?add=][&program=]`: "Hareket ekle"nin kütüphanesi; `add` verilirse o egzersizin
  *   varsayılan setleriyle planı. `program` (muadil ve eklenen için): `op_…` kendi program, yok ya da `pt` PT'nin.
+ *   Kısıtın izinsiz yasakladığı hareket listede yok, eklenemez (409).
  * - `POST /api/me/water`: antrenman dışı su dokunuşları `water.json`'a, kimlikle birleşerek
  *   (idempotent); değişiklik yoksa yazılmaz, çakışmada taze okuyup bir kez daha. Bozuk dosya ezilmez.
  * - `POST /api/me/schedule`: danışanın antrenman günleri (§2.11) `program.json` → `clientSchedule`;
@@ -143,10 +157,11 @@ export type WorkoutResponse = {
   health: { pain: boolean };
 };
 
-/** "Değiştir" sheet'inin bir satırı: muadil ve kendi geçmişiyle planı. */
-export type SwapOption = { exerciseId: string; title: string; pinned: boolean; extra: ExtraRow };
+/** "Değiştir" sheet'inin bir satırı: muadil ve kendi geçmişiyle planı; kısıtta dikkat varsa kısa not ("Sol diz için dikkatli"). */
+export type SwapOption = { exerciseId: string; title: string; pinned: boolean; care?: string; extra: ExtraRow };
 export type SwapGroup = { equipment: string; label: string; options: SwapOption[] };
-export type AlternativesResponse = { rowId: string; exerciseId: string; groups: SwapGroup[] };
+/** `careNote`: sıra kısıtlara göre değiştiyse açıklamanın ikinci cümlesi. */
+export type AlternativesResponse = { rowId: string; exerciseId: string; groups: SwapGroup[]; careNote?: string };
 
 /** "Hareket ekle" kütüphanesinin satırı (arama ada ve kaslara göre). */
 export type LibraryItem = {
@@ -157,6 +172,8 @@ export type LibraryItem = {
   trackingType: TrackingType;
   primaryMuscles: readonly string[];
   secondaryMuscles: readonly string[];
+  /** Kısıtta dikkat varsa kısa not ("Sol diz için dikkatli"; "Değiştir"deki gibi). */
+  care?: string;
 };
 export type LibraryResponse = { exercises: LibraryItem[] };
 export type AddedRowResponse = { extra: ExtraRow };
@@ -299,6 +316,53 @@ export function sessionExtras(input: {
   return extras;
 }
 
+/**
+ * Danışanın kısıtları (tasarım `kisit-tarama.md` §3.4, §3.5): yalnız `conditions` onayı varken; dosya okunamazsa
+ * süzgeç kısıtsız çalışır (antrenman durmaz). `record` kısıt damgası için (onay yoksa null).
+ */
+function careOf(client: Client, healthFile: StoredJson | null | 'broken', today: string): { input: CareInput; record: HealthRecord | null } {
+  if (!canRecordHealth(client, 'conditions') || healthFile === 'broken') return { input: EMPTY_CARE, record: null };
+  // Dosya yoksa boş kayıt: damga Bugün'ün hesabıyla (`client-care.ts`) aynı çıksın.
+  if (!healthFile) return { input: EMPTY_CARE, record: { version: 2, checkIns: [], measurements: [] } };
+  const parsed = v.safeParse(healthRecordSchema, healthFile.content);
+  if (!parsed.success) return { input: EMPTY_CARE, record: null };
+  return { input: careInputOf(parsed.output, { today, painConsent: canRecordHealth(client, 'check_in') }), record: parsed.output };
+}
+
+/** Günün satırlarına kart notu (`care`); kısıt yoksa gün aynen döner. */
+export function withRowCare(day: WorkoutDay, exercises: ReadonlyMap<string, WorkoutExercise>, input: CareInput): WorkoutDay {
+  if (!hasCare(input)) return day;
+  const rows: Record<string, WorkoutDay['rows'][string]> = {};
+  let changed = false;
+  for (const [rowId, row] of Object.entries(day.rows)) {
+    const exercise = exercises.get(row.exerciseId);
+    const care = exercise ? rowCareOf(evaluateCare(exercise, input), input) : null;
+    rows[rowId] = care ? { ...row, care } : row;
+    if (care) changed = true;
+  }
+  return changed ? { ...day, rows } : day;
+}
+
+/**
+ * Danışanın seçtiği hareketin (muadil ya da eklenen) kart notu: günün satırlarıyla aynı kural; metin "antrenörün
+ * planladı" demez (`own`). Kısıt yoksa satır aynen döner.
+ */
+function withExtraCare(extra: ExtraRow, input: CareInput, result: CareResult): ExtraRow {
+  const care = rowCareOf(result, input);
+  return care ? { ...extra, row: { ...extra.row, care: { ...care, own: true } } } : extra;
+}
+
+/** Yarım antrenmandaki muadil ve eklenenlerin notları: yeniden açınca ya da başka cihazda da kalsın. */
+function withExtrasCare(extras: ExtraRows, exercises: ReadonlyMap<string, WorkoutExercise>, input: CareInput): ExtraRows {
+  if (!hasCare(input)) return extras;
+  return Object.fromEntries(
+    Object.entries(extras).map(([key, extra]) => {
+      const exercise = exercises.get(extra.exerciseId);
+      return [key, exercise ? withExtraCare(extra, input, evaluateCare(exercise, input)) : extra];
+    }),
+  );
+}
+
 export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null, programParam: string | null = null): Promise<SessionRouteResult> {
   return run(deps, null, 'workout', async ({ client, repo }) => {
     const head = await repo.head();
@@ -310,13 +374,14 @@ export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null, pr
       catalogOf(deps),
       deps.timeZone(),
       readTolerant(repo, PROPOSALS_PATH),
-      // Sağlık verisi yalnız onay varken okunur (gösterim de işlemedir): set artışının hazır oluşluk koşulu.
-      canRecordHealth(client, 'readiness') ? readTolerant(repo, HEALTH_PATH) : Promise.resolve(null),
+      // Sağlık verisi yalnız onay varken okunur (gösterim de işlemedir): set artışının hazır oluşluk koşulu ve kısıtlar.
+      canRecordHealth(client, 'readiness') || canRecordHealth(client, 'conditions') ? readTolerant(repo, HEALTH_PATH) : Promise.resolve(null),
     ]);
     const now = deps.now();
     const today = todayIn(timeZone, now);
     const index = repaired.index;
     const pt = parseProgram(programFile);
+    const care = careOf(client, healthFile, today);
 
     const unfinished = activeRow(index);
     const active = unfinished ? await readSessionBlob(repo, unfinished.sha) : null;
@@ -335,7 +400,7 @@ export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null, pr
       const history = await readHistory(repo, index, { exerciseIds: ids, rowIds: dayRowIds(program, dayId), programId: owner?.programId ?? null });
       const insight = insightOf(index, now, client);
       day = buildWorkoutDay({ program, dayId, exercises: catalog.exercises, devices: catalog.devices, history, insight, owner });
-      if (day && current) extras = sessionExtras({ day, doc: current, catalog, history, insight });
+      if (day && current) extras = withExtrasCare(sessionExtras({ day, doc: current, catalog, history, insight }), catalog.exercises, care.input);
       if (day) {
         const setIncrease = setSuggestionsFor({
           day,
@@ -343,12 +408,14 @@ export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null, pr
           index,
           now,
           experience: client.training?.experience,
-          readinessScore: healthFile && healthFile !== 'broken' ? readinessFromHealth(healthFile.content) : undefined,
+          readinessScore:
+            healthFile && healthFile !== 'broken' && canRecordHealth(client, 'readiness') ? readinessFromHealth(healthFile.content) : undefined,
           proposals: proposalsFile && proposalsFile !== 'broken' ? parseProposals(proposalsFile.content).items : [],
           setWeightsOf: deps.setWeights,
           sessionId: current?.id,
         });
         if (setIncrease.length > 0) day = { ...day, setIncrease };
+        day = withRowCare(day, catalog.exercises, care.input);
       }
     }
 
@@ -364,7 +431,8 @@ export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null, pr
         program && phase
           ? {
               revision: program.revision,
-              stamp: programStamp(program, owner?.programId ?? null),
+              // Kısıtlar ya da izinler değişince (ya da onay çekilince) telefondaki plan eskir: kart notu yenilenir.
+              stamp: programStamp(program, owner?.programId ?? null) + careStampOf(care.record),
               phaseId: phase.id,
               nextDayId: nextDayId(program),
               days: phase.days.map((item) => ({ id: item.id, name: item.name, ...(last[item.id] ? { lastDate: last[item.id] } : {}) })),
@@ -441,12 +509,16 @@ export function alternativesRoute(
   if (programParam === undefined) return Promise.resolve(BAD_REQUEST);
   return run(deps, null, 'workout-alternatives', async ({ client, repo }) => {
     // Günün programı: kendi programda `program=op_…` (gün kimlikleri bütün programlarda benzersiz).
-    const [repaired, programFile, catalog, ownRead] = await Promise.all([
+    const [repaired, programFile, catalog, ownRead, healthFile, timeZone] = await Promise.all([
       readIndex(repo),
       programParam ? Promise.resolve(null) : readTolerant(repo, 'program.json'),
       catalogOf(deps),
       programParam ? readOwnProgram(repo, programParam) : Promise.resolve(null),
+      // Kısıtlar yalnız `conditions` onayı varken okunur.
+      canRecordHealth(client, 'conditions') ? readTolerant(repo, HEALTH_PATH) : Promise.resolve(null),
+      deps.timeZone(),
     ]);
+    const care = careOf(client, healthFile, todayIn(timeZone, deps.now())).input;
     const program: PlanProgram | null = ownRead ? (ownRead.status === 'ok' ? ownRead.program : null) : parseProgram(programFile).program;
     const found = program ? resolveDay(program, dayParam) : null;
     if (!found || found.day.id !== dayParam) return ROW_GONE;
@@ -458,7 +530,17 @@ export function alternativesRoute(
     if (!block || !row || !source) return ROW_GONE;
 
     const today = new Set(found.day.blocks.flatMap((item) => item.rows.map((other) => other.exerciseId)));
-    const candidates = catalog.list.filter((exercise) => !today.has(exercise.id));
+    // Danışanın kısıtlarına göre izinsiz yasak adaylar listeye hiç girmez (tasarım `kisit-tarama.md` §3.4).
+    const results = new Map<string, CareResult>();
+    const resultOf = (exercise: WorkoutExercise) => {
+      let result = results.get(exercise.id);
+      if (!result) {
+        result = evaluateCare(exercise, care);
+        results.set(exercise.id, result);
+      }
+      return result;
+    };
+    const candidates = catalog.list.filter((exercise) => !today.has(exercise.id) && (!hasCare(care) || resultOf(exercise).blockedBy.length === 0));
     const ranked = rankAlternatives(source, candidates, deps.familyOf, { limit: ALTERNATIVES_LIMIT });
     const programId = programParam ?? null;
     const history = await readHistory(repo, repaired.index, { exerciseIds: new Set(ranked.map((item) => item.exercise.id)), rowIds: new Set([row.id]), programId });
@@ -468,17 +550,33 @@ export function alternativesRoute(
     });
     const firstForMuscle = firstForMuscleRowIds({ blocks: kept }, catalog.exercises).has(row.id);
     const insight = insightOf(repaired.index, deps.now(), client);
-    const groups: SwapGroup[] = groupByEquipment(ranked).map(([equipment, list]) => ({
-      equipment,
-      label: EQUIPMENT_LABELS[equipment as Equipment] ?? equipment,
-      options: list.map(({ exercise, pinned }) => ({
-        exerciseId: exercise.id,
-        title: exercise.title,
-        pinned,
-        extra: swapRowFor({ row, blockId: block.id, original: source, exercise, devices: catalog.devices, history, firstForMuscle, insight, programId }),
-      })),
-    }));
-    const body: AlternativesResponse = { rowId: row.id, exerciseId: source.id, groups };
+    let reordered = false;
+    let anyClear = false;
+    const groups: SwapGroup[] = groupByEquipment(ranked).map(([equipment, list]) => {
+      // Grubun içinde uygun → ipucu → dikkat → eksik bilgi → kontrol edilmedi; puan sırası aynı kümede korunur.
+      const ordered = hasCare(care) ? orderByCare(list, (item) => resultOf(item.exercise)) : { items: list, changed: false, anyClear: true };
+      reordered ||= ordered.changed;
+      anyClear ||= ordered.anyClear;
+      return {
+        equipment,
+        label: EQUIPMENT_LABELS[equipment as Equipment] ?? equipment,
+        options: ordered.items.map(({ exercise, pinned }) => {
+          const note = hasCare(care) ? optionCareText(resultOf(exercise)) : null;
+          const extra = swapRowFor({ row, blockId: block.id, original: source, exercise, devices: catalog.devices, history, firstForMuscle, insight, programId });
+          return {
+            exerciseId: exercise.id,
+            title: exercise.title,
+            pinned,
+            ...(note ? { care: note } : {}),
+            // Seçilen muadilin kartı da notu taşır ("Sol diz için dikkatli" seçildiyse kartta da).
+            extra: hasCare(care) ? withExtraCare(extra, care, resultOf(exercise)) : extra,
+          };
+        }),
+      };
+    });
+    // "Kısıtına uygun olanlar önce" yalnız sıra gerçekten değiştiyse ve en az bir aday uygunsa.
+    const careNote = reordered && anyClear ? (care.active.length + care.reports.length > 1 ? 'Kısıtlarına uygun olanlar önce.' : 'Kısıtına uygun olanlar önce.') : undefined;
+    const body: AlternativesResponse = { rowId: row.id, exerciseId: source.id, groups, ...(careNote ? { careNote } : {}) };
     return { status: 200, body };
   });
 }
@@ -486,36 +584,57 @@ export function alternativesRoute(
 /**
  * "Hareket ekle" (§2.6): kütüphane (ada göre sıralı) ya da `add` verilirse o egzersizin planı:
  * varsayılan setleri ve dinlenmesi, kendi geçmişiyle. Anahtar egzersizin kimliği; telefon kaydı açınca
- * kaydın kimliğiyle değiştirir.
+ * kaydın kimliğiyle değiştirir. Kısıtlar "Değiştir"le aynı kuralla (tasarım `kisit-tarama.md` §3.4): izinsiz
+ * yasak listeye girmez ve eklenemez (liste telefonda önbellekte kalabilir: 409), dikkat kısa notla; eklenen
+ * satır kart notunu taşır.
  */
 export function exercisesRoute(deps: WorkoutRouteDeps, addParam: string | null, programQuery: string | null = null): Promise<SessionRouteResult> {
   if (addParam !== null && !/^[a-z0-9-]{2,60}$/.test(addParam)) return Promise.resolve(BAD_REQUEST);
   const programParam = ownParam(programQuery);
   if (programParam === undefined) return Promise.resolve(BAD_REQUEST);
   return run(deps, null, 'workout-exercises', async ({ client, repo }) => {
-    const catalog = await catalogOf(deps);
+    const [catalog, healthFile, timeZone] = await Promise.all([
+      catalogOf(deps),
+      // Kısıtlar yalnız `conditions` onayı varken okunur.
+      canRecordHealth(client, 'conditions') ? readTolerant(repo, HEALTH_PATH) : Promise.resolve(null),
+      deps.timeZone(),
+    ]);
+    const care = careOf(client, healthFile, todayIn(timeZone, deps.now())).input;
+    const cared = hasCare(care);
     if (addParam === null) {
       const exercises: LibraryItem[] = [...catalog.list]
         .sort((a, b) => a.title.localeCompare(b.title, 'tr'))
-        .map((exercise) => ({
-          id: exercise.id,
-          title: exercise.title,
-          equipment: exercise.equipment,
-          category: exercise.category,
-          trackingType: exercise.trackingType,
-          primaryMuscles: exercise.primaryMuscles,
-          secondaryMuscles: exercise.secondaryMuscles,
-        }));
+        .flatMap((exercise) => {
+          const result = cared ? evaluateCare(exercise, care) : null;
+          // Danışan izin veremez: izinsiz yasak listede hiç yok ("Değiştir"deki gibi).
+          if (result && result.blockedBy.length > 0) return [];
+          const note = result ? optionCareText(result) : null;
+          return [
+            {
+              id: exercise.id,
+              title: exercise.title,
+              equipment: exercise.equipment,
+              category: exercise.category,
+              trackingType: exercise.trackingType,
+              primaryMuscles: exercise.primaryMuscles,
+              secondaryMuscles: exercise.secondaryMuscles,
+              ...(note ? { care: note } : {}),
+            },
+          ];
+        });
       const body: LibraryResponse = { exercises };
       return { status: 200, body };
     }
     const exercise = catalog.exercises.get(addParam);
     if (!exercise) return { status: 404, body: { error: 'Bu hareket kütüphanede yok.' } };
+    const result = cared ? evaluateCare(exercise, care) : null;
+    if (result && result.blockedBy.length > 0) return { status: 409, body: { error: 'Bu hareket şu an sana önerilmiyor; antrenörüne sor.' } };
     const repaired = await readIndex(repo);
     const programId = programParam ?? null;
     const history = await readHistory(repo, repaired.index, { exerciseIds: new Set([exercise.id]), programId });
     const insight = insightOf(repaired.index, deps.now(), client);
-    const body: AddedRowResponse = { extra: addedRowFor({ key: exercise.id, exercise, devices: catalog.devices, history, insight, programId }) };
+    const extra = addedRowFor({ key: exercise.id, exercise, devices: catalog.devices, history, insight, programId });
+    const body: AddedRowResponse = { extra: result ? withExtraCare(extra, care, result) : extra };
     return { status: 200, body };
   });
 }

@@ -1,6 +1,6 @@
-import { canRecordHealth, healthConsentState } from './client-status.ts';
+import { healthFieldState } from './client-status.ts';
 import { MEASUREMENTS, MEASUREMENT_IDS, type MeasurementId } from './measurements.ts';
-import type { Client } from './schemas/client.ts';
+import { HEALTH_FIELD_INFO, type Client, type HealthField } from './schemas/client.ts';
 import type { MeasurementEntry } from './schemas/health.ts';
 
 /**
@@ -167,46 +167,71 @@ export function isCalendarDate(value: string): boolean {
 
 /* --- kayıt izni --- */
 
+/** Sağlık parçası neden yazılamıyor (ve okunmuyor); yazılabiliyorsa null. */
+export type HealthLock = 'off' | 'not_selected' | 'pending' | 'declined' | 'outdated';
 /** Ölçüm neden yazılamıyor; yazılabiliyorsa null. */
-export type MeasurementLock = 'off' | 'not_selected' | 'pending' | 'declined' | 'outdated';
+export type MeasurementLock = HealthLock;
 
 /**
- * Ölçüm yalnız sağlık modülü açık, "Ölçümler" parçası seçili ve danışanın güncel onayı onu
- * kapsıyorsa yazılır (`canRecordHealth`, SPEC §4). Sunucu her yazmada bunu yeniden denetler.
+ * Parça yalnız sağlık modülü açık, parça seçili ve danışanın onayı onu güncel sürümüyle kapsıyorsa yazılır ve
+ * okunur (`canRecordHealth`, SPEC §4; tasarım `kisit-tarama.md` §1). Kilit parça başınadır: kısıtların onayı
+ * yenilenecekken ölçümler açık kalır. Sunucu her yazmada bunu yeniden denetler.
  */
+export function healthLock(client: Pick<Client, 'modules' | 'consents'>, field: HealthField): HealthLock | null {
+  const state = healthFieldState(client, field);
+  return state === 'granted' ? null : state;
+}
+
 export function measurementLock(client: Pick<Client, 'modules' | 'consents'>): MeasurementLock | null {
-  if (canRecordHealth(client, 'measurements')) return null;
-  const state = healthConsentState(client);
-  if (state === 'off') return 'off';
-  if (!client.modules.health.fields.includes('measurements')) return 'not_selected';
-  // `granted` burada olamaz (parça seçili ve onaylıysa yazılabilirdi); yine de kilitli say.
-  return state === 'granted' ? 'outdated' : state;
+  return healthLock(client, 'measurements');
+}
+
+/** Kilit metinlerinde parçanın adı: belirtme hâli ("“Kısıtlar”ı seç"), kaydın adı ve açılınca ne olur. */
+const PART_WORDS: Record<HealthField, { accusative: string; record: string; entry: string }> = {
+  conditions: { accusative: '“Kısıtlar”ı', record: 'kısıt', entry: 'kısıt girebilirsin' },
+  readiness: { accusative: '“Hazır oluşluk”u', record: 'hazır oluşluk', entry: 'hazır oluşluk sorulur' },
+  check_in: { accusative: '“Ağrı takibi”ni', record: 'ağrı kaydı', entry: 'ağrı soruları sorulur' },
+  measurements: { accusative: '“Ölçümler”i', record: 'ölçüm', entry: 'ölçüm girebilirsin' },
+  screening: { accusative: '“Hareket taraması”nı', record: 'tarama', entry: 'tarama girebilirsin' },
+};
+
+/** Kilidin başlığı ve ne yapılacağı, parçanın adıyla. */
+export function healthLockInfo(field: HealthField, lock: HealthLock): { title: string; description: string } {
+  const label = HEALTH_FIELD_INFO[field].label;
+  const words = PART_WORDS[field];
+  switch (lock) {
+    case 'off':
+      return {
+        title: 'Sağlık modülü kapalı',
+        description: `${label} sağlık verisidir; modül kapalıyken kayıt tutulmaz. Danışanın düzenleme sayfasında sağlık modülünü açıp ${words.accusative} seç; danışan bir sonraki girişinde onaylayınca ${words.entry}.`,
+      };
+    case 'not_selected':
+      return {
+        title: `${label} seçili değil`,
+        description: `Sağlık modülü açık ama “${label}” parçası seçili değil. Danışanın düzenleme sayfasında seç; danışan bir sonraki girişinde yeni kapsamı onaylayınca ${words.entry}.`,
+      };
+    case 'pending':
+      return {
+        title: 'Danışanın onayı bekleniyor',
+        description: `Danışan ilk girişinde neyin tutulacağını görüp onaylayacak. Onaylayana kadar ${words.record} kaydedilmez ve eski kayıtlar gösterilmez.`,
+      };
+    case 'declined':
+      return {
+        title: 'Danışan onay vermedi',
+        description: `Danışan sağlık verisi tutulmasına onay vermedi; ${words.record} kaydedilmez ve eski kayıtlar gösterilmez. Fikrini değiştirirse kendi ekranından onay verebilir.`,
+      };
+    case 'outdated':
+      return {
+        title: 'Onay yenilenecek',
+        description: `Danışanın onayı bu parçanın güncel kapsamını ya da metnini kapsamıyor; bir sonraki girişinde yeniden sorulacak. O zamana kadar ${words.record} kaydedilmez ve eski kayıtlar gösterilmez.`,
+      };
+  }
 }
 
 export const MEASUREMENT_LOCK_INFO: Record<MeasurementLock, { title: string; description: string }> = {
-  off: {
-    title: 'Sağlık modülü kapalı',
-    description:
-      'Ölçümler sağlık verisidir; modül kapalıyken kayıt tutulmaz. Danışanın düzenleme sayfasında sağlık modülünü açıp “Ölçümler”i seç; danışan bir sonraki girişinde onaylayınca ölçüm girebilirsin.',
-  },
-  not_selected: {
-    title: 'Ölçümler seçili değil',
-    description:
-      'Sağlık modülü açık ama “Ölçümler” parçası seçili değil. Danışanın düzenleme sayfasında seç; danışan bir sonraki girişinde yeni kapsamı onaylayınca ölçüm girebilirsin.',
-  },
-  pending: {
-    title: 'Danışanın onayı bekleniyor',
-    description:
-      'Danışan ilk girişinde neyin tutulacağını görüp onaylayacak. Onaylayana kadar ölçüm kaydedilmez ve eski kayıtlar gösterilmez.',
-  },
-  declined: {
-    title: 'Danışan onay vermedi',
-    description:
-      'Danışan sağlık verisi tutulmasına onay vermedi; ölçüm kaydedilmez ve eski kayıtlar gösterilmez. Fikrini değiştirirse kendi ekranından onay verebilir.',
-  },
-  outdated: {
-    title: 'Onay yenilenecek',
-    description:
-      'Danışanın onayı güncel parçaları ya da metni kapsamıyor; bir sonraki girişinde yeniden sorulacak. O zamana kadar ölçüm kaydedilmez ve eski kayıtlar gösterilmez.',
-  },
+  off: healthLockInfo('measurements', 'off'),
+  not_selected: healthLockInfo('measurements', 'not_selected'),
+  pending: healthLockInfo('measurements', 'pending'),
+  declined: healthLockInfo('measurements', 'declined'),
+  outdated: healthLockInfo('measurements', 'outdated'),
 };

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { Lightning, ListChecks, Plus, WarningCircle } from '@phosphor-icons/react/dist/ssr';
+import { Bandaids, Lightning, ListChecks, Plus, WarningCircle } from '@phosphor-icons/react/dist/ssr';
 import { EditButton } from '@/components/edit-button';
 import { SectionHeader } from '@/components/section-header';
 import { ChangeLog } from '@/components/program/change-log';
@@ -15,8 +15,10 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Progress, ProgressLabel } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { loadCareInput } from '@/lib/client-care';
 import { clientTargetNotes } from '@/lib/client-targets';
 import { loadClient } from '@/lib/clients';
+import { programConflicts } from '@/lib/constraint-filter';
 import { readAppConfig } from '@/lib/config';
 import { listExercises } from '@/lib/exercises';
 import { formatDate, formatDayShort, formatNumber, todayIn } from '@/lib/format';
@@ -271,10 +273,32 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
    * döngü özeti → evreler → kas yükü → geçmiş. Masaüstünde iki sütun: sıradaki gün evre özetinin
    * yanında, günler tam genişlikte, kas yükü evrelerin yanında (`lg:order-*`).
    */
+  // Kısıtlarla çelişen satırlar (tasarım `kisit-tarama.md` §3.3): yalnız kısıtların onayı sürdükçe.
+  const careInput = await loadCareInput(client, todayIn(config.timeZone));
+  const conflicts = careInput ? programConflicts(program, new Map(exercises.map((exercise) => [exercise.id, exercise])), careInput) : [];
+
   return (
     <div className="flex flex-col gap-6">
       <SectionHeader title="Program" description={description} actions={<EditButton href={editHref} />} />
       <OwnActiveAlert clientId={id} index={ownIndex} timeZone={timeZone} />
+
+      {conflicts.length > 0 ? (
+        <Alert>
+          <Bandaids weight="fill" />
+          <AlertTitle>Kısıtlarla çelişen {formatNumber(conflicts.length)} hareket</AlertTitle>
+          <AlertDescription className="flex flex-col gap-2">
+            <p>{conflicts.map((conflict) => `${conflict.dayName} · ${conflict.title} (${conflict.message})`).join(' · ')}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" nativeButton={false} render={<Link href={editHref} />}>
+                Programı düzenle
+              </Button>
+              <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`${detailHref}/constraints`} />}>
+                Kısıtlar
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {proposalViews.length > 0 ? <ProposalsCard clientId={id} items={proposalViews} /> : null}
       {proposals?.broken ? (

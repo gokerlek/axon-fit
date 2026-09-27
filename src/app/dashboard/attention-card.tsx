@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CalendarX, ChatCircleText, CheckCircle, Flag, QrCode, Ruler, TrendDown } from '@phosphor-icons/react/dist/ssr';
+import { Bandaids, CalendarX, ChatCircleText, CheckCircle, Flag, PersonSimpleTaiChi, QrCode, Ruler, TrendDown } from '@phosphor-icons/react/dist/ssr';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
@@ -9,7 +9,9 @@ import { formatNumber } from '@/lib/format';
 import { clientOverviews } from './client-overviews';
 
 const ICONS: Record<AttentionKind, typeof CalendarX> = {
+  constraint: Bandaids,
   missed: CalendarX,
+  screening: PersonSimpleTaiChi,
   stalled: TrendDown,
   phase: Flag,
   proposals: ChatCircleText,
@@ -23,6 +25,8 @@ const TARGET_PATHS: Record<AttentionTarget, string> = {
   sessions: '/sessions',
   program: '/program',
   measurements: '/measurements',
+  constraints: '/constraints',
+  screening: '/screening',
   invite: '/invite',
 };
 

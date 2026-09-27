@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { EditorBackLink } from '@/components/block-editor/editor-back-link';
 import { SectionHeader } from '@/components/section-header';
+import { loadEditorCare } from '@/lib/client-care';
 import { clientTargetNotes } from '@/lib/client-targets';
 import { loadClient } from '@/lib/clients';
 import { readAppConfig } from '@/lib/config';
@@ -57,6 +58,8 @@ export default async function EditProgramPage({ params }: { params: Promise<{ id
   const templates = templateFiles.flatMap((item) =>
     item.template ? [{ id: item.template.id, name: item.template.name, blocks: item.template.blocks }] : [],
   );
+  // Danışanın kısıtları (tasarım `kisit-tarama.md` §3.2): sheet'te işaret, kartta rozet; onay yoksa yalnız durum.
+  const care = await loadEditorCare(loaded.client, exercises, todayIn(config.timeZone));
   // Danışanın geçerli satır hedefleri (tasarım §6.2): kartta "Danışan güncelledi · hedef 10–14 · 26 Eyl".
   const tracking = new Map(exercises.map((exercise) => [exercise.id, exercise.trackingType]));
   const clientTargets = Object.fromEntries(
@@ -84,6 +87,7 @@ export default async function EditProgramPage({ params }: { params: Promise<{ id
         timeZone={config.timeZone}
         clientDays={program.clientSchedule ?? null}
         clientTargets={clientTargets}
+        care={care}
       />
     </div>
   );

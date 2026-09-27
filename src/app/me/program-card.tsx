@@ -53,7 +53,19 @@ function Unavailable({ children, top }: { children?: React.ReactNode; top?: Reac
  * "Antrenörün yeni bir program hazırladı"; PT paylaşılmış Bugün programını düzenlediyse satırı. Hiç program yoksa
  * boş kartın altında [Kendi programını kur].
  */
-export async function ProgramCard({ clientId, programParam = null, timeZone, children }: { clientId: string; programParam?: string | null; timeZone: string; children?: React.ReactNode }) {
+export async function ProgramCard({
+  clientId,
+  programParam = null,
+  timeZone,
+  careStamp = '',
+  children,
+}: {
+  clientId: string;
+  programParam?: string | null;
+  timeZone: string;
+  careStamp?: string;
+  children?: React.ReactNode;
+}) {
   const [overview, exercises] = await Promise.all([readOwnOverview(clientId).catch(() => null), listExercises()]);
   if (!overview) return <Unavailable>{children}</Unavailable>;
 
@@ -172,7 +184,8 @@ export async function ProgramCard({ clientId, programParam = null, timeZone, chi
   return (
     <>
       {top}
-      <WorkoutFreshness clientId={clientId} stamp={programStamp(program, owner?.programId ?? null)} />
+      {/* Kısıtlar değişince (ya da onay çekilince) telefondaki plan da eskir: kart notu yenilenir. */}
+      <WorkoutFreshness clientId={clientId} stamp={programStamp(program, owner?.programId ?? null) + careStamp} />
       <Card>
         <CardHeader>
           {chip ? <div className="col-span-full flex min-w-0 pb-1">{chip}</div> : null}

@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FirstAidKit } from '@phosphor-icons/react';
+import { CaretRight, FirstAidKit } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -35,13 +36,50 @@ function listTr(items: readonly string[]): string {
   return items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} ve ${items[items.length - 1]}`;
 }
 
+/** Parça adları cümle içinde ("kısıtlar ve hareket taraması için yeni onay gerekiyor"). */
+const PART_NAMES: Record<HealthField, string> = {
+  conditions: 'kısıtlar',
+  readiness: 'hazır oluşluk',
+  check_in: 'ağrı takibi',
+  measurements: 'ölçümler',
+  screening: 'hareket taraması',
+};
+
+function capitalize(text: string): string {
+  return text ? text[0]!.toLocaleUpperCase('tr') + text.slice(1) : text;
+}
+
+/**
+ * Sürümü değişen parçalar yeniden sorulurken ötekiler sürer (tasarım `kisit-tarama.md` §5.1): "Kısıtlar ve hareket
+ * taraması için yeni onay gerekiyor; ağrı takibi ve ölçümler sürüyor."
+ */
+export function outdatedText(outdated: readonly HealthField[], continuing: readonly HealthField[]): string | null {
+  if (outdated.length === 0 || continuing.length === 0) return null;
+  return `${capitalize(listTr(outdated.map((field) => PART_NAMES[field])))} için yeni onay gerekiyor; ${listTr(continuing.map((field) => PART_NAMES[field]))} sürüyor.`;
+}
+
 /**
  * Sağlık verisi onayı (SPEC §9.4). PT modülü açsa da danışan onaylamadan hiçbir sağlık
  * kaydı tutulmaz; onay istendiği an geri çekilebilir. Metnin sürümü değişirse
  * (`HEALTH_CONSENT_VERSION`) yeniden sorulur. Telefon: karar düğmeleri 44 px, onaydan sonra da
  * kapsam listesi görünür (danışan neyin tutulduğunu her zaman görür).
  */
-export function ConsentCard({ state, fields }: { state: Exclude<HealthConsentState, 'off'>; fields: HealthField[] }) {
+export function ConsentCard({
+  state,
+  fields,
+  outdated = [],
+  continuing = [],
+  healthPage = false,
+}: {
+  state: Exclude<HealthConsentState, 'off'>;
+  fields: HealthField[];
+  /** Yeniden onay bekleyen parçalar (sürümü değişen ya da eklenen). */
+  outdated?: HealthField[];
+  /** Onayı sürenler: bu arada kayıtları kesintisiz. */
+  continuing?: HealthField[];
+  /** "Sağlık sayfan ›" bağlantısı (kısıtlar ya da tarama onaylıysa). */
+  healthPage?: boolean;
+}) {
   const router = useRouter();
   const decide = useServiceMutation({
     fn: (granted: boolean) =>
@@ -79,7 +117,15 @@ export function ConsentCard({ state, fields }: { state: Exclude<HealthConsentSta
             İstediğin zaman kapatabilirsin.
           </CardDescription>
         </CardHeader>
-        <CardContent>{list}</CardContent>
+        <CardContent className="flex flex-col gap-4">
+          {list}
+          {healthPage ? (
+            <Link href="/me/saglik" className="flex min-h-11 w-fit items-center gap-1 text-sm font-medium underline-offset-4 hover:underline">
+              Sağlık sayfan
+              <CaretRight className="size-4" />
+            </Link>
+          ) : null}
+        </CardContent>
         <CardFooter>
           <AlertDialog>
             <AlertDialogTrigger render={<Button variant="outline" className="h-11 w-full" />}>Onayı geri çek</AlertDialogTrigger>
@@ -87,7 +133,8 @@ export function ConsentCard({ state, fields }: { state: Exclude<HealthConsentSta
               <AlertDialogHeader>
                 <AlertDialogTitle>Onayını geri çekmek istiyor musun?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Bundan sonra ağrı, ölçüm ve kısıt bilgisi tutulmaz; antrenmanların kaydedilmeye devam eder. Daha önce
+                  Bundan sonra ağrı, ölçüm ve kısıt bilgisi tutulmaz; antrenmanların kaydedilmeye devam eder.
+                  {fields.includes('conditions') ? ' Programın kısıtlarına göre süzülmez, hareket kartlarındaki notlar kalkar.' : ''} Daha önce
                   tutulanların silinmesini antrenöründen isteyebilirsin.
                 </AlertDialogDescription>
               </AlertDialogHeader>
@@ -132,7 +179,8 @@ export function ConsentCard({ state, fields }: { state: Exclude<HealthConsentSta
         </CardTitle>
         <CardDescription>
           {state === 'outdated'
-            ? 'Antrenörün sağlık takibini yeniden başlattı, yeni bir bilgi eklemek istiyor ya da metin güncellendi. Yeniden onaylayana kadar sağlık kaydı tutulmaz.'
+            ? (outdatedText(outdated, continuing) ??
+              'Antrenörün sağlık takibini yeniden başlattı, yeni bir bilgi eklemek istiyor ya da metin güncellendi. Yeniden onaylayana kadar sağlık kaydı tutulmaz.')
             : 'Antrenörün programını güvenle ayarlamak için şu bilgileri tutmak istiyor:'}
         </CardDescription>
       </CardHeader>
