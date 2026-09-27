@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Form, getDeepErrorEntry, getInput, setErrors, setInput, useField, useForm, type FormStore } from '@formisch/react';
 import { ArrowClockwise, ArrowSquareOut, WarningCircle } from '@phosphor-icons/react';
+import type { EditorCare } from '@/lib/constraint-filter';
 import { toast } from 'sonner';
 import type { RowClientTarget } from '@/components/block-editor/editor-context';
 import { DraftAutosave, DraftNotice, useEditorDraft } from '@/components/block-editor/editor-draft';
@@ -118,6 +119,7 @@ export function ProgramForm({
   timeZone,
   clientDays = null,
   clientTargets,
+  care = null,
 }: {
   clientId: string;
   mode: 'create' | 'edit';
@@ -136,6 +138,8 @@ export function ProgramForm({
   clientDays?: ClientDays;
   /** Danışanın satır hedefleri (düzenlemede): satırda "Danışan güncelledi" rozeti (tasarım §6.2). */
   clientTargets?: Readonly<Record<string, RowClientTarget>>;
+  /** Danışanın kısıtları (sheet'te işaret, kartta rozet; `kisit-tarama.md` §3.2); kısıt parçası yoksa null. */
+  care?: EditorCare | null;
 }) {
   const router = useRouter();
   const exerciseById = useMemo(() => new Map(exercises.map((exercise) => [exercise.id, exercise])), [exercises]);
@@ -648,6 +652,7 @@ export function ProgramForm({
             actions={actions}
             footer={formEnd}
             clientTargets={clientTargets}
+            care={care}
           />
         ) : (
           <>

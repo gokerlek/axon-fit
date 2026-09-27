@@ -209,15 +209,17 @@ export type SwapTarget = {
   original: string | null;
 };
 
-function OptionButton({ title, text, busy, onPick }: { title: string; text: string; busy?: boolean; onPick: () => void }) {
+function OptionButton({ title, text, care, busy, onPick }: { title: string; text: string; care?: string | undefined; busy?: boolean; onPick: () => void }) {
   return (
     <Item
       size="sm"
       className="min-h-14 flex-nowrap rounded-none border-0 border-t border-border px-0 text-left first:border-t-0 hover:bg-muted"
-      render={<button type="button" aria-label={`${title} yap`} onClick={onPick} disabled={busy} />}>
+      render={<button type="button" aria-label={`${title} yap${care ? ` · ${care}` : ''}`} onClick={onPick} disabled={busy} />}>
       <ItemContent className="min-w-0">
         <ItemTitle className="w-full truncate text-[0.9375rem]">{title}</ItemTitle>
         {text ? <ItemDescription className="truncate text-[0.8125rem] tabular-nums">{text}</ItemDescription> : null}
+        {/* Danışanın kısıtında dikkat (tasarım `kisit-tarama.md` §3.4): "Sol diz için dikkatli". */}
+        {care ? <ItemDescription className="truncate text-[0.8125rem] text-primary-text">{care}</ItemDescription> : null}
       </ItemContent>
       <ItemActions className="text-muted-foreground">{busy ? <Spinner /> : <CaretRight weight="bold" className="size-4" />}</ItemActions>
     </Item>
@@ -255,7 +257,9 @@ export function SwapSheet({
           <SheetTitle ref={title} tabIndex={-1} className="truncate text-lg font-semibold outline-none">
             {target?.title} yerine
           </SheetTitle>
-          <SheetDescription>Aynı kaslar, ekipmana göre. Geçmişin yoksa rahat bir ağırlıkla başlarsın.</SheetDescription>
+          <SheetDescription>
+            Aynı kaslar, ekipmana göre. {query.data?.careNote ?? 'Geçmişin yoksa rahat bir ağırlıkla başlarsın.'}
+          </SheetDescription>
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
           {target?.original ? (
@@ -295,7 +299,7 @@ export function SwapSheet({
               <section key={group.equipment} aria-label={group.label}>
                 <p className="pt-3 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">{group.label}</p>
                 {group.options.map((option) => (
-                  <OptionButton key={option.exerciseId} title={option.title} text={optionText(option.extra)} onPick={() => onPick(option)} />
+                  <OptionButton key={option.exerciseId} title={option.title} text={optionText(option.extra)} care={option.care} onPick={() => onPick(option)} />
                 ))}
               </section>
             ))

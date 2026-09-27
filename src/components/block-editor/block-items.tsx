@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { getDeepError, setInput, useField, useFieldArray } from '@formisch/react';
-import { ArrowsSplit, Barbell, CaretDown, LinkBreak, NoteBlank, Plus, TrendUp, Trash, UserCircle, WarningCircle } from '@phosphor-icons/react';
+import { ArrowsSplit, Bandaids, Barbell, CaretDown, LinkBreak, NoteBlank, Plus, TrendUp, Trash, UserCircle, WarningCircle } from '@phosphor-icons/react';
 import { ARMED, CardBadge, CardFace, CardGrabber, ExerciseCard, ExerciseCardSection, PLACEHOLDER } from '@/components/exercise-card';
 import { LabeledSelect } from '@/components/labeled-select';
 import { SwipeRow, type SwipeAction } from '@/components/swipe/swipe-row';
@@ -226,13 +226,20 @@ function RowMeta({
   invalid: boolean;
   shortcut?: boolean;
 }) {
-  const { devices, clientTargets } = useEditor();
+  const { devices, clientTargets, care } = useEditor();
   const device = exercise ? rowDevice(row, exercise, devices) : undefined;
   const text = exercise ? rowWorkText(row.sets, exercise.trackingType, block.kind === 'single' ? block.restSeconds : undefined) : null;
   const target = clientTargets[row.id];
+  // Danışanın kısıtı (tasarım `kisit-tarama.md` §3.3): yasak ya da dikkat; gerekçe ekran okuyucuda ve ipucunda.
+  const flag = care?.map[row.exerciseId];
   return (
     <>
       {text ? <span className="truncate tabular-nums">{text}</span> : <span className="truncate font-mono">{row.exerciseId}</span>}
+      {flag?.decision ? (
+        <Mark label={`Kısıt: ${flag.decision === 'block' ? 'bu danışana önerilmiyor' : 'dikkat'} · ${flag.messages.join(' · ')}`}>
+          <Bandaids aria-hidden className={flag.decision === 'block' ? 'text-destructive' : 'text-primary-text'} />
+        </Mark>
+      ) : null}
       {target && clientTargetState(row.sets, target) === 'active' ? (
         <Mark label={`Danışan güncelledi: ${target.text}`}>
           <UserCircle aria-hidden className="text-primary-text" />

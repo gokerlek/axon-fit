@@ -1,9 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { WarningCircle } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import type { EditorCare } from '@/lib/constraint-filter';
 import { sheetStatus } from '@/lib/edit-messages';
 import { DRAG } from '@/lib/motion';
 import type { EditorDevice, PickerExercise } from '@/lib/template-edit';
@@ -34,6 +37,10 @@ type SheetProps = {
   finalFocus: () => HTMLElement | null;
   /** Kapanış animasyonu bitince. */
   onClosed: () => void;
+  /** Programda danışanın kısıtları (`kisit-tarama.md` §3.2); şablonda yok. */
+  care?: EditorCare | null;
+  /** "Yine de ekle" izni kaydedildi. */
+  onAllowed?: (exerciseId: string) => void;
 };
 
 /**
@@ -69,6 +76,33 @@ export function ExerciseSheet(props: SheetProps) {
   );
 }
 
+/**
+ * Sheet'in üst satırları (tasarım `kisit-tarama.md` §3.2): danışanın kısıtları ve karar bekleyen bildirimi; onay
+ * yoksa yalnız durum (veri değil).
+ */
+function CareLines({ care }: { care: EditorCare }) {
+  if (care.unavailable) return <p className="text-sm text-muted-foreground">{care.unavailable}</p>;
+  if (care.summary.length === 0 && care.pending.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1 text-sm">
+      {care.summary.length > 0 ? (
+        <p className="flex flex-wrap items-center gap-x-2">
+          <span>Kısıtlar: {care.summary.join(' · ')}</span>
+          <Link href={`/dashboard/clients/${care.clientId}/constraints`} className="text-muted-foreground underline-offset-4 hover:underline">
+            Kısıtlar ›
+          </Link>
+        </p>
+      ) : null}
+      {care.pending.length > 0 ? (
+        <p className="flex items-start gap-1.5 text-muted-foreground">
+          <WarningCircle weight="fill" className="mt-0.5 size-4 shrink-0 text-primary-text" />
+          Danışan bildirdi: {care.pending.join(' · ')} · karar bekliyor
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /** Sheet'in içi: her açılışta sıfırdan (arama, süzgeç ve onay durumu). */
 function SheetBody({
   searchRef,
@@ -80,6 +114,8 @@ function SheetBody({
   blocked,
   hint,
   onPick,
+  care = null,
+  onAllowed,
 }: SheetProps & { searchRef: React.RefObject<HTMLInputElement | null> }) {
   const [status, setStatus] = useState('');
   const [justAdded, setJustAdded] = useState<string | null>(null);
@@ -102,8 +138,11 @@ function SheetBody({
       <SheetHeader className="border-b pr-14">
         <SheetTitle>{title}</SheetTitle>
         <SheetDescription>{description}</SheetDescription>
+        {care ? <CareLines care={care} /> : null}
       </SheetHeader>
       <ExercisePicker
+        care={care}
+        {...(onAllowed ? { onAllowed } : {})}
         className="min-h-0 flex-1"
         exercises={exercises}
         devices={devices}

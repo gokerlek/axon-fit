@@ -17,7 +17,7 @@ import {
   type ConstraintRegion,
   type ConstraintSide,
 } from './constraints.ts';
-import { evaluateExercise, isTagged, type Decision, type FilterContext, type FilterGroup } from './exercise-filter.ts';
+import { evaluateExercise, isTagged, type Decision, type FilterContext, type FilterGroup, type FilterSummary } from './exercise-filter.ts';
 import { currentPhaseOf, nextDayId } from './program-plan.ts';
 import type { Constraint, HealthRecord, Override } from './schemas/health.ts';
 import type { Program } from './schemas/program.ts';
@@ -368,6 +368,30 @@ export function sheetCareOf(result: CareResult, input: CareInput): SheetCare {
   };
 }
 
+/**
+ * Program düzenleyicisinin kısıt bilgisi (tasarım `kisit-tarama.md` §3.2, §3.3): sunucuda hesaplanır, sheet'e ve
+ * kart rozetine gider. `unavailable`: onay yok (durum söylenir, veri değil); o zaman harita boş.
+ */
+export type EditorCare = {
+  clientId: string;
+  unavailable?: string;
+  /** Etkin kısıtların bölgeleri ("Bel", "Sağ omuz"). */
+  summary: string[];
+  /** Karar bekleyen danışan bildirimleri ("Sol diz"). */
+  pending: string[];
+  /** Egzersiz → işaret (yalnız uygun olmayanlar). */
+  map: Record<string, SheetCare>;
+};
+
+export function editorCareOf(clientId: string, items: readonly (CareTags & { id: string })[], input: CareInput): EditorCare {
+  return {
+    clientId,
+    summary: input.active.map(regionText),
+    pending: input.reports.map(regionText),
+    map: careMap(items, input),
+  };
+}
+
 /** Bütün kütüphane için işaretler (yalnız uygun olmayanlar; uygun hareket haritada yok). */
 export function careMap(items: readonly (CareTags & { id: string })[], input: CareInput): Record<string, SheetCare> {
   const map: Record<string, SheetCare> = {};
@@ -377,6 +401,31 @@ export function careMap(items: readonly (CareTags & { id: string })[], input: Ca
     if (care.group !== 'clear' || care.messages.length > 0) map[item.id] = care;
   }
   return map;
+}
+
+/**
+ * Egzersiz listesinin `?client=` önizlemesi: sunucuda hesaplanan haritadan listenin özeti (`summarizeFilter` ile aynı
+ * biçim). Haritada olmayan hareket uygundur.
+ */
+export function careSummary(items: readonly { id: string }[], map: Readonly<Record<string, SheetCare>>): FilterSummary {
+  const summary: FilterSummary = {
+    cards: new Map(),
+    groups: new Map(),
+    counts: { blocked: 0, warned: 0, clear: 0, untagged: 0, unassessed: 0 },
+    warnedUnassessed: 0,
+    pending: { rules: 0, needs: [] },
+  };
+  for (const item of items) {
+    const care = map[item.id];
+    const group = care?.group ?? 'clear';
+    summary.groups.set(item.id, group);
+    summary.counts[group] += 1;
+    if (!care) continue;
+    const unassessed = group === 'untagged' || care.decision === 'block' ? 0 : care.unassessed;
+    if (group === 'warned' && unassessed > 0) summary.warnedUnassessed += 1;
+    if (care.decision || unassessed > 0) summary.cards.set(item.id, { decision: care.decision, message: care.messages[0] ?? null, unassessed });
+  }
+  return summary;
 }
 
 /** Kümelere göre sayılar (kısıt formunun önizlemesi, sheet'in üst satırı). */

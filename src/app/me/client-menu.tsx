@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { GearSix, House, SignOut } from '@phosphor-icons/react';
+import { FirstAidKit, GearSix, House, SignOut } from '@phosphor-icons/react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -32,7 +32,18 @@ function initials(name: string): string {
  * Bugün) açar; programın bütün günlerini ve geçmişini gösteren `/me/program` gelince oraya bağlanır
  * (docs/design/antrenman-ekrani.md, açık soru 12).
  */
-export function ClientMenu({ name, appName, hasPassword }: { name: string; appName: string; hasPassword: boolean }) {
+export function ClientMenu({
+  name,
+  appName,
+  hasPassword,
+  health = false,
+}: {
+  name: string;
+  appName: string;
+  hasPassword: boolean;
+  /** Kısıtlar ya da tarama onaylı: "Sağlık" (tasarım `kisit-tarama.md` §5.2). */
+  health?: boolean;
+}) {
   const [leaving, setLeaving] = useState(false);
   return (
     <>
@@ -57,6 +68,12 @@ export function ClientMenu({ name, appName, hasPassword }: { name: string; appNa
               <House />
               Programım
             </DropdownMenuItem>
+            {health ? (
+              <DropdownMenuItem className="min-h-11" render={<Link href="/me/saglik" />}>
+                <FirstAidKit />
+                Sağlık
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem className="min-h-11" render={<Link href="/me/ayarlar" />}>
               <GearSix />
               Ayarlar

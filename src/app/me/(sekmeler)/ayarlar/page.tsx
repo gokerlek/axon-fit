@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { FirstAidKit, Key } from '@phosphor-icons/react/dist/ssr';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { canSetPassword, hasPassword, healthConsentState } from '@/lib/client-status';
+import { canRecordHealth, canSetPassword, hasPassword, healthConsentState, outdatedHealthFields } from '@/lib/client-status';
 import { readAppConfig } from '@/lib/config';
 import { currentClient } from '@/lib/guards';
 import { readProgramFile } from '@/lib/programs';
@@ -45,7 +45,13 @@ export default async function ClientSettingsPage() {
           </CardHeader>
         </Card>
       ) : (
-        <ConsentCard state={health} fields={client.modules.health.fields} />
+        <ConsentCard
+          state={health}
+          fields={client.modules.health.fields}
+          outdated={outdatedHealthFields(client)}
+          continuing={client.modules.health.fields.filter((field) => canRecordHealth(client, field))}
+          healthPage={canRecordHealth(client, 'conditions') || canRecordHealth(client, 'screening')}
+        />
       )}
 
       {canSetPassword(client.access, session ?? {}, new Date()) ? (

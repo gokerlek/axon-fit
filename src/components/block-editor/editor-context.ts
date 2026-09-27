@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from 'react';
 import type { FormStore } from '@formisch/react';
+import type { EditorCare } from '@/lib/constraint-filter';
 import type { ReorderTarget } from '@/lib/reorder';
 import type { blocksHostSchema } from '@/lib/schemas/template';
 import type { SetSpec } from '@/lib/set-plan';
@@ -153,6 +154,8 @@ export type Editor = {
   onNudged: () => void;
   /** Danışanın satır hedefleri (yalnız programda; satır kimliğiyle). */
   clientTargets: Readonly<Record<string, RowClientTarget>>;
+  /** Danışanın kısıtları (yalnız programda): kart yüzünde rozet, egzersiz kimliğiyle. */
+  care: EditorCare | null;
 };
 
 export const EditorContext = createContext<Editor | null>(null);

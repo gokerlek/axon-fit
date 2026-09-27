@@ -15,5 +15,5 @@ export const HEALTH_STATE_DETAILS: Record<HealthConsentState, string> = {
   granted: 'Danışan onay verdi; seçili parçalar kaydedilebilir. İstediği an geri çekebilir.',
   declined: 'Danışan onay vermedi; sağlık kaydı tutulmaz. Kendi ekranından sonra açabilir.',
   outdated:
-    'Onay güncel kapsamı ya da metni karşılamıyor (modül yeniden açıldı ya da parça eklendi); bir sonraki girişinde yeniden sorulacak.',
+    'Onay bazı parçaların güncel kapsamını ya da metnini karşılamıyor (modül yeniden açıldı, parça eklendi ya da parçanın metni değişti); o parçalar bir sonraki girişinde yeniden sorulacak, onayı süren parçaların kaydı devam eder.',
 };

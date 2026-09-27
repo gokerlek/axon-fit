@@ -246,7 +246,9 @@ export function sessionExtras(input: {
  * süzgeç kısıtsız çalışır (antrenman durmaz). `record` kısıt damgası için (onay yoksa null).
  */
 function careOf(client: Client, healthFile: StoredJson | null | 'broken', today: string): { input: CareInput; record: HealthRecord | null } {
-  if (!canRecordHealth(client, 'conditions') || !healthFile || healthFile === 'broken') return { input: EMPTY_CARE, record: null };
+  if (!canRecordHealth(client, 'conditions') || healthFile === 'broken') return { input: EMPTY_CARE, record: null };
+  // Dosya yoksa boş kayıt: damga Bugün'ün hesabıyla (`client-care.ts`) aynı çıksın.
+  if (!healthFile) return { input: EMPTY_CARE, record: { version: 2, checkIns: [], measurements: [] } };
   const parsed = v.safeParse(healthRecordSchema, healthFile.content);
   if (!parsed.success) return { input: EMPTY_CARE, record: null };
   return { input: careInputOf(parsed.output, { today, painConsent: canRecordHealth(client, 'check_in') }), record: parsed.output };

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { canSetPassword, healthConsentState } from '@/lib/client-status';
+import { loadCareStamp } from '@/lib/client-care';
+import { canRecordHealth, canSetPassword, healthConsentState, outdatedHealthFields } from '@/lib/client-status';
 import { readAppConfig } from '@/lib/config';
 import { currentClient } from '@/lib/guards';
 import { readClientSession } from '@/lib/session';
@@ -25,6 +26,7 @@ export const metadata: Metadata = { title: 'Bugün' };
  */
 export default async function MePage() {
   const [client, config, session] = await Promise.all([currentClient(), readAppConfig(), readClientSession()]);
+  const careStamp = await loadCareStamp(client);
   const health = healthConsentState(client);
   const firstName = client.name.split(/\s+/)[0] ?? client.name;
   const asking = health === 'pending' || health === 'outdated';
@@ -35,7 +37,14 @@ export default async function MePage() {
       <ClientHeader client={client} appName={config.appName} title={`Merhaba, ${firstName}`} />
 
       {/* Onay bekliyorsa ilk iş o: karar verilmeden sağlık ekranları açılmaz. */}
-      {asking ? <ConsentCard state={health} fields={client.modules.health.fields} /> : null}
+      {asking ? (
+        <ConsentCard
+          state={health}
+          fields={client.modules.health.fields}
+          outdated={outdatedHealthFields(client)}
+          continuing={client.modules.health.fields.filter((field) => canRecordHealth(client, field))}
+        />
+      ) : null}
 
       {/* Şifresi yoksa ya da bu oturum yeni kare kodla açıldıysa (60 dk): zorunlu değil ama görünür. */}
       {canSetPassword(client.access, session ?? {}, new Date()) ? (
@@ -47,7 +56,7 @@ export default async function MePage() {
 
       {/* Yarım antrenman varsa sıradaki antrenman kartının yerine onun kartı (telefondaki kayıt istemcide okunur). */}
       <TodayWorkout clientId={client.id}>
-        <ProgramCard clientId={client.id}>
+        <ProgramCard clientId={client.id} careStamp={careStamp}>
           <WaterCard clientId={client.id} />
         </ProgramCard>
       </TodayWorkout>

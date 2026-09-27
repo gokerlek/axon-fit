@@ -13,6 +13,7 @@ import {
   type ConditionRegion,
 } from './conditions.ts';
 import { and, has, isTagged, loaded, touches, type ExerciseTags } from './exercise-filter.ts';
+import { formatDay } from './format.ts';
 import type { Constraint, ConstraintLogEntry, HealthRecord, Override } from './schemas/health.ts';
 
 /**
@@ -455,6 +456,30 @@ export function yourRegion(constraint: Pick<Constraint, 'region' | 'side'>, form
 export function constraintTitle(constraint: Constraint): string {
   const [first] = conditionsOf(constraint);
   return `${regionText(constraint)} · ${first ? conditionLabel(first) : TYPE_LABELS[constraint.type]}`;
+}
+
+/** Başlangıç: "2024", "Ağu 2026", "12 Eylül 2026"; yaklaşıksa önünde "yaklaşık". */
+export function onsetText(onset: string | undefined, approx?: boolean): string | null {
+  if (!onset) return null;
+  const text =
+    onset.length === 4
+      ? onset
+      : onset.length === 7
+        ? new Intl.DateTimeFormat('tr-TR', { month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${onset}-01T00:00:00Z`))
+        : formatDay(onset);
+  return approx ? `yaklaşık ${text}` : text;
+}
+
+/** Kartın ikinci satırı: "Rahatsızlık · orta · başlangıç Ağu 2026". */
+export function constraintMeta(constraint: Pick<Constraint, 'type' | 'severity' | 'onset' | 'onsetApprox'>): string {
+  const onset = onsetText(constraint.onset, constraint.onsetApprox);
+  return [
+    TYPE_LABELS[constraint.type],
+    constraint.severity ? SEVERITY_LABELS[constraint.severity].toLocaleLowerCase('tr') : null,
+    onset ? `başlangıç ${onset}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 export function avoidText(avoid: readonly AvoidTagId[]): string {

@@ -40,7 +40,7 @@ function Unavailable({ children }: { children?: React.ReactNode }) {
  * `children` ana kartın hemen altına (Bugün'ün su kartı). `clientId` oturumdan doğrulanmış kayıttan
  * gelir (`currentClient`).
  */
-export async function ProgramCard({ clientId, children }: { clientId: string; children?: React.ReactNode }) {
+export async function ProgramCard({ clientId, careStamp = '', children }: { clientId: string; careStamp?: string; children?: React.ReactNode }) {
   const [file, exercises] = await Promise.all([readProgramFile(clientId).catch(() => undefined), listExercises()]);
 
   if (file === null) {
@@ -95,7 +95,8 @@ export async function ProgramCard({ clientId, children }: { clientId: string; ch
 
   return (
     <>
-      <WorkoutFreshness clientId={clientId} stamp={programStamp(program)} />
+      {/* Kısıtlar değişince (ya da onay çekilince) telefondaki plan da eskir: kart notu yenilenir. */}
+      <WorkoutFreshness clientId={clientId} stamp={programStamp(program) + careStamp} />
       <Card>
         <CardHeader>
           <CardDescription>

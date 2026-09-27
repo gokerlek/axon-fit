@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useIsPresent, useReducedMotion } from 'motion/react';
-import { ArrowBendUpRight, ArrowDown, ArrowsLeftRight, ArrowUp, Check, Equals, NotePencil, Play, Plus, Sparkle, Wrench, X } from '@phosphor-icons/react';
+import { ArrowBendUpRight, ArrowDown, ArrowsLeftRight, ArrowUp, Bandaids, Check, Equals, NotePencil, Play, Plus, Sparkle, Wrench, X } from '@phosphor-icons/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { rowCareText } from '@/lib/constraint-filter';
 import { formatNumber } from '@/lib/format';
 import { DURATION, EASE, tween, WORKOUT } from '@/lib/motion';
 import { REASON_LABELS, type SuggestionReason } from '@/lib/progression';
@@ -239,7 +240,7 @@ export function ExerciseCard({
   /** Bekleyen fazladan seti bırakır. */
   onDropExtra: () => void;
 }) {
-  const [open, setOpen] = useState<'reason' | 'note' | 'setup' | null>(null);
+  const [open, setOpen] = useState<'reason' | 'note' | 'setup' | 'care' | null>(null);
   const [warmOpen, setWarmOpen] = useState(false);
   // Grupta üye değişince (ya da hareket muadille değişince) açık çip kapanır (her hareketin kendi notu var).
   const shownKey = `${row.rowId}:${row.exerciseId}`;
@@ -262,7 +263,9 @@ export function ExerciseCard({
   const reasonDetail = row.why?.detail ?? REASON_LABELS[reason] ?? '';
   const reasonUp = row.why ? row.why.tone === 'up' : UP.has(reason);
   const warmDone = warmups.length > 0 && warmups.every((warmup) => warmup.logged);
-  const toggle = (chip: 'reason' | 'note' | 'setup') => setOpen(open === chip ? null : chip);
+  const toggle = (chip: 'reason' | 'note' | 'setup' | 'care') => setOpen(open === chip ? null : chip);
+  // Danışanın kısıtından not (tasarım `kisit-tarama.md` §3.5): tanı adı yok, bölge ve taraf var.
+  const care = row.care ? rowCareText(row.care) : null;
 
   // Şu anki satır panelin üstünde görünür kalsın (4+ sette, grupta tablo kayar).
   useEffect(() => {
@@ -291,6 +294,28 @@ export function ExerciseCard({
                 </h2>
                 {!group && onSwap ? <SwapButton title={row.title} onSwap={onSwap} className="-mr-2" /> : null}
               </div>
+              {care ? (
+                <Chip
+                  open={open === 'care'}
+                  onToggle={() => toggle('care')}
+                  tone={row.care?.kind === 'avoid' ? 'up' : 'plain'}
+                  icon={<Bandaids />}
+                  label={`${care.title}. Aç`}
+                  className="my-1.5 w-fit max-w-full">
+                  {care.title}
+                </Chip>
+              ) : null}
+              {open === 'care' && care ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-[0.8125rem] text-muted-foreground">{care.text}</p>
+                  {row.care?.kind === 'avoid' && onSwap ? (
+                    <Button className="h-11 w-fit" onClick={onSwap}>
+                      <ArrowsLeftRight data-icon="inline-start" />
+                      Değiştir
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="flex min-h-8 items-center gap-1.5 overflow-hidden">
                 <Chip open={open === 'reason'} onToggle={() => toggle('reason')} tone={reasonUp ? 'up' : 'plain'} icon={<ReasonIcon reason={reason} tone={row.why?.tone} />}>
                   {reasonChip}

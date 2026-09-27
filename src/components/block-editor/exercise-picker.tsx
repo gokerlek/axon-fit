@@ -1,8 +1,26 @@
 'use client';
 
 import { useDeferredValue, useMemo, useState } from 'react';
-import { Check, MagnifyingGlass, Plus } from '@phosphor-icons/react';
+import { Check, MagnifyingGlass, Plus, WarningCircle } from '@phosphor-icons/react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Field, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Spinner } from '@/components/ui/spinner';
+import type { EditorCare } from '@/lib/constraint-filter';
+import { fetchJson } from '@/lib/query/errors';
+import { useServiceMutation } from '@/lib/query/use-service';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item';
@@ -44,6 +62,8 @@ export function ExercisePicker({
   searchRef,
   onPick,
   className,
+  care = null,
+  onAllowed,
 }: {
   exercises: readonly PickerExercise[];
   devices: ReadonlyMap<string, EditorDevice>;
@@ -59,6 +79,10 @@ export function ExercisePicker({
   searchRef?: React.Ref<HTMLInputElement>;
   onPick: (exercise: PickerExercise) => void;
   className?: string;
+  /** Programda danışanın kısıtları: dikkat gerekçesi satırda, yasaklar katlanmış grupta (`kisit-tarama.md` §3.2). */
+  care?: EditorCare | null;
+  /** "Yine de ekle" izni kaydedildi. */
+  onAllowed?: (exerciseId: string) => void;
 }) {
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState<string | null>(null);
@@ -78,26 +102,42 @@ export function ExercisePicker({
   }, [replacing, suggestFor, exercises]);
 
   const locked = disabled && !replacing;
-  const shown = results.slice(0, RESULT_LIMIT);
+  // Kısıt varken yaptırma alanlar listenin sonunda katlanmış grupta (kaybolmaz; arama onları da bulur).
+  const flagOf = (exercise: PickerExercise) => (care && !replacing ? care.map[exercise.id] : undefined);
+  const open = care && !replacing ? results.filter((exercise) => flagOf(exercise)?.group !== 'blocked') : results;
+  const hidden = care && !replacing ? results.filter((exercise) => flagOf(exercise)?.group === 'blocked') : [];
+  const shown = open.slice(0, RESULT_LIMIT);
 
   const renderItem = (exercise: PickerExercise) => {
     const count = usage.get(exercise.id) ?? 0;
     const device = exercise.deviceId ? devices.get(exercise.deviceId)?.name : undefined;
     const verb = replacing ? 'seç' : 'ekle';
+    const flag = flagOf(exercise);
+    const reason = flag?.decision ? flag.messages.join(' · ') : null;
     return (
       <Item
         key={exercise.id}
         variant="outline"
         size="sm"
         className="flex-nowrap text-left hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
-        render={<button type="button" disabled={locked} aria-label={`${exercise.title} ${verb}`} onClick={() => onPick(exercise)} />}>
+        render={<button type="button" disabled={locked} aria-label={`${exercise.title} ${verb}${reason ? ` · ${reason}` : ''}`} onClick={() => onPick(exercise)} />}>
         <ItemContent className="min-w-0">
           <ItemTitle className="w-full truncate">{exercise.title}</ItemTitle>
           <ItemDescription className="truncate text-xs">
             {summarizeMuscles(exercise.primaryMuscles).join(', ')} · {device ?? EQUIPMENT_LABELS[exercise.equipment]}
           </ItemDescription>
+          {reason ? (
+            <p title={reason} className="line-clamp-2 flex items-start gap-1 text-xs text-primary-text">
+              <WarningCircle weight="fill" aria-hidden className="mt-px size-3.5 shrink-0" />
+              <span>
+                {flag?.decision === 'cue' ? 'İpucu' : 'Dikkat'} · {reason}
+              </span>
+            </p>
+          ) : null}
         </ItemContent>
         <ItemActions>
+          {flag?.group === 'untagged' ? <Badge variant="outline">kontrol edilmedi</Badge> : null}
+          {flag?.group === 'unassessed' ? <Badge variant="outline">eksik bilgi</Badge> : null}
           {count > 0 ? <Badge variant="secondary">şablonda ×{count}</Badge> : null}
           {replacing ? (
             <span className="text-xs font-medium text-primary-text">Seç</span>
@@ -168,21 +208,110 @@ export function ExercisePicker({
           <section className="flex flex-col gap-2" aria-label="Kütüphane">
             {suggestions.length > 0 ? <h3 className="text-xs font-medium text-muted-foreground">Bütün kütüphane</h3> : null}
             <ItemGroup className="gap-2">{shown.map(renderItem)}</ItemGroup>
-            {results.length > shown.length ? (
+            {open.length > shown.length ? (
               <p className="text-xs text-muted-foreground">
-                <span className="tabular-nums">{results.length}</span> sonuçtan {RESULT_LIMIT}&apos;si gösteriliyor; aramayı daralt.
+                <span className="tabular-nums">{open.length}</span> sonuçtan {RESULT_LIMIT}&apos;si gösteriliyor; aramayı daralt.
               </p>
             ) : null}
           </section>
-        ) : (
+        ) : null}
+        {hidden.length > 0 && care ? (
+          <details className="group rounded-lg border">
+            <summary className="flex min-h-11 cursor-pointer items-center px-3 text-sm font-medium">Bu danışana önerilmeyenler ({hidden.length})</summary>
+            <ul className="flex flex-col divide-y border-t">
+              {hidden.slice(0, RESULT_LIMIT).map((exercise) => {
+                const flag = care.map[exercise.id];
+                return (
+                  <li key={exercise.id} className="flex flex-col gap-1.5 px-3 py-2 text-sm">
+                    <span className="font-medium">{exercise.title}</span>
+                    <span className="text-xs text-muted-foreground">{flag?.messages.join(' · ')}</span>
+                    {flag && flag.overridable.length > 0 && !flag.locked ? (
+                      <AllowButton
+                        care={care}
+                        exercise={exercise}
+                        messages={flag.messages}
+                        sources={flag.overridable.map((item) => item.id)}
+                        disabled={locked}
+                        onAllowed={(picked) => {
+                          onAllowed?.(picked.id);
+                          onPick(picked);
+                        }}
+                      />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Sağlık profesyonelinin görüşü kaydedilene kadar izin verilemez.</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </details>
+        ) : null}
+        {shown.length === 0 && hidden.length === 0 ? (
           <Empty className="border p-4">
             <EmptyHeader>
               <EmptyTitle>Uyan egzersiz yok</EmptyTitle>
               <EmptyDescription>Başka bir ad ya da kas dene.</EmptyDescription>
             </EmptyHeader>
           </Empty>
-        )}
+        ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * "Yine de ekle" (tasarım `kisit-tarama.md` §3.2): kısa onay, isteğe bağlı not; izin bu danışan ve bu hareket için
+ * hemen yazılır (programı kaydetmeden çıkılsa da kalır, Kısıtlar'dan kaldırılabilir), sonra satır eklenir.
+ */
+function AllowButton({
+  care,
+  exercise,
+  messages,
+  sources,
+  disabled,
+  onAllowed,
+}: {
+  care: EditorCare;
+  exercise: PickerExercise;
+  messages: string[];
+  sources: string[];
+  disabled: boolean;
+  onAllowed: (exercise: PickerExercise) => void;
+}) {
+  const [note, setNote] = useState('');
+  const allow = useServiceMutation({
+    fn: async () => {
+      for (const source of sources) {
+        await fetchJson<{ ok: true }>(`/api/clients/${care.clientId}/constraints/overrides`, {
+          method: 'POST',
+          body: JSON.stringify({ exerciseId: exercise.id, source, note }),
+        });
+      }
+    },
+    notify: { success: 'İzin kaydedildi.' },
+    onSuccess: () => onAllowed(exercise),
+  });
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger render={<Button size="sm" variant="outline" className="w-fit touch:h-11" disabled={disabled} />}>Yine de ekle</AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{exercise.title} bu danışana önerilmiyor</AlertDialogTitle>
+          <AlertDialogDescription>{messages.join(' · ')}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <Field>
+          <FieldLabel htmlFor={`allow-${exercise.id}`}>Not (isteğe bağlı)</FieldLabel>
+          <Input id={`allow-${exercise.id}`} maxLength={140} value={note} onChange={(event) => setNote(event.currentTarget.value)} />
+        </Field>
+        <p className="text-sm text-muted-foreground">İzin bu danışan ve bu hareket için kaydedilir; Kısıtlar’dan kaldırılabilir.</p>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Vazgeç</AlertDialogCancel>
+          <AlertDialogAction disabled={allow.isPending} onClick={() => allow.mutate()}>
+            {allow.isPending ? <Spinner data-icon="inline-start" /> : null}
+            Yine de ekle
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
