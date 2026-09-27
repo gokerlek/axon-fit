@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Field as FormField, Form, getDeepError, setErrors, useForm } from '@formisch/react';
+import { Field as FormField, Form, getDeepError, setErrors, setInput, useForm } from '@formisch/react';
 import { ArrowClockwise, ArrowSquareOut, WarningCircle } from '@phosphor-icons/react';
 import { BlockEditor, useBlocks } from '@/components/block-editor/block-editor';
 import type { BlocksFormStore } from '@/components/block-editor/block-items';
@@ -14,8 +14,9 @@ import { TemplateMuscleMap } from '@/components/muscle-map/template-muscle-map';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
+import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { UnsavedChangesGuard, type UnsavedChangesGuardHandle } from '@/components/unsaved-changes-guard';
 import { exerciseSetWeights } from '@/lib/muscles';
@@ -27,7 +28,7 @@ import { idSource, prepareForEditing, type EditorDevice, type PickerExercise } f
 import { templateMuscleLoad } from '@/lib/template-plan';
 import { TEMPLATE_DRAFT_BASE, templateDraftKey } from '@/lib/unsaved-changes';
 
-const BLANK: TemplateInput = { name: '', description: '', blocks: [] };
+const BLANK: TemplateInput = { name: '', description: '', blocks: [], sharedWithClients: false };
 
 const LOAD_DESCRIPTION =
   'Kas başına çalışma seti: hedef 1, yardımcı 0,5, dengeleyici 0,25 sayılır; ısınma ve soğuma hareketleri sayılmaz.';
@@ -64,6 +65,7 @@ export function TemplateForm({
       name: editing.template.name,
       description: editing.template.description,
       blocks: prepared.blocks.map((block) => ({ ...block, rows: block.rows.map((row) => ({ ...row, note: row.note ?? '' })) })),
+      sharedWithClients: editing.template.sharedWithClients ?? false,
     };
     return { input, dropped: prepared.droppedDeviceRowIds.length };
   });
@@ -170,6 +172,27 @@ export function TemplateForm({
                     Danışana özel bilgi yazma: şablonlar uygulama repo&apos;sunda durur ve birden çok danışana atanır.
                   </FieldDescription>
                   <FieldError>{field.errors?.[0]}</FieldError>
+                </Field>
+              )}
+            </FormField>
+            <FormField of={form} path={['sharedWithClients']}>
+              {(field) => (
+                <Field orientation="horizontal" className="lg:col-span-2">
+                  {/* Anahtar küçük: dokunma alanı çevresindeki etiketle 44 px. */}
+                  <label className="-m-2 flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center">
+                    <Switch
+                      id="sharedWithClients"
+                      checked={Boolean(field.input)}
+                      onCheckedChange={(checked) => setInput(form, { path: ['sharedWithClients'], input: checked })}
+                    />
+                  </label>
+                  <FieldContent>
+                    <FieldLabel htmlFor="sharedWithClients">Danışanlar kendi programlarına kopyalayabilir</FieldLabel>
+                    <FieldDescription>
+                      Açıksa danışanlar kendi programlarını bu şablondan başlatabilir ya da gün olarak ekleyebilir. Yarım kalmış ve
+                      kişiye özel (ör. rehabilitasyon) şablonları kapalı tut.
+                    </FieldDescription>
+                  </FieldContent>
                 </Field>
               )}
             </FormField>

@@ -36,6 +36,8 @@ export type HistoryRow = {
   otherDay: boolean;
   unfinished: boolean;
   prs: number;
+  /** Kendi programdan antrenman: programın o günkü adı (`docs/design/kendi-program.md` §3.7, §4); PT'ninkinde yok. */
+  program?: string;
 };
 export type HistoryMonth = { key: string; label: string; rows: HistoryRow[] };
 export type HistoryList = { recent: string | null; months: HistoryMonth[]; count: number };
@@ -51,7 +53,9 @@ function time(iso: string | undefined): number {
 function rowOf(row: SessionIndexRow): HistoryRow {
   const date = new Date(`${row.date}T00:00:00Z`);
   const prs = row.prs ?? 0;
-  const title = [row.dayName || 'Antrenman', ...(row.durationMin !== undefined ? [minutesText(row.durationMin)] : [])].join(' · ');
+  // Kendi programdan antrenman programın adıyla ("Evde · Gün A"): program silinse de anlık görüntü kalır.
+  const day = row.programName ? `${row.programName} · ${row.dayName || 'Antrenman'}` : row.dayName || 'Antrenman';
+  const title = [day, ...(row.durationMin !== undefined ? [minutesText(row.durationMin)] : [])].join(' · ');
   const meta = `${formatNumber(row.sets)} set · ${formatKg(row.volumeKg)}`;
   return {
     id: row.id,
@@ -62,6 +66,7 @@ function rowOf(row: SessionIndexRow): HistoryRow {
     otherDay: row.otherDay,
     unfinished: row.unfinished,
     prs,
+    ...(row.programId ? { program: row.programName ?? 'Kendi programı' } : {}),
   };
 }
 
@@ -173,7 +178,7 @@ export function sessionDetail(doc: SessionDoc, timeZone: string): SessionDetail 
   }
   const sets = workingSetCount(doc);
   const end = doc.finishedAt ?? doc.startedAt;
-  const dayName = doc.program?.dayName ?? 'Antrenman';
+  const dayName = doc.program?.programName ? `${doc.program.programName} · ${doc.program.dayName}` : (doc.program?.dayName ?? 'Antrenman');
   const title = `${dayName} · ${formatDay(doc.date)}`;
   return {
     id: doc.id,

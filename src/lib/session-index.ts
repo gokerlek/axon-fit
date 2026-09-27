@@ -112,6 +112,7 @@ export function indexRowOf(doc: SessionDoc, sha: string): SessionIndexRow {
     startedAt: doc.startedAt,
     ...(doc.finishedAt ? { finishedAt: doc.finishedAt } : {}),
     ...(program ? { dayId: program.dayId, dayName: program.dayName } : {}),
+    ...(program?.programId ? { programId: program.programId, ...(program.programName ? { programName: program.programName } : {}) } : {}),
     otherDay,
     unfinished: notices.includes('unfinished'),
     ...(duration !== undefined ? { durationMin: duration } : {}),

@@ -4,6 +4,7 @@ import {
   clientNotices,
   isUnread,
   noticeFeed,
+  ownProgramNotices,
   programNotices,
   proposalNotices,
   sessionHealthOf,
@@ -11,7 +12,9 @@ import {
   type ClientDigest,
   type PtNotice,
 } from './notices.ts';
+import { ownIndexItemOf, type OwnIndex } from './own-program-index.ts';
 import type { SessionIndex, SessionIndexRow } from './schemas/session.ts';
+import { OWN_ID, ownProgram } from './testing/own-fixtures.ts';
 
 const NOW = new Date('2026-09-26T16:00:00.000Z');
 const DAY = 86_400_000;
@@ -180,5 +183,43 @@ describe('PT bildirimleri: okundu ve Genel bakış listesi', () => {
     );
     assert.equal(feed.unread, 3, 'a1, b1 ve listeye girmeyen b2');
     assert.deepEqual(feed.unreadClients, ['c_aaaaaaaa', 'c_bbbbbbbb']);
+  });
+});
+
+describe('PT bildirimleri: kendi programlar (kendi-program.md §7.1)', () => {
+  const since = NOW.getTime() - 14 * DAY;
+  const evde = ownIndexItemOf(ownProgram({ shared: { at: ago(3) } }), 'a'.repeat(40));
+  const tatil = ownIndexItemOf(ownProgram({ id: 'op_tatil001', name: 'Tatil' }), 'b'.repeat(40));
+  const index = (overrides: Partial<OwnIndex> = {}): OwnIndex => ({ version: 1, items: [evde, tatil], events: [], ...overrides });
+
+  test('seçim, paylaşım, kapatma ve silme olayları', () => {
+    const texts = (own: OwnIndex) => ownProgramNotices(own, since).map((notice) => notice.text).sort();
+    assert.deepEqual(texts(index({ active: { programId: 'op_tatil001', at: ago(1) } })), ["Bugün'ün programı: Tatil", 'Paylaştı: Evde']);
+    assert.deepEqual(texts(index({ active: { programId: null, at: ago(1) } })), ['Antrenörün programına döndü', 'Paylaştı: Evde']);
+    assert.deepEqual(
+      texts(index({ events: [{ kind: 'unshared', id: OWN_ID, name: 'Evde', at: ago(2) }, { kind: 'deleted', id: 'op_eski0001', name: 'Eski', at: ago(20) }] })),
+      ['Paylaştı: Evde', 'Paylaşımı kapattı: Evde'].sort(),
+    );
+    assert.deepEqual(ownProgramNotices(index({ active: { programId: OWN_ID, at: ago(30) } }), since).map((notice) => notice.kind), ['own_program']);
+  });
+
+  test('paylaşılmış programda danışanın düzenlemesi ve bitişi; PT\'nin kaydı ve günler bildirilmez', () => {
+    const logs = new Map([
+      [
+        OWN_ID,
+        [
+          { at: ago(1), revision: 3, kind: 'client' as const, sessionId: 's_k2m9x4qa', changes: [{ scope: 'Gün A', text: 'Goblet Squat 3 → 4 set' }] },
+          { at: ago(2), revision: 2, kind: 'edit' as const, by: 'pt' as const, changes: [{ text: 'PT değiştirdi' }] },
+          { at: ago(2), revision: 2, kind: 'client' as const, changes: [{ text: 'Antrenman günleri: Sal, Per' }] },
+          { at: ago(4), revision: 2, kind: 'edit' as const, changes: [{ scope: 'Gün B', text: 'Plank eklendi' }] },
+        ],
+      ],
+      ['op_tatil001', [{ at: ago(1), revision: 2, kind: 'edit' as const, changes: [{ text: 'paylaşılmamış' }] }]],
+    ]);
+    const texts = ownProgramNotices(index(), since, logs).map((notice) => notice.text);
+    assert.deepEqual(texts.filter((text) => text.startsWith('Evde')), ['Evde · Gün A: Goblet Squat 3 → 4 set', 'Evde · Gün B: Plank eklendi']);
+    assert.equal(texts.some((text) => text.includes('paylaşılmamış') || text.includes('PT değiştirdi') || text.includes('günleri')), false);
+    const all = clientNotices({ index: null, log: [], proposals: null, own: { index: index(), logs }, now: NOW });
+    assert.ok(all.some((notice) => notice.kind === 'own_program' && notice.target === 'program'));
   });
 });

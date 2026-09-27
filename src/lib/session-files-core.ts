@@ -1,5 +1,10 @@
+import * as v from 'valibot';
 import { canRecordHealth } from './client-status.ts';
 import { GithubError } from './github/errors.ts';
+import { parseOwnProgramFile } from './own-program-index.ts';
+import { OWN_INDEX_PATH, ownProgramPath } from './own-programs.ts';
+import { programSchema } from './schemas/program.ts';
+import { hasDay } from './workout-plan.ts';
 import type { Client } from './schemas/client.ts';
 import {
   parseSessionIndex,
@@ -49,6 +54,8 @@ export type SessionRepo = {
   readBlob(sha: string): Promise<unknown>;
   /** Kök ağaçtaki `sessions/` dosyaları (yol, blob `sha`); klasör yoksa boş. */
   listSessions(tree: string): Promise<{ path: string; sha: string }[]>;
+  /** Kök ağaçtaki bir klasörün dosyaları (`own-programs/`; yol, blob `sha`); klasör yoksa boş. */
+  listFolder(tree: string, folder: string): Promise<{ path: string; sha: string }[]>;
   /** Tek dosya, `sha` kilidiyle (Contents API). */
   write(path: string, content: unknown, options: { sha?: string | undefined; message: string }): Promise<{ sha: string; remaining: number | null }>;
   /** Birden çok dosya, tek commit; dal ilerlediyse 409. `deletions` aynı commit'te silinen yollar (yalnız deneme geçmişi). */
@@ -70,6 +77,8 @@ export type SessionRepo = {
 
 /** Yalnız okuyan taraf (onarılmış index): yazmayan çağıranlar (PT'nin Genel bakış özeti) bunu verir. */
 export type SessionReader = Pick<SessionRepo, 'head' | 'read' | 'readBlob' | 'listSessions' | 'log'>;
+/** Kendi programları da okuyan taraf (`own-program-files.ts`). */
+export type OwnReader = SessionReader & Pick<SessionRepo, 'listFolder'>;
 
 export type SessionContext = { now: Date; timeZone: string };
 
@@ -91,7 +100,7 @@ function assertWritable(doc: SessionDoc): void {
 }
 
 /** Bozuk JSON (500) okunamayan dosya sayılır: null. Ağ ve yetki hataları yukarı çıkar. */
-async function readOrNull(repo: SessionReader, path: string, ref: string | undefined): Promise<StoredJson | null> {
+export async function readOrNull(repo: SessionReader, path: string, ref: string | undefined): Promise<StoredJson | null> {
   try {
     return await repo.read(path, ref);
   } catch (error) {
@@ -120,7 +129,7 @@ async function repairedIndexAt(repo: SessionReader, head: RepoHead, known: Reado
 }
 
 /** Tek commit'li bir işi (bitiş, düzeltme, silme) çakışmada bir kez baştan dener. */
-async function withRetry<T>(run: () => Promise<T>): Promise<T> {
+export async function withRetry<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (error) {
@@ -146,8 +155,8 @@ export async function readSession(repo: SessionRepo, id: string): Promise<ReadRe
 }
 
 /** Geçmiş listesi: onarılmış index (yazılmaz; onarım sonraki commit'e biner). */
-export async function readIndex(repo: SessionReader): Promise<RepairResult> {
-  return repairedIndexAt(repo, await repo.head());
+export async function readIndex(repo: SessionReader, head?: RepoHead): Promise<RepairResult> {
+  return repairedIndexAt(repo, head ?? (await repo.head()));
 }
 
 /* --- PUT --- */
@@ -157,7 +166,35 @@ export type PutResult =
   /** Başka bir cihazda bitirildi: dosya değişmedi; telefon gönderilmemiş setleri sorar (`PATCH addSets`). */
   | { status: 'finished'; doc: SessionDoc }
   /** Silinmiş: telefon yerel kopyayı siler. */
-  | { status: 'deleted' };
+  | { status: 'deleted' }
+  /**
+   * Seansın programı tutmuyor (`docs/design/kendi-program.md` §5.4): kayıttaki seans başka bir programa ait
+   * (`mismatch`) ya da ilk yazımda gün seansın programında yok (`program`). Dosya değişmez.
+   */
+  | { status: 'mismatch' | 'program' };
+
+/** Kayıttaki seansla gelenin programı farklı mı: `programId` seans boyunca sabittir (birleştirme karar vermez). */
+export function programMismatch(stored: Pick<SessionDoc, 'program'> | null, incoming: Pick<SessionDoc, 'program'>): boolean {
+  if (!stored?.program || !incoming.program) return false;
+  return (stored.program.programId ?? null) !== (incoming.program.programId ?? null);
+}
+
+/**
+ * İlk yazımda seansın günü seansın programında var mı: `own-programs/<programId>.json`, yoksa `program.json`
+ * (`programId`'siz). Programı olmayan (eski) belge denetlenmez. Okunamayan dosya "yok" sayılır.
+ */
+async function sessionDayExists(repo: SessionReader, doc: Pick<SessionDoc, 'program'>): Promise<boolean> {
+  const program = doc.program;
+  if (!program) return true;
+  if (program.programId) {
+    const file = await readOrNull(repo, ownProgramPath(program.programId), undefined);
+    const parsed = file ? parseOwnProgramFile(program.programId, file.content) : null;
+    return Boolean(parsed?.program && hasDay(parsed.program, program.dayId));
+  }
+  const file = await readOrNull(repo, 'program.json', undefined);
+  const parsed = file ? v.safeParse(programSchema, file.content) : null;
+  return Boolean(parsed?.success && hasDay(parsed.output, program.dayId));
+}
 
 export async function putSession(repo: SessionRepo, ctx: SessionContext, incoming: SessionDoc): Promise<PutResult> {
   const path = sessionPath(incoming.id);
@@ -166,10 +203,13 @@ export async function putSession(repo: SessionRepo, ctx: SessionContext, incomin
     const stored = parseFile(file, incoming.id);
     if (stored?.status === 'deleted') return { status: 'deleted' };
     if (stored?.status === 'finished') return { status: 'finished', doc: stored };
+    if (stored && programMismatch(stored, incoming)) return { status: 'mismatch' };
     if (!stored) {
       // İz dosyası kaybolmuş olsa da index'teki silinmişler listesi dosyayı diriltmez.
       const { index } = await readIndexFile(repo);
       if (isDeletedInIndex(index, incoming.id)) return { status: 'deleted' };
+      // İlk yazım: telefonun yazdığı program ve gün gerçekten var mı (bitişin kipi buna dayanır).
+      if (attempt === 0 && !(await sessionDayExists(repo, incoming))) return { status: 'program' };
     }
     const plan = planPut(stored, incoming, ctx);
     if (!plan.changed) return { status: 'unchanged', doc: stored as SessionDoc, remaining: null };
@@ -191,7 +231,9 @@ export type FinishResult =
   | { status: 'finished'; doc: SessionDoc; plan: Pick<FinishPlan, 'rotation' | 'health' | 'feedback'>; remaining: number | null }
   /** Zaten bitmiş: aynı commit'te öteki dosyalar da yazılmıştı (200, no-op). */
   | { status: 'already'; doc: SessionDoc }
-  | { status: 'deleted' };
+  | { status: 'deleted' }
+  /** Kayıttaki seans başka bir programa ait (`programId` sabittir). */
+  | { status: 'mismatch' };
 
 export async function finishSession(
   repo: SessionRepo,
@@ -200,13 +242,21 @@ export async function finishSession(
 ): Promise<FinishResult> {
   const id = body.doc.id;
   const path = sessionPath(id);
-  return withRetry(async () => {
+  // Kendi programdan antrenman: programın dosyası ve index'i o commit'ten (kip günün bulunduğu dosyadan, §3.4).
+  const ownId = body.doc.program?.programId;
+  return withRetry(async (): Promise<FinishResult> => {
     const head = await repo.head();
     // Okunamayan program rotasyonu durdurur ama bitişi durdurmaz (seans yine kaydedilir).
-    const [file, program] = await Promise.all([repo.read(path, head.commit), readOrNull(repo, 'program.json', head.commit)]);
+    const [file, program, ownFile, ownIndex] = await Promise.all([
+      repo.read(path, head.commit),
+      ownId ? Promise.resolve(null) : readOrNull(repo, 'program.json', head.commit),
+      ownId ? readOrNull(repo, ownProgramPath(ownId), head.commit) : Promise.resolve(null),
+      ownId ? readOrNull(repo, OWN_INDEX_PATH, head.commit) : Promise.resolve(null),
+    ]);
     const stored = parseFile(file, id);
     if (stored?.status === 'deleted') return { status: 'deleted' };
     if (stored?.status === 'finished') return { status: 'already', doc: stored };
+    if (stored && programMismatch(stored, body.doc)) return { status: 'mismatch' };
     const known = new Map(file ? [[path, file.content]] : []);
     const { index } = await repairedIndexAt(repo, head, known);
     if (!stored && isDeletedInIndex(index, id)) return { status: 'deleted' };
@@ -223,9 +273,9 @@ export async function finishSession(
         healthFile = BROKEN_HEALTH;
       }
     }
-    // Öneriler dosyası yalnız uygulanacak bir karar varken okunur; bozuksa ezilmez.
+    // Öneriler dosyası yalnız PT programında ve uygulanacak bir karar varken okunur; bozuksa ezilmez.
     let proposalsFile: unknown = null;
-    if (body.feedback?.items.some((item) => item.apply)) {
+    if (!ownId && body.feedback?.items.some((item) => item.apply)) {
       try {
         proposalsFile = (await repo.read(PROPOSALS_PATH, head.commit))?.content ?? null;
       } catch (error) {
@@ -241,6 +291,7 @@ export async function finishSession(
       feedback: body.feedback,
       index,
       program: program?.content ?? null,
+      ...(ownId ? { own: { program: ownFile?.content ?? null, index: ownIndex?.content ?? null } } : {}),
       proposalsFile,
       healthFile,
       readinessScore: readiness && healthFile !== BROKEN_HEALTH ? readinessFromHealth(healthFile) : undefined,

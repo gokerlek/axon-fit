@@ -92,6 +92,14 @@ export function fakeSessionRepo(initial: Record<string, unknown> = {}) {
         .filter(([path]) => /^sessions\/[^/]+$/.test(path))
         .map(([path, file]) => ({ path, sha: file.sha }));
     },
+    async listFolder(tree, folder) {
+      calls.push(`tree ${tree} ${folder}`);
+      await hook('tree', folder);
+      const files = snapshot(tree.replace(/^tree-/, ''));
+      return [...files.entries()]
+        .filter(([path]) => path.startsWith(`${folder}/`) && !path.slice(folder.length + 1).includes('/'))
+        .map(([path, file]) => ({ path, sha: file.sha }));
+    },
     async write(path, content, options) {
       calls.push(`write ${path} ${options.message}`);
       await hook('write', path);

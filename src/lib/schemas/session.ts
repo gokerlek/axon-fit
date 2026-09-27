@@ -1,6 +1,6 @@
 import * as v from 'valibot';
 import { EFFORTS } from '../progression.ts';
-import { DAY_ID_PATTERN, PHASE_ID_PATTERN } from '../program-plan.ts';
+import { DAY_ID_PATTERN, OWN_PROGRAM_ID_PATTERN, OWN_PROGRAM_NAME_MAX, PHASE_ID_PATTERN } from '../program-plan.ts';
 import { BLOCK_ID_PATTERN, ROW_ID_PATTERN, TEMPLATE_LIMITS } from '../template-plan.ts';
 import { rowSetsSchema, setSpecSchema } from './template.ts';
 
@@ -202,6 +202,13 @@ export const sessionProgramSchema = v.object({
   plannedDayId: v.optional(id(DAY_ID_PATTERN, 'Gün kimliği geçersiz.')),
   /** Sıradaki günün o günkü adı: PT'nin bildirimi ("Gün B yerine Gün C yapıldı"). */
   plannedDayName: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(SESSION_LIMITS.dayName))),
+  /**
+   * Danışanın kendi programı (`docs/design/kendi-program.md` §5.4): yoksa PT'nin programı. Başlangıçta yazılır,
+   * sunucu ilk yazımda günü o programda arar; sonra sabittir (birleştirmede farklıysa 400).
+   */
+  programId: v.optional(id(OWN_PROGRAM_ID_PATTERN, 'Program kimliği geçersiz.')),
+  /** Kendi programın o günkü adı (anlık görüntü): Geçmiş ve PT'nin Antrenmanlar'ı program silinse de okur. */
+  programName: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(OWN_PROGRAM_NAME_MAX))),
 });
 export type SessionProgram = v.InferOutput<typeof sessionProgramSchema>;
 
@@ -313,6 +320,9 @@ export const sessionIndexRowSchema = v.object({
   finishedAt: v.optional(timestamp),
   dayId: v.optional(id(DAY_ID_PATTERN, 'Gün kimliği geçersiz.')),
   dayName: v.optional(v.pipe(v.string(), v.maxLength(SESSION_LIMITS.dayName))),
+  /** Kendi programdan antrenman: programın kimliği ve o günkü adı (yoksa PT'nin programı). */
+  programId: v.optional(id(OWN_PROGRAM_ID_PATTERN, 'Program kimliği geçersiz.')),
+  programName: v.optional(v.pipe(v.string(), v.maxLength(OWN_PROGRAM_NAME_MAX))),
   otherDay: v.boolean(),
   unfinished: v.boolean(),
   durationMin: v.optional(int(0, 24 * 60)),
@@ -421,6 +431,11 @@ export const feedbackDecisionSchema = v.object({
   /** "Hareket ekle": setleri ve dinlenmesi. */
   add: v.optional(v.object({ sets: rowSetsSchema, restSeconds: int(0, TEMPLATE_LIMITS.restSeconds) })),
   why: v.optional(v.pipe(v.string(), v.maxLength(300))),
+  /**
+   * Satırın antrenman başındaki hâli (hareket ve setler; eklemede yok): kendi programda program o arada
+   * değiştiyse satır bununla karşılaştırılır, farklıysa yazılmaz (`docs/design/kendi-program.md` §3.4).
+   */
+  row: v.optional(v.object({ exerciseId: slugSchema, sets: rowSetsSchema })),
 });
 export type FeedbackDecision = v.InferOutput<typeof feedbackDecisionSchema>;
 

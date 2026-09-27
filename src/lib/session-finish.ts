@@ -19,7 +19,11 @@ import {
   type SessionIndex,
   type SessionNotice,
 } from './schemas/session.ts';
+import { ownIndexItemOf, parseOwnIndex, parseOwnProgramFile, upsertOwnItem } from './own-program-index.ts';
+import { planOwnFeedback } from './own-program-feedback.ts';
+import { OWN_INDEX_PATH, ownProgramPath, type OwnProgram } from './own-programs.ts';
 import { indexRowOf, upsertIndexRow } from './session-index.ts';
+import { hasDay } from './workout-plan.ts';
 import { mergeAll, normalizeSession, sameSessionData, withDeletions } from './session-merge.ts';
 import { finishMessage, patchMessage, putMessage } from './session-messages.ts';
 import { verifyAlgoSets } from './set-suggestions.ts';
@@ -87,7 +91,7 @@ export function planPut(stored: SessionDoc | null, incoming: SessionDoc, ctx: Co
 /* --- bitiş --- */
 
 /** Programdaki gün (bütün evrelerde aranır); bulunamazsa null. PT'nin canlı görünümü de sayar (`live-session.ts`). */
-export function dayOf(program: Program | null, dayId: string | undefined): TemplateBody | null {
+export function dayOf(program: Pick<Program, 'phases'> | null, dayId: string | undefined): TemplateBody | null {
   if (!program || !dayId) return null;
   for (const phase of program.phases) {
     const day = phase.days.find((item) => item.id === dayId);
@@ -152,6 +156,11 @@ export type FinishInput = {
   index: SessionIndex;
   /** `program.json`'un ham içeriği (yoksa null). */
   program: unknown;
+  /**
+   * Kendi programdan antrenmanda (`doc.program.programId`): `own-programs/<id>.json` ve `own-programs-index.json`'un
+   * ham içerikleri (yoksa ya da okunamıyorsa null). Kip günün bulunduğu dosyadan (`docs/design/kendi-program.md` §3.4).
+   */
+  own?: { program: unknown; index: unknown } | undefined;
   /** `proposals.json`'un ham içeriği: yalnız uygulanacak karar varken okunur (yoksa null; bozuksa `BROKEN_PROPOSALS`). */
   proposalsFile?: unknown;
   /** `health.json`'un ham içeriği: yalnız onaylı ayrıntı varsa okunur (yoksa ya da okunmadıysa null; bozuk JSON'sa `BROKEN_HEALTH`). */
@@ -187,9 +196,13 @@ function withNotice(notices: readonly SessionNotice[], notice: SessionNotice): S
   return notices.some((item) => item.kind === notice.kind) ? [...notices] : [...notices, notice];
 }
 
-/** Commit mesajı: "Antrenman bitti · Gün A · 17 set", program değiştiyse "· Program (danışan)" ve gövdede cümleler. */
-function finishCommitMessage(doc: SessionDoc, changes: readonly ProgramChange[], proposals: number): string {
-  const parts = [finishMessage(doc), ...(changes.length > 0 ? ['Program (danışan)'] : []), ...(proposals > 0 ? [`${proposals} öneri`] : [])];
+/**
+ * Commit mesajı: "Antrenman bitti · Gün A · 17 set", program değiştiyse "· Program (danışan)" (kendi programda
+ * "· Kendi programı") ve gövdede cümleler.
+ */
+function finishCommitMessage(doc: SessionDoc, changes: readonly ProgramChange[], proposals: number, own = false): string {
+  const label = own ? 'Kendi programı' : 'Program (danışan)';
+  const parts = [finishMessage(doc), ...(changes.length > 0 ? [label] : []), ...(proposals > 0 ? [`${proposals} öneri`] : [])];
   const subject = parts.join(' · ');
   if (changes.length === 0) return subject;
   return `${subject}\n\n${changes.map((change) => `- ${change.scope ? `${change.scope}: ` : ''}${change.text}`).join('\n')}`;
@@ -212,10 +225,15 @@ export function planFinish(input: FinishInput): FinishPlan {
   const prepared: SessionDoc = { ...base, status: 'finished', finishedAt: finishedAtFor(input.incoming.finishedAt, base.startedAt, now) };
   let doc = { ...(mergeAll(input.stored ? [input.stored, prepared] : [prepared]) as SessionDoc), writer: input.incoming.writer };
 
-  const programParsed = input.program === null ? null : v.safeParse(programSchema, input.program);
+  // Kip günün bulunduğu dosyadan (`docs/design/kendi-program.md` §3.4): kendi program kipi `program.json`'a hiç
+  // uygulanmaz; seansın programı yoksa ya da gün orada değilse programa hiçbir şey yazılmaz, seans kaydedilir.
+  const ownId = doc.program?.programId;
+  const ownParsed = ownId && input.own ? parseOwnProgramFile(ownId, input.own.program) : null;
+  const own = ownParsed?.program && doc.program && hasDay(ownParsed.program, doc.program.dayId) ? ownParsed.program : null;
+  const programParsed = ownId || input.program === null ? null : v.safeParse(programSchema, input.program);
   const program = programParsed?.success ? programParsed.output : null;
   const rawProgram = program ? (isRecord(input.program) && input.program.version === 2 ? input.program : (program as unknown as Record<string, unknown>)) : null;
-  const { done, planned } = completion(doc, dayOf(program, doc.program?.dayId));
+  const { done, planned } = completion(doc, dayOf(own ?? program, doc.program?.dayId));
 
   const choice = input.rotation ?? doc.rotation?.value ?? defaultRotation(done, planned);
   if (input.rotation || !doc.rotation) doc = { ...doc, rotation: { value: choice, updatedAt: now.toISOString(), by: doc.writer } };
@@ -228,20 +246,24 @@ export function planFinish(input: FinishInput): FinishPlan {
   const proposalsBroken = input.proposalsFile === BROKEN_PROPOSALS;
   const feedback = planProgramFeedback({
     doc,
-    feedback: verified,
+    feedback: ownId ? undefined : verified,
     program,
     rawProgram,
     proposals: proposalsBroken ? null : (input.proposalsFile ?? null),
     now,
   });
+  const ownFeedback = own ? planOwnFeedback({ doc, feedback: verified, program: own, now }) : null;
 
   let notices = doc.notices;
-  // Yarım antrenman: PT'nin bildirimi yapılan ve planlanan seti söyler ("12/17 set").
-  if (done < planned) notices = withNotice(notices, { kind: 'unfinished', at: doc.finishedAt as string, done, planned });
-  if (doc.program?.plannedDayId && doc.program.plannedDayId !== doc.program.dayId) {
-    notices = withNotice(notices, { kind: 'other_day', at: doc.startedAt });
+  // Kendi programda yarım ve başka gün bildirimi yok: plan danışanın (§3.4).
+  if (!ownId) {
+    // Yarım antrenman: PT'nin bildirimi yapılan ve planlanan seti söyler ("12/17 set").
+    if (done < planned) notices = withNotice(notices, { kind: 'unfinished', at: doc.finishedAt as string, done, planned });
+    if (doc.program?.plannedDayId && doc.program.plannedDayId !== doc.program.dayId) {
+      notices = withNotice(notices, { kind: 'other_day', at: doc.startedAt });
+    }
   }
-  for (const kind of feedback.notices) {
+  for (const kind of [...feedback.notices, ...(ownFeedback?.notices ?? [])]) {
     if (kind === 'proposal' && proposalsBroken) continue;
     notices = withNotice(notices, { kind, at: doc.finishedAt as string });
   }
@@ -267,6 +289,28 @@ export function planFinish(input: FinishInput): FinishPlan {
   if (programContent) files.push({ path: PROGRAM_PATH, content: programContent });
   if (feedback.proposals && !proposalsBroken) files.push({ path: PROPOSALS_PATH, content: feedback.proposals });
 
+  // Kendi program: güncelleme ve rotasyon aynı dosyaya; her program yazımı index satırını da yazar (`sha`, §5.3).
+  if (own && doc.program) {
+    let ownContent: OwnProgram = ownFeedback?.program ?? own;
+    const last = own.rotation.lastCompletedAt;
+    if (choice === 'advance' && (!last || time(doc.startedAt) > time(last))) {
+      const next = completeDay(ownContent, doc.program.dayId, new Date(doc.finishedAt as string));
+      if (next !== ownContent) {
+        ownContent = next;
+        applied = true;
+      }
+    }
+    if (ownContent !== own) {
+      const { index } = parseOwnIndex(input.own?.index ?? null);
+      const previous = index.items.find((item) => item.id === own.id);
+      let item = ownIndexItemOf(ownContent, gitBlobSha(jsonText(ownContent)), previous);
+      // Paylaşılmış programda danışanın kaydı PT'ye bildirilir (§7.1).
+      if (ownContent.shared && ownFeedback?.program) item = { ...item, clientEditedAt: doc.finishedAt as string };
+      files.push({ path: ownProgramPath(own.id), content: ownContent });
+      files.push({ path: OWN_INDEX_PATH, content: upsertOwnItem(index, item) });
+    }
+  }
+
   let health: FinishPlan['health'] = input.health ? 'dropped' : 'none';
   const allowed = allowedHealth(input.client, input.health);
   if (allowed) {
@@ -280,11 +324,12 @@ export function planFinish(input: FinishInput): FinishPlan {
     }
   }
 
-  const outcome = proposalsBroken ? { ...feedback.outcome, proposals: 0, converted: 0 } : feedback.outcome;
+  const outcome = ownFeedback ? ownFeedback.outcome : proposalsBroken ? { ...feedback.outcome, proposals: 0, converted: 0 } : feedback.outcome;
+  const changes = ownFeedback ? (ownFeedback.program ? ownFeedback.changes : []) : feedback.program ? feedback.changes : [];
   return {
     doc,
     files,
-    message: finishCommitMessage(doc, feedback.program ? feedback.changes : [], outcome.proposals),
+    message: finishCommitMessage(doc, changes, outcome.proposals, Boolean(ownFeedback)),
     rotation: { choice, applied },
     health,
     feedback: outcome,

@@ -7,6 +7,10 @@ import { deleteSession, finishSession, patchSession, putSession, readIndex, read
 import { tombstoneOf, withDeletions } from './session-merge.ts';
 import { fakeSessionRepo } from './testing/fake-session-repo.ts';
 import { at, DAY_A, programFile, sessionDoc, sessionEntry, W1, W2, workingSet } from './testing/session-fixtures.ts';
+import { gitBlobSha, jsonText } from './github/blob.ts';
+import { emptyOwnIndex, ownIndexItemOf, upsertOwnItem, type OwnIndex } from './own-program-index.ts';
+import { OWN_INDEX_PATH, type OwnProgram } from './own-programs.ts';
+import { OWN_DAY_A, OWN_ID, OWN_ROW_GOBLET, ownProgram } from './testing/own-fixtures.ts';
 
 const ctx = { now: new Date(at(60)), timeZone: 'Europe/Istanbul' };
 const client: Pick<Client, 'modules' | 'consents'> = { modules: { health: { enabled: false, fields: [] } }, consents: {} };
@@ -47,7 +51,7 @@ describe('PUT', () => {
   });
 
   test('ikinci anlık görüntü: fazladan set ve silme birleşir, tek commit, değersiz silme notu', async () => {
-    const gh = fakeSessionRepo();
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
     await putSession(gh.repo, ctx, doc([s1, s2]));
     const second = withDeletions(doc([s1, s2, s3, set('st_aaaaaaa4', 11, 3, { extra: true })]), { setIds: ['st_aaaaaaa2'] });
     const result = await putSession(gh.repo, ctx, second);
@@ -60,7 +64,7 @@ describe('PUT', () => {
   });
 
   test('geç gelen eski anlık görüntü (keepalive) yeniyi ezmez, silineni geri getirmez', async () => {
-    const gh = fakeSessionRepo();
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
     await putSession(gh.repo, ctx, withDeletions(doc([s1, s3]), { setIds: ['st_aaaaaaa2'] }));
     const stale = await putSession(gh.repo, ctx, doc([s1, s2]));
     assert.equal(stale.status, 'unchanged');
@@ -68,7 +72,7 @@ describe('PUT', () => {
   });
 
   test('çakışma: arada başka cihaz yazdı → taze okuyup bir kez daha birleştirir', async () => {
-    const gh = fakeSessionRepo();
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
     await putSession(gh.repo, ctx, doc([s1]));
     gh.onNext('write', async () => {
       // Öteki telefon aynı anda Leg Press'in setini yazdı.
@@ -83,7 +87,7 @@ describe('PUT', () => {
   });
 
   test('iki cihaz aynı anda: ikisinin setleri de kalır', async () => {
-    const gh = fakeSessionRepo();
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
     await putSession(gh.repo, ctx, doc([s1]));
     await Promise.all([putSession(gh.repo, ctx, doc([s1, s2])), putSession(gh.repo, ctx, { ...doc([s1], [l1]), writer: W2 })]);
     const stored = gh.get(PATH) as SessionDoc;
@@ -107,7 +111,7 @@ describe('PUT', () => {
   });
 
   test('bozuk dosyanın üzerine yazılmaz (500)', async () => {
-    const gh = fakeSessionRepo();
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
     gh.putText(PATH, '{"yarım');
     await assert.rejects(putSession(gh.repo, ctx, doc([s1])), (error: unknown) => error instanceof GithubError && error.status === 500);
     gh.put(PATH, { id: 's_k2m9x4qa', status: 'active' });
@@ -293,7 +297,7 @@ describe('birleşim şemayı bozarsa yazılmaz (422)', () => {
     Array.from({ length: count }, (_, i) => workingSet(`st_${prefix}${String(i).padStart(7, '0')}`, i, { setIndex: i }));
 
   test('var olan set kimliği başka harekette gelirse 422; dosya değişmez', async () => {
-    const gh = fakeSessionRepo();
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
     await putSession(gh.repo, ctx, doc([s1]));
     const before = gh.sha(PATH);
     await assert.rejects(putSession(gh.repo, ctx, doc([], [{ ...s1 }])), rejected);
@@ -303,7 +307,7 @@ describe('birleşim şemayı bozarsa yazılmaz (422)', () => {
   });
 
   test('iki anlık görüntü bir harekette 60 set eder (sınır 40): ikincisi 422', async () => {
-    const gh = fakeSessionRepo();
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
     assert.equal((await putSession(gh.repo, ctx, doc(many('c', 30)))).status, 'created');
     await assert.rejects(putSession(gh.repo, ctx, doc(many('d', 30))), rejected);
     assert.equal((gh.get(PATH) as SessionDoc).entries[0]?.sets.length, 30);
@@ -311,7 +315,7 @@ describe('birleşim şemayı bozarsa yazılmaz (422)', () => {
   });
 
   test('silinen hareket izleri 200\'ü aşarsa PATCH 422; önceki düzeltmeler kalır', async () => {
-    const gh = fakeSessionRepo();
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
     await putSession(gh.repo, ctx, doc([s1]));
     const entryIds = (batch: number) => Array.from({ length: 60 }, (_, i) => `e_${batch}${String(i).padStart(5, '0')}`);
     for (const batch of [1, 2, 3]) {
@@ -348,7 +352,7 @@ describe('geçmişte düzeltme ve silme', () => {
   });
 
   test('etkin seansta düzeltme tek dosya yazar', async () => {
-    const gh = fakeSessionRepo();
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
     await putSession(gh.repo, ctx, doc([s1, s2]));
     await patchSession(gh.repo, ctx, 's_k2m9x4qa', { writer: W1, waterTaps: [{ id: 'wt_aaaaaaaa', d: 1, at: at(20) }] });
     assert.deepEqual(gh.messages(), ['Set 2/3 · Bench Press · 60 kg × 9 (+1 set)', 'Su güncellendi']);
@@ -384,11 +388,93 @@ describe('geçmişte düzeltme ve silme', () => {
   });
 
   test('geçmiş listesi onarılır ama yazılmaz', async () => {
-    const gh = fakeSessionRepo();
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
     await putSession(gh.repo, ctx, doc([s1]));
     const result = await readIndex(gh.repo);
     assert.deepEqual(result.index.items.map((row) => [row.id, row.finishedAt]), [['s_k2m9x4qa', undefined]]);
     assert.equal(result.changed, true);
     assert.equal(gh.commitCount(), 1);
+  });
+});
+
+describe('kendi program (kendi-program.md §3.4, §5.4)', () => {
+  const OWN_PATH = `own-programs/${OWN_ID}.json`;
+  const ownProgramRef = { revision: 1, phaseId: 'p_ownaaa', dayId: OWN_DAY_A, dayName: 'Gün A', programId: OWN_ID, programName: 'Evde' };
+  /** Evde · Gün A: Goblet (r_owngob) 3 set ve Şınav. */
+  const ownDoc = (goblet = [s1, s2, s3], overrides: Partial<SessionDoc> = {}) =>
+    sessionDoc({
+      program: ownProgramRef,
+      entries: [sessionEntry('e_goblet', { rowId: OWN_ROW_GOBLET, exerciseId: 'goblet-squat', title: 'Goblet Squat', sets: goblet })],
+      ...overrides,
+    });
+  const repo = () => {
+    const program = ownProgram();
+    const index = upsertOwnItem(emptyOwnIndex(), ownIndexItemOf(program, gitBlobSha(jsonText(program))));
+    return fakeSessionRepo({ 'program.json': programFile(), [OWN_PATH]: program, [OWN_INDEX_PATH]: index });
+  };
+
+  test('ilk PUT: gün seansın programında yoksa 400 (program); varsa dosya açılır', async () => {
+    const gh = repo();
+    assert.deepEqual(await putSession(gh.repo, ctx, ownDoc([s1], { program: { ...ownProgramRef, programId: 'op_yokyok01' } })), { status: 'program' });
+    assert.deepEqual(await putSession(gh.repo, ctx, ownDoc([s1], { program: { ...ownProgramRef, dayId: DAY_A } })), { status: 'program' }, 'PT\'nin günü kendi programda yok');
+    assert.deepEqual(await putSession(gh.repo, ctx, doc([s1], [], { program: { revision: 1, dayId: OWN_DAY_A, dayName: 'Gün A' } })), { status: 'program' }, 'kendi günü PT programında yok');
+    assert.equal(gh.commitCount(), 0);
+    assert.equal((await putSession(gh.repo, ctx, ownDoc([s1]))).status, 'created');
+  });
+
+  test('programId sabittir: başka programla gelen PUT ve bitiş 400; dosya değişmez', async () => {
+    const gh = repo();
+    await putSession(gh.repo, ctx, ownDoc([s1]));
+    const before = gh.sha(PATH);
+    const other = ownDoc([s1, s2], { program: { revision: 7, dayId: DAY_A, dayName: 'Gün A' } });
+    assert.deepEqual(await putSession(gh.repo, ctx, other), { status: 'mismatch' });
+    assert.deepEqual(await finishSession(gh.repo, { ...ctx, client }, { doc: other }), { status: 'mismatch' });
+    assert.equal(gh.sha(PATH), before);
+  });
+
+  test('bitiş kendi programa yazar (program.json\'a değil): satır, rotasyon, index tek commit; yarım/başka gün bildirimi yok', async () => {
+    const gh = repo();
+    await putSession(gh.repo, ctx, ownDoc([s1]));
+    const feedback: FinishFeedback = {
+      answer: 'yes',
+      items: [
+        {
+          kind: 'sets',
+          apply: true,
+          entryId: 'e_goblet',
+          rowId: OWN_ROW_GOBLET,
+          dayId: OWN_DAY_A,
+          exerciseId: 'goblet-squat',
+          title: 'Goblet Squat',
+          trackingType: 'weight_reps',
+          count: { from: 3, to: 4 },
+          row: { exerciseId: 'goblet-squat', sets: [{ min: 8, max: 12 }, { min: 8, max: 12 }, { min: 8, max: 12 }] },
+        },
+      ],
+    };
+    const result = await finishSession(gh.repo, { ...ctx, client }, { doc: ownDoc([s1, s2, s3]), feedback });
+    assert.equal(result.status, 'finished');
+    if (result.status === 'finished') assert.deepEqual(result.plan.feedback, { direct: 1, proposals: 0, converted: 0, stale: 0 });
+    assert.deepEqual(gh.lastChanged(), [PATH, INDEX, OWN_INDEX_PATH, OWN_PATH].sort());
+    const stored = gh.get(OWN_PATH) as OwnProgram;
+    assert.equal(stored.phases[0]?.days[0]?.blocks[0]?.rows[0]?.sets.length, 4);
+    assert.equal(stored.revision, 2);
+    assert.equal(stored.rotation.lastDayId, OWN_DAY_A);
+    const index = gh.get(OWN_INDEX_PATH) as OwnIndex;
+    assert.equal(index.items[0]?.sha, gh.sha(OWN_PATH));
+    assert.equal(index.items[0]?.revision, 2);
+    const session = gh.get(PATH) as SessionDoc;
+    assert.deepEqual(session.notices.map((notice) => notice.kind), ['program_update'], 'yarım bırakıldı bildirimi yok');
+    assert.equal((gh.get(INDEX) as SessionIndex).items[0]?.programId, OWN_ID);
+    assert.equal(gh.get('proposals.json'), undefined);
+  });
+
+  test('bitişte program silinmişse seans kaydedilir, programa yazılmaz', async () => {
+    const gh = repo();
+    await putSession(gh.repo, ctx, ownDoc([s1]));
+    gh.remove(OWN_PATH);
+    const result = await finishSession(gh.repo, { ...ctx, client }, { doc: ownDoc([s1, s2, s3]) });
+    assert.equal(result.status, 'finished');
+    assert.deepEqual(gh.lastChanged(), [PATH, INDEX].sort());
   });
 });

@@ -24,7 +24,7 @@ import { LiveSession } from '../../live-session';
 export const metadata: Metadata = { title: 'Antrenman' };
 
 /** Programdaki satırın hareketinin kütüphanedeki adı (muadilin yerini aldığı hareket). */
-function rowTitleOf(program: Program | null, titles: ReadonlyMap<string, string>) {
+function rowTitleOf(program: Pick<Program, 'phases'> | null, titles: ReadonlyMap<string, string>) {
   const rows = new Map(
     (program?.phases ?? []).flatMap((phase) => phase.days.flatMap((day) => day.blocks.flatMap((block) => block.rows.map((row) => [row.id, row.exerciseId] as const)))),
   );

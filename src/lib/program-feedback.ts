@@ -128,7 +128,15 @@ type RowContext = {
   doc: SessionDoc;
 };
 
-function base(context: RowContext): Pick<FeedbackItem, 'entryId' | 'rowId' | 'dayId' | 'exerciseId' | 'title' | 'trackingType'> {
+/** Kendi programın günü mü (`docs/design/kendi-program.md` §3.4): bütün maddeler doğrudan yazılır. */
+function ownDay(day: Pick<WorkoutDay, 'source'>): boolean {
+  return day.source === 'own';
+}
+
+/** Kendi programda işaretsiz maddenin ipucu. */
+const OWN_HINT = 'İşaretsiz: program aynı kalır';
+
+function base(context: RowContext): Pick<FeedbackItem, 'entryId' | 'rowId' | 'dayId' | 'exerciseId' | 'title' | 'trackingType' | 'row'> {
   return {
     entryId: context.entry.id,
     rowId: context.row.id,
@@ -136,6 +144,8 @@ function base(context: RowContext): Pick<FeedbackItem, 'entryId' | 'rowId' | 'da
     exerciseId: context.plan.exerciseId,
     title: context.plan.title,
     trackingType: context.plan.trackingType,
+    // Satırın antrenman başındaki hâli: program o arada değiştiyse sunucu bununla karşılaştırır (§3.4).
+    row: { exerciseId: context.row.exerciseId, sets: context.row.sets.map((set) => ({ ...set })) },
   };
 }
 
@@ -219,7 +229,8 @@ function targetItem(context: RowContext): FeedbackItem | null {
   if (!direction || delta === 0) return null;
   const to = shiftSets(sets, delta, plan.trackingType);
   if (sameSets(to, sets)) return null;
-  const direct = plainSets(sets);
+  // Kendi programda piramit, back-off ve AMRAP'ta da doğrudan satıra yazılır (§3.4).
+  const direct = plainSets(sets) || ownDay(context.day);
   const unit = plan.trackingType === 'duration' ? `${margin} sn` : `${margin} tekrar`;
   return {
     ...base(context),
@@ -247,15 +258,16 @@ function setsItem(context: RowContext, previous: RowPrevious | undefined): Feedb
   const from = row.sets.length;
   const to = now === 'up' ? Math.min(done, previous.done, SET_LIMITS.perRow) : Math.max(done, previous.done, 1);
   if (to === from) return null;
+  const own = ownDay(context.day);
   return {
     ...base(context),
     key: `sets:${row.id}`,
     kind: 'sets',
-    mode: 'proposal',
+    mode: own ? 'direct' : 'proposal',
     checked: true,
     count: { from, to },
     text: `${plan.title}: ${formatNumber(from)} → ${formatNumber(to)} set`,
-    hint: 'Antrenörüne öner',
+    hint: own ? OWN_HINT : 'Antrenörüne öner',
     why: done === previous.done ? `2 antrenmandır ${formatNumber(done)} set yapıldı` : `Son 2 antrenmanda ${formatNumber(previous.done)} ve ${formatNumber(done)} set yapıldı`,
   };
 }
@@ -270,14 +282,16 @@ function removeItem(context: RowContext): FeedbackItem | null {
   const previous = plan.previous;
   if (!skippedOn(entry) || !previous?.skipped || previous.done > 0 || (entry.skip?.reason ?? null) !== (previous.reason ?? null)) return null;
   const reason = entry.skip?.reason;
+  // Kendi programda satır silinir: geri dönüşsüz görünen iş kendiliğinden yapılmaz, seçili gelmez (§3.4).
+  const own = ownDay(context.day);
   return {
     ...base(context),
     key: `remove:${context.row.id}`,
     kind: 'remove',
-    mode: 'proposal',
-    checked: true,
-    text: `${plan.title}: çıkar ya da değiştir`,
-    hint: 'Antrenörüne öner',
+    mode: own ? 'direct' : 'proposal',
+    checked: !own,
+    text: own ? `${plan.title}: programdan çıkar` : `${plan.title}: çıkar ya da değiştir`,
+    hint: own ? OWN_HINT : 'Antrenörüne öner',
     why: `2 antrenmandır geçildi${reason ? ` (${SKIP_REASON_LABELS[reason]})` : ''}`,
   };
 }
@@ -289,6 +303,7 @@ function removeItem(context: RowContext): FeedbackItem | null {
  */
 export function feedbackItems(input: { day: WorkoutDay; doc: SessionDoc; extras: ExtraRows; suggestions?: readonly SetSuggestion[] }): FeedbackItem[] {
   const { day, doc } = input;
+  const own = ownDay(day);
   const direct: FeedbackItem[] = [];
   const proposals: FeedbackItem[] = [];
   const push = (item: FeedbackItem | null) => {
@@ -311,11 +326,11 @@ export function feedbackItems(input: { day: WorkoutDay; doc: SessionDoc; extras:
           ...base(context),
           key: `swap:${row.id}`,
           kind: 'swap',
-          mode: 'proposal',
+          mode: own ? 'direct' : 'proposal',
           checked: false,
           swap: { exerciseId: entry.exerciseId, title: entry.title, ...(swapSets ? { sets: swapSets } : {}) },
           text: `${plan.title} yerine ${entry.title}`,
-          hint: 'Antrenörüne öner: bundan sonra bu',
+          hint: own ? OWN_HINT : 'Antrenörüne öner: bundan sonra bu',
           why: `Bu antrenmanda ${entry.title} yapıldı`,
         });
         continue;
@@ -343,7 +358,7 @@ export function feedbackItems(input: { day: WorkoutDay; doc: SessionDoc; extras:
     push({
       key: `add:${entry.id}`,
       kind: 'add',
-      mode: 'proposal',
+      mode: own ? 'direct' : 'proposal',
       checked: false,
       entryId: entry.id,
       dayId: day.dayId,
@@ -352,7 +367,7 @@ export function feedbackItems(input: { day: WorkoutDay; doc: SessionDoc; extras:
       trackingType,
       add: { sets: sets.slice(0, SET_LIMITS.perRow), restSeconds: extra?.restSeconds ?? FALLBACK_REST_SECONDS },
       text: `${entry.title} ekle`,
-      hint: 'Antrenörüne öner: programa ekle',
+      hint: own ? OWN_HINT : 'Antrenörüne öner: programa ekle',
       why: 'Bu antrenmanda eklendi',
     });
   }
@@ -362,11 +377,12 @@ export function feedbackItems(input: { day: WorkoutDay; doc: SessionDoc; extras:
     const entry = plan ? entryForRow(doc.entries, suggestion.rowId) : undefined;
     // Bugün yapılmayan (geçilen) ya da muadille yapılan satıra set artışı önerilmez; danışanın set önerisi varsa o yeter.
     if (!plan || !entry || entry.swappedFrom || entry.status === 'skipped' || working(entry).length === 0) continue;
-    if (proposals.some((item) => item.kind === 'sets' && item.rowId === suggestion.rowId)) continue;
-    proposals.push({
+    if ([...direct, ...proposals].some((item) => item.kind === 'sets' && item.rowId === suggestion.rowId)) continue;
+    const row = day.blocks.flatMap((block) => block.rows).find((item) => item.id === suggestion.rowId);
+    push({
       key: `algo_sets:${suggestion.rowId}`,
       kind: 'algo_sets',
-      mode: 'proposal',
+      mode: own ? 'direct' : 'proposal',
       checked: true,
       entryId: entry.id,
       rowId: suggestion.rowId,
@@ -376,8 +392,9 @@ export function feedbackItems(input: { day: WorkoutDay; doc: SessionDoc; extras:
       trackingType: plan.trackingType,
       count: { from: suggestion.from, to: suggestion.to },
       text: `${plan.title}: ${formatNumber(suggestion.from)} → ${formatNumber(suggestion.to)} set`,
-      hint: 'Antrenörüne öner',
+      hint: own ? OWN_HINT : 'Antrenörüne öner',
       why: suggestion.why,
+      ...(row ? { row: { exerciseId: row.exerciseId, sets: row.sets.map((set) => ({ ...set })) } } : {}),
     });
   }
   return [...direct, ...proposals];
@@ -440,8 +457,27 @@ export function feedbackSummary(items: readonly FeedbackItem[], checked: Readonl
   return { lines: ordered.slice(0, 3), more: Math.max(0, ordered.length - 3), unchecked: items.length - on.length };
 }
 
-/** Bitişten sonra danışana: "Programın güncellendi" / "Önerin antrenörüne gönderildi" ve ayrıntısı; bir şey yoksa null. */
-export function feedbackMessage(outcome: FeedbackOutcome): { title: string; description: string } | null {
+/**
+ * Bitişten sonra danışana: "Programın güncellendi" / "Önerin antrenörüne gönderildi" ve ayrıntısı; bir şey yoksa
+ * null. Kendi programda (`own`) "Evde güncellendi"; o arada değişen satıra yazılamadıysa (`stale`) "Evde o arada
+ * değişti; bu değişiklik yazılmadı." ve `open` (çağıran [Programı aç] ekler; `docs/design/kendi-program.md` §2.9).
+ */
+export function feedbackMessage(
+  outcome: FeedbackOutcome,
+  own?: { name: string } | null,
+): { title: string; description: string; open?: true } | null {
+  if (own) {
+    const stale = outcome.stale ?? 0;
+    if (stale > 0) {
+      return {
+        title: `${own.name} o arada değişti; ${stale > 1 ? `${formatNumber(stale)} değişiklik` : 'bu değişiklik'} yazılmadı.`,
+        description: outcome.direct > 0 ? `Öteki ${formatNumber(outcome.direct)} değişiklik programa yazıldı.` : 'Programını açıp yeniden düzenleyebilirsin.',
+        open: true,
+      };
+    }
+    if (outcome.direct === 0) return null;
+    return { title: `${own.name} güncellendi`, description: `${formatNumber(outcome.direct)} değişiklik programa yazıldı.` };
+  }
   if (outcome.direct === 0 && outcome.proposals === 0) return null;
   if (outcome.converted > 0) return { title: 'Program o arada değişti; önerin antrenörüne gönderildi.', description: 'Antrenörün onaylayınca programına yazılır.' };
   if (outcome.direct > 0) {
@@ -456,12 +492,14 @@ export function feedbackMessage(outcome: FeedbackOutcome): { title: string; desc
 /* --- sunucu: kararları programa ve önerilere yazmak --- */
 
 export type FeedbackOutcome = {
-  /** Programa doğrudan yazılan (kilo ve hedef) madde sayısı. */
+  /** Programa doğrudan yazılan (kilo ve hedef; kendi programda her tür) madde sayısı. */
   direct: number;
   /** Antrenöre giden öneri sayısı. */
   proposals: number;
   /** Doğrudan yazılacakken program o arada değiştiği için öneriye dönen. */
   converted: number;
+  /** Kendi programda: program o arada değiştiği için yazılmayan (§3.4). PT programında yok. */
+  stale?: number;
 };
 
 type FeedbackProgram = {
@@ -488,7 +526,7 @@ function clip(text: string, max: number): string {
 }
 
 /** Kararın seans belgesiyle tutarlılığı: hareket kaydı var, hareketi aynı; kiloda yapılan set var; muadil ve ekleme kendi kaydında. */
-function consistent(decision: FeedbackDecision, doc: SessionDoc): SessionEntry | null {
+export function consistent(decision: FeedbackDecision, doc: SessionDoc): SessionEntry | null {
   const entry = doc.entries.find((item) => item.id === decision.entryId);
   if (!entry) return null;
   switch (decision.kind) {

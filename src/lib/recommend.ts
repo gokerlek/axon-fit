@@ -387,6 +387,8 @@ export function recommend(input: {
   history: readonly SessionResult[];
   startWeightKg?: number;
   rowId?: string;
+  /** Geçmiş yalnız çeviri kaynağı (başka programın antrenmanları; `planSession`). */
+  convertOnly?: boolean;
   exercise: RecommendExercise;
   exposure: Exposure;
   tuning?: Partial<RecommendTuning>;
@@ -400,8 +402,16 @@ export function recommend(input: {
     history,
     ...(input.startWeightKg !== undefined ? { startWeightKg: input.startWeightKg } : {}),
     ...(input.rowId !== undefined ? { rowId: input.rowId } : {}),
+    ...(input.convertOnly ? { convertOnly: true } : {}),
   });
-  const series = sessionSeries({ spec, rule, sets, history, ...(input.rowId !== undefined ? { rowId: input.rowId } : {}) });
+  const series = sessionSeries({
+    spec,
+    rule,
+    sets,
+    history,
+    ...(input.rowId !== undefined ? { rowId: input.rowId } : {}),
+    ...(input.convertOnly ? { convertOnly: true } : {}),
+  });
   const ctx: Context = { spec, rule, sets, engine, series, exposure: input.exposure, pct: increasePct(input.exercise, tuning), tuning };
   const { plan, note } = decide(ctx);
   return { plan, stage: input.exposure.stage, why: explain(ctx, plan, note) };

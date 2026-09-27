@@ -107,9 +107,11 @@ export default async function TemplatesPage() {
                     <CardDescription className="line-clamp-2">
                       {template.description || summarizeMuscles(top).join(', ') || 'Sayılan kas yükü yok'}
                     </CardDescription>
-                    {missingRowIds.length > 0 ? (
-                      <CardAction>
-                        <Badge variant="destructive">eksik hareket</Badge>
+                    {missingRowIds.length > 0 || template.sharedWithClients ? (
+                      <CardAction className="flex flex-col items-end gap-1">
+                        {missingRowIds.length > 0 ? <Badge variant="destructive">eksik hareket</Badge> : null}
+                        {/* Danışanlar kendi programlarına kopyalayabilir (kendi-program.md §3.8). */}
+                        {template.sharedWithClients ? <Badge variant="secondary">Danışanlara açık</Badge> : null}
                       </CardAction>
                     ) : null}
                   </CardHeader>

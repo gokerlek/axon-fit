@@ -146,17 +146,24 @@ const textFields = {
 };
 
 /** Düzenleyicinin şeması (kimlik ve tarihler yok); yalnız yeni biçim. */
-export const templateFormSchema = v.object({ ...textFields, blocks: templateBlocksSchema });
+export const templateFormSchema = v.object({
+  ...textFields,
+  blocks: templateBlocksSchema,
+  /** "Danışanlar kendi programlarına kopyalayabilir" (`docs/design/kendi-program.md` §3.8); varsayılan kapalı. */
+  sharedWithClients: v.optional(v.boolean(), false),
+});
 export type TemplateInput = v.InferInput<typeof templateFormSchema>;
 export type TemplateFormValues = v.InferOutput<typeof templateFormSchema>;
 
 /**
  * Kayıt ucu: kimliksiz istek yeni şablondur; `baseSha` düzenleyicinin yüklediği sürüm.
- * Eski biçimle açık kalmış bir sekmenin kaydı da kabul edilir (yeni biçime çevrilir).
+ * Eski biçimle açık kalmış bir sekmenin kaydı da kabul edilir (yeni biçime çevrilir). Bayrağı
+ * göndermeyen (eski sekme) kayıttakine dokunmaz.
  */
 export const templateSaveSchema = v.object({
   ...textFields,
   blocks: storedBlocksSchema,
+  sharedWithClients: v.optional(v.boolean()),
   id: v.optional(v.pipe(v.string(), v.regex(TEMPLATE_ID_PATTERN, 'Şablon kimliği geçersiz.'))),
   baseSha: v.optional(v.pipe(v.string(), v.regex(/^[0-9a-f]{40}$/))),
 });
@@ -166,6 +173,8 @@ export const templateSchema = v.object({
   id: v.pipe(v.string(), v.regex(TEMPLATE_ID_PATTERN)),
   ...textFields,
   blocks: storedBlocksSchema,
+  /** Danışanlar kendi programlarına kopyalayabilir; yoksa kapalı. Danışan yalnız bu şablonları görür ve okur. */
+  sharedWithClients: v.optional(v.boolean()),
   createdAt: v.pipe(v.string(), v.isoTimestamp()),
   updatedAt: v.pipe(v.string(), v.isoTimestamp()),
 });

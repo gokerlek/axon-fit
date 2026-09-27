@@ -13,6 +13,8 @@ import {
 import type { Client, Invite } from './schemas/client.ts';
 import { programSchema } from './schemas/program.ts';
 import type { SessionIndexExercise, SessionIndexRow } from './schemas/session.ts';
+import { ownIndexItemOf, type OwnIndex } from './own-program-index.ts';
+import { OWN_ID, ownProgram } from './testing/own-fixtures.ts';
 import { programFile, singleBlock } from './testing/session-fixtures.ts';
 import { applyClientSchedule, resetClientSchedule } from './training-days.ts';
 
@@ -312,5 +314,53 @@ describe('dikkat: Genel bakış listesi', () => {
     );
     assert.equal(feed.total, 3);
     assert.equal(feed.clients, 3);
+  });
+});
+
+describe('dikkat: kendi program seçiliyken (kendi-program.md §4)', () => {
+  // PT'nin programı Pzt/Çar/Cum; danışan 1 Eylül'den beri "Evde" (Sal, Per) ile çalışıyor ve Sal/Per yaptı.
+  const ptProgram = v.parse(programSchema, programFile({}, { createdAt: '2026-06-01T10:00:00.000Z', schedule: { weekdays: [1, 3, 5] } }));
+  const evde = ownProgram({ createdAt: '2026-08-01T10:00:00.000Z', schedule: { weekdays: [2, 4], at: '2026-08-01T10:00:00.000Z' } });
+  const item = ownIndexItemOf(evde, 'a'.repeat(40));
+  const ownIndex = (active: OwnIndex['active']): OwnIndex => ({ version: 1, items: [item], events: [], ...(active ? { active } : {}) });
+  const homeDays = { items: [row('2026-09-22'), row('2026-09-24')] };
+  const missed = (own: OwnIndex | null, index = homeDays, program = ptProgram) =>
+    attentionItems(attentionFactsOf({ client: joined, invite: null, index, program, proposals: null, measurements: null, now: NOW, own }), ctx).filter(
+      (entry) => entry.kind === 'missed',
+    );
+
+  test('günler kendi programın index satırından: PT\'nin Pzt/Çar/Cum\'u kaçan sayılmaz', () => {
+    assert.deepEqual(missed(ownIndex({ programId: OWN_ID, at: '2026-09-01T10:00:00.000Z' })), []);
+    // Seçim bilinmeseydi (eski özet) PT'nin günleri kaçmış görünürdü.
+    assert.equal(missed(null).length, 1);
+    // Evde'nin Salı'sı yapılmadıysa o kaçar.
+    assert.deepEqual(missed(ownIndex({ programId: OWN_ID, at: '2026-09-01T10:00:00.000Z' }), { items: [row('2026-09-24')] }).map((entry) => entry.text), [
+      'Antrenman günü kaçtı: 22 Eyl Sal',
+    ]);
+  });
+
+  test('pencere seçimin anından sonra başlar: PT\'nin programına dün dönen danışanda önceki günler sayılmaz', () => {
+    const back = ownIndex({ programId: null, at: '2026-09-25T15:00:00.000Z' });
+    const facts = attentionFactsOf({ client: joined, invite: null, index: homeDays, program: ptProgram, proposals: null, measurements: null, now: NOW, own: back });
+    assert.equal(facts.schedule?.since, '2026-09-25T15:00:00.000Z');
+    assert.deepEqual(missed(back), []);
+    // Evde'yi dün seçen danışan: Evde'nin günleri ama önceki Salı ve Perşembe kaçmış sayılmaz.
+    assert.deepEqual(missed(ownIndex({ programId: OWN_ID, at: '2026-09-25T15:00:00.000Z' }), { items: [] }), []);
+  });
+
+  test('PT programının evresi dolduysa ve danışan kendi programıyla çalışıyorsa madde bunu söyler', () => {
+    const phased = v.parse(
+      programSchema,
+      programFile({}, {
+        phased: true,
+        phases: [
+          { ...programFile().phases[0], name: 'Uyum', weeks: 2 },
+          { id: 'p_bbbbbb', name: 'Güç', weeks: 6, days: [{ id: 'd_dddddd', name: 'Gün D', blocks: [singleBlock('b_dddddd', 'r_dddddd')] }] },
+        ],
+      }),
+    );
+    const facts = attentionFactsOf({ client: joined, invite: null, index: homeDays, program: phased, proposals: null, measurements: null, now: NOW, own: ownIndex({ programId: OWN_ID, at: '2026-09-01T10:00:00.000Z' }) });
+    const phase = attentionItems(facts, ctx).find((entry) => entry.kind === 'phase');
+    assert.equal(phase?.text, "Danışan Evde ile çalışıyor · 'Uyum' evresinin süresi doldu");
   });
 });

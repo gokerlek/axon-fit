@@ -791,11 +791,16 @@ type Analyzed = {
   lighterMiss: boolean;
 };
 
-/** `planSession`'ın serisi (bkz. dosya başı): eşlenmiş antrenmanlar, en yenisi sonda; `latest` çeviri kaynağı. */
+/**
+ * `planSession`'ın serisi (bkz. dosya başı): eşlenmiş antrenmanlar, en yenisi sonda; `latest` çeviri kaynağı.
+ * `convertOnly`: geçmiş yalnız çeviri kaynağıdır, seri kurulmaz (başka programın antrenmanları,
+ * `docs/design/kendi-program.md` §3.9).
+ */
 function analyzeSeries(
   sets: readonly SetTarget[],
   history: readonly SessionResult[],
   rowId: string | undefined,
+  convertOnly = false,
 ): { chain: Analyzed[]; latest: Analyzed | undefined } {
   const full = topSetIndexes(sets);
   const sessions: Analyzed[] = history.flatMap((results) => {
@@ -813,6 +818,7 @@ function analyzeSeries(
       },
     ];
   });
+  if (convertOnly) return { chain: [], latest: sessions.at(-1) };
   const { chain, latest } = seriesOf(
     sessions,
     ({ pairs }) => pairs.every((pair) => pair.fits),
@@ -871,6 +877,7 @@ export function planSession({
   history,
   startWeightKg,
   rowId,
+  convertOnly,
 }: {
   spec: LoadSpec;
   rule: Pick<ProgressionRule, 'scheme' | 'targetRir'>;
@@ -879,6 +886,8 @@ export function planSession({
   startWeightKg?: number;
   /** Satırın kimliği (`r_…`): verilirse başka satırın kayıtları seriye girmez. */
   rowId?: string;
+  /** Geçmiş yalnız çeviri kaynağı (başka programın antrenmanları): seri yok, en yenisinden çevrilir. */
+  convertOnly?: boolean;
 }): SessionPlan {
   const grid = usesWeight(spec) ? gridOf(spec) : null;
   const mins = sets.map((set) => set.min);
@@ -888,7 +897,7 @@ export function planSession({
     reason,
   });
 
-  const { chain, latest } = analyzeSeries(sets, history, rowId);
+  const { chain, latest } = analyzeSeries(sets, history, rowId, convertOnly);
   const lastSession = chain.at(-1);
   const last = lastSession?.pairs;
 
@@ -1008,15 +1017,17 @@ export function sessionSeries({
   sets,
   history,
   rowId,
+  convertOnly,
 }: {
   spec: LoadSpec;
   rule: Pick<ProgressionRule, 'scheme'>;
   sets: readonly SetTarget[];
   history: readonly SessionResult[];
   rowId?: string;
+  convertOnly?: boolean;
 }): SeriesSession[] {
   const weighted = usesWeight(spec);
-  return analyzeSeries(sets, history, rowId).chain.map((session) => {
+  return analyzeSeries(sets, history, rowId, convertOnly).chain.map((session) => {
     const decisive = deciding(session.pairs);
     const { light, heavy } = referenceOf(session, spec);
     const reached = !session.lighter && decisive.every(reachedPair);

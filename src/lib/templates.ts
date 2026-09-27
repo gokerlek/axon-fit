@@ -4,6 +4,7 @@ import type { DeviceWithSource } from './devices';
 import type { ExerciseWithSource } from './exercises';
 import { appRepo, GithubError } from './github/client';
 import { deleteFile, getFileSha, listDir, readJson, writeJson } from './github/files';
+import type { TemplateOption } from './program-plan';
 import { TEMPLATE_ID_PATTERN, templateSchema, type Template } from './schemas/template';
 import type { EditorDevice, PickerExercise } from './template-edit';
 
@@ -126,6 +127,26 @@ export async function listTemplates(): Promise<TemplateFile[]> {
 /** Seçiciler için geçerli şablonların kimliği ve adı (ör. danışanın başlangıç şablonu). */
 export async function templateChoices(): Promise<{ id: string; name: string }[]> {
   return (await listTemplates()).flatMap((file) => (file.template ? [{ id: file.template.id, name: file.template.name }] : []));
+}
+
+/**
+ * Danışanlara açık şablonlar (`docs/design/kendi-program.md` §3.8): kendi programın "Hazır şablondan" başlangıcı ve
+ * gün ekleme. Yalnız bayraklı (`sharedWithClients`) ve okunabilen şablonlar; açıklama gönderilmez.
+ */
+export async function clientTemplates(): Promise<TemplateOption[]> {
+  return (await listTemplates()).flatMap((file) =>
+    file.template?.sharedWithClients ? [{ id: file.template.id, name: file.template.name, blocks: file.template.blocks }] : [],
+  );
+}
+
+/**
+ * Danışanın kimlikle okuması (`?sablon=t_…`): şablon kimlikleri tahmin edilebilir, bu yüzden işaretsiz şablon
+ * yokmuş gibi null döner (liste süzgeci yetmez, §3.8).
+ */
+export async function clientTemplate(id: string): Promise<TemplateOption | null> {
+  const file = await readTemplateFile(id);
+  const template = file?.template;
+  return template && template.sharedWithClients === true ? { id: template.id, name: template.name, blocks: template.blocks } : null;
 }
 
 export async function writeTemplate(template: Template, options: { sha?: string; message: string }): Promise<{ sha: string }> {

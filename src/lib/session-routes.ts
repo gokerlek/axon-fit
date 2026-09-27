@@ -50,6 +50,8 @@ export type Authorized = { client: Client; repo: SessionRepo };
 const EXPIRED = { status: 401, body: { error: 'Oturumun kapanmış. Yeniden giriş yap.' } };
 const NOT_FOUND = { status: 404, body: { error: 'Antrenman bulunamadı.' } };
 const GONE = { status: 410, body: { error: 'Bu antrenman silinmiş.', reason: 'deleted' } };
+/** Seansın programı sabittir (`docs/design/kendi-program.md` §5.4): başka cihazdan farklı programla gelen yazılmaz. */
+const PROGRAM_MISMATCH = { status: 400, body: { error: 'Kayıt başka bir programa ait.', reason: 'program' } };
 
 async function authorize(deps: SessionRouteDeps): Promise<Authorized | SessionRouteResult> {
   if (!deps.session) return EXPIRED;
@@ -147,6 +149,10 @@ export function putRoute(deps: SessionRouteDeps, headers: Headers, origin: strin
     switch (result.status) {
       case 'deleted':
         return GONE;
+      case 'mismatch':
+        return PROGRAM_MISMATCH;
+      case 'program':
+        return { status: 400, body: { error: 'Bu antrenmanın programı bulunamadı.', reason: 'program' } };
       case 'finished':
         return { status: 409, body: { error: 'Bu antrenman başka bir cihazda bitirildi.', reason: 'finished', doc: result.doc } };
       case 'unchanged':
@@ -168,6 +174,7 @@ export function finishRoute(deps: SessionRouteDeps, headers: Headers, origin: st
     if (parsed.output.doc.id !== id) return { status: 400, body: { error: 'Kayıt başka bir antrenmana ait.' } };
     const result = await finishSession(repo, { now: deps.now(), timeZone: await deps.timeZone(), client }, parsed.output);
     if (result.status === 'deleted') return GONE;
+    if (result.status === 'mismatch') return PROGRAM_MISMATCH;
     if (result.status === 'already') return { status: 200, body: { doc: result.doc, already: true } };
     deps.log(`[seans] ${client.id} ${id} finish`);
     return {

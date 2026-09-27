@@ -326,3 +326,98 @@ describe('Bugün: index\'ten', () => {
     assert.deepEqual(afterFinish(data, { id: 's_eeeeeeee', date: '2026-09-18', waterTaps: taps }), { ...data });
   });
 });
+
+describe('kendi programlar ve geçmiş penceresi (kendi-program.md §3.9)', () => {
+  const OWN = 'op_evde0001';
+  const HOME_ROW = 'r_ownbnc';
+  const HOME_DAY = 'd_ownaaa';
+  const sha = (n: number) => n.toString(16).padStart(40, 'b');
+  const DAY = 24 * 60;
+
+  /** Bitmiş antrenman: satır, program ve setler (`kg × reps`, hedef 8–10); `minute` başlangıçtan. */
+  function session(n: number, minute: number, rowId: string, sets: { kg: number; reps: number }[], programId?: string): SessionDoc {
+    const id = `s_${n.toString(36).padStart(8, '0')}`;
+    return sessionDoc({
+      id,
+      status: 'finished',
+      startedAt: at(minute),
+      finishedAt: at(minute + 40),
+      program: programId
+        ? { revision: 1, dayId: HOME_DAY, dayName: 'Gün A', programId, programName: 'Evde' }
+        : { revision: 7, dayId: DAY_A, dayName: 'Gün A' },
+      entries: [
+        sessionEntry(`e_${n.toString(36).padStart(6, '0')}`, {
+          rowId,
+          status: 'done',
+          sets: sets.map((set, index) => workingSet(setId(), minute + index + 1, { setIndex: index, kg: set.kg, reps: set.reps, target: { min: 8, max: 10 } })),
+        }),
+      ],
+    });
+  }
+
+  /** "Evde": tek günde PT'nin Bench satırının kopyası (yeni satır kimliği). */
+  function homeProgram() {
+    const raw = programFile();
+    const phases = raw.phases as { id: string; days: { id: string; blocks: unknown[] }[] }[];
+    phases[0]!.days = [{ ...phases[0]!.days[0]!, id: HOME_DAY, blocks: [singleBlock('b_ownbnc', HOME_ROW, 3)] }];
+    return parsedProgram({ ...raw, revision: 1 });
+  }
+
+  test('üç hafta Evde\'den sonra PT satırı yine kendi serisinden planlanır', () => {
+    // Salonda (PT programı) üç antrenman 60 kg × 10; sonra üç hafta, haftada üç kez evde 30 kg × 10.
+    const gym = [0, 1, 2].map((n) => session(n + 1, n * 2 * DAY, 'r_aaaaaa', three(60, 10)));
+    const home = Array.from({ length: 9 }, (_, n) => session(n + 10, (10 + n * 2) * DAY, HOME_ROW, three(30, 10), OWN));
+    const all = [...gym, ...home];
+    const index: SessionIndex = { version: 1, items: all.map((doc, n) => indexRowOf(doc, sha(n))), deleted: [] };
+    const program = parsedProgram();
+
+    const window = historyRows(index, { exerciseIds: dayExerciseIds(program, DAY_A), rowIds: new Set(['r_aaaaaa', 'r_bbbbbb']), programId: null });
+    const picked = new Set(window.map((row) => row.id));
+    assert.ok(gym.every((doc) => picked.has(doc.id)), 'PT satırının antrenmanları pencerede');
+    assert.equal(window.filter((row) => row.programId === OWN).length, 8, 'en yeni 8 yine okunur');
+
+    const history = all.filter((doc) => picked.has(doc.id));
+    const built = buildWorkoutDay({ program, exercises: EXERCISES, devices: DEVICES, history });
+    const row = built?.rows.r_aaaaaa;
+    assert.equal(row?.plan.reason, 'increase');
+    assert.equal(row?.plan.topWeightKg, 62.5, 'evdeki 30 kg salonun planını çekmez');
+    assert.deepEqual(row?.lastTime.map((set) => set.kg), [60, 60, 60], '"Önceki" satırın kendi kaydı');
+
+    // Eski pencere (yalnız en yeni 8) PT satırını evdeki seriye bırakırdı.
+    const old = new Set(historyRows(index, new Set(['bench-press'])).map((item) => item.id));
+    assert.ok(gym.every((doc) => !old.has(doc.id)));
+  });
+
+  test('Evde\'nin ilk antrenmanı salonun serisini sürdürmez: yalnız çeviri kaynağı', () => {
+    // Salonda üç tıkanma (60 kg × 5): seri olsaydı hafifletme gelirdi.
+    const gym = [0, 1, 2].map((n) => session(n + 1, n * DAY, 'r_aaaaaa', three(60, 5)));
+    const program = homeProgram();
+    const own = buildWorkoutDay({ program, exercises: EXERCISES, devices: DEVICES, history: gym, owner: { programId: OWN, name: 'Evde' } });
+    const row = own?.rows[HOME_ROW];
+    assert.equal(own?.source, 'own');
+    assert.equal(own?.programId, OWN);
+    assert.equal(row?.plan.reason, 'first_time');
+    assert.equal(row?.plan.topWeightKg, 55, 'Epley: 60 × 5 → 8 tekrar, ızgaraya aşağı');
+
+    // Programı bilmeyen (eski) çağrı salonun serisinden hafifletirdi.
+    const legacy = buildWorkoutDay({ program, exercises: EXERCISES, devices: DEVICES, history: gym });
+    assert.equal(legacy?.rows[HOME_ROW]?.plan.reason, 'deload');
+
+    // Aynı programın (Evde) antrenmanı varsa seri oradan kurulur.
+    const homeOnce = session(20, 5 * DAY, 'r_baskaaa', three(40, 10), OWN);
+    const same = buildWorkoutDay({ program, exercises: EXERCISES, devices: DEVICES, history: [...gym, homeOnce], owner: { programId: OWN, name: 'Evde' } });
+    assert.equal(same?.rows[HOME_ROW]?.plan.topWeightKg, 42.5);
+  });
+
+  test('"Önceki": satırın kaydı yoksa önce aynı programın aynı egzersizi', () => {
+    const gym = session(1, 0, 'r_aaaaaa', three(60, 10));
+    const home = session(2, -DAY, 'r_baskaaa', three(30, 10), OWN);
+    assert.deepEqual(lastTimeOf([gym, home], { rowId: HOME_ROW, exerciseId: 'bench-press', programId: OWN }).map((set) => set.kg), [30, 30, 30]);
+    assert.deepEqual(lastTimeOf([gym, home], { rowId: HOME_ROW, exerciseId: 'bench-press' }).map((set) => set.kg), [60, 60, 60]);
+  });
+
+  test('damga programın kimliğini taşır: seçim değişince saklanan plan eskir', () => {
+    const program = parsedProgram();
+    assert.notEqual(programStamp(program, OWN), programStamp(program));
+  });
+});

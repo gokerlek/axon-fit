@@ -1,4 +1,5 @@
 import { formatKg, formatNumber } from './format.ts';
+import type { OwnIndex } from './own-program-index.ts';
 import type { ProgramLogEntry } from './program-plan.ts';
 import type { SessionIndex } from './schemas/session.ts';
 
@@ -26,7 +27,7 @@ export const NOTICE_FEED_LIMIT = 20;
 
 const DAY_MS = 86_400_000;
 
-export const PT_NOTICE_KINDS = ['other_day', 'unfinished', 'overload', 'lighter', 'pain', 'program', 'proposal'] as const;
+export const PT_NOTICE_KINDS = ['other_day', 'unfinished', 'overload', 'lighter', 'pain', 'program', 'proposal', 'own_program'] as const;
 export type PtNoticeKind = (typeof PT_NOTICE_KINDS)[number];
 
 export const PT_NOTICE_LABELS: Record<PtNoticeKind, string> = {
@@ -37,6 +38,7 @@ export const PT_NOTICE_LABELS: Record<PtNoticeKind, string> = {
   pain: 'Ağrı',
   program: 'Program',
   proposal: 'Öneri',
+  own_program: 'Kendi programı',
 };
 
 export type PtNotice = {
@@ -109,6 +111,43 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** Paylaşılmış programın geçmişinden PT'ye giden kayıt: danışanın düzenleyici kaydı ya da bitişteki kaydı (günler değil). */
+function clientEdit(entry: Pick<ProgramLogEntry, 'kind' | 'by' | 'sessionId'>): boolean {
+  return (entry.kind === 'edit' && entry.by !== 'pt') || (entry.kind === 'client' && entry.sessionId !== undefined);
+}
+
+/**
+ * Danışanın kendi programları (`docs/design/kendi-program.md` §7.1), `own_program` türü, bağlantı Program sekmesi:
+ * Bugün'ün programını değiştirdi (index `active.at`), paylaştı (`items[].shared.at`), paylaşımı kapattı ya da
+ * sildi (`events`), paylaşılmış programı düzenledi (`logs`: çağıran yalnız `clientEditedAt`'i pencerede olan
+ * paylaşılmış programların geçmişini verir). Paylaşılmamış programdaki düzenlemeler bildirilmez.
+ */
+export function ownProgramNotices(index: OwnIndex | null | undefined, since: number, logs: ReadonlyMap<string, readonly ProgramLogEntry[]> = new Map()): PtNotice[] {
+  if (!index) return [];
+  const notices: PtNotice[] = [];
+  const push = (key: string, at: string, text: string) => notices.push({ key: `own_program:${key}`, kind: 'own_program', at, text, target: 'program' });
+  const names = new Map(index.items.map((item) => [item.id, item.name]));
+  if (index.active && time(index.active.at) >= since) {
+    const id = index.active.programId;
+    const name = id ? (names.get(id) ?? index.events.find((event) => event.id === id)?.name) : null;
+    push(`active:${index.active.at}`, index.active.at, id ? `Bugün'ün programı: ${name ?? 'kendi programı'}` : 'Antrenörün programına döndü');
+  }
+  for (const item of index.items) {
+    if (item.shared && time(item.shared.at) >= since) push(`shared:${item.id}:${item.shared.at}`, item.shared.at, `Paylaştı: ${item.name}`);
+    if (!item.shared) continue;
+    for (const entry of logs.get(item.id) ?? []) {
+      if (!clientEdit(entry) || time(entry.at) < since) continue;
+      const text = entry.changes.map((change) => (change.scope ? `${change.scope}: ${change.text}` : change.text)).join(' · ');
+      push(`edit:${item.id}:${entry.at}`, entry.at, `${item.name} · ${text}`);
+    }
+  }
+  for (const event of index.events) {
+    if (time(event.at) < since) continue;
+    push(`${event.kind}:${event.id}:${event.at}`, event.at, event.kind === 'deleted' ? `Sildi: ${event.name}` : `Paylaşımı kapattı: ${event.name}`);
+  }
+  return notices;
+}
+
 /**
  * `proposals.json`'daki bekleyen öneriler (`proposals.ts`; burada hoşgörüyle yalnız `status`, `at` ve `text`
  * okunur, bilinmeyen türler de sayılır): tek bildirim, en yeni önerinin anında; tek öneri varsa metniyle
@@ -129,6 +168,8 @@ export function clientNotices(input: {
   log: readonly Pick<ProgramLogEntry, 'at' | 'kind' | 'changes'>[];
   proposals: unknown;
   health?: readonly SessionHealth[];
+  /** Kendi programların index'i ve paylaşılmış programların geçmişi (`ownProgramNotices`). */
+  own?: { index: OwnIndex | null; logs?: ReadonlyMap<string, readonly ProgramLogEntry[]> } | undefined;
   now: Date;
   windowDays?: number;
   limit?: number;
@@ -138,6 +179,7 @@ export function clientNotices(input: {
     ...(input.index ? sessionNotices(input.index, since, input.health) : []),
     ...programNotices(input.log, since),
     ...proposalNotices(input.proposals),
+    ...(input.own ? ownProgramNotices(input.own.index, since, input.own.logs) : []),
   ];
   return all.sort((a, b) => time(b.at) - time(a.at) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)).slice(0, input.limit ?? NOTICES_PER_CLIENT);
 }
