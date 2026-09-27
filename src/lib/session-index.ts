@@ -101,7 +101,8 @@ export function indexRowOf(doc: SessionDoc, sha: string): SessionIndexRow {
   const notices = [...new Set(doc.notices.map((notice) => notice.kind))].sort() as NoticeKind[];
   const duration = durationOf(doc);
   const program = doc.program;
-  const otherDay = Boolean(program?.plannedDayId && program.plannedDayId !== program.dayId);
+  // Kendi programda başka gün yok: plan danışanın (`docs/design/kendi-program.md` §3.4).
+  const otherDay = !program?.programId && Boolean(program?.plannedDayId && program.plannedDayId !== program.dayId);
   const unfinished = doc.notices.find((notice) => notice.kind === 'unfinished');
   const overloads = notices.includes('overload') ? overloadsOf(doc) : [];
   return {

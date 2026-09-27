@@ -186,7 +186,7 @@ export function sessionDetail(doc: SessionDoc, timeZone: string): SessionDetail 
     meta: [`${clockOf(doc.startedAt, timeZone)}–${clockOf(end, timeZone)}`, `${formatNumber(sets)} set`, formatKg(volumeOf(doc))].join(' · '),
     water: waterOf(doc),
     effort: doc.effort?.sessionRpe !== undefined ? `Zorluk ${formatNumber(doc.effort.sessionRpe)}/10` : null,
-    otherDay: Boolean(doc.program?.plannedDayId && doc.program.plannedDayId !== doc.program.dayId),
+    otherDay: !doc.program?.programId && Boolean(doc.program?.plannedDayId && doc.program.plannedDayId !== doc.program.dayId),
     unfinished: doc.notices.some((notice) => notice.kind === 'unfinished'),
     exercises,
     subject: `${title} · ${formatNumber(sets)} set ve özeti`,

@@ -370,8 +370,8 @@ export function WorkoutScreen({
       if (!data.day) return setLoad({ phase: 'empty', problem: data.problem });
       const doc = newSessionDoc(data.day, { today: data.today, now: new Date(), writer: writerId() });
       adopt(createLocalWorkout(doc, data.day, null, options));
-      // Başka gün seçildi (§2.3): antrenöre bitişte bildirilir (`other_day`).
-      if (!announced && data.day.plannedDayId && data.day.plannedDayId !== data.day.dayId) {
+      // Başka gün seçildi (§2.3): antrenöre bitişte bildirilir (`other_day`); kendi programda bildirim yok.
+      if (!announced && data.day.source !== 'own' && data.day.plannedDayId && data.day.plannedDayId !== data.day.dayId) {
         announced = true;
         toast(`${data.day.dayName} seçildi`, { description: 'Antrenörüne bildirilecek' });
       }

@@ -24,7 +24,7 @@ import { clearWorkoutCache, readWorkoutCache } from './workout-storage';
  * - üst satır: "Bugün antrenman günün · Gün B" ya da "Dinlenme günü · sıradaki antrenman Çarşamba (Gün B)";
  * - 7 günlük şerit (pazartesi başlar): seçili günler halkalı, yapılanlar dolu, kaçanlar soluk; altında
  *   "Günlerini değiştir";
- * - "Başka gün seç": gün sheet'i, antrenörüne bildirilir, sıra seçilen günden sürer;
+ * - "Başka gün seç": gün sheet'i, antrenörüne bildirilir (kendi programda değil), sıra seçilen günden sürer;
  * - telefondaki gün planının tazeliği: sunucuda taze okunan programın damgası saklanan planınkinden
  *   farklıysa (PT programı değiştirdi) saklanan plan atılır, "Antrenmana başla" güncel planı açar.
  */
@@ -127,7 +127,10 @@ export function OtherDayButton({ clientId }: { clientId: string }) {
             <SheetTitle id="other-day-title" className="text-lg font-semibold">
               Hangi günü yapacaksın?
             </SheetTitle>
-            <SheetDescription>Antrenörüne bildirilir. Sıra seçtiğin günden devam eder.</SheetDescription>
+            {/* Kendi programda PT'ye bildirilmez (`docs/design/kendi-program.md` §3.4). */}
+            <SheetDescription>
+              {data?.program?.source === 'own' ? 'Sıra seçtiğin günden devam eder.' : 'Antrenörüne bildirilir. Sıra seçtiğin günden devam eder.'}
+            </SheetDescription>
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4">
             <RadioGroup aria-labelledby="other-day-title" value={selected} onValueChange={(value) => setPicked(String(value))}>

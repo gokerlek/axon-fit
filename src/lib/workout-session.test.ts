@@ -5,7 +5,12 @@ import { sessionDocSchema, type SessionDoc } from './schemas/session.ts';
 import { volumeOf, waterOf } from './session-index.ts';
 import { toSetResults } from './session-results.ts';
 import { at, DAY_A, programFile, sessionDoc, sessionEntry, W1, workingSet } from './testing/session-fixtures.ts';
-import { dayWithBlocks, workoutDay } from './testing/workout-fixtures.ts';
+import { DEVICES, EXERCISES, dayWithBlocks, workoutDay } from './testing/workout-fixtures.ts';
+import { OWN_DAY_B, OWN_ID, ownProgram } from './testing/own-fixtures.ts';
+import { fakeSessionRepo } from './testing/fake-session-repo.ts';
+import { ownProgramPath } from './own-programs.ts';
+import { putSession } from './session-files-core.ts';
+import { buildWorkoutDay } from './workout-plan.ts';
 import { feedbackItems } from './program-feedback.ts';
 import { completion } from './session-finish.ts';
 import { withExtraRounds } from './workout-flow.ts';
@@ -108,6 +113,19 @@ describe('antrenman belgesi: başlangıç ve sıradaki set', () => {
     assert.equal(nextSet(day, doc, { rowId: 'r_aaaaaa', setIndex: 0, kg: 25, value: 9 })?.kg, 25);
     assert.equal(nextSet(day, doc, { rowId: 'r_aaaaaa', setIndex: 0, value: 9 })?.kg, 20);
     assert.equal(nextSet(day, doc, { rowId: 'r_aaaaaa', setIndex: 1, kg: 25 })?.kg, 20);
+  });
+
+  test('kendi programın belgesi programın kimliğini ve adını taşır; sunucu günü o programda bulur', async () => {
+    const owner = { programId: OWN_ID, name: 'Evde' };
+    const day = buildWorkoutDay({ program: ownProgram(), dayId: OWN_DAY_B, exercises: EXERCISES, devices: DEVICES, history: [], owner });
+    assert.ok(day);
+    const doc = logNext(day, start(day), 1);
+    assert.equal(doc.program?.programId, OWN_ID);
+    assert.equal(doc.program?.programName, 'Evde');
+    assert.equal(v.safeParse(sessionDocSchema, doc).success, true);
+    // `programId`'siz belge günü PT'nin programında arardı ("program", 400).
+    const gh = fakeSessionRepo({ 'program.json': programFile(), [ownProgramPath(OWN_ID)]: ownProgram() });
+    assert.equal((await putSession(gh.repo, { now: new Date(at(2)), timeZone: 'Europe/Istanbul' }, doc)).status, 'created');
   });
 });
 
