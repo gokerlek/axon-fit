@@ -121,7 +121,13 @@ function ownCommitMessage(name: string, kind: 'create' | 'edit', changes: readon
 export type OwnLibrary = { exercises: ReadonlyMap<string, PlanExercise>; deviceIds: ReadonlySet<string> };
 
 export type OwnSaveResult =
-  | { status: 'created' | 'saved' | 'unchanged'; program: OwnProgram; droppedDevices: number }
+  | {
+      status: 'created' | 'saved' | 'unchanged';
+      program: OwnProgram;
+      droppedDevices: number;
+      /** Oluşturmada Bugün'ün programı oldu (PT'nin programı yokken ilk program). */
+      activated?: boolean;
+    }
   /** Alan hataları (Formisch yolları; ad `name`). */
   | { status: 'invalid'; errors: Record<string, string> }
   /**
@@ -189,10 +195,11 @@ export async function saveOwnProgram(
       const program = createOwnProgram({ id, name, currentPhaseId: settled.currentPhaseId, phases: settled.phases, weekdays: body.weekdays, now });
       let index = upsertOwnItem(state.index, ownIndexItemOf(program, shaOf(program)));
       // PT'nin programı yokken ilk kendi program Bugün'ün programı olur (§3.2): Bugün boş kalmasın.
-      if (!pt.exists && state.index.items.length === 0) index = withActive(index, id, now) ?? index;
+      const activated = !pt.exists && state.index.items.length === 0;
+      if (activated) index = withActive(index, id, now) ?? index;
       await commitProgram(repo, head, program, index, ownCommitMessage(program.name, 'create', program.log[0]?.changes ?? []));
       repo.log(`[kendi program] oluşturuldu`);
-      return { status: 'created', program, droppedDevices: normalized.droppedDevices };
+      return { status: 'created', program, droppedDevices: normalized.droppedDevices, activated };
     }
 
     if (stored.status === 'missing') return { status: 'missing' };

@@ -1,6 +1,6 @@
 # Danışanın kendi programları
 
-> **Durum:** onaylandı (rev. 2: inceleme işlendi, açık soruların önerilen kararları kabul) · **Tarih:** 2026-09-27 · **Kapsam:** SPEC §3, §4, §6 ("kendi programı", "PT ile paylaş"), §7.4; `antrenman-ekrani.md` §0 (dock), §2.11 (günler), §6.5; `editor-tek-kart.md` (düzenleyici).
+> **Durum:** onaylandı (rev. 2: inceleme işlendi, açık soruların önerilen kararları kabul); fazlar 1–6 uygulandı ("sonra" maddeleri hariç, §9 uygulama notları) · **Tarih:** 2026-09-27 · **Kapsam:** SPEC §3, §4, §6 ("kendi programı", "PT ile paylaş"), §7.4; `antrenman-ekrani.md` §0 (dock), §2.11 (günler), §6.5; `editor-tek-kart.md` (düzenleyici).
 > **Girdiler:** v2 kodu (`programs.ts`, `schemas/program.ts`, `program-plan.ts`, `program-diff.ts`, `training-days.ts`, `client-targets.ts`, `proposals*.ts`, `program-feedback.ts`, `session-finish.ts`, `session-merge.ts`, `workout-plan.ts`, `workout-routes.ts`, `session-routes.ts`, `progression.ts`, `attention.ts`, `notices*.ts`, `components/block-editor/**`, PT'nin program sayfaları), v1'in "Antrenmanlarım" ekranı (kendi şablonları, arşiv), rev. 1'in incelemesi (8 madde).
 > **Dil:** belge PT'den üçüncü şahısla söz eder. Danışana dönük metin "antrenörün" der; marka ve kişi adı yazılmaz (beyaz etiket).
 
@@ -467,7 +467,8 @@ sessions-index.json             satırda programId?, programName?
   "version": 1,
   "active": { "programId": "op_k2m9x4qa", "at": "…" },   // programId null ya da alan yok: PT'nin programı
   "items": [                                              // oluşturulma sırasıyla
-    { "id": "op_k2m9x4qa", "name": "Evde", "days": 2, "daysPerWeek": 2, "weekdays": [2, 4],
+    { "id": "op_k2m9x4qa", "name": "Evde", "sha": "…",     // dosyanın blob sha'sı (onarım bununla karşılaştırır)
+      "days": 2, "daysPerWeek": 2, "weekdays": [2, 4], "weekdaysAt": "…",
       "revision": 4, "createdAt": "…", "updatedAt": "…",
       "shared": { "at": "…" },                             // paylaşılmışsa (gösterim; karar dosyadan)
       "ptEditedAt": "…", "clientEditedAt": "…" }           // paylaşılmışken son düzenlemeler (bildirim)
@@ -479,8 +480,8 @@ sessions-index.json             satırda programId?, programName?
 }
 ```
 - **Neden:** Bugün ve Programlar listeyi, günleri ve seçimi tek okumayla alır (program başına okuma yok); PT'nin özeti ve "Dikkat gerektirenler" seçili programın günlerini dosya açmadan bilir; silinen ya da kapatılan programın bildirimine iz kalır.
-- **Ne zaman yazılır:** oluşturma, kayıt (ad, gün sayısı, günler, sıklık, revision), kendi programda "Günlerini değiştir", paylaşma ve kapatma, silme, seçim, bitişte satır yazımı. Programla **aynı commit** (`commitFiles`). Rotasyon ve bitişin yalnız rotasyonu ya da yalnız kilo kaydı index'e dokunmaz.
-- **Onarım** (`sessions-index` gibi): okunurken `own-programs/` ağacıyla karşılaştırılır. Dosyası olmayan satır düşer; satırı olmayan ya da `revision`'ı dosyanınkinden farklı dosya okunup satırı yeniden kurulur (`shared` dahil, dosyadan); `active` yok olan programı gösteriyorsa PT'nin programı geçerlidir. Bozuk index dosyalardan kurulur, seçim PT'nin programına döner (günlüğe yazılır).
+- **Ne zaman yazılır:** oluşturma, kayıt (ad, gün sayısı, günler, sıklık, revision), kendi programda "Günlerini değiştir", paylaşma ve kapatma, silme, seçim ve **her bitiş** (yalnız rotasyon ilerlese de: dosyanın metni değişir, satırın `sha`'sı yenilenir; paylaşılmışsa ve bitiş satır yazdıysa `clientEditedAt`). Programla **aynı commit** (`commitFiles`); ek yazma bedeli yok.
+- **Onarım** (`sessions-index` gibi): okunurken `own-programs/` ağacıyla karşılaştırılır. Dosyası olmayan satır düşer; satırı olmayan ya da `sha`'sı dosyanınkinden (ağaçtaki blob) farklı dosya okunup satırı yeniden kurulur (`shared` dahil, dosyadan; `sha` revision'dan güvenilir: rotasyon ve paylaşım revision'ı artırmaz); `active` yok olan programı gösteriyorsa PT'nin programı geçerlidir. Bozuk index dosyalardan kurulur, seçim PT'nin programına döner (günlüğe yazılır).
 
 **Yazma bedeli** (GitHub içerik yazımı; `commitFiles` dosya sayısından bağımsız 3):
 
@@ -501,7 +502,7 @@ sessions-index.json             satırda programId?, programName?
 - **İlk PUT** (dosya yokken): gün seansın programında aranır (`own-programs/<programId>.json`, yoksa `program.json`); bulunmazsa 400 "Bu antrenmanın programı bulunamadı." (telefon kayıtları tutar; bitiş yine kaydeder, programa yazmaz).
 - **Birleştirme:** `programId` sabittir; kayıttaki seansın `programId`'si gelenden farklıysa PUT ve bitiş 400 ("Kayıt başka bir programa ait.").
 - **Devam etme:** `GET /api/me/workout` yarım antrenman varken programı seansın `programId`'sinden kurar, `active`'ten ya da adresten değil. Program okunamıyorsa plan yok (yarım kart telefondaki kopyayla sürer).
-- **Bitiş** (`planFinish`, tek commit): kip günün bulunduğu dosyadan (§3.4). Kendi program kipinde `own-programs/<id>.json` (rotasyon, §3.4 maddeleri) ve satır yazıldıysa index (`revision`, `updatedAt`, paylaşılmışsa `clientEditedAt`) yazılır; PT kipinde bugünkü gibi `program.json` + `proposals.json`. Dosya yoksa ya da gün bulunamazsa rotasyon ve güncelleme geçilir, seans kaydedilir.
+- **Bitiş** (`planFinish`, tek commit): kip günün bulunduğu dosyadan (§3.4). Kendi program kipinde `own-programs/<id>.json` (rotasyon, §3.4 maddeleri) ve index (satırın `sha`'sı; satır yazıldıysa `revision`, `updatedAt`, paylaşılmışsa `clientEditedAt`) yazılır; PT kipinde bugünkü gibi `program.json` + `proposals.json`. Dosya yoksa ya da gün bulunamazsa rotasyon ve güncelleme geçilir, seans kaydedilir.
 - Egzersiz deneyimi, rekorlar, İlerleme egzersiz kimliğiyle çalışır: kaynak fark etmez. Öneri motorunun serisi §3.9.
 
 ### 5.5 Modüller
@@ -513,7 +514,10 @@ sessions-index.json             satırda programId?, programName?
 | `src/lib/schemas/own-program.ts` | dosya, kayıt, paylaşım ve seçim gövdeleri |
 | `src/lib/own-program-files.ts` (çekirdek, sahte depoyla test) | okuma (onarılmış index), oluşturma, kayıt, silme, paylaşım, seçim, günler, PT kaydı; hepsi `commitFiles` |
 | `src/lib/own-program-routes.ts` (ince çekirdek, test) | danışan uçları: `run()`, `postGuard`, `originGuard` |
-| `src/lib/own-programs-store.ts` (`server-only`) | sayfaların okumaları, PT uçlarının bağlaması, `dropNotices` |
+| `src/lib/own-programs-store.ts` (`server-only`) | sayfaların okumaları (`readOwnOverview`), danışanın düzenleyici kütüphanesi (`ownEditorLibrary`: kısıt rozeti), PT uçlarının bağlaması, `dropNotices` |
+| `src/lib/own-program-text.ts`, `src/lib/turkish.ts` (saf) | kart satırları ("2 gün · haftada 2 · Sal, Per · son: 22 Eyl"), son antrenman, geçmiş etiketleri; ada ek ("Evde'ye yaz", "Evde'yi düzenle") |
+| `src/lib/exercise-caution.ts` (saf) | "Kısıtına uymayabilir": sakatlık süzgecinin `block`/`warn` kararı (karar 10) |
+| `src/app/me/(sekmeler)/programlar/**`, `src/app/me/program-choice.tsx` | Programlar sayfaları, paylaşım, silme, görüldü bilgisi; Bugün'ün çipi, yeni PT programı ve PT düzenlemesi satırları |
 | `program-feedback.ts`, `session-finish.ts`, `session-files-core.ts` | kip ve dosya kaynağa göre; `row` anlık görüntüsü; `programId` denetimleri |
 | `workout-plan.ts`, `workout-routes.ts`, `progression.ts`, `recommend.ts` | seçimden plan, `programStamp`'e kimlik, `weekOf`/`scheduleOf`, satır başına pencere, `convertOnly` |
 | `notices.ts`, `notices-store.ts`, `attention.ts` | `own_program` türü; seçimi bilen dikkat maddeleri |
@@ -534,6 +538,7 @@ sessions-index.json             satırda programId?, programName?
 | `POST /api/me/programs/active` | danışan | `{ programId: "op_…" \| null }` (null: PT'nin programı); 404 bilinmeyen program. Yarım antrenman engellemez |
 | `POST /api/me/schedule` | danışan | `{ weekdays, programId? }`: gösterilen programa yazar (kendi programda `schedule`, tek commit) |
 | `GET /api/me/workout?program=&day=` | danışan | Plan: yarım antrenman varsa onun programından; yoksa `program` (`op_…` ya da `pt`), o da yoksa kalıcı seçim. Yanıtta `program.source` (`pt` \| `own`), `id`, `name` ve seçim listesi (`choices`: ad, son antrenman) |
+| `GET /api/me/workout/alternatives?…&program=`, `GET /api/me/workout/exercises?add=…&program=` | danışan | Muadil ve eklenen hareket o programın geçmişiyle planlanır; `op_…` kendi program, yok ya da `pt` PT'nin programı |
 | `PUT /api/clients/[id]/programs/[pid]` | PT | Paylaşılmış programı kaydet; 403 paylaşılmamış; 404; 412 |
 
 - Her uç yol kurmadan önce `pid`'yi `^op_[a-z0-9]{8}$` ile denetler; uymazsa 404 (dosya adı yalnız kimlikten, `ownProgramPath`).
@@ -555,7 +560,7 @@ sessions-index.json             satırda programId?, programName?
 "Yalnız bugün" bildirilmez (yazılmaz); o antrenman Antrenmanlar'da "Kendi programı · Evde" rozetiyle görünür. Paylaşılmamış programdaki düzenlemeler bildirilmez. Özetin önbelleği bu yazımların hepsinde düşer (`dropNotices`).
 
 ### 7.2 Danışana (Bugün ve Programlar)
-- PT paylaşılmış programı düzenleyince Bugün'de tek satır: "Antrenörün Evde programını düzenledi · 2 gün önce" [Gör] (→ programın sayfası, geçmiş). Kaynak index `ptEditedAt` (14 gün); Programlar'da "Antrenörün düzenledi" rozeti.
+- PT paylaşılmış programı düzenleyince Bugün'de tek satır: "Antrenörün Evde programını düzenledi · 26 Eyl" [Gör] (→ programın sayfası, geçmiş). Kaynak index `ptEditedAt` (14 gün); Programlar'da "Antrenörün düzenledi" rozeti.
 - Görüldü bilgisi telefonda (`localStorage`, try/catch; `ProposalOutcomes` gibi 14 günlük pencere): başka cihazda yeniden görünebilir; kabul.
 
 ### 7.3 Geçmiş etiketleri
@@ -605,6 +610,8 @@ sessions-index.json             satırda programId?, programName?
 | 6 | Şablon bayrağı | Şablon formunda Switch, listede rozet, "Hazır şablondan" başlangıcı ve gün ekleme, kimlikle okumada bayrak |
 
 Her faz tek başına yayınlanır, 375 px'te test danışanlarında doğrulanır (gerçek danışanın verisine yazılmaz), saf mantık `npm test`, `npm run lint` 0 hata.
+
+**Uygulama notları (1–6 tek dalda):** Antrenörünün programının ve kendi programın günleri bütün hareketleriyle açık listelenir (§2.2'deki "3 hareket daha ⌄" katlaması yok). Ayarlar'daki "Antrenman günleri" Bugün'ün programının (kalıcı seçim) günlerini gösterir ve ona yazar. "Kısıtına uymayabilir" rozeti danışanın `health.json` kısıtlarından, yalnız kısıtlar parçası onaylıyken.
 
 ---
 

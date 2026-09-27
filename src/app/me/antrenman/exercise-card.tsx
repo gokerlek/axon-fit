@@ -217,6 +217,7 @@ export function ExerciseCard({
   onSwap,
   onAddSet,
   onDropExtra,
+  ownProgram = false,
 }: {
   row: WorkoutRow;
   group: GroupView | null;
@@ -238,6 +239,8 @@ export function ExerciseCard({
   onAddSet: (() => void) | null;
   /** Bekleyen fazladan seti bırakır. */
   onDropExtra: () => void;
+  /** Kendi programda satır notu danışanın kendi notudur: etiket "Not:" (`docs/design/kendi-program.md` §2.9). */
+  ownProgram?: boolean;
 }) {
   const [open, setOpen] = useState<'reason' | 'note' | 'setup' | null>(null);
   const [warmOpen, setWarmOpen] = useState(false);
@@ -315,7 +318,7 @@ export function ExerciseCard({
                 )}
               </div>
               {open === 'reason' ? <p className="text-[0.8125rem] text-muted-foreground">{reasonDetail}</p> : null}
-              {open === 'note' ? <p className="text-[0.8125rem] text-muted-foreground">Antrenörünün notu: {row.note ?? ''}</p> : null}
+              {open === 'note' ? <p className="text-[0.8125rem] text-muted-foreground">{ownProgram ? 'Not' : 'Antrenörünün notu'}: {row.note ?? ''}</p> : null}
               {open === 'setup' ? (
                 <SetupNoteForm
                   note={setupNote}

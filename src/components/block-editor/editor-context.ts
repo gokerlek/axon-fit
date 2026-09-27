@@ -153,7 +153,12 @@ export type Editor = {
   onNudged: () => void;
   /** Danışanın satır hedefleri (yalnız programda; satır kimliğiyle). */
   clientTargets: Readonly<Record<string, RowClientTarget>>;
+  /** Düzenleyicinin kipi: `simple` danışanın kendi programı (kural, RIR ve yüzdeli set düzeni yok). */
+  variant: EditorVariant;
 };
+
+/** `full`: PT (şablon, program); `simple`: danışanın kendi programı (`docs/design/kendi-program.md` §2.5). */
+export type EditorVariant = 'full' | 'simple';
 
 export const EditorContext = createContext<Editor | null>(null);
 

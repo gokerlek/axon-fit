@@ -64,6 +64,8 @@ export type PickerExercise = EditorExercise & {
   loadStepKg: number;
   minLoadKg: number;
   source: 'library' | 'custom';
+  /** Danışanın kendi programında: kısıtına uymayabilir (rozet, engel değil; `exercise-caution.ts`). */
+  caution?: true;
 };
 /** Düzenleyicinin cihaz bilgisi (ad ve ağırlık ayarı). */
 export type EditorDevice = DeviceLoadSettings & { id: string; name: string };

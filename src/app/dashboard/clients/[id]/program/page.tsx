@@ -47,7 +47,9 @@ import { templateSummary } from '@/lib/template-plan';
 import { templateChoices } from '@/lib/templates';
 import { effectiveSchedule, weekdaysText } from '@/lib/training-days';
 import { cn } from '@/lib/utils';
+import { readOwnState } from '@/lib/own-program-files';
 import { InvalidProgramAlert } from './invalid-program-alert';
+import { OwnActiveAlert, SharedProgramsCard } from './own-programs-card';
 import { PhaseTransition } from './phase-transition';
 import { ProposalsCard, type ProposalView } from './proposals-card';
 import { ResetDaysButton } from './weekday-field';
@@ -63,6 +65,8 @@ export const metadata: Metadata = { title: 'Program' };
  * İleri aşamadaki harekette hafifletme ipucu (tasarım §5.3, `deloadHintDue`).
  * Evresiz programda evreden söz edilmez: "Döngü" kartı (sıradaki gün, sıklık, planlanan
  * haftalık yük) ve sırayla dönen günler.
+ * Danışan kendi programıyla çalışıyorsa en üstte bilgi satırı; paylaştığı programlar en altta
+ * (`docs/design/kendi-program.md` §4).
  */
 export default async function ProgramPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePt();
@@ -74,7 +78,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
   if (!loaded.ok) redirect(`/dashboard/clients/${id}`);
   const { client } = loaded;
 
-  const [file, exercises, config, templates, proposals, sessions] = await Promise.all([
+  const [file, exercises, config, templates, proposals, sessions, own] = await Promise.all([
     readProgramFile(id),
     listExercises(),
     readAppConfig(),
@@ -83,7 +87,10 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
     readProposals(id).catch(() => null),
     // Antrenmanlar (bu haftanın yükü, hafifletme ipucu) okunamasa da program görünür.
     readIndex(sessionRepo(id)).catch(() => null),
+    // Danışanın kendi programları (index): okunamasa da program görünür.
+    readOwnState(sessionRepo(id)).catch(() => null),
   ]);
+  const ownIndex = own?.index ?? null;
   const detailHref = `/dashboard/clients/${id}`;
   const editHref = `${detailHref}/program/edit`;
 
@@ -91,6 +98,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
     return (
       <div className="flex flex-col gap-6">
         <SectionHeader title="Program" />
+        <OwnActiveAlert clientId={id} index={ownIndex} timeZone={config.timeZone} />
         <Card>
           <Empty>
             <EmptyHeader>
@@ -110,6 +118,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
             </EmptyContent>
           </Empty>
         </Card>
+        <SharedProgramsCard clientId={id} index={ownIndex} sessions={sessions?.index ?? null} timeZone={config.timeZone} />
       </div>
     );
   }
@@ -118,7 +127,9 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
     return (
       <div className="flex flex-col gap-6">
         <SectionHeader title="Program" actions={<EditButton href={editHref} />} />
+        <OwnActiveAlert clientId={id} index={ownIndex} timeZone={config.timeZone} />
         <InvalidProgramAlert problem={file.problem} />
+        <SharedProgramsCard clientId={id} index={ownIndex} sessions={sessions?.index ?? null} timeZone={config.timeZone} />
       </div>
     );
   }
@@ -263,6 +274,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
   return (
     <div className="flex flex-col gap-6">
       <SectionHeader title="Program" description={description} actions={<EditButton href={editHref} />} />
+      <OwnActiveAlert clientId={id} index={ownIndex} timeZone={timeZone} />
 
       {proposalViews.length > 0 ? <ProposalsCard clientId={id} items={proposalViews} /> : null}
       {proposals?.broken ? (
@@ -511,6 +523,8 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
           </CardContent>
         </Card>
       </div>
+
+      <SharedProgramsCard clientId={id} index={ownIndex} sessions={sessions?.index ?? null} timeZone={timeZone} />
     </div>
   );
 }

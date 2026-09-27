@@ -3,16 +3,18 @@ import assert from 'node:assert/strict';
 import { CLIENT_TABS, clientTabIndex, tabDirection } from './client-tabs.ts';
 
 describe("clientTabIndex: dock'un etkin sekmesi", () => {
-  test("sıra dock'taki sırayla aynı: Bugün · Geçmiş · İlerleme", () => {
-    assert.deepEqual(CLIENT_TABS.map(({ label }) => label), ['Bugün', 'Geçmiş', 'İlerleme']);
+  test("sıra dock'taki sırayla aynı: Bugün · Geçmiş · İlerleme · Programlar", () => {
+    assert.deepEqual(CLIENT_TABS.map(({ label }) => label), ['Bugün', 'Geçmiş', 'İlerleme', 'Programlar']);
     assert.equal(clientTabIndex('/me'), 0);
     assert.equal(clientTabIndex('/me/gecmis'), 1);
     assert.equal(clientTabIndex('/me/ilerleme'), 2);
+    assert.equal(clientTabIndex('/me/programlar'), 3);
   });
 
   test('Bugün yalnız tam eşleşmede; öteki sekmeler alt sayfalarında da etkin', () => {
     assert.equal(clientTabIndex('/me/gecmis/s_k2m9x4qa'), 1);
     assert.equal(clientTabIndex('/me/ilerleme/bench-press'), 2);
+    assert.equal(clientTabIndex('/me/programlar/op_k2m9x4qa/duzenle'), 3);
     assert.equal(clientTabIndex('/me/ayarlar'), -1);
     assert.equal(clientTabIndex('/me/antrenman'), -1);
   });

@@ -3,7 +3,8 @@ import { ClientDock } from '../client-dock';
 
 /**
  * Danışan kabuğu (docs/design/antrenman-ekrani.md §0, SPEC §6): sekme sayfaları (Bugün `/me`, Geçmiş,
- * İlerleme) ve avatar menüsünden açılan Ayarlar aynı ortalı tek sütunda (`max-w-md`, 16 px kenar),
+ * İlerleme, Programlar ve alt sayfaları; docs/design/kendi-program.md §2) ve avatar menüsünden açılan
+ * Ayarlar aynı ortalı tek sütunda (`max-w-md`, 16 px kenar),
  * altta dock. Yalnız telefon, 375 px'te tasarlanır. Etkin antrenman (`/me/antrenman`) bu grubun
  * dışındadır: tam ekran, dock ve avatar menüsü yok.
  *

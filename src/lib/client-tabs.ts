@@ -1,14 +1,15 @@
 /**
- * Danışan uygulamasının sekmeleri (docs/design/antrenman-ekrani.md §0), tarayıcıdan ve Next'ten
- * bağımsız saf mantık: dock'un etkin öğesi ve sekme değişiminde içeriğin geldiği yön. İkonlar ve
- * dock `src/app/me/client-dock.tsx`'te; hesapla ilgili her şey (Ayarlar, Çıkış) avatar menüsünde
- * kalır ve dock'ta tekrarlanmaz. Programlar sekmesi sonraki fazda; gelene kadar listede yok.
+ * Danışan uygulamasının sekmeleri (docs/design/antrenman-ekrani.md §0, docs/design/kendi-program.md §2.1),
+ * tarayıcıdan ve Next'ten bağımsız saf mantık: dock'un etkin öğesi ve sekme değişiminde içeriğin geldiği yön.
+ * İkonlar ve dock `src/app/me/client-dock.tsx`'te; hesapla ilgili her şey (Ayarlar, Çıkış) avatar menüsünde
+ * kalır ve dock'ta tekrarlanmaz.
  */
 
 export const CLIENT_TABS = [
   { href: '/me', label: 'Bugün' },
   { href: '/me/gecmis', label: 'Geçmiş' },
   { href: '/me/ilerleme', label: 'İlerleme' },
+  { href: '/me/programlar', label: 'Programlar' },
 ] as const;
 
 export type ClientTab = (typeof CLIENT_TABS)[number];
@@ -16,7 +17,8 @@ export type ClientTab = (typeof CLIENT_TABS)[number];
 /**
  * Adresin ait olduğu sekmenin sırası; sekme dışındaki sayfada (Ayarlar) -1. Bugün yalnız tam
  * eşleşmede etkindir (`/me` bütün danışan adreslerinin önekidir); öteki sekmeler alt sayfalarında
- * da (`/me/gecmis/[id]`). Sondaki eğik çizgi yok sayılır; `/me/gecmisler` Geçmiş değildir.
+ * da (`/me/gecmis/[id]`, `/me/programlar/[pid]/duzenle`). Sondaki eğik çizgi yok sayılır; `/me/gecmisler`
+ * Geçmiş değildir.
  */
 export function clientTabIndex(pathname: string): number {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;

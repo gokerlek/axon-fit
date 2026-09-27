@@ -318,6 +318,11 @@ describe('muadil ve eklenen hareketler', () => {
     assert.equal((await alternativesRoute(deps, DAY_A, 'r_zzzzzz')).status, 404);
     assert.equal((await alternativesRoute(deps, DAY_B, 'r_aaaaaa')).status, 404);
     assert.equal((await alternativesRoute(setup(undefined, { session: null }).deps, DAY_A, 'r_aaaaaa')).status, 401);
+    // Program adres parçası: `pt` PT'nin programıdır (telefon planın programını hep yollar), bozuk değer 400.
+    assert.equal((await alternativesRoute(deps, DAY_A, 'r_aaaaaa', 'pt')).status, 200);
+    assert.equal((await alternativesRoute(deps, DAY_A, 'r_aaaaaa', '../x')).status, 400);
+    assert.equal((await exercisesRoute(deps, 'push-up', 'pt')).status, 200);
+    assert.equal((await exercisesRoute(deps, 'push-up', 'op_../..')).status, 400);
   });
 
   test('"Hareket ekle": kütüphane ada göre; seçilenin varsayılan setleri ve dinlenmesiyle planı', async () => {

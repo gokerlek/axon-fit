@@ -202,6 +202,8 @@ export function FlowSheet({
 
 export type SwapTarget = {
   dayId: string;
+  /** Planın programı (`op_…` ya da `pt`): muadiller o programın geçmişiyle planlanır. */
+  program: string;
   rowId: string;
   /** Şu anki hareket (muadil seçildiyse muadil). */
   title: string;
@@ -241,8 +243,12 @@ export function SwapSheet({
 }) {
   const title = useRef<HTMLHeadingElement>(null);
   const query = useServiceQuery<AlternativesResponse>({
-    key: ['me', 'workout', 'alternatives', target?.dayId, target?.rowId],
-    fn: ({ signal }) => fetchJson(`/api/me/workout/alternatives?day=${encodeURIComponent(target?.dayId ?? '')}&row=${encodeURIComponent(target?.rowId ?? '')}`, { signal }),
+    key: ['me', 'workout', 'alternatives', target?.program, target?.dayId, target?.rowId],
+    fn: ({ signal }) =>
+      fetchJson(
+        `/api/me/workout/alternatives?day=${encodeURIComponent(target?.dayId ?? '')}&row=${encodeURIComponent(target?.rowId ?? '')}&program=${encodeURIComponent(target?.program ?? 'pt')}`,
+        { signal },
+      ),
     enabled: target !== null,
     notify: 'none',
     staleTime: 5 * 60_000,

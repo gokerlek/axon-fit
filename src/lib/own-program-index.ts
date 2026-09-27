@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { OWN_PROGRAM_ID_PATTERN } from './program-plan.ts';
 import { ownProgramIdOfPath, ownSummaryOf, type OwnProgram } from './own-programs.ts';
 import { ownIndexActiveSchema, ownIndexEventSchema, ownIndexItemSchema, ownProgramSchema } from './schemas/own-program.ts';
 
@@ -126,6 +127,28 @@ export function withActive(index: OwnIndex, programId: string | null, now: Date)
 export function activeProgramId(index: OwnIndex | null | undefined): string | null {
   const id = index?.active?.programId ?? null;
   return id && index?.items.some((item) => item.id === id) ? id : null;
+}
+
+/**
+ * Bugün'de gösterilecek program (yarım antrenman yokken; §2.6, §3.2): adresteki (`pt` ya da listede olan kendi
+ * program, "Yalnız bugün"), yoksa kalıcı seçim; null PT'nin programı. `oneOff`: kalıcı seçimden farklı. Kalıcı seçim
+ * okunamayan dosyayı gösteriyorsa (onarımda listeden düştü) `broken` onun adıyla: PT'nin programı gösterilir.
+ */
+export function shownProgram(
+  index: OwnIndex,
+  unreadable: readonly Pick<UnreadableOwnProgram, 'id' | 'name'>[],
+  param: string | null,
+): { shown: string | null; oneOff: boolean; broken?: { name: string | null } } {
+  const active = activeProgramId(index);
+  let shown = active;
+  if (param === 'pt') shown = null;
+  else if (param && OWN_PROGRAM_ID_PATTERN.test(param) && index.items.some((item) => item.id === param)) shown = param;
+  else if (!param) {
+    const selected = index.active?.programId;
+    const broken = selected ? unreadable.find((item) => item.id === selected) : undefined;
+    if (broken) return { shown: null, oneOff: false, broken: { name: broken.name } };
+  }
+  return { shown, oneOff: shown !== active };
 }
 
 export function activeItem(index: OwnIndex | null | undefined): OwnIndexItem | null {

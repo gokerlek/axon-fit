@@ -34,7 +34,7 @@ export function ClientHeader({
         )}
         <h1 className="font-heading text-2xl font-semibold tracking-tight break-words">{title}</h1>
       </div>
-      <ClientMenu name={client.name} appName={appName} hasPassword={hasPassword(client.access)} />
+      <ClientMenu clientId={client.id} name={client.name} appName={appName} hasPassword={hasPassword(client.access)} />
     </header>
   );
 }

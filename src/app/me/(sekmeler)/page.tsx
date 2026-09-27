@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { canSetPassword, healthConsentState } from '@/lib/client-status';
 import { readAppConfig } from '@/lib/config';
 import { currentClient } from '@/lib/guards';
+import { isOwnProgramId } from '@/lib/own-programs';
 import { readClientSession } from '@/lib/session';
 import { AfterCheck } from '../after-check';
 import { ClientHeader } from '../client-header';
@@ -10,7 +11,7 @@ import { PasswordCard } from '../password-card';
 import { ProgramCard } from '../program-card';
 import { ProposalOutcomes } from '../proposal-outcomes';
 import { RememberClient } from '../remember-client';
-import { TodayWorkout, WaterCard } from '../today-workout';
+import { TodayWorkout, WaterCard, WorkoutProgramProvider } from '../today-workout';
 
 export const metadata: Metadata = { title: 'Bugün' };
 
@@ -23,8 +24,10 @@ export const metadata: Metadata = { title: 'Bugün' };
  * x/3") ya da yarım kalan antrenman, ve bugünkü su (tasarım §0, §2.1); antrenörünün önerilerine kararı
  * (tasarım §6.4). Antrenmandan 10 dk – 24 saat sonra üstte "Antrenman ne kadar zordu?" kartı (§2.9).
  */
-export default async function MePage() {
-  const [client, config, session] = await Promise.all([currentClient(), readAppConfig(), readClientSession()]);
+export default async function MePage({ searchParams }: { searchParams: Promise<{ program?: string | string[] }> }) {
+  const [client, config, session, query] = await Promise.all([currentClient(), readAppConfig(), readClientSession(), searchParams]);
+  // "Yalnız bugün" (docs/design/kendi-program.md §2.6): `?program=op_…|pt`; hiçbir şey yazmaz, sekmeden çıkınca düşer.
+  const program = typeof query.program === 'string' && (query.program === 'pt' || isOwnProgramId(query.program)) ? query.program : null;
   const health = healthConsentState(client);
   const firstName = client.name.split(/\s+/)[0] ?? client.name;
   const asking = health === 'pending' || health === 'outdated';
@@ -46,11 +49,13 @@ export default async function MePage() {
       <AfterCheck clientId={client.id} />
 
       {/* Yarım antrenman varsa sıradaki antrenman kartının yerine onun kartı (telefondaki kayıt istemcide okunur). */}
-      <TodayWorkout clientId={client.id}>
-        <ProgramCard clientId={client.id}>
-          <WaterCard clientId={client.id} />
-        </ProgramCard>
-      </TodayWorkout>
+      <WorkoutProgramProvider program={program}>
+        <TodayWorkout clientId={client.id}>
+          <ProgramCard clientId={client.id} programParam={program} timeZone={config.timeZone}>
+            <WaterCard clientId={client.id} />
+          </ProgramCard>
+        </TodayWorkout>
+      </WorkoutProgramProvider>
 
       <ProposalOutcomes clientId={client.id} timeZone={config.timeZone} />
     </main>

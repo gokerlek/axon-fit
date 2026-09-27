@@ -21,49 +21,70 @@ const BOTTOM = 'gap-0 rounded-t-2xl pb-[env(safe-area-inset-bottom)]';
  * "Günlerini değiştir" (tasarım §2.11): haftanın 7 günü (çoklu, 44 px), antrenörün planladığı sıklıktan
  * farklıysa küçük uyarı (engel değil), Kaydet. Doğrudan uygulanır: program geçmişine danışan değişikliği
  * olarak yazılır, antrenöre bildirim gider. Antrenörün günlerinden farklıysa onlara tek dokunuşla dönülür.
- * Sıra değişmez: günler yalnız "ne zaman" sorusunu cevaplar.
+ * Sıra değişmez: günler yalnız "ne zaman" sorusunu cevaplar. Kendi programda (`own`, `docs/design/kendi-program.md`
+ * §3.2) günler o programa yazılır: antrenörün sıklığı ve günleri yok, bildirim de gitmez.
  */
+export type ScheduleProgram = { programId: string; name: string } | null;
+
 export function ScheduleSheet({
   open,
   onOpenChange,
   schedule,
   onSaved,
+  own = null,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   schedule: WorkoutSchedule;
   onSaved: (schedule: WorkoutSchedule) => void;
+  /** Gösterilen kendi program; null PT'nin programı. */
+  own?: ScheduleProgram;
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" showCloseButton={false} className={BOTTOM}>
         {/* Her açılışta kayıttaki günlerle başlar. */}
-        {open ? <ScheduleBody schedule={schedule} onSaved={onSaved} onClose={() => onOpenChange(false)} /> : null}
+        {open ? <ScheduleBody schedule={schedule} own={own} onSaved={onSaved} onClose={() => onOpenChange(false)} /> : null}
       </SheetContent>
     </Sheet>
   );
 }
 
-function ScheduleBody({ schedule, onSaved, onClose }: { schedule: WorkoutSchedule; onSaved: (schedule: WorkoutSchedule) => void; onClose: () => void }) {
+function ScheduleBody({
+  schedule,
+  own,
+  onSaved,
+  onClose,
+}: {
+  schedule: WorkoutSchedule;
+  own: ScheduleProgram;
+  onSaved: (schedule: WorkoutSchedule) => void;
+  onClose: () => void;
+}) {
   const [days, setDays] = useState<Weekday[]>(schedule.weekdays);
   const save = useServiceMutation({
-    fn: (weekdays: Weekday[]) => fetchJson<ScheduleResponse>('/api/me/schedule', { method: 'POST', body: JSON.stringify({ weekdays }) }),
-    notify: { success: 'Günlerin kaydedildi. Antrenörüne bildirildi.' },
+    fn: (weekdays: Weekday[]) =>
+      fetchJson<ScheduleResponse>('/api/me/schedule', { method: 'POST', body: JSON.stringify({ weekdays, programId: own?.programId ?? null }) }),
+    notify: { success: own ? 'Günlerin kaydedildi.' : 'Günlerin kaydedildi. Antrenörüne bildirildi.' },
     onSuccess: (result) => {
       onSaved(result.schedule);
       onClose();
     },
   });
   const unchanged = sameWeekdays(days, schedule.weekdays);
-  const differsFromPt = schedule.pt.length > 0 && !sameWeekdays(days, schedule.pt);
-  const perWeek = schedule.daysPerWeek ?? undefined;
+  const differsFromPt = !own && schedule.pt.length > 0 && !sameWeekdays(days, schedule.pt);
+  const perWeek = own ? undefined : (schedule.daysPerWeek ?? undefined);
   return (
     <>
       <SheetHeader className="gap-1.5 pt-5">
         <SheetTitle id="schedule-title" className="text-lg font-semibold">
           Antrenman günlerin
         </SheetTitle>
-        <SheetDescription>Antrenörüne bildirilir. Sıra değişmez: sıradaki antrenman seçtiğin ilk güne kayar.</SheetDescription>
+        <SheetDescription>
+          {own
+            ? `${own.name} programına yazılır. Sıra değişmez: sıradaki antrenman seçtiğin ilk güne kayar.`
+            : 'Antrenörüne bildirilir. Sıra değişmez: sıradaki antrenman seçtiğin ilk güne kayar.'}
+        </SheetDescription>
       </SheetHeader>
       <div className="flex flex-col gap-3 px-4">
         <WeekdayToggle id="schedule-title" value={days} onChange={setDays} disabled={save.isPending} />
@@ -92,10 +113,11 @@ function ScheduleBody({ schedule, onSaved, onClose }: { schedule: WorkoutSchedul
 }
 
 /**
- * Ayarlar'daki "Antrenman günleri" satırı: geçerli günler (danışanınki ya da antrenörünki) ve
- * "Günlerini değiştir" (Bugün'dekiyle aynı sheet). Kaydedince sayfa tazelenir.
+ * Ayarlar'daki "Antrenman günleri" satırı: Bugün'ün programının (kalıcı seçim) geçerli günleri (danışanınki ya
+ * da antrenörünki; kendi programda o programınki) ve "Günlerini değiştir" (Bugün'dekiyle aynı sheet). Kaydedince
+ * sayfa tazelenir.
  */
-export function TrainingDaysCard({ schedule: initial }: { schedule: WorkoutSchedule }) {
+export function TrainingDaysCard({ schedule: initial, own = null }: { schedule: WorkoutSchedule; own?: ScheduleProgram }) {
   const router = useRouter();
   const [schedule, setSchedule] = useState(initial);
   const [open, setOpen] = useState(false);
@@ -108,8 +130,9 @@ export function TrainingDaysCard({ schedule: initial }: { schedule: WorkoutSched
           Antrenman günleri
         </CardTitle>
         <CardDescription>
+          {own ? <span className="block">{own.name}</span> : null}
           {text
-            ? `${text}${schedule.source === 'client' ? ' (senin seçimin)' : ' (antrenörünün seçimi)'}`
+            ? `${text}${own ? '' : schedule.source === 'client' ? ' (senin seçimin)' : ' (antrenörünün seçimi)'}`
             : 'Henüz seçilmedi. Hangi günler çalışacağını seçersen Bugün sana hatırlatır.'}
         </CardDescription>
         <CardAction>
@@ -122,6 +145,7 @@ export function TrainingDaysCard({ schedule: initial }: { schedule: WorkoutSched
         open={open}
         onOpenChange={setOpen}
         schedule={schedule}
+        own={own}
         onSaved={(next) => {
           setSchedule(next);
           router.refresh();

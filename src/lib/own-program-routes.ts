@@ -37,7 +37,10 @@ function fieldsOf(issues: readonly v.BaseIssue<unknown>[]): Record<string, strin
 export function saveResponse(result: OwnSaveResult, by: 'client' | 'pt'): SessionRouteResult {
   switch (result.status) {
     case 'created':
-      return { status: 201, body: { id: result.program.id, revision: result.program.revision, droppedDevices: result.droppedDevices } };
+      return {
+        status: 201,
+        body: { id: result.program.id, revision: result.program.revision, droppedDevices: result.droppedDevices, ...(result.activated ? { activated: true } : {}) },
+      };
     case 'saved':
       return { status: 200, body: { id: result.program.id, revision: result.program.revision, droppedDevices: result.droppedDevices } };
     case 'unchanged':

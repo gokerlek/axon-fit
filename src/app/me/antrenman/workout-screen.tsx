@@ -79,7 +79,7 @@ import {
   type NextSet,
 } from '@/lib/workout-session';
 import { startSetTimer, stopSetTimer, tickSetTimer } from '@/lib/workout-timer';
-import { WORKOUT_KEY } from '../today-workout';
+import { WORKOUT_KEY, WORKOUT_OVERVIEW_KEY } from '../today-workout';
 import { clearLocalWorkout, clearWorkoutCache, readLocalWorkout, readWorkoutCache, saveLocalWorkout, saveWorkoutCache, writerId } from '../workout-storage';
 import { DonePanel } from './done-panel';
 import { EntryPanel, type TimerView, type TransitionView } from './entry-panel';
@@ -121,6 +121,16 @@ function useNow(intervalMs: number): number {
 
 function stampOf(local: LocalWorkout) {
   return { at: new Date().toISOString(), by: local.doc.writer };
+}
+
+/** Planın programı adres parçası olarak (`program=`): kendi programın kimliği ya da `pt`. */
+function planProgram(plan: WorkoutDay): string {
+  return plan.source === 'own' && plan.programId ? plan.programId : 'pt';
+}
+
+/** Yanıttaki planın programı (`planProgram` gibi). */
+function responseProgram(data: WorkoutResponse): string {
+  return data.program?.source === 'own' && data.program.id ? data.program.id : 'pt';
 }
 
 /** Telefondaki antrenmanda henüz hiçbir şey yok: plan değişirse sessizce yeniden kurulabilir. */
@@ -216,7 +226,18 @@ function lastWorkingSetId(doc: SessionDoc): string | null {
  * `extra` işaretiyle yazılır; iki antrenman üst üste plandan fazla set yapılırsa bitişte antrenöre set önerisi
  * olur (§6.1). Bekleyen fazladan set bitirmeyi engellemez; satırdaki ✕ ya da paneldeki "Kaldır" bırakır.
  */
-export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: string; dayParam: string | null; finishOnOpen: boolean }) {
+export function WorkoutScreen({
+  clientId,
+  dayParam,
+  programParam = null,
+  finishOnOpen,
+}: {
+  clientId: string;
+  dayParam: string | null;
+  /** Bugün'ün tek seferlik program seçimi (`op_…` ya da `pt`); yoksa kalıcı seçim. */
+  programParam?: string | null;
+  finishOnOpen: boolean;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [load, setLoad] = useState<LoadState>({ phase: 'loading' });
@@ -355,7 +376,11 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
         toast(`${data.day.dayName} seçildi`, { description: 'Antrenörüne bildirilecek' });
       }
     };
-    const url = `/api/me/workout${dayParam ? `?day=${encodeURIComponent(dayParam)}` : ''}`;
+    const query = [
+      ...(dayParam ? [`day=${encodeURIComponent(dayParam)}`] : []),
+      ...(programParam ? [`program=${encodeURIComponent(programParam)}`] : []),
+    ].join('&');
+    const url = `/api/me/workout${query ? `?${query}` : ''}`;
     /**
      * Saklanan planla açılan ve henüz hiçbir şey kaydedilmemiş antrenman arka planda aynı günün taze planıyla
      * karşılaştırılır: PT o arada programı kaydettiyse (ya da başka cihazda yarım antrenman varsa) güncel
@@ -364,7 +389,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
     const revalidate = () => {
       const current = localRef.current;
       if (!current || !untouched(current)) return;
-      fetchJson<WorkoutResponse>(`/api/me/workout?day=${encodeURIComponent(current.plan.dayId)}`)
+      fetchJson<WorkoutResponse>(`/api/me/workout?day=${encodeURIComponent(current.plan.dayId)}&program=${encodeURIComponent(planProgram(current.plan))}`)
         .then((data) => {
           const latest = localRef.current;
           if (cancelled || !latest || latest.doc.id !== current.doc.id || !untouched(latest) || !planChanged(latest, data)) return;
@@ -385,8 +410,12 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
     const cached = readWorkoutCache(clientId);
     // Saklanan yanıt bu açılışın günü mü: istenen gün ya da (gün istenmediyse) rotasyonda sıradaki gün;
     // "Başka gün seç"le çekilmiş bir gün sonraki olağan başlangıçta kullanılmaz.
+    // Program da aynı olmalı: tek seferlik seçimde istenen program, yoksa kalıcı seçim (`docs/design/kendi-program.md` §2.6).
+    const sameProgram = (data: WorkoutResponse) =>
+      data.active !== null || (programParam ? responseProgram(data) === programParam : !data.selection?.oneOff);
     const matches = (data: WorkoutResponse) =>
-      dayParam ? data.day?.dayId === dayParam : data.active !== null || !data.day || data.day.dayId === (data.program?.nextDayId ?? data.day.dayId);
+      sameProgram(data) &&
+      (dayParam ? data.day?.dayId === dayParam : data.active !== null || !data.day || data.day.dayId === (data.program?.nextDayId ?? data.day.dayId));
     const usable = cached && matches(cached.data) ? cached : null;
     if (usable && Date.now() - usable.at < CACHE_FRESH_MS) {
       begin(usable.data);
@@ -408,7 +437,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
     return cleanup;
     // `finishOnOpen` ve `outbox` açılışta bir kez okunur.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, dayParam, attempt]);
+  }, [clientId, dayParam, programParam, attempt]);
 
   // Ses bağlamı ilk dokunuşta açılır: sayfa dinlenmenin ortasında yenilendiyse de bitiş çalsın.
   useEffect(() => {
@@ -876,12 +905,23 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
         });
         // Tarih sunucunun (ilk yazımda koyduğu); yanıt gelmediyse telefondaki.
         const saved = result.doc ?? doc;
-        queryClient.setQueryData<WorkoutResponse>(WORKOUT_KEY, (old) => (old ? afterFinish(old, saved) : old));
+        queryClient.setQueriesData<WorkoutResponse>({ queryKey: WORKOUT_OVERVIEW_KEY }, (old) => (old ? afterFinish(old, saved) : old));
         release();
         router.replace(`/me/antrenman/ozet/${current.doc.id}`);
-        const message = result.feedback ? feedbackMessage(result.feedback) : null;
+        // Kendi programda mesaj programın adıyla; yazılamayan madde varsa [Programı aç] (§2.9).
+        const ownPlan = current.plan.source === 'own' && current.plan.programId ? { id: current.plan.programId, name: current.plan.programName ?? 'Programın' } : null;
+        const message = result.feedback ? feedbackMessage(result.feedback, ownPlan) : null;
         // Özet açılırken bir an sonra (prototip): önce özetin ilk kartı görünsün.
-        if (message) window.setTimeout(() => toast(message.title, { description: message.description }), 450);
+        if (message) {
+          window.setTimeout(
+            () =>
+              toast(message.title, {
+                description: message.description,
+                ...(message.open && ownPlan ? { action: { label: 'Programı aç', onClick: () => router.push(`/me/programlar/${ownPlan.id}`) } } : {}),
+              }),
+            450,
+          );
+        }
       } catch (error) {
         if (error instanceof ApiError && error.status === 410) {
           leave('Bu antrenman silinmiş.', 'info');
@@ -1085,7 +1125,13 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
     const row = planOf(current).rows[rowId];
     const original = current.plan.rows[rowId];
     if (!row || !original) return;
-    setSwapTarget({ dayId: current.plan.dayId, rowId, title: row.title, original: row.exerciseId !== original.exerciseId ? original.title : null });
+    setSwapTarget({
+      dayId: current.plan.dayId,
+      program: planProgram(current.plan),
+      rowId,
+      title: row.title,
+      original: row.exerciseId !== original.exerciseId ? original.title : null,
+    });
   }, []);
 
   const onPickSwap = useCallback(
@@ -1114,7 +1160,10 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
       if (addBusy) return;
       setAddBusy(item.id);
       try {
-        const { extra } = await fetchJson<AddedRowResponse>(`/api/me/workout/exercises?add=${encodeURIComponent(item.id)}`);
+        const planned = localRef.current;
+        const { extra } = await fetchJson<AddedRowResponse>(
+          `/api/me/workout/exercises?add=${encodeURIComponent(item.id)}${planned ? `&program=${encodeURIComponent(planProgram(planned.plan))}` : ''}`,
+        );
         const current = localRef.current;
         if (!current) return;
         const entryId = newEntryId(current.doc);
@@ -1316,6 +1365,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
             Ara ver
           </Button>
           <p className="font-heading font-semibold whitespace-nowrap tabular-nums">
+            {plan.source === 'own' && plan.programName ? `${plan.programName} · ` : ''}
             {doc.program?.dayName ?? plan.dayName} · {elapsedText((now - Date.parse(doc.startedAt)) / 1000)}
           </p>
           <Button variant="ghost" className="h-11 justify-self-end px-3" onClick={() => setFinishOpen(true)}>
@@ -1378,6 +1428,7 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
                   onSwap={!saving && canSwap(local.plan, doc, row.rowId) ? () => openSwap(row.rowId) : null}
                   onAddSet={!saving && addable(unitKey) ? () => onAddSet(unitKey) : null}
                   onDropExtra={() => onDropExtra(unitKey)}
+                  ownProgram={local.plan.source === 'own'}
                 />
               </motion.div>
             ) : (
@@ -1511,7 +1562,13 @@ export function WorkoutScreen({ clientId, dayParam, finishOnOpen }: { clientId: 
       <AddExerciseSheet open={addOpen} onOpenChange={setAddOpen} todayIds={todayIds} busyId={addBusy} onPick={(item) => void onPickAdd(item)} />
       <EditSetSheet target={editing} onClose={() => setEditing(null)} onSave={onSaveEdit} onDelete={onAskDelete} />
       <DeleteSetDialog target={deleting} onCancel={() => setDeleting(null)} onConfirm={onConfirmDelete} />
-      <ProgramUpdateSheet items={update?.items ?? null} busy={finishing} onAnswer={onProgramAnswer} onDismiss={() => onProgramAnswer(null)} />
+      <ProgramUpdateSheet
+        items={update?.items ?? null}
+        busy={finishing}
+        ownName={local?.plan.source === 'own' ? (local.plan.programName ?? null) : null}
+        onAnswer={onProgramAnswer}
+        onDismiss={() => onProgramAnswer(null)}
+      />
       <FinishedElsewhereDialog count={elsewhere?.count ?? null} busy={elsewhereBusy} onAdd={onAddElsewhere} onSkip={() => leave('Bu antrenman başka bir cihazda bitirildi.', 'info')} />
       {/* Yoklama (§2.2): yalnız sağlık onayı varken ve antrenman yeni başlıyorken açılır. */}
       <StartCheck clientId={clientId} local={local} onApply={commit} onLeave={leave} />

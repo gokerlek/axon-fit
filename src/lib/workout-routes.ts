@@ -12,7 +12,8 @@ import { parseProposals, PROPOSALS_PATH } from './proposals.ts';
 import type { Client } from './schemas/client.ts';
 import { EQUIPMENT_LABELS, type Category, type Equipment } from './schemas/exercise.ts';
 import { readOwnProgram, readOwnState, scheduleOwnProgram, type OwnState } from './own-program-files.ts';
-import { activeProgramId } from './own-program-index.ts';
+import { activeProgramId, shownProgram } from './own-program-index.ts';
+import { lastDateByProgram } from './own-program-text.ts';
 import { isOwnProgramId, PT_PROGRAM_NAME } from './own-programs.ts';
 import { scheduleBodySchema } from './schemas/own-program.ts';
 import { programSchema, type Program } from './schemas/program.ts';
@@ -65,14 +66,18 @@ import {
  *   silinmiş tarayıcı verisiyle sürdürülen antrenman aynı hareketlerle açılır. Günün set artışı adayları
  *   (§5.6, `set-suggestions.ts`) planda (`day.setIncrease`): `proposals.json` (bu haftaki öneriler) ve
  *   sağlık onayı varken `health.json` (son hazır oluşluk) bunun için okunur.
- * - `GET /api/me/workout/alternatives?day=&row=`: satırın muadilleri ("Değiştir", §2.6), ekipmana göre
+ *   Kendi programlar (`docs/design/kendi-program.md` §2.6, §3.2): `?program=op_…|pt` ("Yalnız bugün") planı o
+ *   programdan kurar; yarım antrenman varsa onun programı, yoksa adresteki, o da yoksa kalıcı seçim
+ *   (`shownProgram`). En az bir kendi program varken yanıtta seçim (`selection`) de gelir.
+ * - `GET /api/me/workout/alternatives?day=&row=[&program=]`: satırın muadilleri ("Değiştir", §2.6), ekipmana göre
  *   gruplu (`alternatives.ts`); her biri kendi geçmişiyle planlı. Bugünün öteki hareketleri önerilmez.
- * - `GET /api/me/workout/exercises[?add=]`: "Hareket ekle"nin kütüphanesi; `add` verilirse o egzersizin
- *   varsayılan setleriyle planı.
+ * - `GET /api/me/workout/exercises[?add=][&program=]`: "Hareket ekle"nin kütüphanesi; `add` verilirse o egzersizin
+ *   varsayılan setleriyle planı. `program` (muadil ve eklenen için): `op_…` kendi program, yok ya da `pt` PT'nin.
  * - `POST /api/me/water`: antrenman dışı su dokunuşları `water.json`'a, kimlikle birleşerek
  *   (idempotent); değişiklik yoksa yazılmaz, çakışmada taze okuyup bir kez daha. Bozuk dosya ezilmez.
  * - `POST /api/me/schedule`: danışanın antrenman günleri (§2.11) `program.json` → `clientSchedule`;
- *   revision artmaz, program geçmişine `client` kaydı, PT'nin bildirim özeti düşer.
+ *   revision artmaz, program geçmişine `client` kaydı, PT'nin bildirim özeti düşer. `programId` bir kendi
+ *   programsa günler o programa yazılır (`scheduleOwnProgram`); null PT'nin programı, verilmezse kalıcı seçim.
  */
 
 export type WorkoutRouteDeps = SessionRouteDeps & {
@@ -199,18 +204,6 @@ function parseProgram(file: StoredJson | null | 'broken'): { program: Program | 
 /** Planın programı: PT'nin programı ya da kendi program (sahibiyle); okunamadıysa danışana dönük sorun. */
 type PlanSource = { program: PlanProgram | null; owner: PlanOwner; problem?: string };
 
-/** Bitmiş antrenmanların programa göre son günü (seçim sheet'i: "son antrenman: 22 Eyl"); PT'nin programı `pt`. */
-function lastDateByProgram(index: SessionIndex): Map<string, string> {
-  const last = new Map<string, string>();
-  for (const row of index.items) {
-    if (!row.finishedAt) continue;
-    const key = row.programId ?? 'pt';
-    const known = last.get(key);
-    if (!known || row.date > known) last.set(key, row.date);
-  }
-  return last;
-}
-
 /**
  * Gösterilecek program (`docs/design/kendi-program.md` §3.2, §5.4): yarım antrenman varsa onun programı (seçimden
  * bağımsız); yoksa adresteki (`program=op_…|pt`, "Yalnız bugün"); o da yoksa kalıcı seçim. Seçilen kendi program
@@ -224,18 +217,11 @@ async function planSource(input: {
   param: string | null;
 }): Promise<{ source: PlanSource; shown: string | null; oneOff: boolean; selectionProblem?: string }> {
   const { own, pt, current, param } = input;
-  const active = activeProgramId(own.index);
-  const known = (id: string) => own.index.items.some((item) => item.id === id);
-  let shown: string | null;
-  if (current) shown = current.program?.programId ?? null;
-  else if (param === 'pt') shown = null;
-  else if (param && isOwnProgramId(param) && known(param)) shown = param;
-  else shown = active;
-  const oneOff = !current && shown !== active;
+  const choice = current ? { shown: current.program?.programId ?? null, oneOff: false } : shownProgram(own.index, own.unreadable, param);
+  const { shown, oneOff } = choice;
   const ptSource: PlanSource = { program: pt.program, owner: null, ...(pt.problem ? { problem: pt.problem } : {}) };
   // Kalıcı seçim okunamayan programı gösteriyor (onarımda listeden düştü): PT'nin programı, sorunuyla.
-  const selected = own.index.active?.programId;
-  const broken = !current && !param && selected ? own.unreadable.find((item) => item.id === selected) : undefined;
+  const broken = 'broken' in choice ? choice.broken : undefined;
   if (broken) return { source: ptSource, shown: null, oneOff: false, selectionProblem: `${broken.name ?? 'Seçtiğin program'} şu an açılamıyor.` };
   if (!shown) return { source: ptSource, shown: null, oneOff };
   const cached = own.programs.get(shown);
@@ -431,6 +417,12 @@ function selectionOf(input: {
 }
 
 const BAD_REQUEST = { status: 400, body: { error: 'İstek geçersiz.' } };
+
+/** Muadil ve eklenen hareketin programı: `op_…` kendi program, yok ya da `pt` PT'nin programı; bozuksa undefined. */
+function ownParam(value: string | null): string | null | undefined {
+  if (value === null || value === 'pt') return null;
+  return isOwnProgramId(value) ? value : undefined;
+}
 const ROW_GONE = { status: 404, body: { error: 'Bu hareket programında artık yok; muadilleri açılamadı.' } };
 
 /**
@@ -442,10 +434,11 @@ export function alternativesRoute(
   deps: WorkoutRouteDeps,
   dayParam: string | null,
   rowParam: string | null,
-  programParam: string | null = null,
+  programQuery: string | null = null,
 ): Promise<SessionRouteResult> {
   if (!dayParam || !DAY_ID_PATTERN.test(dayParam) || !rowParam || !ROW_ID_PATTERN.test(rowParam)) return Promise.resolve(BAD_REQUEST);
-  if (programParam !== null && !isOwnProgramId(programParam)) return Promise.resolve(BAD_REQUEST);
+  const programParam = ownParam(programQuery);
+  if (programParam === undefined) return Promise.resolve(BAD_REQUEST);
   return run(deps, null, 'workout-alternatives', async ({ client, repo }) => {
     // Günün programı: kendi programda `program=op_…` (gün kimlikleri bütün programlarda benzersiz).
     const [repaired, programFile, catalog, ownRead] = await Promise.all([
@@ -495,9 +488,10 @@ export function alternativesRoute(
  * varsayılan setleri ve dinlenmesi, kendi geçmişiyle. Anahtar egzersizin kimliği; telefon kaydı açınca
  * kaydın kimliğiyle değiştirir.
  */
-export function exercisesRoute(deps: WorkoutRouteDeps, addParam: string | null, programParam: string | null = null): Promise<SessionRouteResult> {
+export function exercisesRoute(deps: WorkoutRouteDeps, addParam: string | null, programQuery: string | null = null): Promise<SessionRouteResult> {
   if (addParam !== null && !/^[a-z0-9-]{2,60}$/.test(addParam)) return Promise.resolve(BAD_REQUEST);
-  if (programParam !== null && !isOwnProgramId(programParam)) return Promise.resolve(BAD_REQUEST);
+  const programParam = ownParam(programQuery);
+  if (programParam === undefined) return Promise.resolve(BAD_REQUEST);
   return run(deps, null, 'workout-exercises', async ({ client, repo }) => {
     const catalog = await catalogOf(deps);
     if (addParam === null) {

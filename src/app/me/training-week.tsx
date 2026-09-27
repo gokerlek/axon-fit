@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import type { WorkoutSchedule } from '@/lib/workout-plan';
 import type { WorkoutResponse } from '@/lib/workout-routes';
 import { ScheduleSheet } from './schedule-sheet';
-import { useWorkoutOverview, WORKOUT_KEY } from './today-workout';
+import { useWorkoutOverview, useWorkoutProgram, WORKOUT_OVERVIEW_KEY } from './today-workout';
 import { clearWorkoutCache, readWorkoutCache } from './workout-storage';
 
 /**
@@ -48,6 +48,7 @@ function dayLabel(day: StripDay): string {
 export function WeekStrip({ clientId }: { clientId: string }) {
   const { data, isPending } = useWorkoutOverview(clientId);
   const queryClient = useQueryClient();
+  const program = useWorkoutProgram();
   const [open, setOpen] = useState(false);
   if (isPending && !data) return <Skeleton className="h-[6.25rem] w-full rounded-lg" />;
   if (!data?.schedule) return null;
@@ -57,11 +58,11 @@ export function WeekStrip({ clientId }: { clientId: string }) {
 
   const saved = (next: WorkoutSchedule) => {
     // Hemen görünsün; sonra sunucudan taze (plan damgası değişti, telefondaki plan da yenilenir).
-    queryClient.setQueryData<WorkoutResponse>(WORKOUT_KEY, (old) =>
+    queryClient.setQueryData<WorkoutResponse>([...WORKOUT_OVERVIEW_KEY, program ?? 'default'], (old) =>
       old ? { ...old, schedule: next, week: { ...old.week, target: weekTarget(next.weekdays, next.daysPerWeek ?? undefined) } } : old,
     );
     clearWorkoutCache(clientId);
-    void queryClient.invalidateQueries({ queryKey: WORKOUT_KEY });
+    void queryClient.invalidateQueries({ queryKey: WORKOUT_OVERVIEW_KEY });
   };
 
   return (
@@ -89,7 +90,13 @@ export function WeekStrip({ clientId }: { clientId: string }) {
       <Button variant="ghost" className="h-11 self-center px-3 text-muted-foreground" onClick={() => setOpen(true)}>
         {schedule.weekdays.length > 0 ? 'Günlerini değiştir' : 'Antrenman günlerini seç'}
       </Button>
-      <ScheduleSheet open={open} onOpenChange={setOpen} schedule={schedule} onSaved={saved} />
+      <ScheduleSheet
+        open={open}
+        onOpenChange={setOpen}
+        schedule={schedule}
+        own={data.program?.source === 'own' && data.program.id ? { programId: data.program.id, name: data.program.name ?? '' } : null}
+        onSaved={saved}
+      />
     </div>
   );
 }
@@ -102,6 +109,7 @@ export function WeekStrip({ clientId }: { clientId: string }) {
 export function OtherDayButton({ clientId }: { clientId: string }) {
   const router = useRouter();
   const { data } = useWorkoutOverview(clientId);
+  const program = useWorkoutProgram();
   const [open, setOpen] = useState(false);
   const days = data?.program?.days ?? [];
   const next = data?.program?.nextDayId ?? null;
@@ -144,7 +152,11 @@ export function OtherDayButton({ clientId }: { clientId: string }) {
               className="h-14 w-full text-base"
               onClick={() => {
                 setOpen(false);
-                router.push(selected && selected !== next ? `/me/antrenman?day=${encodeURIComponent(selected)}` : '/me/antrenman');
+                const query = [
+                  ...(selected && selected !== next ? [`day=${encodeURIComponent(selected)}`] : []),
+                  ...(program ? [`program=${encodeURIComponent(program)}`] : []),
+                ].join('&');
+                router.push(query ? `/me/antrenman?${query}` : '/me/antrenman');
               }}>
               Bu günle başla
             </Button>
@@ -162,12 +174,15 @@ export function OtherDayButton({ clientId }: { clientId: string }) {
  */
 export function WorkoutFreshness({ clientId, stamp }: { clientId: string; stamp: string }) {
   const queryClient = useQueryClient();
+  const program = useWorkoutProgram();
   useEffect(() => {
+    const key = [...WORKOUT_OVERVIEW_KEY, program ?? 'default'];
     const cached = readWorkoutCache(clientId);
-    const memory = queryClient.getQueryData<WorkoutResponse>(WORKOUT_KEY);
+    const memory = queryClient.getQueryData<WorkoutResponse>(key);
     const stale = (data: WorkoutResponse | undefined) => Boolean(data?.program && data.program.stamp !== stamp);
+    // Saklanan yanıt başka programınsa da (tek seferlik seçim) damga farklıdır: atılır, Bugün yeniden çeker.
     if (cached && (stale(cached.data) || !cached.data.program?.stamp)) clearWorkoutCache(clientId);
-    if (stale(memory)) void queryClient.invalidateQueries({ queryKey: WORKOUT_KEY });
-  }, [clientId, stamp, queryClient]);
+    if (stale(memory)) void queryClient.invalidateQueries({ queryKey: key });
+  }, [clientId, stamp, program, queryClient]);
   return null;
 }

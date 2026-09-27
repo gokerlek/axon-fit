@@ -32,7 +32,7 @@
 8. Bitiş ekranı: toplam kaldırılan ağırlık, set sayısı, çalışan kaslar; **kaydırılabilir karusel**; gelişim (geçen seferle fark, rekorlar).
 9. Danışan geçmişini görür ve istediği veriyi (antrenman, hareket, set) **silebilir**; her silmede "geri alınamaz" uyarısı. Git geçmişinde eski sürüm kalır: metin bunu dürüstçe söyler.
 10. Önceki kararlar: günler sırayla döner (A → B → C); danışan başka gün seçebilir, **PT'ye bildirim gider**; hazır oluşluk ve ağrı yoklaması sağlık modülünün isteğe bağlı parçasıdır (onaylıysa, §7.5); "bu hafta x/3".
-11. **Danışan uygulamasına alt dock** gelir (PT'ninki gibi, telefon öncelikli): Bugün · Geçmiş · İlerleme; Programlar sonraki fazda. Antrenman sırasında dock gizlenir.
+11. **Danışan uygulamasına alt dock** gelir (PT'ninki gibi, telefon öncelikli): Bugün · Geçmiş · İlerleme · Programlar (`kendi-program.md`). Antrenman sırasında dock gizlenir.
 12. **Antrenman günleri (haftanın günleri, takvim değil).** Programı yapan PT, "Haftada kaç gün"ün yanında haftanın hangi günleri çalışılacağını işaretler (Pzt · Sal · Çar · Per · Cum · Cmt · Paz). **Danışan kendi günlerini güncelleyebilir**: doğrudan uygulanır, program geçmişine danışan değişikliği olarak yazılır, PT'ye bildirim gider; PT geçerli günleri görür ve değiştirebilir. Program günlere çakılmaz: A → B → C sırası seçilen günlere dağılır, kaçan gün içeriği atlatmaz (§2.11).
 
 ---
@@ -46,10 +46,10 @@ Danışan yalnız telefondan kullanır (SPEC §6). Gezinme alttaki dock'ta; hesa
 | **Bugün** | `/me` | Sıradaki antrenman kartı, "Antrenmana başla", "Başka gün seç", "bu hafta x/3", bugünkü su, yarım kalan antrenman kartı, karar bekleyen kartlar (onay, şifre), antrenmandan ~10 dk sonra "Antrenman ne kadar zordu?" | 1 (kabuk), 3 (antrenman) |
 | **Geçmiş** | `/me/gecmis` | Geçmiş antrenmanlar, detay, silme (§2.10) | 1 (boş), 9 |
 | **İlerleme** | `/me/ilerleme` | Hareket başına grafik (üst ağırlık, e1RM; `progress-chart.tsx`), haftalık tonaj, haftalık kas yükü (gerçekleşen, SPEC §7.4), rekorlar ve başarılar (seri, rozet) | 1 (boş), 10 |
-| Programlar | `/me/programlar` | Danışanın kendi programları ve "PT ile paylaş" (SPEC §6) | **Sonraki faz**; gelene kadar dock'ta görünmez |
+| **Programlar** | `/me/programlar` | Antrenörünün programı (salt okuma) ve danışanın kendi programları, "Antrenörünle paylaş" (SPEC §6, `kendi-program.md`) | ✓ (`kendi-program.md` §9) |
 
-- **Avatar menüsü** (var olan `client-menu.tsx`): Programım · Ayarlar · Çıkış yap. Ayarlar (`/me/ayarlar`) sağlık onayını ve şifreyi tutar. Dock'a girmez. Öneri: "Programım" bugün `/me`'yi açıyor, dock'taki Bugün ile aynı yer. Programın bütün günlerini ve geçmişini gösteren `/me/program`'a bağlansın (açık soru 12).
-- **Dock bileşeni:** `src/components/dock/dock.tsx` aynen (PT'de `src/app/dashboard/nav.tsx`). Telefonda (`touch:`) ikonun altında kısa etiket; öğe ≥ 44 px; `aria-current="page"`; `ariaLabel="Ana menü"`. İkonlar Phosphor: `House` Bugün, `ClockCounterClockwise` Geçmiş, `ChartLineUp` İlerleme, ileride `Notebook` Programlar.
+- **Avatar menüsü** (var olan `client-menu.tsx`): Ayarlar · Çıkış yap. Ayarlar (`/me/ayarlar`) sağlık onayını ve şifreyi tutar. Dock'a girmez. "Programım" Programlar dock'a girince kalktı (açık soru 12; `kendi-program.md` karar 1).
+- **Dock bileşeni:** `src/components/dock/dock.tsx` aynen (PT'de `src/app/dashboard/nav.tsx`). Telefonda (`touch:`) ikonun altında kısa etiket; öğe ≥ 44 px; `aria-current="page"`; `ariaLabel="Ana menü"`. İkonlar Phosphor: `House` Bugün, `ClockCounterClockwise` Geçmiş, `ChartLineUp` İlerleme, `Notebook` Programlar.
 - **Dock nerede görünmez:** etkin antrenman (`/me/antrenman`) ve özet karuseli (`/me/antrenman/ozet/[id]`) tam ekrandır, dock ve avatar menüsü yoktur (faz 9'da karusel de tam ekran oldu: "Sonraki ›" ve "Bugün'e dön" dock'un yerinde). Ana sayfa ve Geçmiş (detay dahil) dock'la açılır. Önerilen dosya düzeni: `src/app/me/(sekmeler)/layout.tsx` dock'u çizer (Bugün, Geçmiş, İlerleme, özet); `src/app/me/antrenman/page.tsx` bu grubun dışında kalır. Next 16'da route group ve layout davranışı yazmadan önce `node_modules/next/dist/docs/` ile doğrulanır (AGENTS.md).
 - İçerik dock'un altında kalmasın: sayfa alt boşluğu = dock yüksekliği + `env(safe-area-inset-bottom)`.
 
@@ -836,8 +836,8 @@ Bitişin tek commit'inde (§4.7): rotasyon + danışan kaydı + `clientTargets`.
   - Satır o arada silindiyse `stale` → "Program değişti; öneri uygulanamadı".
 - Bekleyen öneri 30 gün sonra listede soluklaşır; silinmez.
 
-### 6.5 Danışanın kendi programı (SPEC §6)
-Program danışanınsa bütün değişiklikler (set sayısı dahil) doğrudan uygulanır ve `client` kaydı yazılır; tekrar hedefi override değil satırın kendisine yazılır (düzenleyiciyi danışan kullanır). PT ile paylaşılmışsa PT geçmişte görür. Sheet'te "Antrenörüne öner" yerine "Programa yaz".
+### 6.5 Danışanın kendi programı (SPEC §6, `kendi-program.md` §2.9, §3.4)
+Program danışanınsa bütün değişiklikler (set sayısı, hareket değişimi, çıkarma ve ekleme dahil) doğrudan uygulanır ve `client` kaydı yazılır; tekrar hedefi override değil satırın kendisine yazılır (düzenleyiciyi danışan kullanır), ağırlık kayda geçer (plan geçmişten gelir). Satır o arada değiştiyse (başka cihaz, PT'nin düzenlemesi; maddenin `row` anlık görüntüsüyle karşılaştırılır) o madde yazılmaz: "Evde o arada değişti; bu değişiklik yazılmadı." [Programı aç]. PT ile paylaşılmışsa PT geçmişte görür ve bildirim alır. Sheet'in sorusu "Evde programını güncelleyelim mi?", birincil düğme "Evde'ye yaz"; "Antrenörüne öner" yok, madde ipucu "İşaretsiz: program aynı kalır". Satır notunun etiketi "Not:", üst çubuk programın adını da yazar.
 
 ---
 
@@ -903,7 +903,7 @@ Her faz tek başına yayınlanır, 375 px'te doğrulanır, saf mantık `npm test
 | 10 | İlerleme sekmesi | hareket grafikleri (e1RM, üst ağırlık), haftalık tonaj ve kas yükü, rekorlar, başarılar |
 | 11 | Yoklama | hazır oluşluk ve ağrı sheet'i (SPEC 5b ile), hafifletme sorusu |
 | 12 | PT canlı görünüm | şu an çalışanlar (son commit), açık antrenman 10 sn |
-| sonra | Programlar sekmesi | danışanın kendi programları, "PT ile paylaş" |
+| ✓ | Programlar sekmesi | danışanın kendi programları, "Antrenörünle paylaş" (`kendi-program.md` §9) |
 
 **Onaylanınca SPEC'e yansıyacaklar** (bu belge SPEC'i değiştirmez):
 - §7.1 "Zorluk: danışan her çalışma setinden sonra… Kolay / İyi / Zor / Başaramadım" → "hareketin son çalışma setinden sonra bir kez: Kolay / İyi / Zor; cevap bütün setlere yazılır. Ara setlerde yalnız tepedeyken isteğe bağlı 'Kolaydı' kısayolu. Tekrar < alt sınır kaçırmadır; `fail` yalnız eski kayıtlarda."
@@ -922,7 +922,7 @@ Her faz tek başına yayınlanır, 375 px'te doğrulanır, saf mantık `npm test
 9. Silme PT'ye bildirilsin mi? Öneri: hayır (danışanın verisi). Commit mesajı genel kalır ("Kayıt silindi").
 10. Seans RPE'si (CR-10) 10 dk sonra Bugün kartında mı, özetin son kartında mı? SPEC ~10 dk diyor. Öneri: Bugün kartı.
 11. Antrenöre e-posta ya da push bildirimi? Öneri: şimdilik yalnız uygulama içi.
-12. Avatar menüsündeki "Programım" dock'taki Bugün ile aynı yeri açıyor. Öneri: bütün günleri ve program geçmişini gösteren `/me/program`.
+12. ~~Avatar menüsündeki "Programım" dock'taki Bugün ile aynı yeri açıyor.~~ Karar (`kendi-program.md` karar 1): Programlar dock'un 4. sekmesi oldu, antrenörünün programının bütün günleri `/me/programlar/antrenor`'da; "Programım" menüden kalktı.
 13. Dinlenme ±15 değişikliği programa öneri olsun mu? Öneri: hayır, yalnız o dinlenme.
 14. Orta aşamaya geçiş eşiği "2 hafifletme" **[sentez]**; Rippetoe & Baker'daki sıfırlama anlatımı basılı kaynaktan doğrulanacak. Öneri: 2; PT değiştirebilsin.
 15. Dinlenme alarmı 15 sn'de bir, en çok 3 kez yinelensin mi? Öneri: evet; Ayarlar'daki "Antrenman sesi" hepsini kapatır.

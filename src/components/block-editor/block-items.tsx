@@ -374,6 +374,26 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
     editor.updateWithUndo((before) => setRow(before, result.row), message, { highlight: row.id });
   };
 
+  const resetRule = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="self-start touch:h-11"
+      onClick={() => setInput(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'rule'), input: undefined })}>
+      Egzersizin kuralına dön
+    </Button>
+  );
+  // Kendi program (kendi-program.md §2.5): kural seçilmez; kopyalanan satırdaki antrenörün kuralı yalnız okunur.
+  const simple = editor.variant === 'simple';
+  const ownRule = row.rule ? (
+    <Field className="gap-1.5">
+      <FieldLabel>Antrenörünün kuralı</FieldLabel>
+      <FieldDescription>{describeRule(rule, spec)}</FieldDescription>
+      {resetRule}
+    </Field>
+  ) : null;
+
   return (
     <div id={`details-${row.id}`} className="grid grid-cols-1 gap-4 px-3 pt-3 pb-3 sm:grid-cols-2">
       <Field className="gap-1.5">
@@ -390,37 +410,32 @@ function RowDetails({ blockIndex, rowIndex, row, exercise }: { blockIndex: numbe
         </FieldDescription>
       </Field>
 
-      <Field className="gap-1.5">
-        <FieldLabel htmlFor={`scheme-${row.id}`}>İlerleme</FieldLabel>
-        <div className="grid grid-cols-2 gap-2">
-          <LabeledSelect
-            {...SELECT_TOUCH}
-            id={`scheme-${row.id}`}
-            value={rule.scheme}
-            labels={PROGRESSION_LABELS}
-            onChange={(scheme) => writeRule({ scheme })}
-          />
-          <LabeledSelect
-            {...SELECT_TOUCH}
-            id={`rir-${row.id}`}
-            value={String(rule.targetRir)}
-            labels={RIR_ITEMS}
-            onChange={(rir) => writeRule({ targetRir: Number(rir) })}
-          />
-        </div>
-        <FieldDescription>{describeRule(rule, spec)}</FieldDescription>
-        {setRules ? <FieldDescription>{setRules}</FieldDescription> : null}
-        {row.rule ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="self-start touch:h-11"
-            onClick={() => setInput(form, { path: blockField(path, blockIndex, 'rows', rowIndex, 'rule'), input: undefined })}>
-            Egzersizin kuralına dön
-          </Button>
-        ) : null}
-      </Field>
+      {simple ? (
+        ownRule
+      ) : (
+        <Field className="gap-1.5">
+          <FieldLabel htmlFor={`scheme-${row.id}`}>İlerleme</FieldLabel>
+          <div className="grid grid-cols-2 gap-2">
+            <LabeledSelect
+              {...SELECT_TOUCH}
+              id={`scheme-${row.id}`}
+              value={rule.scheme}
+              labels={PROGRESSION_LABELS}
+              onChange={(scheme) => writeRule({ scheme })}
+            />
+            <LabeledSelect
+              {...SELECT_TOUCH}
+              id={`rir-${row.id}`}
+              value={String(rule.targetRir)}
+              labels={RIR_ITEMS}
+              onChange={(rir) => writeRule({ targetRir: Number(rir) })}
+            />
+          </div>
+          <FieldDescription>{describeRule(rule, spec)}</FieldDescription>
+          {setRules ? <FieldDescription>{setRules}</FieldDescription> : null}
+          {row.rule ? resetRule : null}
+        </Field>
+      )}
 
       <Field data-invalid={Boolean(noteField.errors) || undefined} className="gap-1.5 sm:col-span-2">
         <FieldLabel htmlFor={`note-${row.id}`}>Not</FieldLabel>
@@ -547,7 +562,11 @@ function RowBody({
       {exercise ? (
         <div className="border-t">
           <DisclosureButton open={detailsOpen} controls={`details-${row.id}`} onToggle={() => editor.toggleDetails(row.id)}>
-            Ayrıntılar <span className="text-muted-foreground">· {device ? 'cihaz · ' : ''}kural · not</span>
+            Ayrıntılar{' '}
+            <span className="text-muted-foreground">
+              · {device ? 'cihaz · ' : ''}
+              {editor.variant === 'simple' && !row.rule ? 'not' : 'kural · not'}
+            </span>
           </DisclosureButton>
           {detailsOpen ? <RowDetails blockIndex={blockIndex} rowIndex={rowIndex} row={row} exercise={exercise} /> : null}
         </div>

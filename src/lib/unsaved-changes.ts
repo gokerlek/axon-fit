@@ -24,6 +24,16 @@ export function programDraftKey(clientId: string): string {
   return `${DRAFT_PREFIX}program.${clientId}`;
 }
 
+/** Danışanın kendi programlarının taslak öneki (`docs/design/kendi-program.md` §2.5): danışan çıkınca hepsi silinir. */
+export function ownDraftPrefix(clientId: string): string {
+  return `${DRAFT_PREFIX}own.${clientId}.`;
+}
+
+/** Kendi program: program başına (danışan ve PT aynı biçimde; yeni programda `new`). */
+export function ownProgramDraftKey(clientId: string, programId: string | null): string {
+  return `${ownDraftPrefix(clientId)}${programId ?? 'new'}`;
+}
+
 /**
  * Taslağın dayandığı sürüm: şablonda dosyanın sha'sı; programda revision ve oluşturulma anı
  * (`ProgramBase`: silinip yeniden oluşturulan program revision 1'den başlasa da ayrılır); yenide null.

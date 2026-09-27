@@ -1,15 +1,16 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { ChartLineUp, ClockCounterClockwise, House } from '@phosphor-icons/react';
+import { ChartLineUp, ClockCounterClockwise, House, Notebook } from '@phosphor-icons/react';
 import { Dock } from '@/components/dock/dock';
 import { CLIENT_TABS, clientTabIndex } from '@/lib/client-tabs';
 
-/** Sekmelerin ikonları (Phosphor, tasarım §0); sıra ve adlar `client-tabs.ts`'te. Programlar ileride `Notebook`. */
+/** Sekmelerin ikonları (Phosphor, tasarım §0); sıra ve adlar `client-tabs.ts`'te. */
 const ICONS: Record<(typeof CLIENT_TABS)[number]['href'], React.ReactNode> = {
   '/me': <House />,
   '/me/gecmis': <ClockCounterClockwise />,
   '/me/ilerleme': <ChartLineUp />,
+  '/me/programlar': <Notebook />,
 };
 
 /**

@@ -12,6 +12,7 @@ import {
   ptEdits,
   removeOwnItem,
   repairOwnIndex,
+  shownProgram,
   upsertOwnItem,
   withActive,
   type OwnIndex,
@@ -63,6 +64,19 @@ describe('seçim, silme, olaylar', () => {
     assert.equal(activeProgramId(selected), OWN_ID);
     assert.equal(activeItem(selected)?.name, 'Evde');
     assert.equal(activeProgramId({ ...selected!, items: [] }), null);
+  });
+
+  test('Bugün\'de gösterilen: adresteki ("Yalnız bugün"), yoksa kalıcı seçim; okunamayan seçim PT\'ye düşer', () => {
+    const index = withActive(indexOf(ownProgram(), tatil()), OWN_ID, NOW)!;
+    assert.deepEqual(shownProgram(index, [], null), { shown: OWN_ID, oneOff: false });
+    assert.deepEqual(shownProgram(index, [], 'pt'), { shown: null, oneOff: true });
+    assert.deepEqual(shownProgram(index, [], OTHER), { shown: OTHER, oneOff: true });
+    assert.deepEqual(shownProgram(index, [], OWN_ID), { shown: OWN_ID, oneOff: false });
+    assert.deepEqual(shownProgram(index, [], 'op_yokyok01'), { shown: OWN_ID, oneOff: false }, 'listede olmayan adres kalıcı seçime düşer');
+    assert.deepEqual(shownProgram(index, [], '../x'), { shown: OWN_ID, oneOff: false });
+    const broken = { ...index, items: index.items.filter((item) => item.id !== OWN_ID) };
+    assert.deepEqual(shownProgram(broken, [{ id: OWN_ID, name: 'Evde' }], null), { shown: null, oneOff: false, broken: { name: 'Evde' } });
+    assert.deepEqual(shownProgram(emptyOwnIndex(), [], null), { shown: null, oneOff: false });
   });
 
   test('silme: satır düşer; seçiliyse seçim PT\'ye (an yenilenir); paylaşılmışsa deleted olayı', () => {

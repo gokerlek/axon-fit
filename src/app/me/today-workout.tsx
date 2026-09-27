@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -36,12 +36,30 @@ import { localWorkoutText, readPendingWater, savePendingWater, saveWorkoutCache,
  */
 
 export const WORKOUT_KEY = ['me', 'workout'] as const;
+/** Bugün'ün yanıtları (programa göre); `setQueriesData` ile hepsi birden güncellenir, muadil sorguları değil. */
+export const WORKOUT_OVERVIEW_KEY = [...WORKOUT_KEY, 'overview'] as const;
+
+/**
+ * Bugün'ün tek seferlik program seçimi (`?program=op_…|pt`, `docs/design/kendi-program.md` §2.6): Bugün'ün
+ * parçaları yanıtı o programla çeker; yoksa kalıcı seçim (sunucu karar verir).
+ */
+const WorkoutProgramContext = createContext<string | null>(null);
+
+export function WorkoutProgramProvider({ program, children }: { program: string | null; children: React.ReactNode }) {
+  return <WorkoutProgramContext.Provider value={program}>{children}</WorkoutProgramContext.Provider>;
+}
+
+/** Tek seferlik seçimin adres parçası (`program=…`); yoksa boş. */
+export function useWorkoutProgram(): string | null {
+  return useContext(WorkoutProgramContext);
+}
 
 export function useWorkoutOverview(clientId: string) {
+  const program = useWorkoutProgram();
   return useServiceQuery<WorkoutResponse>({
-    key: WORKOUT_KEY,
+    key: [...WORKOUT_OVERVIEW_KEY, program ?? 'default'],
     fn: async ({ signal }) => {
-      const data = await fetchJson<WorkoutResponse>('/api/me/workout', { signal });
+      const data = await fetchJson<WorkoutResponse>(`/api/me/workout${program ? `?program=${encodeURIComponent(program)}` : ''}`, { signal });
       saveWorkoutCache(clientId, data);
       return data;
     },
@@ -165,7 +183,9 @@ export function WaterCard({ clientId }: { clientId: string }) {
         const result = await fetchJson<{ file: number }>('/api/me/water', { method: 'POST', body });
         const sent = new Set(taps.map((tap) => tap.id));
         update(pendingRef.current.filter((tap) => !sent.has(tap.id)));
-        queryClient.setQueryData<WorkoutResponse>(WORKOUT_KEY, (old) => (old ? { ...old, water: { ...old.water, file: result.file } } : old));
+        queryClient.setQueriesData<WorkoutResponse>({ queryKey: WORKOUT_OVERVIEW_KEY }, (old) =>
+          old ? { ...old, water: { ...old.water, file: result.file } } : old,
+        );
       } catch {
         // Telefonda kalır: sonraki dokunuşta, bağlantı gelince ya da sonraki açılışta gider.
       } finally {
