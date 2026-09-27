@@ -5,7 +5,11 @@
  * Kaynak: `docs/research/medical-fitness/` (164 kaynaklı tarama). Şiddet ve faz
  * kimliğe gömülmez; ayrı `qualifier` alanında tutulur — yoksa 30 kimlik 80 olur.
  *
- * Kırmızı bayrak, egzersiz süzgeci değil akış kesicidir: uygulama tıbbi izin ister.
+ * Kırmızı bayrak PT'nin tek başına karar vermeyeceği durumdur: danışanın kısıtında sağlık profesyoneline
+ * yönlendirme ve görüş adımları ister (`constraints.ts`, tasarım `kisit-tarama.md` §2.6).
+ *
+ * Tür (`kind`): tanı (`diagnosis`, varsayılan) bir sağlık profesyonelinin koyduğu şeydir; bulgu (`finding`)
+ * PT'nin gözlemidir (postür, hareket taraması). Kısıt formunda ayrı seçicilerde çıkar; danışan bulguyu görmez.
  */
 
 export const CONDITION_REGIONS = ['spine', 'neck', 'shoulder', 'elbow', 'wrist', 'hip', 'knee', 'ankle', 'systemic'] as const;
@@ -15,10 +19,14 @@ export type ConditionRegion = (typeof CONDITION_REGIONS)[number];
 export const CONDITION_QUALIFIERS = ['acute', 'reactive', 'severe', 'stable', 'controlled', 'uncontrolled', 'postop'] as const;
 export type ConditionQualifier = (typeof CONDITION_QUALIFIERS)[number];
 
+export type ConditionKind = 'diagnosis' | 'finding';
+
 export type ConditionInfo = {
   label: string;
   region: ConditionRegion;
-  /** Tıbbi izin olmadan program yazılmaz; uygulama uyarıyı gizleyemez. */
+  /** Bulgu (PT'nin gözlemi) mi; yoksa tanı. */
+  kind?: ConditionKind;
+  /** Sağlık profesyoneline yönlendirme ve görüş ister; uygulama uyarıyı gizleyemez. */
   redFlag?: boolean;
   /** Kayıtta anlamlı olan niteleyiciler (boşsa niteleyici sorulmaz). */
   qualifiers?: readonly ConditionQualifier[];
@@ -74,11 +82,13 @@ export const CONDITIONS = {
   upper_crossed_pattern: {
     label: 'Üst çapraz patern (öne baş, yuvarlak omuz)',
     region: 'neck',
+    kind: 'finding',
     note: 'Bulgu; yasak değil. Skapular kontrol kurulana kadar baş üstü itişte uyarı.',
   },
   thoracic_extension_deficit: {
     label: 'Torasik ekstansiyon kısıtı',
     region: 'spine',
+    kind: 'finding',
     note: 'Baş üstü hareketlerde açığı bel hiperekstansiyonu kapatır.',
   },
 
@@ -99,7 +109,7 @@ export const CONDITIONS = {
   },
   multidirectional_shoulder_instability: { label: 'Multidireksiyonel omuz instabilitesi', region: 'shoulder' },
   ac_joint_injury: { label: 'AC eklem sorunu', region: 'shoulder', qualifiers: ['severe'] },
-  scapular_dyskinesis: { label: 'Skapular diskinezi', region: 'shoulder', note: 'Tek başına bulgu; ağrısızsa yasak gerekçesi değildir.' },
+  scapular_dyskinesis: { label: 'Skapular diskinezi', region: 'shoulder', kind: 'finding', note: 'Tek başına bulgu; ağrısızsa yasak gerekçesi değildir.' },
 
   // --- Dirsek / el bileği ---
   lateral_epicondylitis: { label: 'Lateral epikondilit (tenisçi dirseği)', region: 'elbow', qualifiers: ['acute'] },
@@ -109,6 +119,7 @@ export const CONDITIONS = {
   lower_crossed_pattern: {
     label: 'Alt çapraz patern (anterior pelvik tilt)',
     region: 'hip',
+    kind: 'finding',
     note: 'Bulgu; tek postür fotoğrafına dayanıyorsa karar verdirmez.',
   },
   hip_impingement_fai: { label: 'Kalça sıkışması (FAI)', region: 'hip', note: 'Derin kalça fleksiyonunda semptom verir.' },
@@ -127,12 +138,13 @@ export const CONDITIONS = {
   acute_meniscus_tear: { label: 'Akut menisküs yırtığı', region: 'knee', redFlag: true, note: 'Kilitlenme/blokaj varsa egzersiz yok.' },
   meniscus_repair_postop: { label: 'Menisküs onarımı sonrası', region: 'knee', redFlag: true },
   acute_knee_effusion: { label: 'Dizde akut şişlik (efüzyon)', region: 'knee', note: 'Efüzyon kuadriseps inhibisyonu yapar; yük artırılmaz.' },
-  dynamic_knee_valgus: { label: 'Dinamik diz valgusu', region: 'knee', note: 'Bulgu; nöromüsküler çalışmayla düzeltilir.' },
+  dynamic_knee_valgus: { label: 'Dinamik diz valgusu', region: 'knee', kind: 'finding', note: 'Bulgu; nöromüsküler çalışmayla düzeltilir.' },
 
   // --- Ayak bileği ---
   ankle_dorsiflexion_restriction: {
     label: 'Ayak bileği dorsifleksiyon kısıtı',
     region: 'ankle',
+    kind: 'finding',
     note: 'Derin squat’ta topuk yükseltilmezse açık belden kapanır.',
   },
 
@@ -144,11 +156,13 @@ export const CONDITIONS = {
     note: 'Valsalva ile ağır eksenel yük kan basıncını ani yükseltir.',
   },
   pregnancy_second_third_trimester: { label: 'Gebelik (2. ve 3. trimester)', region: 'systemic' },
+  // Eski kayıtlarda okunur; hiçbir seçicide çıkmaz (taramadaki ağrı tanısız hareket kısıtı olur, `kisit-tarama.md` §4.4).
   movement_screen_pain_flag: {
     label: 'Hareket taramasında ağrı',
     region: 'systemic',
+    kind: 'finding',
     redFlag: true,
-    note: 'FMS final skoru 0 ya da clearing testi pozitif: önce değerlendirme.',
+    note: 'Hareket taramasında ağrı: önce değerlendirme.',
   },
 } as const satisfies Record<string, ConditionInfo>;
 
@@ -196,7 +210,27 @@ export function conditionLabel({ id, qualifier }: ClientCondition): string {
   return qualifier && ek[qualifier] ? `${base} (${ek[qualifier]})` : base;
 }
 
-/** Tıbbi izin isteyen kısıtlar. */
+/** Sağlık profesyoneline yönlendirme isteyen kısıtlar. */
 export function redFlags(conditions: readonly ClientCondition[]): ClientCondition[] {
   return conditions.filter((condition) => conditionInfo(condition.id).redFlag);
+}
+
+export function conditionKind(id: ConditionId): ConditionKind {
+  return conditionInfo(id).kind ?? 'diagnosis';
+}
+
+/** Hiçbir seçicide çıkmayan, yalnız eski kayıtta okunan kimlikler. */
+export const RETIRED_CONDITION_IDS: ReadonlySet<ConditionId> = new Set(['movement_screen_pain_flag']);
+
+/** "Egzersiz yok" kuralı: görüşle de değişmez, izin verilemez; seçilince acil yönlendirme metni. */
+export const EMERGENCY_CONDITION_ID: ConditionId = 'cauda_equina_or_progressive_neuro_deficit';
+
+/**
+ * Danışanın göreceği tanı adı (tasarım `kisit-tarama.md` §5.2): yalnız tanı türünde, niteleyicisiz temel ad;
+ * adında niteleyici ya da kuşku sözcüğü geçen tanı hiç yazılmaz. Kaynağın hekim olup olmadığına çağıran bakar.
+ */
+export function clientSafeLabel(id: ConditionId): string | null {
+  const info = conditionInfo(id);
+  if (conditionKind(id) !== 'diagnosis') return null;
+  return /akut|şiddetli|kontrolsüz|şüphe/i.test(info.label) ? null : info.label;
 }

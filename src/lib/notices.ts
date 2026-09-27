@@ -26,7 +26,7 @@ export const NOTICE_FEED_LIMIT = 20;
 
 const DAY_MS = 86_400_000;
 
-export const PT_NOTICE_KINDS = ['other_day', 'unfinished', 'overload', 'lighter', 'pain', 'program', 'proposal'] as const;
+export const PT_NOTICE_KINDS = ['other_day', 'unfinished', 'overload', 'lighter', 'pain', 'program', 'proposal', 'constraint'] as const;
 export type PtNoticeKind = (typeof PT_NOTICE_KINDS)[number];
 
 export const PT_NOTICE_LABELS: Record<PtNoticeKind, string> = {
@@ -37,6 +37,7 @@ export const PT_NOTICE_LABELS: Record<PtNoticeKind, string> = {
   pain: 'Ağrı',
   program: 'Program',
   proposal: 'Öneri',
+  constraint: 'Kısıt',
 };
 
 export type PtNotice = {
@@ -45,9 +46,22 @@ export type PtNotice = {
   kind: PtNoticeKind;
   at: string;
   text: string;
-  /** Bağlantı: danışanın sayfası ya da programı. */
-  target: 'client' | 'program';
+  /** Bağlantı: danışanın sayfası, programı ya da kısıtları. */
+  target: 'client' | 'program' | 'constraints';
 };
+
+/** Kısıt kaydının danışan satırları (`health.json` → `constraintLog`); çağıran onayı denetler. */
+export type ConstraintLogRow = { at: string; by: 'pt' | 'client'; id: string; kind: string; text: string };
+
+/**
+ * Danışanın kısıt bildirimleri (tasarım `kisit-tarama.md` §3.6): değişiklik kaydının danışan satırları, pencere
+ * içinde ("Sol diz bildirildi (orta)", "Sol diz: orta → şiddetli (danışan)", "Bildirim geri çekildi: Sol diz").
+ */
+export function constraintNotices(log: readonly ConstraintLogRow[], since: number): PtNotice[] {
+  return log
+    .filter((row) => row.by === 'client' && time(row.at) >= since)
+    .map((row) => ({ key: `constraint:${row.id}:${row.kind}:${row.at}`, kind: 'constraint' as const, at: row.at, text: row.text, target: 'constraints' as const }));
+}
 
 /** Onaylı sağlık ayrıntısı (`health.json` → `checkIns[]`, seansa bağlı olanlar); çağıran onaya göre süzer. */
 export type SessionHealth = { sessionId: string; painSkips: number; adjustReason?: 'readiness' | 'pain' };
@@ -129,6 +143,8 @@ export function clientNotices(input: {
   log: readonly Pick<ProgramLogEntry, 'at' | 'kind' | 'changes'>[];
   proposals: unknown;
   health?: readonly SessionHealth[];
+  /** Kısıt kaydı, yalnız `conditions` onayı sürdükçe. */
+  constraintLog?: readonly ConstraintLogRow[];
   now: Date;
   windowDays?: number;
   limit?: number;
@@ -138,6 +154,7 @@ export function clientNotices(input: {
     ...(input.index ? sessionNotices(input.index, since, input.health) : []),
     ...programNotices(input.log, since),
     ...proposalNotices(input.proposals),
+    ...constraintNotices(input.constraintLog ?? [], since),
   ];
   return all.sort((a, b) => time(b.at) - time(a.at) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)).slice(0, input.limit ?? NOTICES_PER_CLIENT);
 }

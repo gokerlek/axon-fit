@@ -182,3 +182,19 @@ describe('PT bildirimleri: okundu ve Genel bakış listesi', () => {
     assert.deepEqual(feed.unreadClients, ['c_aaaaaaaa', 'c_bbbbbbbb']);
   });
 });
+
+describe('kısıt bildirimleri (kisit-tarama.md §3.6)', () => {
+  test('yalnız danışan satırları, pencere içinde; hedef Kısıtlar', () => {
+    const log = [
+      { at: ago(1), by: 'client' as const, id: 'k_aaaaaa', kind: 'reported', text: 'Sol diz bildirildi (orta)' },
+      { at: ago(2), by: 'pt' as const, id: 'k_aaaaaa', kind: 'confirmed', text: 'Sol diz onaylandı' },
+      { at: ago(20), by: 'client' as const, id: 'k_bbbbbb', kind: 'worsened', text: 'Bel: orta → şiddetli (danışan)' },
+    ];
+    const notices = clientNotices({ index: null, log: [], proposals: null, constraintLog: log, now: NOW });
+    assert.deepEqual(
+      notices.map((notice) => [notice.kind, notice.text, notice.target]),
+      [['constraint', 'Sol diz bildirildi (orta)', 'constraints']],
+    );
+    assert.deepEqual(clientNotices({ index: null, log: [], proposals: null, now: NOW }), []);
+  });
+});

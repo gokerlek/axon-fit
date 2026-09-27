@@ -1,5 +1,5 @@
-import type { Client, ClientIndexEntry, ClientStatus, HealthField, Invite } from './schemas/client.ts';
-import { HEALTH_CONSENT_VERSION } from './schemas/client.ts';
+import type { Client, ClientIndexEntry, ClientStatus, HealthConsent, HealthField, Invite } from './schemas/client.ts';
+import { HEALTH_FIELD_VERSIONS } from './schemas/client.ts';
 
 /**
  * Danışanın davet ve sağlık onayı durumları — tarayıcıda da çalışır (kripto yok).
@@ -190,20 +190,62 @@ export function nextHealthModule(
   return { enabled: true, fields, ...(previous?.enabledAt ? { enabledAt: previous.enabledAt } : {}) };
 }
 
+const VERSION = /^\d{4}-\d{2}$/;
+
+/** Parçanın onaylandığı sürüm: kayıtta parça başına yoksa onayın kendi sürümü (eski onaylar). */
+export function consentVersionOf(consent: Pick<HealthConsent, 'version' | 'versions'>, field: HealthField): string {
+  return consent.versions?.[field] ?? consent.version;
+}
+
+/**
+ * Onaylanan sürüm parçanın güncel metnini kapsıyor mu: onay o parçanın sürümünde ya da daha yenisinde
+ * verildiyse evet ("2026-10"'da verilen onay "2026-09" metnini kapsar). Biçimi bozuk sürüm kapsamaz.
+ */
+function coversVersion(version: string, field: HealthField): boolean {
+  return VERSION.test(version) && version >= HEALTH_FIELD_VERSIONS[field];
+}
+
+/** Tek parçanın durumu: modül ve seçim, danışanın kararı, kapsam, parçanın sürümü, modülün taban anı. */
+export type HealthFieldState = 'off' | 'not_selected' | 'pending' | 'declined' | 'outdated' | 'granted';
+
+/**
+ * Parçanın onay durumu (tasarım `kisit-tarama.md` §5.1): sürüm parça başınadır, bir parçanın metni değişince
+ * yalnız o parça `outdated` olur, öteki parçaların kaydı sürer (kırmızı bayrak sorusu ve ağrı kuralı sürüm
+ * artışıyla kapanmaz). Modülün yeniden açılması ya da kapsamının genişlemesi (`enabledAt`) bütün onayı yeniler
+ * (SPEC §9.4).
+ */
+export function healthFieldState(client: Pick<Client, 'modules' | 'consents'>, field: HealthField): HealthFieldState {
+  const healthModule = client.modules.health;
+  if (!healthModule.enabled) return 'off';
+  if (!healthModule.fields.includes(field)) return 'not_selected';
+  const consent = client.consents.health;
+  if (!consent) return 'pending';
+  if (!consent.granted) return 'declined';
+  if (!consent.fields.includes(field) || !coversVersion(consentVersionOf(consent, field), field)) return 'outdated';
+  // Modül yeniden açıldı ya da kapsamı genişledi: ondan önceki onay yetmez (SPEC §9.4).
+  if (healthModule.enabledAt && Date.parse(consent.at) < Date.parse(healthModule.enabledAt)) return 'outdated';
+  return 'granted';
+}
+
+/** Modülde seçili olup yeniden onay bekleyen parçalar (onay kartındaki "yeni onay gerekiyor" listesi). */
+export function outdatedHealthFields(client: Pick<Client, 'modules' | 'consents'>): HealthField[] {
+  return client.modules.health.fields.filter((field) => healthFieldState(client, field) === 'outdated');
+}
+
+/** Modülün danışan açısından tek durumu: seçili parçalardan biri yenilenecekse `outdated` (kart yeniden sorar). */
 export function healthConsentState(client: Pick<Client, 'modules' | 'consents'>): HealthConsentState {
   const healthModule = client.modules.health;
   if (!healthModule.enabled) return 'off';
   const consent = client.consents.health;
   if (!consent) return 'pending';
   if (!consent.granted) return 'declined';
-  const covers = (field: HealthField) => consent.fields.includes(field);
-  if (consent.version !== HEALTH_CONSENT_VERSION || !healthModule.fields.every(covers)) return 'outdated';
-  // Modül yeniden açıldı ya da kapsamı genişledi: ondan önceki onay yetmez (SPEC §9.4).
-  if (healthModule.enabledAt && Date.parse(consent.at) < Date.parse(healthModule.enabledAt)) return 'outdated';
-  return 'granted';
+  return outdatedHealthFields(client).length > 0 ? 'outdated' : 'granted';
 }
 
-/** Sağlık kaydı yazılabilir mi: modül açık VE danışanın güncel onayı var (SPEC §9.4). */
+/**
+ * Sağlık kaydı yazılabilir mi: modül açık, parça seçili VE danışanın onayı bu parçayı güncel sürümüyle kapsıyor
+ * (SPEC §9.4). Başka bir parçanın yenilenmesi bunu kapatmaz.
+ */
 export function canRecordHealth(client: Pick<Client, 'modules' | 'consents'>, field: HealthField): boolean {
-  return healthConsentState(client) === 'granted' && client.modules.health.fields.includes(field);
+  return healthFieldState(client, field) === 'granted';
 }

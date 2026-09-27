@@ -60,7 +60,11 @@ export async function NoticesCard({ timeZone }: { timeZone: string }) {
               <li key={`${item.clientId}:${item.key}`}>
                 <Item
                   size="sm"
-                  render={<Link href={`/dashboard/clients/${item.clientId}${item.target === 'program' ? '/program' : ''}`} />}
+                  render={
+                    <Link
+                      href={`/dashboard/clients/${item.clientId}${item.target === 'program' ? '/program' : item.target === 'constraints' ? '/constraints' : ''}`}
+                    />
+                  }
                   className="touch:min-h-11">
                   <ItemMedia>
                     <span

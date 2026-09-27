@@ -6,11 +6,15 @@ import {
   attentionFactsOf,
   attentionFeed,
   attentionItems,
+  constraintFactsOf,
   exerciseStalls,
   missedTrainingDays,
+  screeningFactsOf,
   type AttentionFacts,
 } from './attention.ts';
+import { addConstraint, clearConstraint, referConstraint, removeConstraint, reportConstraint, reportWorse } from './constraints.ts';
 import type { Client, Invite } from './schemas/client.ts';
+import type { HealthRecord } from './schemas/health.ts';
 import { programSchema } from './schemas/program.ts';
 import type { SessionIndexExercise, SessionIndexRow } from './schemas/session.ts';
 import { programFile, singleBlock } from './testing/session-fixtures.ts';
@@ -312,5 +316,93 @@ describe('dikkat: Genel bakış listesi', () => {
     );
     assert.equal(feed.total, 3);
     assert.equal(feed.clients, 3);
+  });
+});
+
+describe('dikkat: kısıtlar ve tarama (kisit-tarama.md §3.6)', () => {
+  const at = '2026-09-20T10:00:00.000Z';
+  let health: HealthRecord = { version: 2, checkIns: [], measurements: [] };
+  health = addConstraint(
+    health,
+    { region: 'knee', side: 'left', type: 'post_op', avoid: [], conditionId: 'acl_reconstruction_early', diagnosisSource: 'clinician' },
+    { id: 'k_aaaaaa', now: at },
+  );
+  health = addConstraint(
+    health,
+    { region: 'lower_back', type: 'condition', avoid: [], conditionId: 'cauda_equina_or_progressive_neuro_deficit', diagnosisSource: 'client' },
+    { id: 'k_bbbbbb', now: at },
+  );
+  health = reportConstraint(health, { region: 'shoulder', side: 'right', type: 'injury', severity: 'moderate', triggers: [] }, { id: 'k_cccccc', now: at, today: '2026-09-20' });
+
+  test('yönlendirme en üstte (95); kauda ekinada acil metin; bildirim 80; sıradaki gündeki çelişki 85', () => {
+    const constraints = constraintFactsOf(health, [
+      { phaseId: 'p_a', dayId: 'd_a', dayName: 'Gün A', rowId: 'r_a', exerciseId: 'jump-squat', title: 'Jump Squat', message: 'x', next: true },
+    ]);
+    const items = attentionItems(facts({ constraints }), ctx);
+    assert.deepEqual(
+      items.map((item) => [item.urgency, item.text, item.target]),
+      [
+        [ATTENTION_URGENCY.redFlag, 'Acil: danışanı bugün acil servise yönlendir (Bel)', 'constraints'],
+        [ATTENTION_URGENCY.redFlag, 'Sağlık profesyoneline yönlendir: Sol diz · ACL rekonstrüksiyonu erken dönem (0–12 hafta)', 'constraints'],
+        [ATTENTION_URGENCY.conflictNext, 'Sıradaki günde kısıtla çelişen hareket: Gün A · Jump Squat', 'program'],
+        [ATTENTION_URGENCY.report, 'Danışan kısıt bildirdi: Sağ omuz (orta)', 'constraints'],
+      ],
+    );
+  });
+
+  test('yönlendirilince 40 "görüş bekleniyor · n gün"; görüş alınınca madde yok', () => {
+    let referred = referConstraint(health, 'k_aaaaaa', { now: at, date: '2026-09-14' });
+    referred = removeConstraint(removeConstraint(referred, 'k_bbbbbb', { now: at }), 'k_cccccc', { now: at });
+    const items = attentionItems(facts({ constraints: constraintFactsOf(referred, []) }), ctx);
+    assert.deepEqual(
+      items.map((item) => [item.urgency, item.text]),
+      [[ATTENTION_URGENCY.referralWaiting, 'Profesyonel görüşü bekleniyor · Sol diz · 12 gün']],
+    );
+    const cleared = clearConstraint(referred, 'k_aaaaaa', { now: at, date: '2026-09-25', basis: 'client_report' });
+    assert.deepEqual(attentionItems(facts({ constraints: constraintFactsOf(cleared, []) }), ctx), []);
+  });
+
+  test('kötüleşme 72; sıradaki günde olmayan çelişki 66', () => {
+    let record: HealthRecord = { version: 2, checkIns: [], measurements: [] };
+    record = addConstraint(record, { region: 'knee', side: 'left', type: 'injury', severity: 'moderate', avoid: ['ballistic'] }, { id: 'k_dddddd', now: at });
+    record = reportWorse(record, 'k_dddddd', 'severe', { now: at });
+    const conflict = { phaseId: 'p_a', dayId: 'd_b', dayName: 'Gün B', rowId: 'r_b', exerciseId: 'x', title: 'Jump Squat', message: 'x', next: false };
+    const items = attentionItems(facts({ constraints: constraintFactsOf(record, [conflict, { ...conflict, rowId: 'r_c' }]) }), ctx);
+    assert.deepEqual(
+      items.map((item) => [item.urgency, item.text]),
+      [
+        [ATTENTION_URGENCY.constraintChange, 'Kısıt kötüleşti: Sol diz orta → şiddetli'],
+        [ATTENTION_URGENCY.conflict, 'Programda kısıtla çelişen 2 hareket'],
+      ],
+    );
+  });
+
+  test('tarama: gözden geçirilmemiş ağrı 78; tek büyük asimetri 38 ve 28 gün sonra düşer; kısıtlı taraf bastırılır', () => {
+    const screening = {
+      date: '2026-09-12',
+      protocol: 1 as const,
+      tests: {
+        split_squat: { left: { result: 'standard' as const, missed: [] }, right: { result: 'unable' as const } },
+        single_leg_balance: {
+          left: { result: 'standard' as const, missed: [], reachCm: 70 },
+          right: { result: 'standard' as const, missed: [], reachCm: 60 },
+        },
+        shoulder_flexion: { right: { pain: true as const } },
+      },
+    };
+    const record: HealthRecord = { version: 2, checkIns: [], measurements: [], screenings: [screening] };
+    const items = attentionItems(facts({ screening: screeningFactsOf(record) }), ctx);
+    assert.deepEqual(
+      items.map((item) => [item.urgency, item.text, item.target]),
+      [
+        [ATTENTION_URGENCY.screeningPain, 'Taramada ağrı: Kol kaldırma (sağ)', 'screening'],
+        [ATTENTION_URGENCY.asymmetry, 'Taramada büyük asimetri: Split squat', 'screening'],
+      ],
+    );
+    assert.equal(attentionItems(facts({ screening: screeningFactsOf(record) }), { ...ctx, now: new Date('2026-10-20T10:00:00.000Z') }).length, 1);
+    const reviewed: HealthRecord = { ...record, screenings: [{ ...screening, painReviewedAt: { 'shoulder_flexion.right': at } }] };
+    assert.equal(screeningFactsOf(reviewed)?.pain.length, 0);
+    const knee = addConstraint(record, { region: 'knee', side: 'right', type: 'injury', avoid: [] }, { id: 'k_eeeeee', now: at });
+    assert.equal(screeningFactsOf(knee)?.asymmetry, null);
   });
 });

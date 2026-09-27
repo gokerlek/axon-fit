@@ -1,9 +1,14 @@
 import 'server-only';
 import { revalidateTag, unstable_cache } from 'next/cache';
 import * as v from 'valibot';
-import { attentionFactsOf, type AttentionFacts } from './attention';
+import { attentionFactsOf, constraintFactsOf, screeningFactsOf, type AttentionFacts, type ConstraintFacts } from './attention';
 import { readClient } from './client-record';
 import { canRecordHealth } from './client-status';
+import { readAppConfig } from './config';
+import { careInputOf, programConflicts } from './constraint-filter';
+import { constraintLogOf } from './constraints';
+import { listExercises } from './exercises';
+import { todayIn } from './format';
 import { clientRepoName, GithubError, sessionWriter } from './github/client';
 import { listFolder, readBlobJson, readJson, repoHead } from './github/files';
 import { clientNotices, sessionHealthOf, type ClientDigest } from './notices';
@@ -74,39 +79,57 @@ async function buildDigest(id: string): Promise<ClientOverview | null> {
   if (!stored) return null;
   const { client } = stored;
   const repo = clientRepoName(id);
-  // Sağlık ayrıntısı ve ölçümler yalnız onay sürdükçe: onay yoksa dosya hiç okunmaz.
+  // Sağlık ayrıntısı, ölçümler, kısıtlar ve tarama yalnız o parçanın onayı sürdükçe: hiçbiri yoksa dosya hiç okunmaz.
   const consent = {
     pain: canRecordHealth(client, 'check_in'),
     readiness: canRecordHealth(client, 'readiness'),
     measurements: canRecordHealth(client, 'measurements'),
+    conditions: canRecordHealth(client, 'conditions'),
+    screening: canRecordHealth(client, 'screening'),
   };
+  const anyHealth = Object.values(consent).some(Boolean);
   const [repaired, programRaw, proposals, healthRaw, inviteRaw] = await Promise.all([
     readIndex(sessionReader(repo)),
     readTolerant(repo, 'program.json'),
     readTolerant(repo, 'proposals.json'),
-    consent.pain || consent.readiness || consent.measurements ? readTolerant(repo, 'health.json') : Promise.resolve(null),
+    anyHealth ? readTolerant(repo, 'health.json') : Promise.resolve(null),
     joined(client) ? Promise.resolve(null) : readTolerant(repo, 'invite.json'),
   ]);
   const program = programRaw === null ? null : v.safeParse(programSchema, programRaw);
   const index = repaired.index;
   const now = new Date();
+  const parsedHealth = healthRaw !== null ? v.safeParse(healthRecordSchema, healthRaw) : null;
+  const record = parsedHealth?.success ? parsedHealth.output : null;
   const notices = clientNotices({
     index,
     log: program?.success ? program.output.log : [],
     proposals,
     health: sessionHealthOf(healthRaw, consent),
+    constraintLog: consent.conditions && record ? constraintLogOf(record) : [],
     now,
   });
-  const health = consent.measurements && healthRaw !== null ? v.safeParse(healthRecordSchema, healthRaw) : null;
   const invite = inviteRaw === null ? null : v.safeParse(inviteSchema, inviteRaw);
+  const programOk = program?.success ? program.output : null;
+  let constraints: ConstraintFacts | null = null;
+  if (consent.conditions && record) {
+    // Çelişkiler için kütüphanenin etiketleri: yalnız etkin kısıt ve program varken okunur.
+    const input = careInputOf(record, { today: todayIn((await readAppConfig()).timeZone, now), painConsent: consent.pain });
+    const conflicts =
+      programOk && input.active.length > 0
+        ? programConflicts(programOk, new Map((await listExercises()).map((exercise) => [exercise.id, exercise])), input)
+        : [];
+    constraints = constraintFactsOf(record, conflicts);
+  }
   const attention = attentionFactsOf({
     client,
     invite: invite?.success ? invite.output : null,
     index,
-    program: program?.success ? program.output : null,
+    program: programOk,
     proposals,
-    // Onay yoksa ya da dosya okunamıyorsa ölçüm maddesi yok.
-    measurements: health?.success ? health.output.measurements : null,
+    // Onay yoksa ya da dosya okunamıyorsa ölçüm, kısıt ve tarama maddesi yok.
+    measurements: consent.measurements && record ? record.measurements : null,
+    constraints,
+    screening: consent.screening && record ? screeningFactsOf(consent.conditions ? record : { ...record, constraints: [] }) : null,
     now,
   });
   return { id, name: client.name, ...(client.inbox?.seenAt ? { seenAt: client.inbox.seenAt } : {}), notices, attention };

@@ -156,7 +156,8 @@ describe('onay: hangi sorular (canRecordHealth)', () => {
     ['yalnız hazır oluşluk seçili', client(['readiness']), { readiness: true, pain: false }],
     ['yalnız ağrı takibi seçili', client(['check_in']), { readiness: false, pain: true }],
     ['onay yok', client(['readiness', 'check_in'], null), { readiness: false, pain: false }],
-    ['onay eksik (modül genişledi)', client(['readiness', 'check_in'], ['readiness']), { readiness: false, pain: false }],
+    // Onay parça başına: kapsanmayan parça sorulmaz, kapsanan sürer.
+    ['onay eksik (modül genişledi)', client(['readiness', 'check_in'], ['readiness']), { readiness: true, pain: false }],
   ];
   for (const [name, item, parts] of rows) test(name, () => assert.deepEqual(checkParts(item), parts));
 });

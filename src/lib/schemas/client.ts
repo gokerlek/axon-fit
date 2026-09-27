@@ -29,7 +29,10 @@ export const CLIENT_STATUS_LABELS: Record<ClientStatus, string> = {
 export const HEALTH_FIELDS = ['conditions', 'readiness', 'check_in', 'measurements', 'screening'] as const;
 export type HealthField = (typeof HEALTH_FIELDS)[number];
 export const HEALTH_FIELD_INFO: Record<HealthField, { label: string; description: string }> = {
-  conditions: { label: 'Kısıtlar', description: 'Sakatlık ve rahatsızlıklar; egzersiz süzgeci bunlarla çalışır.' },
+  conditions: {
+    label: 'Kısıtlar',
+    description: 'Sakatlık, rahatsızlık ve kaçınılacak hareketler; antrenörün programı bunlara göre yazar, sen de bildirebilirsin.',
+  },
   readiness: {
     label: 'Hazır oluşluk',
     description: 'Antrenman öncesi uyku, enerji, kas ağrısı ve stres (1–5); kötü günde yük önerisi hafifler.',
@@ -39,11 +42,28 @@ export const HEALTH_FIELD_INFO: Record<HealthField, { label: string; description
     description: 'Ağrı seviyesi, belirtilerin yönü ve kırmızı bayrak soruları; ağrı artarsa yük durur.',
   },
   measurements: { label: 'Ölçümler', description: 'Beden çevreleri, performans testleri ve anket skorları.' },
-  screening: { label: 'Hareket taraması', description: 'Hareket paternlerinin puanı, asimetri ve ağrı bayrakları.' },
+  screening: {
+    label: 'Hareket taraması',
+    description: 'Temel hareketlerin sonucu, sağ-sol farkı ve ağrı notu; antrenörün nereden başlayacağını buna göre seçer.',
+  },
 };
 
-/** Onay metninin sürümü: metin değişirse artar, eski onay "güncel değil" sayılır. */
-export const HEALTH_CONSENT_VERSION = '2026-09';
+/**
+ * Parça başına onay metninin sürümü (tasarım `kisit-tarama.md` §5.1): bir parçanın metni ya da amacı değişince
+ * yalnız onun sürümü artar ve yalnız o parça yeniden sorulur; öteki parçaların kaydı kesintisiz sürer (sürüm
+ * artışı ağrı takibini ve kırmızı bayrak sorusunu kapatmasın). Kısıtlar ve tarama 2026-10'da genişledi:
+ * danışanın bildirimi, antrenmandaki not, tarama ipuçları.
+ */
+export const HEALTH_FIELD_VERSIONS: Record<HealthField, string> = {
+  conditions: '2026-10',
+  readiness: '2026-09',
+  check_in: '2026-09',
+  measurements: '2026-09',
+  screening: '2026-10',
+};
+
+/** Onay metninin güncel sürümü (parça sürümlerinin en yenisi): danışanın ekranı bununla onay verir. */
+export const HEALTH_CONSENT_VERSION = '2026-10';
 
 /**
  * Danışanın uygulamaya gelmeden önceki antrenman geçmişi (tasarım §5.2 "Genel deneyim tabanı", açık
@@ -74,9 +94,25 @@ const healthFieldsSchema = v.pipe(
   v.maxLength(HEALTH_FIELDS.length),
 );
 
+const consentVersion = v.pipe(v.string(), v.maxLength(20));
+
 export const healthConsentSchema = v.object({
   granted: v.boolean(),
+  /** Onay verildiğinde ekrandaki metnin sürümü. */
   version: v.string(),
+  /**
+   * Parça başına onaylanan sürüm (`HEALTH_FIELD_VERSIONS`). Eski onayda yok: her parça `version` ile onaylanmış
+   * sayılır (bugünkü kayıtlarda 2026-09).
+   */
+  versions: v.optional(
+    v.object({
+      conditions: v.optional(consentVersion),
+      readiness: v.optional(consentVersion),
+      check_in: v.optional(consentVersion),
+      measurements: v.optional(consentVersion),
+      screening: v.optional(consentVersion),
+    }),
+  ),
   /** Onayın kapsadığı parçalar. */
   fields: healthFieldsSchema,
   at: timestamp,

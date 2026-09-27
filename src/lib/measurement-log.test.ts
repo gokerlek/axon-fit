@@ -115,7 +115,6 @@ describe('kayıt şeması', () => {
     const bozuklar = [
       { ...kayit, measurements: [{ date: '2026-02-30', id: 'waist_girth', value: 82 }] },
       { ...kayit, checkIns: [{ date: '2026-04-31' }] },
-      { ...kayit, movementScreens: [{ date: '2026-02-29', entries: {} }] },
       { ...kayit, surgeryDate: '2026-06-31' },
     ];
     for (const bozuk of bozuklar) assert.equal(v.safeParse(healthRecordSchema, bozuk).success, false, JSON.stringify(bozuk));

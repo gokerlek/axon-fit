@@ -6,9 +6,11 @@ import {
   accessState,
   canRecordHealth,
   clientSessionValid,
+  consentVersionOf,
   hasNewDeviceCode,
   formatInviteCode,
   healthConsentState,
+  healthFieldState,
   healthScopeGrows,
   indexWithStatus,
   INVITE_MAX_ATTEMPTS,
@@ -16,12 +18,14 @@ import {
   inviteStatus,
   nextHealthModule,
   normalizeInviteCode,
+  outdatedHealthFields,
   revokedInvite,
 } from './client-status.ts';
 import {
   CLIENT_ID_PATTERN,
   clientFormSchema,
   HEALTH_CONSENT_VERSION,
+  HEALTH_FIELD_VERSIONS,
   trainingOf,
   type Client,
   type ClientIndexEntry,
@@ -227,14 +231,41 @@ describe('sağlık onayı', () => {
     // Onaylanmış ama PT modülde açmamış: tutulmaz.
     assert.equal(canRecordHealth(acik, 'measurements'), false);
 
+    // Onay parça başınadır: kapsanmayan parça yeniden sorulur, kapsanan sürer (taban anı yoksa).
     const genisledi = danisan({ enabled: true, fields: ['check_in', 'screening'] }, onay(['check_in']));
     assert.equal(healthConsentState(genisledi), 'outdated');
-    assert.equal(canRecordHealth(genisledi, 'check_in'), false);
+    assert.equal(canRecordHealth(genisledi, 'check_in'), true);
+    assert.equal(canRecordHealth(genisledi, 'screening'), false);
+    assert.deepEqual(outdatedHealthFields(genisledi), ['screening']);
+    // PT'nin kaydı kapsamı genişletince taban anı yenilenir: bütün onay yeniden sorulur.
+    const tabanli = danisan({ enabled: true, fields: ['check_in', 'screening'], enabledAt: an(10) }, onay(['check_in'], { at: an(5) }));
+    assert.equal(canRecordHealth(tabanli, 'check_in'), false);
   });
 
   test('onay metni değişince eski onay güncel değil', () => {
     const eski = danisan({ enabled: true, fields: ['check_in'] }, onay(['check_in'], { version: '2025-01' }));
     assert.equal(healthConsentState(eski), 'outdated');
+  });
+
+  test('sürüm parça başına: kısıtların sürümü artınca yalnız kısıtlar yeniden sorulur, ağrı takibi sürer', () => {
+    const eski = danisan({ enabled: true, fields: ['conditions', 'check_in', 'measurements'] }, onay(['conditions', 'check_in', 'measurements'], { version: '2026-09' }));
+    assert.equal(healthFieldState(eski, 'conditions'), 'outdated');
+    assert.equal(canRecordHealth(eski, 'check_in'), true);
+    assert.equal(canRecordHealth(eski, 'measurements'), true);
+    assert.deepEqual(outdatedHealthFields(eski), ['conditions']);
+    assert.equal(healthConsentState(eski), 'outdated');
+    // Parça başına sürüm yazılmışsa o okunur; bozuk biçim kapsamaz.
+    const parcali = danisan(
+      { enabled: true, fields: ['conditions', 'check_in'] },
+      onay(['conditions', 'check_in'], { version: '2026-09', versions: { conditions: '2026-10', check_in: '2026-09' } }),
+    );
+    assert.equal(healthConsentState(parcali), 'granted');
+    assert.equal(consentVersionOf({ version: '2026-09' }, 'screening'), '2026-09');
+    const bozuk = danisan({ enabled: true, fields: ['check_in'] }, onay(['check_in'], { version: 'sonra' }));
+    assert.equal(canRecordHealth(bozuk, 'check_in'), false);
+    // Güncel onay bütün parçaları kapsar.
+    assert.equal(healthConsentState(danisan({ enabled: true, fields: ['conditions', 'screening'] }, onay(['conditions', 'screening']))), 'granted');
+    assert.equal(HEALTH_FIELD_VERSIONS.conditions > HEALTH_FIELD_VERSIONS.check_in, true);
   });
 
   const an = (dakika: number) => new Date(simdi.getTime() + dakika * 60_000).toISOString();

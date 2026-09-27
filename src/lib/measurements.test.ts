@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {
   ENDURANCE_NOISE,
   enduranceRatios,
-  fmsSummary,
   MEASUREMENT_IDS,
   measurementDef,
   realChange,
@@ -78,25 +77,6 @@ describe('yorumlayıcılar', () => {
   test('dayanıklılık oranları cinsiyete göre başvuru değeriyle döner', () => {
     const erkek = enduranceRatios({ flexorS: 90, extensorS: 150, sideS: 90 }, 'male');
     assert.deepEqual(erkek, { sideToExtensor: 0.6, sideToFlexor: 1, reference: { sideToExtensor: 0.65, sideToFlexor: 0.99 } });
-  });
-});
-
-describe('hareket taraması', () => {
-  test('asimetri, ağrı bayrağı ve en düşük patern; toplam skor yok', () => {
-    const ozet = fmsSummary({
-      deep_squat: { score: 2 },
-      hurdle_step: { left: 2, right: 1 },
-      shoulder_mobility: { left: 3, right: 3, clearingPain: true },
-      rotary_stability: { left: 1, right: 1 },
-    });
-    assert.deepEqual(ozet.asymmetries, ['hurdle_step']);
-    assert.deepEqual(ozet.painFlags, ['shoulder_mobility']);
-    assert.deepEqual(ozet.lowest, { pattern: 'hurdle_step', score: 1 });
-    assert.equal('total' in ozet, false);
-  });
-
-  test('0 puan ağrı demektir: bayrak kalkar', () => {
-    assert.deepEqual(fmsSummary({ deep_squat: { score: 0 } }).painFlags, ['deep_squat']);
   });
 });
 

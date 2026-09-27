@@ -1,8 +1,23 @@
 import * as v from 'valibot';
 import { IRRITABILITY_LEVELS, RED_FLAG_CHECKS, SYMPTOM_DIRECTIONS, TOLERANCE_MODES } from '../check-in.ts';
 import { parseCondition } from '../conditions.ts';
+import {
+  AVOID_TAG_IDS,
+  CLEARANCE_BASES,
+  CONSTRAINT_ID_PATTERN,
+  CONSTRAINT_LIMITS,
+  CONSTRAINT_REGIONS,
+  CONSTRAINT_SIDES,
+  CONSTRAINT_TYPES,
+  DIAGNOSIS_SOURCES,
+  GRAFTS,
+  SEVERITIES,
+  STAGES,
+  TRIGGERS,
+} from '../constraints.ts';
 import { isCalendarDate } from '../measurement-log.ts';
-import { FMS_PATTERNS, MEASUREMENT_IDS, type FmsPattern } from '../measurements.ts';
+import { MEASUREMENT_IDS } from '../measurements.ts';
+import { NOT_TESTED_REASONS, RESULT_CHOICES, SCREENING_LIMIT, SCREENING_PROTOCOL } from '../screening.ts';
 
 /**
  * Danışanın sağlık kaydı — `client-<id>` repo'sunda `health.json` (SPEC §4).
@@ -115,31 +130,172 @@ export const measurementEntrySchema = v.object({
 });
 export type MeasurementEntry = v.InferOutput<typeof measurementEntrySchema>;
 
-const fmsScore = v.picklist([0, 1, 2, 3] as const, 'Puan 0–3 olmalı.');
-const fmsEntrySchema = v.object({
-  score: v.optional(fmsScore),
-  left: v.optional(fmsScore),
-  right: v.optional(fmsScore),
-  clearingPain: v.optional(v.boolean()),
-});
+/* --- kısıtlar (tasarım `kisit-tarama.md` §2, §5.3) --- */
 
-/** Hareket taraması: yalnız PT'nin girdiği patern puanları; toplam skor tutulmaz. */
-export const movementScreenSchema = v.object({
-  date: isoDate,
-  entries: v.record(v.picklist(Object.keys(FMS_PATTERNS) as FmsPattern[]), fmsEntrySchema),
+const timestamp = v.pipe(v.string(), v.isoTimestamp());
+const text = (max: number) => v.pipe(v.string(), v.trim(), v.maxLength(max, `En fazla ${max} karakter.`));
+const constraintId = v.pipe(v.string(), v.regex(CONSTRAINT_ID_PATTERN, 'Kısıt kimliği geçersiz.'));
+const exerciseId = v.pipe(v.string(), v.regex(/^[a-z0-9-]{2,60}$/, 'Egzersiz kimliği geçersiz.'));
+const severity = v.picklist(SEVERITIES, 'Şiddeti seç.');
+
+/** "2026", "2026-09" ya da "2026-09-12": bilinen kesinlikte. */
+const onsetSchema = v.pipe(
+  v.string(),
+  v.regex(/^\d{4}(-\d{2}(-\d{2})?)?$/, 'Başlangıç YYYY, YYYY-AA ya da YYYY-AA-GG olmalı.'),
+  v.check((value) => {
+    if (value.length === 10) return isCalendarDate(value);
+    if (value.length === 7) return Number(value.slice(5)) >= 1 && Number(value.slice(5)) <= 12;
+    return true;
+  }, 'Takvimde olmayan tarih.'),
+);
+
+export const constraintSchema = v.object({
+  id: constraintId,
+  region: v.picklist(CONSTRAINT_REGIONS, 'Bölgeyi seç.'),
+  side: v.optional(v.picklist(CONSTRAINT_SIDES, 'Tarafı seç.')),
+  type: v.picklist(CONSTRAINT_TYPES, 'Türü seç.'),
+  /** Sağlık profesyonelinin koyduğu tanı (sözlükte `kind: 'diagnosis'`). */
+  conditionId: v.optional(conditionRef),
+  diagnosisSource: v.optional(v.picklist(DIAGNOSIS_SOURCES)),
+  /** PT'nin gözlemi (sözlükte `kind: 'finding'`); danışan görmez. */
+  findingId: v.optional(conditionRef),
+  origin: v.optional(v.literal('screening')),
+  details: v.optional(
+    v.object({
+      surgeryDate: v.optional(isoDate),
+      graft: v.optional(v.picklist(GRAFTS)),
+      stage: v.optional(v.picklist(STAGES)),
+    }),
+  ),
+  severity: v.optional(severity),
+  onset: v.optional(onsetSchema),
+  onsetApprox: v.optional(v.boolean()),
+  avoid: v.pipe(v.array(v.picklist(AVOID_TAG_IDS)), v.maxLength(AVOID_TAG_IDS.length)),
+  /** Danışanın "Neler zorluyor?" cevabı. */
+  triggers: v.optional(v.pipe(v.array(v.picklist(TRIGGERS)), v.maxLength(TRIGGERS.length))),
+  status: v.picklist(['active', 'resolved'] as const),
+  resolvedAt: v.optional(timestamp),
+  source: v.picklist(['pt', 'client'] as const),
+  confirmedAt: v.optional(timestamp),
+  /** Onaylı kısıtta danışanın bekleyen güncellemesi (kötüleşti / düzeldi). */
+  clientChange: v.optional(
+    v.object({
+      at: timestamp,
+      severity: v.optional(severity),
+      previousSeverity: v.optional(severity),
+      resolved: v.optional(v.boolean()),
+      note: v.optional(text(CONSTRAINT_LIMITS.reportNote)),
+    }),
+  ),
+  /** PT bildirimi kısıt olarak almadı. */
+  declined: v.optional(v.object({ at: timestamp, note: v.optional(text(CONSTRAINT_LIMITS.reportNote)) })),
+  /** Kırmızı bayrakta: sağlık profesyoneline yönlendirildiği gün. */
+  referredAt: v.optional(isoDate),
+  /** Kırmızı bayrakta: görüş alındı. */
+  clearance: v.optional(v.object({ at: isoDate, basis: v.picklist(CLEARANCE_BASES), scope: v.optional(text(CONSTRAINT_LIMITS.scope)) })),
+  note: v.optional(text(CONSTRAINT_LIMITS.note)),
+  clientNote: v.optional(text(CONSTRAINT_LIMITS.clientNote)),
+  reportNote: v.optional(text(CONSTRAINT_LIMITS.reportNote)),
+  createdAt: timestamp,
+  updatedAt: timestamp,
 });
+export type Constraint = v.InferOutput<typeof constraintSchema>;
+
+/** Danışana özel izin: o kısıtın bulguları bu harekette susar. */
+export const overrideSchema = v.object({
+  exerciseId,
+  source: constraintId,
+  at: timestamp,
+  note: v.optional(text(CONSTRAINT_LIMITS.clientNote)),
+});
+export type Override = v.InferOutput<typeof overrideSchema>;
+
+export const CONSTRAINT_LOG_KINDS = [
+  'added',
+  'reported',
+  'confirmed',
+  'declined',
+  'edited',
+  'worsened',
+  'improved',
+  'resolved',
+  'reopened',
+  'withdrawn',
+  'removed',
+  'override_added',
+  'override_removed',
+  'referred',
+  'cleared',
+] as const;
+
+export const constraintLogSchema = v.object({
+  at: timestamp,
+  by: v.picklist(['pt', 'client'] as const),
+  id: constraintId,
+  kind: v.picklist(CONSTRAINT_LOG_KINDS),
+  text: v.pipe(v.string(), v.maxLength(CONSTRAINT_LIMITS.logText)),
+});
+export type ConstraintLogEntry = v.InferOutput<typeof constraintLogSchema>;
+
+/* --- hareket taraması (protokol 1, tasarım §4) --- */
+
+const pointId = v.pipe(v.string(), v.regex(/^[a-z_]{2,20}$/));
+
+/** Testin bir tarafı: ağrı ya da sürüm + kaçan noktalar (sonuç bunlardan hesaplanır, saklanmaz). */
+export const screeningSideSchema = v.object({
+  result: v.optional(v.picklist(RESULT_CHOICES)),
+  reason: v.optional(v.picklist(NOT_TESTED_REASONS)),
+  missed: v.optional(v.pipe(v.array(pointId), v.maxLength(8))),
+  pain: v.optional(v.literal(true)),
+  painNote: v.optional(text(140)),
+  seconds: v.optional(v.pipe(v.number('Sayı gir.'), v.minValue(0, 'Negatif olamaz.'), v.maxValue(300, 'En fazla 300 sn.'))),
+  reachCm: v.optional(v.pipe(v.number('Sayı gir.'), v.minValue(0, 'Negatif olamaz.'), v.maxValue(250, 'En fazla 250 cm.'))),
+});
+export type ScreeningSide = v.InferOutput<typeof screeningSideSchema>;
+
+const singleTest = v.object({ ...screeningSideSchema.entries, note: v.optional(text(140)) });
+const sidedTest = v.object({ left: v.optional(screeningSideSchema), right: v.optional(screeningSideSchema), note: v.optional(text(140)) });
+
+export const screeningTestsSchema = v.object({
+  squat: v.optional(v.object({ ...singleTest.entries, heelSupportHelps: v.optional(v.boolean()) })),
+  hinge: v.optional(singleTest),
+  split_squat: v.optional(sidedTest),
+  single_leg_balance: v.optional(sidedTest),
+  push: v.optional(singleTest),
+  pull: v.optional(singleTest),
+  anti_rotation: v.optional(sidedTest),
+  shoulder_flexion: v.optional(sidedTest),
+});
+export type ScreeningTests = v.InferOutput<typeof screeningTestsSchema>;
+
+export const screeningSchema = v.object({
+  date: isoDate,
+  protocol: v.literal(SCREENING_PROTOCOL),
+  tests: screeningTestsSchema,
+  /** Ağrının gözden geçirildiği an, hücre başına ("shoulder_flexion.right"). */
+  painReviewedAt: v.optional(v.record(v.pipe(v.string(), v.regex(/^[a-z_]+(\.(left|right))?$/)), timestamp)),
+  note: v.optional(text(500)),
+});
+export type Screening = v.InferOutput<typeof screeningSchema>;
 
 export const healthRecordSchema = v.object({
+  /** Dosya biçimi: alanı olmayan dosya sürüm 1 sayılır (eski `conditions`). */
+  version: v.optional(v.literal(2)),
   /** Başvuru değerleri cinsiyete göre (bel-kalça oranı, gövde dayanıklılığı). */
   sex: v.optional(v.picklist(['female', 'male'] as const)),
   /** Ağrı tavanı: ağrısız (3/10) ya da ağrı izleme (5/10, tendinopati). */
   toleranceMode: v.optional(v.picklist(TOLERANCE_MODES)),
-  /** Kısıtlar: sakatlık süzgeci bunlarla çalışır. */
-  conditions: v.pipe(v.array(conditionRef), v.maxLength(12, 'En fazla 12 kısıt.')),
-  /** ACL rekonstrüksiyonu gibi faza bağlı kurallar için ameliyat tarihi. */
+  /** Eski biçim (sürüm 1): kısıt kimlikleri. Okunurken kısıta çevrilir; ilk kısıt yazımı düşürür. */
+  conditions: v.optional(v.pipe(v.array(conditionRef), v.maxLength(12, 'En fazla 12 kısıt.'))),
+  /** Eski biçim: tek ameliyat tarihi (kısıtın `details`'ine taşınır). */
   surgeryDate: v.optional(isoDate),
   checkIns: v.array(healthCheckInSchema),
   measurements: v.array(measurementEntrySchema),
-  movementScreens: v.array(movementScreenSchema),
+  /** Eski biçimde tarama (başka protokol): çevrilmez, olduğu gibi kalır; boşsa yazımda düşer. */
+  movementScreens: v.optional(v.array(v.unknown())),
+  constraints: v.optional(v.pipe(v.array(constraintSchema), v.maxLength(CONSTRAINT_LIMITS.total))),
+  overrides: v.optional(v.pipe(v.array(overrideSchema), v.maxLength(CONSTRAINT_LIMITS.overrides))),
+  constraintLog: v.optional(v.pipe(v.array(constraintLogSchema), v.maxLength(CONSTRAINT_LIMITS.log))),
+  screenings: v.optional(v.pipe(v.array(screeningSchema), v.maxLength(SCREENING_LIMIT))),
 });
 export type HealthRecord = v.InferOutput<typeof healthRecordSchema>;
