@@ -113,6 +113,18 @@ export function ShareSwitch({ programId, name, shared: initial }: { programId: s
     };
   }, [flush]);
 
+  /** Bekleyen kapatmayı iptal eder (sunucu hâlâ paylaşımlı); iptal ettiyse true. */
+  const cancelPending = () => {
+    const current = pending.current;
+    if (!current) return false;
+    pending.current = null;
+    window.clearTimeout(current.timer);
+    // "Geri al" tostu kendisi kapatır; Switch'e dokunulunca tost açık kalırdı.
+    toast.dismiss(current.toast);
+    setShared(true);
+    return true;
+  };
+
   const unshare = () => {
     setShared(false);
     const id = toast('Paylaşım kapatılıyor', {
@@ -122,11 +134,7 @@ export function ShareSwitch({ programId, name, shared: initial }: { programId: s
       action: {
         label: 'Geri al',
         onClick: () => {
-          const current = pending.current;
-          if (!current) return;
-          pending.current = null;
-          window.clearTimeout(current.timer);
-          setShared(true);
+          cancelPending();
         },
       },
     });
@@ -134,6 +142,8 @@ export function ShareSwitch({ programId, name, shared: initial }: { programId: s
   };
 
   const share = async () => {
+    // Bekleyen kapatma paylaşımı sonradan geri almasın.
+    cancelPending();
     setBusy(true);
     try {
       const response = await post(true);
@@ -156,8 +166,13 @@ export function ShareSwitch({ programId, name, shared: initial }: { programId: s
           <span className="font-medium">Antrenörünle paylaş</span>
           <span className="text-sm text-muted-foreground">{shared ? 'Antrenörün görür ve düzenleyebilir.' : 'Antrenörün programı görmez.'}</span>
         </span>
-        {/* Anahtar küçük: dokunma alanı satırın tamamı (44 px). */}
-        <Switch checked={shared} disabled={busy} onCheckedChange={(checked) => (checked ? setAsking(true) : unshare())} aria-label="Antrenörünle paylaş" />
+        {/* Anahtar küçük: dokunma alanı satırın tamamı (44 px). Kapatma beklerken açmak "Geri al"dır (sunucu hâlâ paylaşımlı). */}
+        <Switch
+          checked={shared}
+          disabled={busy}
+          onCheckedChange={(checked) => (checked ? cancelPending() || setAsking(true) : unshare())}
+          aria-label="Antrenörünle paylaş"
+        />
       </label>
       <Sheet open={asking} onOpenChange={(open) => (busy ? undefined : setAsking(open))}>
         <SheetContent side="bottom" showCloseButton={false} className={BOTTOM}>

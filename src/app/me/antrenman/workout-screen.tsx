@@ -1359,14 +1359,18 @@ export function WorkoutScreen({
   return (
     <div className="mx-auto flex h-dvh w-full max-w-md flex-col overflow-hidden bg-background">
       <header className="shrink-0 border-b pt-[env(safe-area-inset-top)]">
-        <div className="grid h-13 grid-cols-[1fr_auto_1fr] items-center px-1">
+        {/* Orta sütun daralabilir: uzun program adı kısalır, gün, süre ve "Bitir" ekranda kalır. */}
+        <div className="grid h-13 grid-cols-[1fr_minmax(0,auto)_1fr] items-center px-1">
           <Button variant="ghost" className="h-11 justify-self-start px-2 text-muted-foreground" onClick={() => router.push('/me')}>
             <CaretLeft data-icon="inline-start" weight="bold" />
             Ara ver
           </Button>
-          <p className="font-heading font-semibold whitespace-nowrap tabular-nums">
-            {plan.source === 'own' && plan.programName ? `${plan.programName} · ` : ''}
-            {doc.program?.dayName ?? plan.dayName} · {elapsedText((now - Date.parse(doc.startedAt)) / 1000)}
+          <p className="flex min-w-0 font-heading font-semibold whitespace-nowrap tabular-nums">
+            {plan.source === 'own' && plan.programName ? <span className="truncate">{plan.programName}</span> : null}
+            <span className="shrink-0">
+              {plan.source === 'own' && plan.programName ? '\u00a0· ' : ''}
+              {doc.program?.dayName ?? plan.dayName} · {elapsedText((now - Date.parse(doc.startedAt)) / 1000)}
+            </span>
           </p>
           <Button variant="ghost" className="h-11 justify-self-end px-3" onClick={() => setFinishOpen(true)}>
             Bitir
