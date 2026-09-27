@@ -17,7 +17,6 @@ import { Toggle } from '@/components/ui/toggle';
 import { formatDay } from '@/lib/format';
 import { fetchJson } from '@/lib/query/errors';
 import { useServiceMutation } from '@/lib/query/use-service';
-import type { ScreeningSide, ScreeningTests } from '@/lib/schemas/health';
 import {
   BALANCE_SECONDS,
   NOT_TESTED_REASON_LABELS,
@@ -32,88 +31,13 @@ import {
   sideEntry,
   SIDE_KEY_LABELS,
   sidesOf,
-  type NotTestedReason,
-  type ResultChoice,
   type ScreeningTestId,
   type SideKey,
 } from '@/lib/screening';
 import { cn } from '@/lib/utils';
-
-/** Bir tarafın formdaki hâli (sayılar metin: boş alan girilmedi). */
-type SideState = { pain: boolean; painNote: string; result?: ResultChoice; reason?: NotTestedReason; missed: string[]; seconds: string; reachCm: string };
-type TestExtra = { note: string; heelSupportHelps?: boolean };
-export type ScreeningDraftState = { sides: Record<string, SideState>; extras: Record<string, TestExtra>; note: string; date: string };
+import { decimal, EMPTY_SIDE, testsOf, toEntry, type ScreeningDraftState, type SideState, type TestExtra } from './screening-state';
 
 export type ScreeningFormMode = { kind: 'new'; today: string; screenedDates: string[] } | { kind: 'edit'; date: string };
-
-const EMPTY_SIDE: SideState = { pain: false, painNote: '', missed: [], seconds: '', reachCm: '' };
-
-function decimal(text: string): number | undefined {
-  const value = Number(text.replace(',', '.'));
-  return text.trim() === '' || !Number.isFinite(value) ? undefined : value;
-}
-
-function toEntry(state: SideState | undefined): ScreeningSide | undefined {
-  if (!state) return undefined;
-  if (state.pain) return { pain: true, ...(state.painNote.trim() ? { painNote: state.painNote.trim() } : {}) };
-  if (!state.result) return undefined;
-  const seconds = decimal(state.seconds);
-  const reachCm = decimal(state.reachCm);
-  return {
-    result: state.result,
-    ...(state.result === 'not_tested' && state.reason ? { reason: state.reason } : {}),
-    ...(state.result === 'standard' || state.result === 'easier' ? { missed: state.missed } : {}),
-    ...(seconds !== undefined ? { seconds } : {}),
-    ...(reachCm !== undefined ? { reachCm } : {}),
-  };
-}
-
-/** Formdan kaydın `tests`'i (sunucu yeniden temizler). */
-function testsOf(state: ScreeningDraftState): ScreeningTests {
-  const tests: Record<string, unknown> = {};
-  for (const testId of SCREENING_TEST_IDS) {
-    const extra = state.extras[testId];
-    const note = extra?.note.trim();
-    if (SCREENING_TESTS[testId].sided) {
-      const left = toEntry(state.sides[screeningKey(testId, 'left')]);
-      const right = toEntry(state.sides[screeningKey(testId, 'right')]);
-      if (left || right) tests[testId] = { ...(left ? { left } : {}), ...(right ? { right } : {}), ...(note ? { note } : {}) };
-    } else {
-      const center = toEntry(state.sides[testId]);
-      if (center) tests[testId] = { ...center, ...(testId === 'squat' && extra?.heelSupportHelps !== undefined ? { heelSupportHelps: extra.heelSupportHelps } : {}), ...(note ? { note } : {}) };
-    }
-  }
-  return tests as ScreeningTests;
-}
-
-function stateOfSide(entry: ScreeningSide | undefined): SideState {
-  if (!entry) return EMPTY_SIDE;
-  return {
-    pain: Boolean(entry.pain),
-    painNote: entry.painNote ?? '',
-    ...(entry.result ? { result: entry.result } : {}),
-    ...(entry.reason ? { reason: entry.reason } : {}),
-    missed: entry.missed ?? [],
-    seconds: entry.seconds !== undefined ? String(entry.seconds) : '',
-    reachCm: entry.reachCm !== undefined ? String(entry.reachCm).replace('.', ',') : '',
-  };
-}
-
-/** Kayıttan (düzenleme) ya da kısıtlardan (yeni; görüşü alınmamış kırmızı bayrak bölgesi) başlangıç. */
-export function initialScreeningState(input: { date: string; tests?: ScreeningTests; note?: string; preset?: Record<string, true> }): ScreeningDraftState {
-  const sides: Record<string, SideState> = {};
-  const extras: Record<string, TestExtra> = {};
-  for (const testId of SCREENING_TEST_IDS) {
-    const raw = input.tests?.[testId] as { note?: string; heelSupportHelps?: boolean } | undefined;
-    extras[testId] = { note: raw?.note ?? '', ...(raw?.heelSupportHelps !== undefined ? { heelSupportHelps: raw.heelSupportHelps } : {}) };
-    for (const side of sidesOf(testId)) {
-      const key = screeningKey(testId, side);
-      const entry = input.tests ? sideEntry(input.tests, testId, side) : undefined;
-      sides[key] = entry ? stateOfSide(entry) : input.preset?.[key] ? { ...EMPTY_SIDE, result: 'not_tested', reason: 'constraint' } : EMPTY_SIDE;
-    }
-  }
-  return { sides, extras, note: input.note ?? '', date: input.date };
-}
 
 const draftKey = (clientId: string, mode: ScreeningFormMode) => `pulsecoach.screening-draft.${clientId}.${mode.kind === 'edit' ? mode.date : 'new'}`;
 

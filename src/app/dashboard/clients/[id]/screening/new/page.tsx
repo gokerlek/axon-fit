@@ -12,7 +12,8 @@ import type { Constraint } from '@/lib/schemas/health';
 import { presetFromConstraints } from '@/lib/screening';
 import { HealthLockAlert } from '../../health-page';
 import { MeasurementProblemAlert, measurementClient } from '../../measurements/measurement-page';
-import { initialScreeningState, ScreeningForm } from '../screening-form';
+import { ScreeningForm } from '../screening-form';
+import { initialScreeningState } from '../screening-state';
 
 const TITLE = 'Tarama yap';
 

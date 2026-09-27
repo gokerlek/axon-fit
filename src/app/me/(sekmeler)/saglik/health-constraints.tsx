@@ -22,6 +22,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Spinner } from '@/components/ui/spinner';
 import {
   afterReportText,
+  REPORT_SAFETY,
   SEVERITIES,
   SEVERITY_LABELS,
   type ClientConstraintView,
@@ -62,8 +63,11 @@ function useReportAction(id: string, success: string) {
   });
 }
 
-/** Onaylı kısıtta "Kötüleşti": şimdikinden yüksek şiddet sorulur, hemen yazılır. */
-function WorseButton({ view }: { view: ClientConstraintView }) {
+/**
+ * Onaylı kısıtta "Kötüleşti": şimdikinden yüksek şiddet sorulur, hemen yazılır. Diyalog bildirim sheet'inin ikinci
+ * güvenlik kademesini de gösterir; gönderince yeni bildirimdeki gibi şiddete göre ne yapacağı söylenir.
+ */
+function WorseButton({ view, onWorse }: { view: ClientConstraintView; onWorse: (text: string) => void }) {
   const [severity, setSeverity] = useState<Severity | undefined>(undefined);
   const worse = useReportAction(view.id, 'Antrenörüne iletildi.');
   const rank = view.severity ? SEVERITIES.indexOf(view.severity) : -1;
@@ -75,7 +79,9 @@ function WorseButton({ view }: { view: ClientConstraintView }) {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{view.title}: ne kadar etkiliyor?</AlertDialogTitle>
-          <AlertDialogDescription>Antrenörüne hemen iletilir. Yeni uyuşma ya da güç kaybı varsa beklemeden acil servise başvur.</AlertDialogDescription>
+          <AlertDialogDescription>
+            Antrenörüne hemen iletilir. Yeni uyuşma ya da güç kaybı varsa beklemeden acil servise başvur. {REPORT_SAFETY.other}
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <ChoiceChips
           label="Şiddet"
@@ -86,7 +92,13 @@ function WorseButton({ view }: { view: ClientConstraintView }) {
         />
         <AlertDialogFooter>
           <AlertDialogCancel className="h-11">Vazgeç</AlertDialogCancel>
-          <AlertDialogAction className="h-11" disabled={!severity || worse.isPending} onClick={() => severity && worse.mutate({ action: 'worse', severity })}>
+          <AlertDialogAction
+            className="h-11"
+            disabled={!severity || worse.isPending}
+            onClick={() =>
+              severity && worse.mutate({ action: 'worse', severity }, { onSuccess: () => onWorse(afterReportText({ severity, type: view.typeId })) })
+            }
+          >
             {worse.isPending ? <Spinner data-icon="inline-start" /> : null}
             Gönder
           </AlertDialogAction>
@@ -128,7 +140,15 @@ function WithdrawButton({ view }: { view: ClientConstraintView }) {
   );
 }
 
-function ConstraintCard({ view, onEdit }: { view: ClientConstraintView; onEdit: (view: ClientConstraintView) => void }) {
+function ConstraintCard({
+  view,
+  onEdit,
+  onWorse,
+}: {
+  view: ClientConstraintView;
+  onEdit: (view: ClientConstraintView) => void;
+  onWorse: (text: string) => void;
+}) {
   const meta = [view.type, view.severity ? SEVERITY_LABELS[view.severity].toLocaleLowerCase('tr') : null].filter(Boolean).join(' · ');
   return (
     <Card size="sm">
@@ -156,7 +176,7 @@ function ConstraintCard({ view, onEdit }: { view: ClientConstraintView; onEdit: 
         </CardFooter>
       ) : view.state === 'confirmed' || view.state === 'seen' ? (
         <CardFooter className="gap-2">
-          <WorseButton view={view} />
+          <WorseButton view={view} onWorse={onWorse} />
           {view.change !== 'better' ? <BetterButton view={view} /> : null}
         </CardFooter>
       ) : null}
@@ -204,7 +224,7 @@ export function HealthConstraints({ open, closed }: { open: ClientConstraintView
       {open.length === 0 ? (
         <p className="text-sm text-muted-foreground">Kayıtlı kısıtın yok. Bir sakatlık ya da rahatsızlığın varsa bildir.</p>
       ) : (
-        open.map((view) => <ConstraintCard key={view.id} view={view} onEdit={edit} />)
+        open.map((view) => <ConstraintCard key={view.id} view={view} onEdit={edit} onWorse={setAfter} />)
       )}
       <Button variant="outline" className="h-11 w-full" onClick={() => setSheet({ editing: null, initial: EMPTY })}>
         <Plus data-icon="inline-start" />

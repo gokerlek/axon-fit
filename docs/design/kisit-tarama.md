@@ -321,6 +321,8 @@ Yalnız danışanın programında (şablonda danışan yok) ve `conditions` onay
 
 "Kısıtına (kısıtlarına) uygun olanlar önce." yalnız sıra gerçekten değiştiyse **ve** en az bir aday uygunsa eklenir; tanı adı yazılmaz, bölge ve taraf yazılır.
 
+"+ Hareket ekle" (`exercisesRoute`) aynı kuralla: izinsiz yasak kütüphane listesinde yok, dikkat alan satırda aynı kısa not; telefondaki liste 10 dakika önbellekte kalabildiği için `?add=` yasaklıyı 409 ile geri çevirir ("Bu hareket şu an sana önerilmiyor; antrenörüne sor."). Seçilen muadilin ve eklenen hareketin kartı da §3.5 notunu taşır (yarım antrenman yeniden açılınca da).
+
 ### 3.5 Danışanın hareket kartındaki not (375 px)
 
 Günün planı (`/api/me/workout`) satır başına isteğe bağlı `care: { label: 'Sol diz', kind, note? }` taşır:
@@ -331,6 +333,8 @@ Günün planı (`/api/me/workout`) satır başına isteğe bağlı `care: { labe
 | `avoid` | **izinsiz yasak** programda kalmış (kısıt program yazıldıktan sonra eklendi) | "Antrenörün bu hareketi sol dizin için değiştirecek. Bugün 'Değiştir'den bir muadil seç." Ana düğme **Değiştir** |
 | `report` | bekleyen bildirimin zorlayanı | "Bildirdiğin sol diz için zorlayabilir; ağrı yaparsa geç." |
 | `referral` | görüşü alınmamış kırmızı bayrak bölgesi | "Antrenörün bu bölge için sağlık profesyonelinin görüşünü bekliyor. Ağrı yaparsa hareketi geç." |
+
+Hareketi danışan seçtiyse (muadil ya da eklenen; `own: true`) metin "antrenörün planladı" demez: `note` → "Sol dizin için dikkatli ol; ağrısız aralıkta kal, ağrı artarsa hareketi geç." (PT'nin `clientNote`'u varsa o), `avoid` → "Bu hareket şu an sol dizin için önerilmiyor. Bugün geç ya da antrenörüne sor."
 
 ```
 │ 2/5  Leg Press                 Değiştir │

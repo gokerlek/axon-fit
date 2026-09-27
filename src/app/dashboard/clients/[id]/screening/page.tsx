@@ -9,6 +9,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { canRecordHealth } from '@/lib/client-status';
 import { readAppConfig } from '@/lib/config';
+import { careInputOf, evaluateCare, hasCare } from '@/lib/constraint-filter';
 import { AVOID_TAGS, constraintsOf, isPaired, regionText } from '@/lib/constraints';
 import { listExercises } from '@/lib/exercises';
 import { formatDay, formatNumber, todayIn } from '@/lib/format';
@@ -133,7 +134,10 @@ async function Overview({ client, record, today, query }: { client: Client; reco
   const asymmetry = majorAsymmetry(current, suppress);
   const exercises = await listExercises();
   const titles = new Map(exercises.map((exercise) => [exercise.id, exercise.title]));
-  const hints = screeningHints(current, (id) => titles.get(id), suppress);
+  // Kısıtın izinsiz yasakladığı hareket ipucunda önerilmez (düzenleyici de yaptırmaz; tek bacak hareketinde iki taraf).
+  const care = conditionsConsent ? careInputOf(record, { today, painConsent: canRecordHealth(client, 'check_in') }) : null;
+  const blocked = new Set(care && hasCare(care) ? exercises.filter((exercise) => evaluateCare(exercise, care).blockedBy.length > 0).map((exercise) => exercise.id) : []);
+  const hints = screeningHints(current, (id) => (blocked.has(id) ? undefined : titles.get(id)), suppress);
   const own = exercises.filter((exercise) => exercise.source === 'custom');
 
   return (

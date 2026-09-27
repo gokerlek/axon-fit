@@ -73,7 +73,7 @@ import {
  * - `GET /api/me/workout/alternatives?day=&row=`: satırın muadilleri ("Değiştir", §2.6), ekipmana göre
  *   gruplu (`alternatives.ts`); her biri kendi geçmişiyle planlı. Bugünün öteki hareketleri önerilmez.
  * - `GET /api/me/workout/exercises[?add=]`: "Hareket ekle"nin kütüphanesi; `add` verilirse o egzersizin
- *   varsayılan setleriyle planı.
+ *   varsayılan setleriyle planı. Kısıtın izinsiz yasakladığı hareket listede yok, eklenemez (409).
  * - `POST /api/me/water`: antrenman dışı su dokunuşları `water.json`'a, kimlikle birleşerek
  *   (idempotent); değişiklik yoksa yazılmaz, çakışmada taze okuyup bir kez daha. Bozuk dosya ezilmez.
  * - `POST /api/me/schedule`: danışanın antrenman günleri (§2.11) `program.json` → `clientSchedule`;
@@ -136,6 +136,8 @@ export type LibraryItem = {
   trackingType: TrackingType;
   primaryMuscles: readonly string[];
   secondaryMuscles: readonly string[];
+  /** Kısıtta dikkat varsa kısa not ("Sol diz için dikkatli"; "Değiştir"deki gibi). */
+  care?: string;
 };
 export type LibraryResponse = { exercises: LibraryItem[] };
 export type AddedRowResponse = { extra: ExtraRow };
@@ -268,6 +270,26 @@ export function withRowCare(day: WorkoutDay, exercises: ReadonlyMap<string, Work
   return changed ? { ...day, rows } : day;
 }
 
+/**
+ * Danışanın seçtiği hareketin (muadil ya da eklenen) kart notu: günün satırlarıyla aynı kural; metin "antrenörün
+ * planladı" demez (`own`). Kısıt yoksa satır aynen döner.
+ */
+function withExtraCare(extra: ExtraRow, input: CareInput, result: CareResult): ExtraRow {
+  const care = rowCareOf(result, input);
+  return care ? { ...extra, row: { ...extra.row, care: { ...care, own: true } } } : extra;
+}
+
+/** Yarım antrenmandaki muadil ve eklenenlerin notları: yeniden açınca ya da başka cihazda da kalsın. */
+function withExtrasCare(extras: ExtraRows, exercises: ReadonlyMap<string, WorkoutExercise>, input: CareInput): ExtraRows {
+  if (!hasCare(input)) return extras;
+  return Object.fromEntries(
+    Object.entries(extras).map(([key, extra]) => {
+      const exercise = exercises.get(extra.exerciseId);
+      return [key, exercise ? withExtraCare(extra, input, evaluateCare(exercise, input)) : extra];
+    }),
+  );
+}
+
 export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null): Promise<SessionRouteResult> {
   return run(deps, null, 'workout', async ({ client, repo }) => {
     const [repaired, programFile, waterFile, catalog, timeZone, proposalsFile, healthFile] = await Promise.all([
@@ -300,7 +322,7 @@ export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null): P
       const history = await readHistory(repo, index, ids);
       const insight = insightOf(index, now, client);
       day = buildWorkoutDay({ program, dayId, exercises: catalog.exercises, devices: catalog.devices, history, insight });
-      if (day && current) extras = sessionExtras({ day, doc: current, catalog, history, insight });
+      if (day && current) extras = withExtrasCare(sessionExtras({ day, doc: current, catalog, history, insight }), catalog.exercises, care.input);
       if (day) {
         const setIncrease = setSuggestionsFor({
           day,
@@ -413,12 +435,14 @@ export function alternativesRoute(deps: WorkoutRouteDeps, dayParam: string | nul
         label: EQUIPMENT_LABELS[equipment as Equipment] ?? equipment,
         options: ordered.items.map(({ exercise, pinned }) => {
           const note = hasCare(care) ? optionCareText(resultOf(exercise)) : null;
+          const extra = swapRowFor({ row, blockId: block.id, original: source, exercise, devices: catalog.devices, history, firstForMuscle, insight });
           return {
             exerciseId: exercise.id,
             title: exercise.title,
             pinned,
             ...(note ? { care: note } : {}),
-            extra: swapRowFor({ row, blockId: block.id, original: source, exercise, devices: catalog.devices, history, firstForMuscle, insight }),
+            // Seçilen muadilin kartı da notu taşır ("Sol diz için dikkatli" seçildiyse kartta da).
+            extra: hasCare(care) ? withExtraCare(extra, care, resultOf(exercise)) : extra,
           };
         }),
       };
@@ -433,33 +457,54 @@ export function alternativesRoute(deps: WorkoutRouteDeps, dayParam: string | nul
 /**
  * "Hareket ekle" (§2.6): kütüphane (ada göre sıralı) ya da `add` verilirse o egzersizin planı:
  * varsayılan setleri ve dinlenmesi, kendi geçmişiyle. Anahtar egzersizin kimliği; telefon kaydı açınca
- * kaydın kimliğiyle değiştirir.
+ * kaydın kimliğiyle değiştirir. Kısıtlar "Değiştir"le aynı kuralla (tasarım `kisit-tarama.md` §3.4): izinsiz
+ * yasak listeye girmez ve eklenemez (liste telefonda önbellekte kalabilir: 409), dikkat kısa notla; eklenen
+ * satır kart notunu taşır.
  */
 export function exercisesRoute(deps: WorkoutRouteDeps, addParam: string | null): Promise<SessionRouteResult> {
   if (addParam !== null && !/^[a-z0-9-]{2,60}$/.test(addParam)) return Promise.resolve(BAD_REQUEST);
   return run(deps, null, 'workout-exercises', async ({ client, repo }) => {
-    const catalog = await catalogOf(deps);
+    const [catalog, healthFile, timeZone] = await Promise.all([
+      catalogOf(deps),
+      // Kısıtlar yalnız `conditions` onayı varken okunur.
+      canRecordHealth(client, 'conditions') ? readTolerant(repo, HEALTH_PATH) : Promise.resolve(null),
+      deps.timeZone(),
+    ]);
+    const care = careOf(client, healthFile, todayIn(timeZone, deps.now())).input;
+    const cared = hasCare(care);
     if (addParam === null) {
       const exercises: LibraryItem[] = [...catalog.list]
         .sort((a, b) => a.title.localeCompare(b.title, 'tr'))
-        .map((exercise) => ({
-          id: exercise.id,
-          title: exercise.title,
-          equipment: exercise.equipment,
-          category: exercise.category,
-          trackingType: exercise.trackingType,
-          primaryMuscles: exercise.primaryMuscles,
-          secondaryMuscles: exercise.secondaryMuscles,
-        }));
+        .flatMap((exercise) => {
+          const result = cared ? evaluateCare(exercise, care) : null;
+          // Danışan izin veremez: izinsiz yasak listede hiç yok ("Değiştir"deki gibi).
+          if (result && result.blockedBy.length > 0) return [];
+          const note = result ? optionCareText(result) : null;
+          return [
+            {
+              id: exercise.id,
+              title: exercise.title,
+              equipment: exercise.equipment,
+              category: exercise.category,
+              trackingType: exercise.trackingType,
+              primaryMuscles: exercise.primaryMuscles,
+              secondaryMuscles: exercise.secondaryMuscles,
+              ...(note ? { care: note } : {}),
+            },
+          ];
+        });
       const body: LibraryResponse = { exercises };
       return { status: 200, body };
     }
     const exercise = catalog.exercises.get(addParam);
     if (!exercise) return { status: 404, body: { error: 'Bu hareket kütüphanede yok.' } };
+    const result = cared ? evaluateCare(exercise, care) : null;
+    if (result && result.blockedBy.length > 0) return { status: 409, body: { error: 'Bu hareket şu an sana önerilmiyor; antrenörüne sor.' } };
     const repaired = await readIndex(repo);
     const history = await readHistory(repo, repaired.index, new Set([exercise.id]));
     const insight = insightOf(repaired.index, deps.now(), client);
-    const body: AddedRowResponse = { extra: addedRowFor({ key: exercise.id, exercise, devices: catalog.devices, history, insight }) };
+    const extra = addedRowFor({ key: exercise.id, exercise, devices: catalog.devices, history, insight });
+    const body: AddedRowResponse = { extra: result ? withExtraCare(extra, care, result) : extra };
     return { status: 200, body };
   });
 }

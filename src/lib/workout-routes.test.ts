@@ -351,6 +351,68 @@ describe('muadil ve eklenen hareketler', () => {
     assert.ok(!plain.gh.calls.some((call) => call.includes('health.json')));
   });
 
+  test('kısıtlar: "Hareket ekle" izinsiz yasağı listelemez ve eklemez (409); muadil ve eklenen satır notu taşır', async () => {
+    const health = addConstraint(
+      { version: 2, checkIns: [], measurements: [] },
+      { region: 'shoulder', side: 'right', type: 'injury', avoid: ['behind_body'] },
+      { id: 'k_aaaaaa', now: '2026-09-20T10:00:00.000Z' },
+    );
+    // Dumbbell Press yasak (pencere etiketi); Şınav'ın etiketi yok: kalıp yedeği dikkat verir.
+    const catalog = async () => ({
+      exercises: [...EXERCISES.values()].map((exercise) =>
+        exercise.id === 'dumbbell-press' ? { ...exercise, jointWindows: ['glenohumeral_extension_beyond_neutral' as const] } : exercise,
+      ),
+      devices: [...DEVICES.values()],
+    });
+    const consented = (files: Record<string, unknown>) => {
+      const result = setup(files);
+      result.deps.catalog = catalog;
+      result.deps.loadClient = async () => ({
+        ...CLIENT,
+        modules: { health: { enabled: true, fields: ['conditions'] } },
+        consents: { health: { granted: true, version: HEALTH_CONSENT_VERSION, fields: ['conditions'], at: '2026-09-01T10:00:00.000Z' } },
+      });
+      return result;
+    };
+    const files = { 'program.json': programFile(), 'health.json': health };
+    const own = { kind: 'note', label: 'Sağ omuz', region: 'shoulder', side: 'right', own: true };
+
+    const library = (await exercisesRoute(consented(files).deps, null)).body as unknown as LibraryResponse;
+    assert.ok(!library.exercises.some((item) => item.id === 'dumbbell-press'), 'yasak listede yok');
+    assert.equal(library.exercises.find((item) => item.id === 'push-up')?.care, 'Sağ omuz için dikkatli');
+    const blocked = await exercisesRoute(consented(files).deps, 'dumbbell-press');
+    assert.deepEqual([blocked.status, blocked.body.error], [409, 'Bu hareket şu an sana önerilmiyor; antrenörüne sor.']);
+    const added = (await exercisesRoute(consented(files).deps, 'push-up')).body as unknown as AddedRowResponse;
+    assert.deepEqual(added.extra.row.care, own);
+
+    const alternatives = (await alternativesRoute(consented(files).deps, DAY_A, 'r_aaaaaa')).body as unknown as AlternativesResponse;
+    const option = alternatives.groups.flatMap((group) => group.options).find((item) => item.exerciseId === 'push-up');
+    assert.equal(option?.care, 'Sağ omuz için dikkatli');
+    assert.deepEqual(option?.extra.row.care, own);
+
+    // Yarım antrenmanın muadil ve eklenenleri yeniden açınca da notlu.
+    const active = sessionDoc({
+      id: 's_cccccccc',
+      startedAt: '2026-09-26T15:00:00.000Z',
+      entries: [
+        sessionEntry('e_swapxx', { swappedFrom: 'r_aaaaaa', exerciseId: 'push-up', title: 'Şınav' }),
+        sessionEntry('e_addedx', { added: true, plannedSets: 2, exerciseId: 'push-up', title: 'Şınav' }),
+      ],
+    });
+    const data = body(await workoutRoute(consented({ ...files, 'sessions/s_cccccccc.json': active }).deps, null));
+    assert.deepEqual(data.extras['r_aaaaaa:push-up']?.row.care, own);
+    assert.deepEqual(data.extras['e_addedx:push-up']?.row.care, own);
+
+    // Onay yoksa kısıt okunmaz: yasak da listede, not yok.
+    const plain = setup(files);
+    plain.deps.catalog = catalog;
+    const open = (await exercisesRoute(plain.deps, null)).body as unknown as LibraryResponse;
+    assert.ok(open.exercises.some((item) => item.id === 'dumbbell-press'));
+    assert.ok(open.exercises.every((item) => item.care === undefined));
+    assert.equal((await exercisesRoute(plain.deps, 'dumbbell-press')).status, 200);
+    assert.ok(!plain.gh.calls.some((call) => call.includes('health.json')));
+  });
+
   test('"Değiştir": istek geçersizse 400, satır programda yoksa 404, oturum yoksa 401', async () => {
     const { deps } = setup();
     assert.equal((await alternativesRoute(deps, DAY_A, null)).status, 400);

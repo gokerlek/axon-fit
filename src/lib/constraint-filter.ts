@@ -278,8 +278,11 @@ export function careStampOf(record: Pick<HealthRecord, 'constraints' | 'conditio
 
 export type RowCareKind = 'note' | 'avoid' | 'report' | 'referral';
 
-/** Günün planındaki satırın notu (§3.5): tanı adı yok, bölge ve taraf var. */
-export type RowCare = { kind: RowCareKind; label: string; region: ConstraintRegion; side?: ConstraintSide; note?: string };
+/**
+ * Günün planındaki satırın notu (§3.5): tanı adı yok, bölge ve taraf var. `own`: hareketi danışan seçti (muadil ya da
+ * eklenen); metin "antrenörün planladı" demez.
+ */
+export type RowCare = { kind: RowCareKind; label: string; region: ConstraintRegion; side?: ConstraintSide; note?: string; own?: true };
 
 const KIND_ORDER: Record<RowCareKind, number> = { avoid: 4, referral: 3, report: 2, note: 1 };
 
@@ -318,9 +321,12 @@ export function rowCareOf(result: CareResult, input: CareInput): RowCare | null 
 export function rowCareText(care: RowCare): { title: string; text: string } {
   const title = `${care.label} için not`;
   const where = { region: care.region, side: care.side };
+  const yours = yourRegion(where, 'gen');
   switch (care.kind) {
     case 'avoid':
-      return { title, text: `Antrenörün bu hareketi ${yourRegion(where, 'gen')} için değiştirecek. Bugün 'Değiştir'den bir muadil seç.` };
+      return care.own
+        ? { title, text: `Bu hareket şu an ${yours} için önerilmiyor. Bugün geç ya da antrenörüne sor.` }
+        : { title, text: `Antrenörün bu hareketi ${yours} için değiştirecek. Bugün 'Değiştir'den bir muadil seç.` };
     case 'referral':
       return { title, text: 'Antrenörün bu bölge için sağlık profesyonelinin görüşünü bekliyor. Ağrı yaparsa hareketi geç.' };
     case 'report':
@@ -330,7 +336,9 @@ export function rowCareText(care: RowCare): { title: string; text: string } {
         title,
         text:
           care.note ??
-          `Antrenörün bu hareketi ${yourRegion(where, 'acc')} düşünerek planladı. Ağrısız aralıkta kal; ağrı artarsa hareketi geç ya da Değiştir'e dokun.`,
+          (care.own
+            ? `${yours.charAt(0).toLocaleUpperCase('tr')}${yours.slice(1)} için dikkatli ol; ağrısız aralıkta kal, ağrı artarsa hareketi geç.`
+            : `Antrenörün bu hareketi ${yourRegion(where, 'acc')} düşünerek planladı. Ağrısız aralıkta kal; ağrı artarsa hareketi geç ya da Değiştir'e dokun.`),
       };
   }
 }

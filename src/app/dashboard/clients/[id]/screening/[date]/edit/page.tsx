@@ -9,7 +9,8 @@ import { isCalendarDate } from '@/lib/measurement-log';
 import { HealthLockAlert } from '../../../health-page';
 import { MeasurementProblemAlert, measurementClient } from '../../../measurements/measurement-page';
 import { ScreeningDelete } from '../../screening-actions';
-import { initialScreeningState, ScreeningForm } from '../../screening-form';
+import { ScreeningForm } from '../../screening-form';
+import { initialScreeningState } from '../../screening-state';
 
 /** Günün taraması; başlık ve sayfa aynı okumayı paylaşır. Okunabilen kayıtta o gün yoksa 404. */
 const loadDay = cache(async (id: string, date: string) => {

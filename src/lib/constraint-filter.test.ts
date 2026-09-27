@@ -175,6 +175,16 @@ describe('sıra ve danışanın notu', () => {
       "Antrenörün bu hareketi sağ omzunu düşünerek planladı. Ağrısız aralıkta kal; ağrı artarsa hareketi geç ya da Değiştir'e dokun.",
     );
     assert.equal(rowCareText({ kind: 'report', label: 'Sol diz', region: 'knee', side: 'left' }).text, 'Bildirdiğin sol diz için zorlayabilir; ağrı yaparsa geç.');
+    // Danışanın seçtiği hareket (muadil, eklenen): "antrenörün planladı" denmez.
+    assert.equal(
+      rowCareText({ kind: 'note', label: 'Sol diz', region: 'knee', side: 'left', own: true }).text,
+      'Sol dizin için dikkatli ol; ağrısız aralıkta kal, ağrı artarsa hareketi geç.',
+    );
+    assert.equal(rowCareText({ kind: 'note', label: 'Sol diz', region: 'knee', side: 'left', note: 'Derine inme.', own: true }).text, 'Derine inme.');
+    assert.equal(
+      rowCareText({ kind: 'avoid', label: 'Bel', region: 'lower_back', own: true }).text,
+      'Bu hareket şu an belin için önerilmiyor. Bugün geç ya da antrenörüne sor.',
+    );
   });
 
   test('muadilin kısa satırı', () => {

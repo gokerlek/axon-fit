@@ -414,13 +414,15 @@ export function AddExerciseSheet({
                     <Item
                       size="sm"
                       className="min-h-14 flex-nowrap rounded-none border-0 border-t border-border px-0 text-left hover:bg-muted"
-                      render={<button type="button" aria-label={`${item.title} ekle`} disabled={busyId !== null} onClick={() => onPick(item)} />}>
+                      render={<button type="button" aria-label={`${item.title} ekle${item.care ? ` · ${item.care}` : ''}`} disabled={busyId !== null} onClick={() => onPick(item)} />}>
                       <ItemContent className="min-w-0">
                         <ItemTitle className="w-full truncate text-[0.9375rem]">{item.title}</ItemTitle>
                         <ItemDescription className="truncate text-[0.8125rem]">
                           {muscles} · {equipment}
                           {todayIds.has(item.id) ? ' · bugün var' : ''}
                         </ItemDescription>
+                        {/* Kısıtta dikkat ("Değiştir"deki gibi); yasaklılar listede yok. */}
+                        {item.care ? <ItemDescription className="truncate text-[0.8125rem] text-primary-text">{item.care}</ItemDescription> : null}
                       </ItemContent>
                       <ItemActions className="text-muted-foreground">{busyId === item.id ? <Spinner /> : <Plus weight="bold" className="size-4" />}</ItemActions>
                     </Item>
