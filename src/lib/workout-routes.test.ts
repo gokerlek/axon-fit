@@ -1,5 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { careInputOf } from './constraint-filter.ts';
 import { addConstraint } from './constraints.ts';
 import { GithubError } from './github/errors.ts';
 import { HEALTH_CONSENT_VERSION, type Client } from './schemas/client.ts';
@@ -11,12 +12,13 @@ import { gitBlobSha, jsonText } from './github/blob.ts';
 import { emptyOwnIndex, ownIndexItemOf, upsertOwnItem } from './own-program-index.ts';
 import { OWN_INDEX_PATH, type OwnProgram } from './own-programs.ts';
 import { OWN_DAY_A, OWN_DAY_B, OWN_ID, OWN_ROW_GOBLET, ownProgram } from './testing/own-fixtures.ts';
-import { DEVICES, EXERCISES } from './testing/workout-fixtures.ts';
+import { DEVICES, EXERCISES, workoutDay } from './testing/workout-fixtures.ts';
 import {
   alternativesRoute,
   exercisesRoute,
   scheduleRoute,
   waterRoute,
+  withRowCare,
   workoutRoute,
   type AddedRowResponse,
   type AlternativesResponse,
@@ -353,6 +355,18 @@ describe('muadil ve eklenen hareketler', () => {
     assert.equal(plainDay.day?.rows.r_aaaaaa?.care, undefined);
     assert.notEqual(plainDay.program?.stamp, data.program?.stamp);
     assert.ok(!plain.gh.calls.some((call) => call.includes('health.json')));
+  });
+
+  test('kısıtlar: kendi programın satırında not "antrenörün planladı" demez (own)', () => {
+    const health = addConstraint(
+      { version: 2, checkIns: [], measurements: [] },
+      { region: 'shoulder', side: 'right', type: 'injury', avoid: ['behind_body'] },
+      { id: 'k_aaaaaa', now: '2026-09-20T10:00:00.000Z' },
+    );
+    const input = careInputOf(health, { today: '2026-09-27', painConsent: false });
+    const day = workoutDay();
+    assert.equal(withRowCare(day, EXERCISES, input).rows.r_aaaaaa?.care?.own, undefined);
+    assert.equal(withRowCare({ ...day, source: 'own' }, EXERCISES, input).rows.r_aaaaaa?.care?.own, true);
   });
 
   test('kısıtlar: "Hareket ekle" izinsiz yasağı listelemez ve eklemez (409); muadil ve eklenen satır notu taşır', async () => {

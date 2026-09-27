@@ -31,7 +31,7 @@ import {
 import { formatDayShort } from '@/lib/format';
 import { fetchJson } from '@/lib/query/errors';
 import { useServiceMutation } from '@/lib/query/use-service';
-import { ReportSheet, type ReportDraft } from './report-sheet';
+import { ReportSheet, type ReportDraft } from '../../report-sheet';
 
 const EMPTY: ReportDraft = { triggers: [], note: '' };
 

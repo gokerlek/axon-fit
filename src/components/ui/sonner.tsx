@@ -44,10 +44,24 @@ const Toaster = ({ position, offset, mobileOffset, ...props }: ToasterProps) => 
           "--normal-bg": "var(--popover)",
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
+        '--error-bg': 'color-mix(in oklab, var(--destructive) 10%, var(--popover))',
+        '--error-text': 'var(--destructive-text)',
+        '--error-border': 'var(--destructive)',
+        '--warning-bg': 'color-mix(in oklab, var(--warning, #b45309) 10%, var(--popover))',
+        '--warning-text': 'var(--warning, #b45309)',
+        '--warning-border': 'var(--warning, #b45309)',
+
+          "--success-bg": "color-mix(in oklab, var(--success, var(--primary)) 10%, var(--popover))",
+          "--success-text": "var(--success, var(--primary-text))",
+          "--success-border": "color-mix(in oklab, var(--success, var(--primary)) 35%, var(--border))",
+          "--info-bg": "color-mix(in oklab, var(--primary) 8%, var(--popover))",
+          "--info-text": "var(--primary-text)",
+          "--info-border": "color-mix(in oklab, var(--primary) 30%, var(--border))",
           "--border-radius": "var(--radius)",
         } as React.CSSProperties
       }
       toastOptions={{
+        actionButtonStyle: { background: "var(--primary)", color: "var(--primary-foreground)" },
         classNames: {
           toast: "cn-toast",
         },

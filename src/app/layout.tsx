@@ -6,6 +6,7 @@ import { RADIUS_OPTIONS } from '@/lib/schemas/config';
 import { brandStyle as accentStyle } from '@/lib/color';
 import { cn } from '@/lib/utils';
 import './globals.css';
+import { paletteCss } from '@/lib/theme-palette';
 
 // latin-ext şart: ğ ş ı İ bu alt kümede. Yalnız 'latin' yüklenirse bu harfler
 // sistem yazı tipine düşer ve kelimelerin ortasında farklı görünür.
@@ -50,6 +51,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       style={brandStyle}
       className={cn('font-sans antialiased', outfit.variable, geistMono.variable)}>
       <body className="min-h-dvh bg-background text-foreground">
+        <style id="app-palette">{paletteCss(config.palette)}</style>
         <Providers defaultTheme={config.theme}>{children}</Providers>
       </body>
     </html>

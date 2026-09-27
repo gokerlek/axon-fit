@@ -3,10 +3,12 @@ import { notFound, redirect } from 'next/navigation';
 import { EditorBackLink } from '@/components/block-editor/editor-back-link';
 import { OwnProgramForm } from '@/components/program/own-program-form';
 import { SectionHeader } from '@/components/section-header';
+import { loadEditorCare } from '@/lib/client-care';
 import { loadClient } from '@/lib/clients';
 import { readAppConfig } from '@/lib/config';
 import { listDevices } from '@/lib/devices';
 import { listExercises } from '@/lib/exercises';
+import { todayIn } from '@/lib/format';
 import { requirePt } from '@/lib/guards';
 import { isOwnProgramId } from '@/lib/own-programs';
 import { readOwnProgramOf } from '@/lib/own-programs-store';
@@ -19,7 +21,8 @@ export const metadata: Metadata = { title: 'Danışanın programını düzenle' 
  * PT danışanın paylaştığı programı düzenler (`docs/design/kendi-program.md` §4, §3.5): `OwnProgramForm` `own-pt`
  * kipinde (ad salt okuma, tam düzenleyici, "+ Gün"de bütün şablonlar). Kayıt `PUT /api/clients/[id]/programs/[pid]`;
  * paylaşım o arada kapandıysa 403, program silindiyse 404, başkası kaydettiyse 412 (form söyler). Paylaşılmamış
- * dosya açılmaz: görünüm sayfası nedenini söyler.
+ * dosya açılmaz: görünüm sayfası nedenini söyler. Danışanın kısıtları PT'nin program düzenleyicisindeki gibi
+ * (`kisit-tarama.md` §3.2): sheet'te işaret, "Bu danışana önerilmeyenler", "Yine de ekle", kartta rozet.
  */
 export default async function EditOwnProgramPtPage({ params }: { params: Promise<{ id: string; pid: string }> }) {
   await requirePt();
@@ -37,6 +40,7 @@ export default async function EditOwnProgramPtPage({ params }: { params: Promise
   const program = read.program;
   const [templateFiles, exercises, devices, config] = await Promise.all([listTemplates().catch(() => []), listExercises(), listDevices(), readAppConfig()]);
   const templates = templateFiles.flatMap((item) => (item.template ? [{ id: item.template.id, name: item.template.name, blocks: item.template.blocks }] : []));
+  const care = await loadEditorCare(loaded.client, exercises, todayIn(config.timeZone));
 
   return (
     <div className="flex flex-col gap-6">
@@ -59,6 +63,7 @@ export default async function EditOwnProgramPtPage({ params }: { params: Promise
         timeZone={config.timeZone}
         saveUrl={`/api/clients/${id}/programs/${pid}`}
         doneHref={viewHref}
+        care={care}
       />
     </div>
   );

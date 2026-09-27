@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GithubError } from './github/errors.ts';
-import { deleteOwnProgram, readOwnState, saveOwnProgram, scheduleOwnProgram, selectOwnActive, shareOwnProgram } from './own-program-files.ts';
+import { deleteOwnProgram, readOwnState, saveOwnProgram, scheduleOwnProgram, selectOwnActive, shareOwnProgram, type OwnGuard } from './own-program-files.ts';
 import type { OwnIndex } from './own-program-index.ts';
 import { OWN_INDEX_PATH, type OwnProgram } from './own-programs.ts';
 import type { DiffContext } from './program-diff.ts';
@@ -28,8 +28,20 @@ function saveBody(program: OwnProgram, overrides: Partial<OwnProgramSaveBody> = 
   return { name: program.name, currentPhaseId: program.current.phaseId, phases: structuredClone(program.phases), baseRevision: program.revision, baseCreatedAt: program.createdAt, ...overrides };
 }
 
-const save = (gh: ReturnType<typeof fakeSessionRepo>, body: OwnProgramSaveBody, by: 'client' | 'pt' = 'client', id = OWN_ID) =>
-  saveOwnProgram(gh.repo, { id, body, by, library, ctx, now: NOW });
+const save = (gh: ReturnType<typeof fakeSessionRepo>, body: OwnProgramSaveBody, by: 'client' | 'pt' = 'client', id = OWN_ID, guard?: OwnGuard) =>
+  saveOwnProgram(gh.repo, { id, body, by, library, ctx, now: NOW, guard });
+
+/** Kısıt denetimi: yasaklı hareketler ve danışanlara açık şablonların hareketleri. */
+function guardOf(blocked: string[], templates: Record<string, string[]> = {}): OwnGuard {
+  return { blocked: new Set(blocked), templateExercises: async (id) => templates[id] ?? null };
+}
+
+/** Günün sonuna tek hareketlik blok. */
+function withRow(phases: OwnProgramSaveBody['phases'], dayIndex: number, exerciseId: string, suffix = 'x'): OwnProgramSaveBody['phases'] {
+  const next = structuredClone(phases);
+  next[0]!.days[dayIndex]!.blocks.push({ id: `b_add${suffix}a`, kind: 'single', restSeconds: 60, rows: [{ id: `r_add${suffix}a`, exerciseId, sets: [{ min: 8, max: 12 }] }] });
+  return next;
+}
 
 describe('oluşturma', () => {
   test('program ve index tek commit; PT\'nin programı varken seçilmez', async () => {
@@ -137,6 +149,57 @@ describe('kayıt', () => {
   });
 });
 
+describe('kısıt: kütüphaneden eklenen yasak', () => {
+  const PATH_B = 'phases.0.days.1.blocks.1.rows.0.exerciseId';
+
+  test('oluştururken eklenen yasaklı hareket reddedilir (alan hatası, yazma yok)', async () => {
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
+    const result = await save(gh, createBody({ phases: withRow(createBody().phases, 1, 'crunch') }), 'client', OWN_ID, guardOf(['crunch']));
+    assert.deepEqual(result, { status: 'blocked', errors: { [PATH_B]: 'Bu hareket şu an sana önerilmiyor; antrenörüne sor.' } });
+    assert.equal(gh.commitCount(), 0);
+  });
+
+  test('önceki kayıtta duran yasak başka değişikliği engellemez; yeni eklenen engeller', async () => {
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
+    await save(gh, createBody());
+    const program = gh.get(PATH) as OwnProgram;
+    const body = saveBody(program);
+    body.phases[0]!.days[1]!.name = 'Karın';
+    assert.equal((await save(gh, body, 'client', OWN_ID, guardOf(['goblet-squat']))).status, 'saved');
+    const stored = gh.get(PATH) as OwnProgram;
+    const added = saveBody(stored, { phases: withRow(stored.phases, 1, 'crunch') });
+    assert.equal((await save(gh, added, 'client', OWN_ID, guardOf(['goblet-squat', 'crunch']))).status, 'blocked');
+    assert.equal((gh.get(PATH) as OwnProgram).revision, 2);
+  });
+
+  test('antrenörünün programındaki yasak kopyayla gelir: işaretli kalır, kayıt sürer', async () => {
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
+    const body = createBody({ phases: withRow(createBody().phases, 0, 'bench-press') });
+    const sourceDay = programFile().phases[0]!.days[0]!;
+    body.phases[0]!.days[0]!.copiedFrom = { dayId: sourceDay.id, dayName: sourceDay.name, at: NOW.toISOString() };
+    assert.equal((await save(gh, body, 'client', OWN_ID, guardOf(['bench-press']))).status, 'created');
+  });
+
+  test('danışanlara açık şablondan gelen yasak kalır; şablon okunamıyorsa reddedilir', async () => {
+    const source = { templateId: 't_evdeaaaa', templateName: 'Karın', at: NOW.toISOString() };
+    const phases = withRow(createBody().phases, 1, 'crunch');
+    phases[0]!.days[1] = { ...phases[0]!.days[1]!, source };
+    const blocked = await save(fakeSessionRepo({ 'program.json': programFile() }), createBody({ phases }), 'client', OWN_ID, guardOf(['crunch']));
+    assert.equal(blocked.status, 'blocked');
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
+    assert.equal((await save(gh, createBody({ phases }), 'client', OWN_ID, guardOf(['crunch'], { t_evdeaaaa: ['crunch', 'plank'] }))).status, 'created');
+  });
+
+  test('PT\'nin kaydı denetlenmez (yasağı PT izinle açar)', async () => {
+    const gh = fakeSessionRepo({ 'program.json': programFile() });
+    await save(gh, createBody());
+    await shareOwnProgram(gh.repo, OWN_ID, true, NOW);
+    const shared = gh.get(PATH) as OwnProgram;
+    const body = saveBody(shared, { phases: withRow(shared.phases, 1, 'crunch') });
+    assert.equal((await save(gh, body, 'pt', OWN_ID, guardOf(['crunch']))).status, 'saved');
+  });
+});
+
 describe('silme, paylaşım, seçim, günler', () => {
   test('yarım antrenman bu programdansa silinmez; bitmişse silinir, seçim PT\'ye, paylaşılmışsa olay', async () => {
     const gh = fakeSessionRepo({ 'program.json': programFile() });
@@ -204,4 +267,19 @@ describe('silme, paylaşım, seçim, günler', () => {
     gh.failNext('head', new GithubError('sınır', 403, { rateLimited: true }));
     await assert.rejects(save(gh, createBody()));
   });
+});
+
+
+test('PT programında bulunması kopyalanmayan güne yeni yasaklı hareket ekleme izni değildir', async () => {
+  const gh = fakeSessionRepo({ 'program.json': programFile() });
+  const body = createBody({ phases: withRow(createBody().phases, 0, 'bench-press') });
+  assert.equal((await save(gh, body, 'client', OWN_ID, guardOf(['bench-press']))).status, 'blocked');
+  assert.equal(gh.commitCount(), 0);
+});
+test('bir günün şablonu başka günün yasaklı hareketine izin vermez', async () => {
+  const gh = fakeSessionRepo({ 'program.json': programFile() });
+  const phases = withRow(createBody().phases, 1, 'crunch');
+  phases[0]!.days[0]!.source = { templateId: 't_evdeaaaa', templateName: 'Karın', at: NOW.toISOString() };
+  assert.equal((await save(gh, createBody({ phases }), 'client', OWN_ID, guardOf(['crunch'], { t_evdeaaaa: ['crunch'] }))).status, 'blocked');
+  assert.equal(gh.commitCount(), 0);
 });

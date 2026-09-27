@@ -9,10 +9,12 @@ import { Button } from '@/components/ui/button';
 import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from '@/components/ui/carousel';
 import { formatNumber } from '@/lib/format';
 import { DURATION, EASE, tween, WORKOUT } from '@/lib/motion';
+import type { PainReportOffer } from '@/lib/pain-report';
 import type { Trend } from '@/lib/session-records';
 import { cn } from '@/lib/utils';
 import { CHANGE_LABELS, type SessionSummary } from '@/lib/workout-summary';
 import { vibrate } from '../../workout-feedback';
+import { PainReportCallout } from './pain-report-callout';
 
 const CARDS = ['Antrenman tamamlandı', 'Rekorlar ve gelişim', 'Çalışan kaslar', 'Hareketler'] as const;
 
@@ -84,8 +86,20 @@ function Line({ lead, name, value, muted }: { lead?: React.ReactNode; name: stri
  *
  * Erişilebilirlik: `role="region"` + `aria-roledescription="carousel"`, kartlar "2 / 4, Rekorlar ve gelişim";
  * ←/→ tuşları; görünmeyen kartlar ekran okuyucudan gizli. Hareket azaltmada geçiş anında, sayılar son değerle.
+ * Bitişte, ağrıyla yine geçilen hareket varsa ilk kartın altında "Antrenörüne kısıt olarak bildir" (`painOffers`,
+ * `kisit-tarama.md` §3.7).
  */
-export function SummaryCarousel({ summary, firstName, from }: { summary: SessionSummary; firstName: string; from: 'finish' | 'history' }) {
+export function SummaryCarousel({
+  summary,
+  firstName,
+  from,
+  painOffers = [],
+}: {
+  summary: SessionSummary;
+  firstName: string;
+  from: 'finish' | 'history';
+  painOffers?: readonly PainReportOffer[];
+}) {
   const reduced = useReducedMotion() ?? false;
   const [api, setApi] = useState<CarouselApi>();
   const [index, setIndex] = useState(0);
@@ -133,7 +147,7 @@ export function SummaryCarousel({ summary, firstName, from }: { summary: Session
   }, []);
 
   const cards: React.ReactNode[] = [
-    <FirstCard key="first" summary={summary} firstName={firstName} celebrate={from === 'finish'} />,
+    <FirstCard key="first" summary={summary} firstName={firstName} celebrate={from === 'finish'} painOffers={painOffers} />,
     <RecordsCard key="records" summary={summary} />,
     <MusclesCard key="muscles" summary={summary} />,
     <ExercisesCard key="exercises" summary={summary} />,
@@ -201,7 +215,17 @@ export function SummaryCarousel({ summary, firstName, from }: { summary: Session
   );
 }
 
-function FirstCard({ summary, firstName, celebrate }: { summary: SessionSummary; firstName: string; celebrate: boolean }) {
+function FirstCard({
+  summary,
+  firstName,
+  celebrate,
+  painOffers,
+}: {
+  summary: SessionSummary;
+  firstName: string;
+  celebrate: boolean;
+  painOffers: readonly PainReportOffer[];
+}) {
   return (
     <>
       <Eyebrow>{summary.unfinished ? 'Antrenman kaydedildi' : 'Antrenman tamamlandı'}</Eyebrow>
@@ -231,6 +255,7 @@ function FirstCard({ summary, firstName, celebrate }: { summary: SessionSummary;
         </div>
       ) : null}
       <p className="text-sm text-muted-foreground tabular-nums">{summary.footer}</p>
+      {painOffers.length > 0 ? <PainReportCallout offers={painOffers} /> : null}
     </>
   );
 }

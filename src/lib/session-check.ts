@@ -12,6 +12,7 @@ import {
 } from './check-in.ts';
 import { canRecordHealth } from './client-status.ts';
 import { formatKg, formatNumber, formatSignedWithUnit } from './format.ts';
+import { sessionDayText } from './own-program-text.ts';
 import { percentOfTop, type LoadSpec, type PlannedSet, type SessionPlan, type SetTarget, type SuggestionReason } from './progression.ts';
 import { lightenPlan, type Why } from './recommend.ts';
 import type { Client } from './schemas/client.ts';
@@ -660,6 +661,7 @@ export const AFTER_WINDOW_MS = 24 * 60 * 60_000;
 
 export type AfterPrompt = {
   sessionId: string;
+  /** "Gün A"; kendi programdan antrenmanda programın adıyla ("Evde · Gün A"). */
   dayName?: string;
   finishedAt: string;
   /** Önceden dolu süre (dk). */
@@ -688,7 +690,7 @@ export function afterPromptOf(doc: Pick<SessionDoc, 'id' | 'status' | 'startedAt
   );
   return {
     sessionId: doc.id,
-    ...(doc.program?.dayName ? { dayName: doc.program.dayName } : {}),
+    ...(doc.program?.dayName ? { dayName: sessionDayText(doc.program) } : {}),
     finishedAt: doc.finishedAt,
     ...(durationMin !== undefined && durationMin >= 1 ? { durationMin } : {}),
     exercises: exercises.filter((item, position) => exercises.findIndex((other) => other.rowId === item.rowId) === position),

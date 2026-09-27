@@ -244,6 +244,9 @@ describe('özet', () => {
     });
     assert.equal(summary.unfinished, true);
     assert.equal(summary.dayName, 'Gün A');
+    // Kendi programdan antrenmanda programın adıyla ("Evde · Gün A"), Geçmiş'teki gibi.
+    const own = { ...second, program: { ...second.program!, programId: 'op_evde0001', programName: 'Evde' } };
+    assert.equal(sessionSummary({ doc: own, index, timeZone: TZ, exercises: LIBRARY, setWeightsOf, muscleGroups: groups, week: null, changes: [], next: null }).dayName, 'Evde · Gün A');
     assert.equal(summary.when, '28 Eyl Pzt · 20:00–20:52');
     assert.equal(summary.minutes, 52);
     // 62,5 × (10 + 9 + 8) + 50 × 10

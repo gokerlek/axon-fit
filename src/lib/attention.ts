@@ -11,7 +11,7 @@ import {
   regionText,
   type Severity,
 } from './constraints.ts';
-import { cellTitle, constraintSuppress, majorAsymmetry, newestFirst, painCells, SCREENING_ALERT_DAYS, testName } from './screening.ts';
+import { cellTitle, constraintSuppress, majorAsymmetry, newestFirst, painHistory, SCREENING_ALERT_DAYS, testName } from './screening.ts';
 import { formatDayShort, formatNumber, formatSignedWithUnit, todayIn } from './format.ts';
 import { SIDE_LABELS } from './measurement-log.ts';
 import { measurementAlerts, type LineKey } from './measurement-trends.ts';
@@ -83,10 +83,19 @@ export const ATTENTION_LABELS: Record<AttentionKind, string> = {
  * öneri danışanı PT'nin kararına bekletir; hafifletmeye düşen ya da gerileyen hareket ve süresi dolan evre
  * programda bir karar ister; tek kaçan gün, ilerlemeyen hareket ve ölçüm eğilimi izlenir; davet PT'nin işidir
  * ama acil değildir (kilitli ya da süresi dolmuş davet danışanı dışarıda bırakır).
+ *
+ * **Kırmızı ünlemli** (`tone: 'danger'`) maddeler sağlık güvenliğidir ve hepsi ötekilerin üstündedir (en küçüğü 92 >
+ * kaçan günler 90): liste kırmızıları hiçbir zaman sıradan bir maddeyle bölmez.
  */
 export const ATTENTION_URGENCY = {
   /** Kırmızı bayrak, yönlendirme yok (kauda ekinada acil metin) — tasarım `kisit-tarama.md` §3.6. */
   redFlag: 95,
+  /**
+   * Danışan "şiddetli" dedi (onaylı kısıtta kötüleşti ya da şiddetli bildirim), PT bakmadı: günlük hayatı etkileyen
+   * bir değişiklik her antrenmanı ilgilendirir (sıradaki gündeki tek çelişkiden, 85, geniş); yönlendirme
+   * beklemeyen bir sağlık profesyoneli kararının (95) altında, kaçan günlerin (90) üstünde.
+   */
+  constraintSevere: 92,
   missedMany: 90,
   /** Kısıtla çelişen satır danışanın sıradaki gününde. */
   conflictNext: 85,
@@ -95,7 +104,7 @@ export const ATTENTION_URGENCY = {
   /** Taramada ağrı, gözden geçirilmedi. */
   screeningPain: 78,
   proposals: 75,
-  /** Danışan kötüleşti ya da düzeldi dedi. */
+  /** Danışan kötüleşti (şiddetli değil) ya da düzeldi dedi. */
   constraintChange: 72,
   deload: 70,
   declining: 65,
@@ -142,8 +151,11 @@ export type ConstraintFacts = {
   waiting: { id: string; label: string; referredAt: string }[];
   /** Danışanın karar bekleyen bildirimleri. */
   reports: { id: string; label: string; severity?: Severity }[];
-  /** Onaylı kısıtta danışanın bekleyen güncellemesi. */
-  changes: { id: string; label: string; kind: 'worse' | 'better'; from?: Severity; to?: Severity }[];
+  /**
+   * Onaylı kısıtta danışanın bekleyen güncellemesi. `wasSevere`: "düzeldi" demeden önce PT'nin bakmadığı "şiddetli"
+   * vardı (süzgeçteki dikkati PT'nin kararına kadar sürer).
+   */
+  changes: { id: string; label: string; kind: 'worse' | 'better'; from?: Severity; to?: Severity; wasSevere?: true }[];
   /** İzinsiz yasaklar (şu anki evre); `next`: danışanın sıradaki gününde. */
   conflicts: { dayName: string; title: string; next: boolean }[];
 };
@@ -180,7 +192,7 @@ export function constraintFactsOf(
       if (!change) return [];
       return [
         change.resolved
-          ? { id: item.id, label: regionText(item), kind: 'better' as const }
+          ? { id: item.id, label: regionText(item), kind: 'better' as const, ...(change.severity === 'severe' ? { wasSevere: true as const } : {}) }
           : {
               id: item.id,
               label: regionText(item),
@@ -194,16 +206,17 @@ export function constraintFactsOf(
   };
 }
 
-/** Son taramadan özet: gözden geçirilmemiş ağrı ve tek büyük asimetri (etkin kısıtlı taraf bastırılır). */
+/**
+ * Taramanın özeti: açık ağrılar (`painHistory`: gözden geçirilmemiş ve sonradan ağrısız test edilmemiş; yeni tarama
+ * o testi yapmadıysa eski taramanın ağrısı da) ve son taramada tek büyük asimetri (etkin kısıtlı taraf bastırılır).
+ */
 export function screeningFactsOf(record: Pick<HealthRecord, 'screenings' | 'constraints' | 'conditions' | 'surgeryDate'>): ScreeningFacts | null {
   const latest = newestFirst(record.screenings ?? [])[0];
   if (!latest) return null;
   const asymmetry = majorAsymmetry(latest, constraintSuppress(constraintsOf(record)));
   return {
     date: latest.date,
-    pain: painCells(latest)
-      .filter((cell) => !cell.reviewed)
-      .map((cell) => cellTitle(cell.testId, cell.side)),
+    pain: painHistory(record.screenings ?? []).open.map((cell) => cellTitle(cell.testId, cell.side)),
     asymmetry: asymmetry ? testName(asymmetry.testId) : null,
   };
 }
@@ -391,7 +404,12 @@ export function attentionFactsOf(input: {
 /* --- kararlar --- */
 
 export type AttentionTarget = 'client' | 'sessions' | 'program' | 'measurements' | 'constraints' | 'screening' | 'invite';
-export type AttentionItem = { key: string; kind: AttentionKind; urgency: number; text: string; target: AttentionTarget };
+/**
+ * `tone: 'danger'`: sağlık güvenliği (kırmızı bayrak, kauda ekina, danışanın bakılmamış "şiddetli"si); satırın başında
+ * kırmızı ünlem ve ekran okuyucuya "Acil".
+ */
+export type AttentionTone = 'danger';
+export type AttentionItem = { key: string; kind: AttentionKind; urgency: number; text: string; target: AttentionTarget; tone?: AttentionTone };
 
 /**
  * Kaçan antrenman günleri (§2.11): son `lookbackDays` gün (bugün hariç), seçili hafta günü, o gün antrenman
@@ -561,21 +579,45 @@ function daysBetween(from: string, to: string): number {
   return Math.max(0, Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000));
 }
 
-/** Kısıt maddeleri (tasarım `kisit-tarama.md` §3.6). */
+/**
+ * Kısıt maddeleri (tasarım `kisit-tarama.md` §3.6). Kırmızı ünlem (`danger`): kırmızı bayrak, kauda ekina ve
+ * danışanın PT'nin bakmadığı "şiddetli"si (onaylı kısıtta kötüleşme ya da şiddetli bildirim; 92). Şiddetli olmayan
+ * kötüleşme ve "düzeldi dedi" 72'de, tonsuz kalır.
+ */
 export function constraintItems(facts: ConstraintFacts, today: string): AttentionItem[] {
   const items: AttentionItem[] = [];
-  const item = (key: string, urgency: number, text: string, target: AttentionTarget = 'constraints'): AttentionItem => ({
+  const item = (key: string, urgency: number, text: string, target: AttentionTarget = 'constraints', tone?: AttentionTone): AttentionItem => ({
     key: `constraint:${key}`,
     kind: 'constraint',
     urgency,
     text,
     target,
+    ...(tone ? { tone } : {}),
   });
   for (const urgent of facts.urgent) {
-    items.push(item(`urgent:${urgent.id}`, ATTENTION_URGENCY.redFlag, `${EMERGENCY_TEXT.replace(/\.$/, '')} (${urgent.label})`));
+    items.push(item(`urgent:${urgent.id}`, ATTENTION_URGENCY.redFlag, `${EMERGENCY_TEXT.replace(/\.$/, '')} (${urgent.label})`, 'constraints', 'danger'));
   }
   if (facts.refer.length > 0) {
-    items.push(item('refer', ATTENTION_URGENCY.redFlag, `Sağlık profesyoneline yönlendir: ${listText(facts.refer.map((entry) => entry.title))}`));
+    items.push(item('refer', ATTENTION_URGENCY.redFlag, `Sağlık profesyoneline yönlendir: ${listText(facts.refer.map((entry) => entry.title))}`, 'constraints', 'danger'));
+  }
+  const severeChanges = facts.changes.filter((change) => change.kind === 'worse' ? change.to === 'severe' : change.wasSevere);
+  if (severeChanges.length > 0) {
+    const parts = severeChanges.map((change) => change.kind === 'better'
+      ? `${change.label} · önce şiddetli, şimdi düzeldi dedi (inceleme bekliyor)`
+      : `${change.label}${change.from ? ` ${SEVERITY_TEXT[change.from]} → şiddetli` : ' · şiddetli'}`);
+    items.push(item('severe', ATTENTION_URGENCY.constraintSevere, `Kısıt kötüleşti: ${listText(parts)}`, 'constraints', 'danger'));
+  }
+  const severeReports = facts.reports.filter((report) => report.severity === 'severe');
+  if (severeReports.length > 0) {
+    items.push(
+      item(
+        'report-severe',
+        ATTENTION_URGENCY.constraintSevere,
+        `Danışan kısıt bildirdi: ${listText(severeReports.map((report) => `${report.label} (şiddetli)`))}`,
+        'constraints',
+        'danger',
+      ),
+    );
   }
   const next = facts.conflicts.filter((conflict) => conflict.next);
   if (next.length > 0) {
@@ -594,17 +636,19 @@ export function constraintItems(facts: ConstraintFacts, today: string): Attentio
       ),
     );
   }
-  if (facts.reports.length > 0) {
-    const parts = facts.reports.map((report) => (report.severity ? `${report.label} (${SEVERITY_TEXT[report.severity]})` : report.label));
+  const reports = facts.reports.filter((report) => report.severity !== 'severe');
+  if (reports.length > 0) {
+    const parts = reports.map((report) => (report.severity ? `${report.label} (${SEVERITY_TEXT[report.severity]})` : report.label));
     items.push(item('report', ATTENTION_URGENCY.report, `Danışan kısıt bildirdi: ${listText(parts)}`));
   }
-  if (facts.changes.length > 0) {
-    const parts = facts.changes.map((change) =>
+  const changes = facts.changes.filter((change) => !severeChanges.includes(change));
+  if (changes.length > 0) {
+    const parts = changes.map((change) =>
       change.kind === 'better'
-        ? `${change.label} · düzeldi dedi`
+        ? `${change.label} · düzeldi dedi${change.wasSevere ? ' (önce şiddetli demişti)' : ''}`
         : `${change.label}${change.from && change.to ? ` ${SEVERITY_TEXT[change.from]} → ${SEVERITY_TEXT[change.to]}` : ' · kötüleşti'}`,
     );
-    const worse = facts.changes.some((change) => change.kind === 'worse');
+    const worse = changes.some((change) => change.kind === 'worse');
     items.push(item('change', ATTENTION_URGENCY.constraintChange, `${worse ? 'Kısıt kötüleşti' : 'Kısıt güncellendi'}: ${listText(parts)}`));
   }
   if (facts.waiting.length > 0) {

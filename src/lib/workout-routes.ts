@@ -17,6 +17,7 @@ import {
   type CareResult,
 } from './constraint-filter.ts';
 import { healthRecordSchema, type HealthRecord } from './schemas/health.ts';
+import { BLOCKED_TEXT } from './exercise-caution.ts';
 import { todayIn } from './format.ts';
 import { GithubError } from './github/errors.ts';
 import { currentPhaseOf, DAY_ID_PATTERN, nextDayId } from './program-plan.ts';
@@ -329,15 +330,19 @@ function careOf(client: Client, healthFile: StoredJson | null | 'broken', today:
   return { input: careInputOf(parsed.output, { today, painConsent: canRecordHealth(client, 'check_in') }), record: parsed.output };
 }
 
-/** Günün satırlarına kart notu (`care`); kısıt yoksa gün aynen döner. */
+/**
+ * Günün satırlarına kart notu (`care`); kısıt yoksa gün aynen döner. Kendi programda satırı danışan seçti: metin
+ * "antrenörün planladı" demez (`own`, muadil ve eklenenle aynı).
+ */
 export function withRowCare(day: WorkoutDay, exercises: ReadonlyMap<string, WorkoutExercise>, input: CareInput): WorkoutDay {
   if (!hasCare(input)) return day;
   const rows: Record<string, WorkoutDay['rows'][string]> = {};
   let changed = false;
+  const own = day.source === 'own';
   for (const [rowId, row] of Object.entries(day.rows)) {
     const exercise = exercises.get(row.exerciseId);
     const care = exercise ? rowCareOf(evaluateCare(exercise, input), input) : null;
-    rows[rowId] = care ? { ...row, care } : row;
+    rows[rowId] = care ? { ...row, care: own ? { ...care, own: true as const } : care } : row;
     if (care) changed = true;
   }
   return changed ? { ...day, rows } : day;
@@ -628,7 +633,7 @@ export function exercisesRoute(deps: WorkoutRouteDeps, addParam: string | null, 
     const exercise = catalog.exercises.get(addParam);
     if (!exercise) return { status: 404, body: { error: 'Bu hareket kütüphanede yok.' } };
     const result = cared ? evaluateCare(exercise, care) : null;
-    if (result && result.blockedBy.length > 0) return { status: 409, body: { error: 'Bu hareket şu an sana önerilmiyor; antrenörüne sor.' } };
+    if (result && result.blockedBy.length > 0) return { status: 409, body: { error: BLOCKED_TEXT } };
     const repaired = await readIndex(repo);
     const programId = programParam ?? null;
     const history = await readHistory(repo, repaired.index, { exerciseIds: new Set([exercise.id]), programId });

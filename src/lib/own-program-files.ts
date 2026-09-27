@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { BLOCKED_TEXT } from './exercise-caution.ts';
 import { gitBlobSha, jsonText } from './github/blob.ts';
 import {
   addOwnEvent,
@@ -51,6 +52,9 @@ import type { PlanExercise } from './template-plan.ts';
  *   commit'te denetlenir. PT'nin programı yokken ilk kendi program kendiliğinden seçilir.
  * - **PT'nin kaydı** yalnız dosyada `shared` varken (403 değilse); ad, paylaşım, kimlik, geçmiş, rotasyon ve (PT
  *   günleri değiştirmediyse) günler kayıttan (`applyOwnEdit`).
+ * - **Kısıt** (yalnız danışanın kaydında, `guard`): kütüphaneden eklenen izinsiz yasaklı hareket reddedilir; önceki
+ *   kayıtta duran ya da antrenörünün programından, danışanlara açık şablondan kopyayla gelen kalır (`kisit-tarama.md`
+ *   §3.7). PT'nin kaydı denetlenmez: yasağı PT "Yine de ekle" iznini vererek açar.
  * - **Silme** yarım antrenman o programdansa reddedilir (`sessionId` ile).
  */
 
@@ -120,6 +124,15 @@ function ownCommitMessage(name: string, kind: 'create' | 'edit', changes: readon
 
 export type OwnLibrary = { exercises: ReadonlyMap<string, PlanExercise>; deviceIds: ReadonlySet<string> };
 
+/**
+ * Danışanın kaydında kısıt denetimi: izinsiz yasaklı hareketler (`exercise-caution.ts`; `conditions` onayı yoksa
+ * çağıran hiç kurmaz) ve danışanlara açık şablonun hareketleri (kopyayla gelebilir; işaretsiz ya da yoksa null).
+ */
+export type OwnGuard = {
+  blocked: ReadonlySet<string>;
+  templateExercises(id: string): Promise<readonly string[] | null>;
+};
+
 export type OwnSaveResult =
   | {
       status: 'created' | 'saved' | 'unchanged';
@@ -130,6 +143,8 @@ export type OwnSaveResult =
     }
   /** Alan hataları (Formisch yolları; ad `name`). */
   | { status: 'invalid'; errors: Record<string, string> }
+  /** Kütüphaneden eklenen izinsiz yasaklı hareket (satırın alan yoluyla). */
+  | { status: 'blocked'; errors: Record<string, string> }
   /**
    * missing: program yok (silinmiş) · stale: o arada kaydedildi (412) · exists: aynı kimlikle başka gövde ·
    * limit: 5 program dolu · forbidden: PT'nin kaydında dosya paylaşılmamış (403).
@@ -163,14 +178,53 @@ async function otherIds(repo: OwnReader, state: OwnState, id: string, pt: Progra
 }
 
 /**
+ * Eklenen yasaklılar (§3.7 [sentez]): temel önceki kaydın aynı hareketi taşıyan satırları, günün kopyalandığı PT günü ve kaynağı olan
+ * açık şablonlar (şablonlar yalnız gerekirse okunur). Hata satırın alanına, metin danışanın antrenmandaki ile aynı.
+ */
+async function guardErrors(guard: OwnGuard, phases: readonly OwnProgramPhase[], stored: OwnProgram | null, pt: Program | null): Promise<Record<string, string> | null> {
+  const storedRows = new Map(stored?.phases.flatMap((phase) => phase.days.flatMap((day) => day.blocks.flatMap((block) => block.rows.map((row) => [row.id, row.exerciseId] as const)))) ?? []);
+  const ptDays = new Map(pt?.phases.flatMap((phase) => phase.days.map((day) => [day.id, day] as const)) ?? []);
+  const templates = new Map<string, readonly string[]>();
+  const errors: Record<string, string> = {};
+  for (const [p, phase] of phases.entries()) {
+    for (const [d, day] of phase.days.entries()) {
+      const copied = day.copiedFrom ? ptDays.get(day.copiedFrom.dayId) : undefined;
+      const allowed = new Set(copied?.blocks.flatMap((block) => block.rows.map((row) => row.exerciseId)) ?? []);
+      const candidates = day.blocks.flatMap((block, b) => block.rows.flatMap((row, r) =>
+        guard.blocked.has(row.exerciseId) && storedRows.get(row.id) !== row.exerciseId && !allowed.has(row.exerciseId)
+          ? [{ exerciseId: row.exerciseId, path: `phases.${p}.days.${d}.blocks.${b}.rows.${r}.exerciseId` }] : []));
+      if (candidates.length === 0) continue;
+      if (day.source) {
+        const id = day.source.templateId;
+        if (!templates.has(id)) templates.set(id, (await guard.templateExercises(id)) ?? []);
+        for (const exerciseId of templates.get(id)!) allowed.add(exerciseId);
+      }
+      for (const row of candidates) if (!allowed.has(row.exerciseId)) errors[row.path] = BLOCKED_TEXT;
+    }
+  }
+  return Object.keys(errors).length > 0 ? errors : null;
+}
+
+/**
  * Oluşturma (`baseRevision` null; yalnız danışan) ya da kayıt (danışan ya da PT). Değişiklik yoksa yazılmaz.
  * Bildirim anı: paylaşılmış programda PT'nin kaydı `ptEditedAt`, danışanınki `clientEditedAt`.
  */
 export async function saveOwnProgram(
   repo: SessionRepo,
-  input: { id: string; body: OwnProgramSaveBody; by: 'client' | 'pt'; library: OwnLibrary; ctx: DiffContext; now: Date; random?: (n: number) => Uint8Array },
+  input: {
+    id: string;
+    body: OwnProgramSaveBody;
+    by: 'client' | 'pt';
+    library: OwnLibrary;
+    ctx: DiffContext;
+    now: Date;
+    /** Danışanın kaydında kısıt denetimi; kısıt yoksa verilmez. */
+    guard?: OwnGuard | null;
+    random?: (n: number) => Uint8Array;
+  },
 ): Promise<OwnSaveResult> {
   const { id, body, by, now } = input;
+  const guard = by === 'client' && input.guard && input.guard.blocked.size > 0 ? input.guard : null;
   if (!isOwnProgramId(id)) return { status: 'missing' };
   return withRetry(async (): Promise<OwnSaveResult> => {
     const head = await repo.head();
@@ -190,6 +244,8 @@ export async function saveOwnProgram(
       if (problem) return { status: 'invalid', errors: { name: problem } };
       const normalized = normalizeOwn(body.phases, input.library, null);
       if (Object.keys(normalized.errors).length > 0) return { status: 'invalid', errors: normalized.errors };
+      const refused = guard ? await guardErrors(guard, body.phases, null, pt.program) : null;
+      if (refused) return { status: 'blocked', errors: refused };
       const taken = await otherIds(repo, state, id, pt.program);
       const settled = reIdCollisions({ currentPhaseId: body.currentPhaseId, phases: normalized.phases }, taken, new Set(), input.random);
       const program = createOwnProgram({ id, name, currentPhaseId: settled.currentPhaseId, phases: settled.phases, weekdays: body.weekdays, now });
@@ -214,6 +270,8 @@ export async function saveOwnProgram(
     }
     const normalized = normalizeOwn(body.phases, input.library, current);
     if (Object.keys(normalized.errors).length > 0) return { status: 'invalid', errors: normalized.errors };
+    const refused = guard ? await guardErrors(guard, body.phases, current, pt.program) : null;
+    if (refused) return { status: 'blocked', errors: refused };
     const taken = await otherIds(repo, state, id, pt.program);
     const settled = reIdCollisions({ currentPhaseId: body.currentPhaseId, phases: normalized.phases }, taken, programIds(current.phases), input.random);
     const result = applyOwnEdit(

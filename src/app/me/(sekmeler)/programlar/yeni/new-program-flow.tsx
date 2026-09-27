@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { OwnProgramForm, type OwnProgramFormProps } from '@/components/program/own-program-form';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -8,14 +8,17 @@ import { Field, FieldContent, FieldDescription, FieldError, FieldLabel, FieldTit
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { newOwnProgramId, OWN_PROGRAM_LIMITS, ownNameProblem, ownStartBody, type OwnStart } from '@/lib/own-programs';
+import { formatNumber } from '@/lib/format';
 import { programIdSource, type ClientTargets, type ProgramPhase, type TemplateOption } from '@/lib/program-plan';
+import type { TemplateBlock } from '@/lib/template-plan';
 
 type StartKind = OwnStart['kind'];
 
 /**
  * Yeni program (`docs/design/kendi-program.md` §2.4): aynı adres iki adım. Önce ad ve başlangıç (boş, antrenörünün
  * programından seçili günler, danışanlara açık bir şablon); "Devam" hiçbir şey yazmaz, düzenleyiciyi oluşturma
- * kipinde açar ("Programı oluştur"). Program kimliği telefonda üretilir (oluşturma idempotent).
+ * kipinde açar ("Programı oluştur"). Program kimliği telefonda üretilir (oluşturma idempotent). Kısıtının yasakladığı
+ * hareket kopyadan düşmez: seçenekte sayısı yazar, düzenleyicide satır "Sana önerilmiyor" der (`kisit-tarama.md` §3.7).
  */
 export function NewProgramFlow({
   form,
@@ -48,6 +51,12 @@ export function NewProgramFlow({
     () => initialStart.dayIds ?? current?.days.slice(0, OWN_PROGRAM_LIMITS.days).map((day) => day.id) ?? [],
   );
   const [templateId, setTemplateId] = useState(initialStart.templateId ?? templates[0]?.id ?? '');
+  const blockedIds = useMemo(() => new Set(form.exercises.filter((exercise) => exercise.blocked).map((exercise) => exercise.id)), [form.exercises]);
+  /** "Sana önerilmeyen 1 hareket; kopyada işaretli kalır." — yoksa null. */
+  const blockedNote = (blocks: readonly TemplateBlock[]) => {
+    const count = blocks.reduce((sum, block) => sum + block.rows.filter((row) => blockedIds.has(row.exerciseId)).length, 0);
+    return count > 0 ? `Sana önerilmeyen ${formatNumber(count)} hareket; kopyada işaretli kalır.` : null;
+  };
 
   if (step) {
     return (
@@ -85,7 +94,7 @@ export function NewProgramFlow({
   };
 
   const others = ptPhases.filter((phase) => phase.id !== current?.id);
-  const dayRow = (day: { id: string; name: string }) => {
+  const dayRow = (day: { id: string; name: string; blocks: readonly TemplateBlock[] }) => {
     const checked = dayIds.includes(day.id);
     return (
       <FieldLabel key={day.id} htmlFor={`start-day-${day.id}`}>
@@ -99,6 +108,7 @@ export function NewProgramFlow({
           />
           <FieldContent>
             <FieldTitle className="break-words">{day.name}</FieldTitle>
+            {blockedNote(day.blocks) ? <FieldDescription>{blockedNote(day.blocks)}</FieldDescription> : null}
           </FieldContent>
         </Field>
       </FieldLabel>
@@ -187,6 +197,7 @@ export function NewProgramFlow({
                     <FieldTitle className="break-words">{template.name}</FieldTitle>
                     <FieldDescription className="tabular-nums">
                       {template.blocks.reduce((sum, block) => sum + block.rows.length, 0)} hareket
+                      {blockedNote(template.blocks as TemplateBlock[]) ? ` · ${blockedNote(template.blocks as TemplateBlock[])}` : ''}
                     </FieldDescription>
                   </FieldContent>
                 </Field>

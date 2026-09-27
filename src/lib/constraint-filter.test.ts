@@ -19,7 +19,7 @@ import {
   rowCareText,
   type CareInput,
 } from './constraint-filter.ts';
-import { addConstraint, addOverride, clearConstraint, constraintsOf, reportConstraint, type ConstraintInput } from './constraints.ts';
+import { ackClientChange, reportWorse, addConstraint, addOverride, clearConstraint, constraintsOf, reportConstraint, type ConstraintInput } from './constraints.ts';
 import type { HealthRecord } from './schemas/health.ts';
 import type { Program } from './schemas/program.ts';
 
@@ -96,15 +96,15 @@ describe('kırmızı bayrak, bekleyen bildirim, izin', () => {
     assert.equal(evaluateCare(ex('halter-hip-thrust'), back).reasons.some((reason) => reason.kind === 'referral'), false);
   });
 
-  test('bekleyen bildirim: yalnız zorlayanlar, yalnız dikkat; zorlayan yoksa hiçbir şey', () => {
+  test('şiddetli bekleyen bildirim bölgeyi çalıştıran harekette de dikkat verir', () => {
     let health: HealthRecord = { version: 2, checkIns: [], measurements: [] };
     health = reportConstraint(health, { region: 'knee', side: 'left', type: 'injury', severity: 'severe', triggers: ['squat'] }, { id: 'k_rrrrrr', now: NOW, today: TODAY });
     const care = input(health);
     const hack = evaluateCare(ex('hack-squat'), care);
     assert.deepEqual([hack.decision, hack.reasons[0]?.kind], ['warn', 'report']);
-    assert.equal(evaluateCare(ex('leg-extension'), care).decision, null);
+    assert.equal(evaluateCare(ex('leg-extension'), care).decision, 'warn');
     const silent = reportConstraint({ version: 2, checkIns: [], measurements: [] }, { region: 'knee', side: 'left', type: 'injury', severity: 'severe', triggers: [] }, { id: 'k_ssssss', now: NOW, today: TODAY });
-    assert.equal(evaluateCare(ex('hack-squat'), input(silent)).decision, null);
+    assert.equal(evaluateCare(ex('hack-squat'), input(silent)).decision, 'warn');
   });
 
   test('izin o kısıtın bulgularını susturur; kırmızı bayrakta görüş yoksa susturmaz', () => {
@@ -246,4 +246,18 @@ describe('PT: sheet ve çelişkiler', () => {
       [['Gün A', 'Hack Squat', 'Sol diz: derin diz bükme (90° üstü)', true]],
     );
   });
+});
+
+
+test('önceden verilmiş izin yeni şiddetli uyarıyı susturmaz; PT gördükten sonra susar', () => {
+  let health = record([{ region: 'knee', side: 'left', avoid: ['deep_knee_flexion'] }]);
+  health = addOverride(health, { exerciseId: 'hack-squat', source: 'k_000000' }, { now: NOW, title: 'Hack Squat' });
+  const stamp = careStampOf(health);
+  health = reportWorse(health, 'k_000000', 'severe', { now: NOW });
+  const warning = evaluateCare(ex('hack-squat'), input(health));
+  assert.equal(warning.decision, 'warn');
+  assert.ok(warning.reasons.some((reason) => reason.kind === 'severe'));
+  assert.notEqual(careStampOf(health), stamp);
+  health = ackClientChange(health, 'k_000000', { now: NOW });
+  assert.equal(evaluateCare(ex('hack-squat'), input(health)).decision, null);
 });

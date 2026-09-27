@@ -22,7 +22,7 @@ import { effectiveSchedule, weekTarget } from './training-days';
  * (`readBlob`, süreç belleğinde önbellekli) ve özetleri Next'in veri önbelleğinde: anahtar `depo@sha`
  * (dosya değişirse `sha` da değişir, eski özet hiç sunulmaz), etiket `session:<id>` (silme
  * `revalidateTag` ile düşürür). Her antrenman dosyası bir kez okunur; sonraki açılışlarda yalnız yeniler.
- * `water.json` ve program birer okuma; `health.json` yalnız hazır oluşluk, ağrı ya da ölçüm parçası
+ * `water.json` ve program birer okuma; `health.json` yalnız hazır oluşluk, ağrı, ölçüm ya da tarama parçası
  * onaylıysa (onay yoksa hiç okunmaz, SPEC §9.4).
  */
 export function loadProgress(
@@ -64,6 +64,7 @@ export function loadProgress(
         readiness: canRecordHealth(client, 'readiness'),
         pain: canRecordHealth(client, 'check_in'),
         measurements: canRecordHealth(client, 'measurements'),
+        screening: canRecordHealth(client, 'screening'),
       },
     },
     now,

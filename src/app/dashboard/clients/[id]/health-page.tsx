@@ -8,21 +8,20 @@ import { pendingReports } from '@/lib/constraints';
 import { healthLockInfo, type HealthLock } from '@/lib/measurement-log';
 import type { Client, HealthField } from '@/lib/schemas/client';
 import type { HealthRecord } from '@/lib/schemas/health';
-import { newestFirst, painCells } from '@/lib/screening';
+import { painHistory } from '@/lib/screening';
 import { HealthTabs } from './health-tabs';
 
 /** "Sağlık" sayfalarının ortak parçaları (yalnız sunucu): alt şerit ve kilit uyarısı. */
 
 /**
- * Bekleyen işleri olan parçalar (şeritteki nokta): karar bekleyen danışan bildirimi, son taramada gözden
- * geçirilmemiş ağrı. Yalnız o parçanın onayı sürdükçe ve kayıt zaten okunduysa.
+ * Bekleyen işleri olan parçalar (şeritteki nokta): karar bekleyen danışan bildirimi, taramada açık ağrı (gözden
+ * geçirilmemiş, sonra ağrısız test edilmemiş; `painHistory`). Yalnız o parçanın onayı sürdükçe ve kayıt zaten okunduysa.
  */
 export function healthPending(client: Client, record: HealthRecord | null): HealthField[] {
   if (!record) return [];
   const pending: HealthField[] = [];
   if (canRecordHealth(client, 'conditions') && pendingReports(record).length > 0) pending.push('conditions');
-  const latest = newestFirst(record.screenings ?? [])[0];
-  if (canRecordHealth(client, 'screening') && latest && painCells(latest).some((cell) => !cell.reviewed)) pending.push('screening');
+  if (canRecordHealth(client, 'screening') && painHistory(record.screenings ?? []).open.length > 0) pending.push('screening');
   return pending;
 }
 

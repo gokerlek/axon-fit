@@ -1,4 +1,5 @@
 import { formatKg, formatNumber } from './format.ts';
+import { sessionDayText } from './own-program-text.ts';
 import { mondayOf, type ProgramLogEntry } from './program-plan.ts';
 import type { Category } from './schemas/exercise.ts';
 import type { SessionDoc, SessionEntry, SessionIndex } from './schemas/session.ts';
@@ -366,7 +367,8 @@ export function sessionSummary<E extends MuscleSource>(input: {
   return {
     id: doc.id,
     unfinished,
-    dayName: doc.program?.dayName ?? 'Antrenman',
+    // Kendi programdan antrenmanda programın adıyla ("Evde · Gün A"), Geçmiş'teki gibi.
+    dayName: sessionDayText(doc.program),
     when: `${shortDayText(doc.date)} · ${clockOf(doc.startedAt, input.timeZone)}–${clockOf(end, input.timeZone)}`,
     minutes,
     volumeKg,

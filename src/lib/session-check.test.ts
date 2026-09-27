@@ -546,6 +546,9 @@ describe('antrenman sonrası kart (§2.9: 10 dk – 24 saat, CR-10)', () => {
     assert.equal(afterPromptOf({ ...doc, effort: { sessionRpe: 6, updatedAt: at(70) } }), null);
     assert.equal(afterPromptOf({ ...doc, effort: { durationMin: 40, updatedAt: at(70) } })?.durationMin, 40);
     assert.equal(afterPromptOf(sessionDoc()), null);
+    // Kendi programdan antrenman programın adıyla (Geçmiş'teki gibi).
+    const own = { ...doc, program: { ...doc.program!, programId: 'op_evde0001', programName: 'Evde' } };
+    assert.equal(afterPromptOf(own)?.dayName, 'Evde · Gün A');
   });
 
   test('zamanlama: 9:59 erken (kalan süreyle), 10 dk açık, 24 saat açık, sonrası geçti', () => {

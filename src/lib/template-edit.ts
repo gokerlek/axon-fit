@@ -66,6 +66,8 @@ export type PickerExercise = EditorExercise & {
   source: 'library' | 'custom';
   /** Danışanın kendi programında: kısıtına uymayabilir (rozet, engel değil; `exercise-caution.ts`). */
   caution?: true;
+  /** Danışanın kendi programında: kısıtı izinsiz yasaklıyor (sheet'te yok, satırda "Sana önerilmiyor"). */
+  blocked?: true;
 };
 /** Düzenleyicinin cihaz bilgisi (ad ve ağırlık ayarı). */
 export type EditorDevice = DeviceLoadSettings & { id: string; name: string };

@@ -8,6 +8,16 @@ import { normalizeWeekdays, weekdaysText } from './training-days.ts';
  * kartı index satırından (program başına okuma yok), geçmiş etiketleri görene göre.
  */
 
+/**
+ * Antrenmanın gün adı: kendi programdan antrenmanda programın adıyla ("Evde · Gün A"; seansın anlık görüntüsü, program
+ * silinse de kalır), PT'nin programında yalnız gün; gün adı yoksa `fallback`. Geçmiş, özet, antrenman sonrası kart ve
+ * PT'nin ekranları aynı metni kullanır.
+ */
+export function sessionDayText(program: { dayName?: string | undefined; programName?: string | undefined } | undefined, fallback = 'Antrenman'): string {
+  const day = program?.dayName || fallback;
+  return program?.programName ? `${program.programName} · ${day}` : day;
+}
+
 /** "Sal, Per", yoksa "haftada 2", o da yoksa "gün seçilmedi". */
 export function scheduleText(input: { weekdays: readonly number[]; daysPerWeek?: number | undefined }): string {
   const days = weekdaysText(input.weekdays);

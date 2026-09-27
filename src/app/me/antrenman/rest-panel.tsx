@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { ArrowUp, CaretDown, CaretRight, Check, Drop, LockSimple } from '@phosphor-icons/react';
+import { ArrowUp, CaretDown, CaretRight, Check, LockSimple } from '@phosphor-icons/react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Stepper } from '@/components/ui/stepper';
@@ -10,6 +10,7 @@ import { formatKg } from '@/lib/format';
 import { DURATION, EASE, tween, WORKOUT } from '@/lib/motion';
 import { EFFORT_LABELS } from '@/lib/progression';
 import { SESSION_LIMITS } from '@/lib/schemas/session';
+import { WaterGlass } from '@/components/water-glass';
 import { cn } from '@/lib/utils';
 import { clockText, EFFORT_CHOICES, type EffortChoice, type EffortQuestion } from '@/lib/workout-session';
 
@@ -322,8 +323,8 @@ export function RestPanel({
         </p>
 
         <div className="relative mt-1 shrink-0">
-          <Button variant="secondary" className="h-14 w-full gap-2.5 text-base" onClick={onWater}>
-            <Drop className="size-5 text-primary" />
+          <Button variant="secondary" className="h-28 w-full gap-3 border border-sky-500/25 bg-sky-500/10 text-base text-sky-700 hover:bg-sky-500/20 dark:text-sky-300" onClick={onWater}>
+            <WaterGlass count={water} className="h-24 w-20" />
             <span>
               Su içtim ·{' '}
               <motion.b key={water} initial={{ scale: 1.15 }} animate={{ scale: 1 }} transition={tween(DURATION.fast)} className="inline-block font-semibold tabular-nums">
@@ -338,7 +339,7 @@ export function RestPanel({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={tween(DURATION.fast)}
-                className="absolute top-1/2 right-2 -translate-y-1/2">
+                className="mt-2 text-right">
                 <Button variant="outline" className="h-10 px-3 text-[0.8125rem]" onClick={onUndoWater}>
                   +1 · Geri al
                 </Button>

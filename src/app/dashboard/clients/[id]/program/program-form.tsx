@@ -165,8 +165,9 @@ export function ProgramForm({
   const currentPhaseId = useField(form, { path: ['currentPhaseId'] }).input ?? '';
   const phased = useField(form, { path: ['phased'] }).input ?? false;
   const exerciseIds = useMemo(() => new Set(exercises.map((exercise) => exercise.id)), [exercises]);
-  // Canlı evrelerden: değiştirilen/kaldırılan satır ya da silinen gün uyarıdan hemen düşer.
-  const missing = useMemo(() => missingExerciseDays(phases, exerciseIds), [phases, exerciseIds]);
+  // Canlı evrelerden: değiştirilen/kaldırılan satır ya da silinen gün uyarıdan hemen düşer. Formisch'in `input`'u
+  // her çizimde yeni dizi kurduğu için burada önbellek işe yaramaz; doğrudan hesaplanır.
+  const missing = missingExerciseDays(phases, exerciseIds);
   // Cihazı silinmiş satırlar (açılışta, şablondan gelen günde, geri yüklenen taslakta) egzersizin cihazına
   // döner. Uyarı bugünkü hâle bakar (`droppedDeviceNotice`): kaldırılan satır ya da PT'nin cihaz seçtiği satır düşer.
   const [droppedRowIds, setDroppedRowIds] = useState<ReadonlySet<string>>(() => new Set(start.dropped));

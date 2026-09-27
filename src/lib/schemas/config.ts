@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { paletteSchema } from '../theme-palette.ts';
 
 /**
  * Uygulama ayarı şeması — sunucu ve istemci ORTAK kullanır.
@@ -38,6 +39,7 @@ export const appConfigSchema = v.object({
   theme: v.picklist(['dark', 'light', 'system']),
   /** Eski kurulumlarda yok: varsayılan temanınki (hafif). */
   radius: v.optional(v.picklist(RADIUS_KEYS, 'Geçerli bir köşe seçeneği seç.'), 'subtle'),
+  palette: v.optional(v.nullable(paletteSchema)),
   timeZone: v.pipe(v.string(), v.minLength(1)),
   setupCompleted: v.boolean(),
 });

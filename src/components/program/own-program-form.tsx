@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Form, getInput, setErrors, setInput, useField, useForm } from '@formisch/react';
-import { ArrowClockwise, CopySimple, FileText, Plus, Square, Trash, UserCircle, WarningCircle } from '@phosphor-icons/react';
+import { ArrowClockwise, Bandaids, CopySimple, FileText, Plus, Square, Trash, UserCircle, WarningCircle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { BlockEditor } from '@/components/block-editor/block-editor';
 import type { BlocksFormStore } from '@/components/block-editor/block-items';
@@ -20,6 +20,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { showUndoToast } from '@/components/undo-toast';
 import { UnsavedChangesGuard, type UnsavedChangesGuardHandle } from '@/components/unsaved-changes-guard';
 import { WeekdayToggle } from '@/components/weekday-toggle';
+import type { EditorCare } from '@/lib/constraint-filter';
 import { dayBlocksPath } from '@/lib/editor-undo';
 import { formatNumber } from '@/lib/format';
 import { copyPtDays, OWN_PROGRAM_LIMITS, ownNameProblem, type OwnProgramDay, type OwnProgramPhase } from '@/lib/own-programs';
@@ -91,6 +92,12 @@ export type OwnProgramFormProps = {
   doneHref: string;
   /** Açılışta eklenecek günler (Antrenörünün programından "Kendi programına kopyala"). */
   addPtDayIds?: string[];
+  /**
+   * PT (`own-pt`): danışanın kısıtları, PT'nin program düzenleyicisiyle aynı (`kisit-tarama.md` §3.2: sheet'te işaret,
+   * "Bu danışana önerilmeyenler", "Yine de ekle"; kartta rozet). Danışanda kısıt egzersizlerin işaretindedir
+   * (`blocked`, `caution`).
+   */
+  care?: EditorCare | null;
 };
 
 /**
@@ -134,7 +141,7 @@ export function OwnProgramForm(props: OwnProgramFormProps) {
   const nameField = useField(form, { path: ['name'] });
   const frequencyField = useField(form, { path: ['phases', 0, 'daysPerWeek'] });
   const phase = phases[0];
-  const days = phase?.days ?? [];
+  const days = useMemo(() => phase?.days ?? [], [phase]);
 
   const [selectedDayId, setSelectedDayId] = useState(start.firstDayId);
   const [addOpen, setAddOpen] = useState(false);
@@ -148,6 +155,23 @@ export function OwnProgramForm(props: OwnProgramFormProps) {
   const exerciseIds = useMemo(() => new Set(exercises.map((exercise) => exercise.id)), [exercises]);
   const missing = useMemo(() => missingExerciseDays(phases as ProgramPhase[], exerciseIds), [phases, exerciseIds]);
   const missingRows = missing.reduce((sum, item) => sum + item.rowIds.length, 0);
+  // Kısıtının yasakladığı ama programda duran (kopyayla gelmiş) satırlar: sessizce kalmaz (`kisit-tarama.md` §3.7).
+  const blockedRows = useMemo(
+    () =>
+      days.flatMap((day) =>
+        day.blocks.flatMap((block) =>
+          block.rows.flatMap((row) => {
+            const exercise = exerciseById.get(row.exerciseId);
+            return exercise?.blocked ? [`${day.name} · ${exercise.title}`] : [];
+          }),
+        ),
+      ),
+    [days, exerciseById],
+  );
+  const rowsText = (blocks: readonly TemplateBlock[]) => {
+    const blocked = blocks.reduce((sum, block) => sum + block.rows.filter((row) => exerciseById.get(row.exerciseId)?.blocked).length, 0);
+    return `${formatNumber(countRows(blocks))} hareket${blocked > 0 ? ` · sana önerilmeyen ${formatNumber(blocked)}` : ''}`;
+  };
 
   const current = useCallback(() => (getInput(form, { path: ['phases'] }) ?? []) as unknown as OwnProgramPhase[], [form]);
   const write = useCallback((next: OwnProgramPhase[]) => setInput(form, { path: ['phases'], input: toInput(next) }), [form]);
@@ -214,7 +238,14 @@ export function OwnProgramForm(props: OwnProgramFormProps) {
       if (error.status === 412) setProblem('stale');
       else if (error.status === 403) setProblem('unshared');
       else if (error.status === 404) setProblem('missing');
-      else applyFieldErrors(form as never, error);
+      else if (applyFieldErrors(form as never, error)) {
+        // Satırın hatası (ör. kütüphaneden eklenmiş yasaklı hareket): o gün açılır.
+        const index = Object.keys(error.fields)
+          .map((key) => key.match(/^phases\.0\.days\.(\d+)\./)?.[1])
+          .find((value) => value !== undefined);
+        const day = index === undefined ? undefined : current()[0]?.days[Number(index)];
+        if (day) setSelectedDayId(day.id);
+      }
     },
     onSuccess: async (result) => {
       draft.discard();
@@ -318,6 +349,16 @@ export function OwnProgramForm(props: OwnProgramFormProps) {
             <AlertDescription>{formatNumber(missingRows)} hareket kütüphanede yok; kaydetmeden önce kartlarını sil, yerine yenisini ekle.</AlertDescription>
           </Alert>
         ) : null}
+        {blockedRows.length > 0 ? (
+          <Alert>
+            <Bandaids />
+            <AlertTitle>Kısıtın nedeniyle sana önerilmeyen {formatNumber(blockedRows.length)} hareket</AlertTitle>
+            <AlertDescription>
+              <p>{blockedRows.join(' · ')}</p>
+              <p>Kaydedebilirsin; antrenmanda &apos;Değiştir&apos;den bir muadil seç ya da kartı sil. Emin değilsen antrenörüne sor.</p>
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
         {own ? (
           <Field data-invalid={Boolean(nameField.errors) || undefined}>
@@ -404,6 +445,7 @@ export function OwnProgramForm(props: OwnProgramFormProps) {
               listLabel={`${selectedDay.name} hareketleri`}
               addLabel={`Hareket ekle: ${selectedDay.name}`}
               variant={own ? 'simple' : 'full'}
+              care={props.care ?? null}
             />
             {days.length > 1 ? (
               <Button
@@ -471,7 +513,7 @@ export function OwnProgramForm(props: OwnProgramFormProps) {
                           </ItemMedia>
                           <ItemContent>
                             <ItemTitle>{day.name}</ItemTitle>
-                            <ItemDescription>{formatNumber(countRows(day.blocks))} hareket</ItemDescription>
+                            <ItemDescription>{rowsText(day.blocks)}</ItemDescription>
                           </ItemContent>
                         </Item>
                       </li>
@@ -505,7 +547,7 @@ export function OwnProgramForm(props: OwnProgramFormProps) {
                           </ItemMedia>
                           <ItemContent>
                             <ItemTitle>{multiPhase ? `${from.name} · ${day.name}` : day.name}</ItemTitle>
-                            <ItemDescription>{formatNumber(countRows(day.blocks))} hareket</ItemDescription>
+                            <ItemDescription>{rowsText(day.blocks)}</ItemDescription>
                           </ItemContent>
                         </Item>
                       </li>
@@ -535,7 +577,7 @@ export function OwnProgramForm(props: OwnProgramFormProps) {
                           </ItemMedia>
                           <ItemContent>
                             <ItemTitle>{template.name}</ItemTitle>
-                            <ItemDescription>{formatNumber(countRows(template.blocks as TemplateBlock[]))} hareket</ItemDescription>
+                            <ItemDescription>{rowsText(template.blocks as TemplateBlock[])}</ItemDescription>
                           </ItemContent>
                         </Item>
                       </li>

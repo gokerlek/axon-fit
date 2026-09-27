@@ -103,7 +103,10 @@ export const TYPE_CLIENT_LABELS: Record<ConstraintType, string> = {
 export const SEVERITIES = ['mild', 'moderate', 'severe'] as const;
 export type Severity = (typeof SEVERITIES)[number];
 export const SEVERITY_LABELS: Record<Severity, string> = { mild: 'Hafif', moderate: 'Orta', severe: 'Şiddetli' };
-/** Tanımlar **[sentez]**: gösterim ve "kötüleşti" içindir, süzgeci değiştirmez. */
+/**
+ * Tanımlar **[sentez]**: gösterim ve "kötüleşti" içindir. PT'nin seçtiği şiddet süzgeci değiştirmez; yalnız danışanın
+ * PT'nin henüz bakmadığı "şiddetli"si (`severeUnreviewed`) bölgeyi çalıştıran harekete dikkat ekler.
+ */
 export const SEVERITY_DESCRIPTIONS: Record<Severity, string> = {
   mild: 'Antrenmanı etkilemiyor',
   moderate: 'Bazı hareketlerde zorluyor',
@@ -177,7 +180,8 @@ export type AvoidTagId = (typeof AVOID_TAG_IDS)[number];
 /** Kaçınmanın okuduğu etiket (kütüphane testi ailedeki hareketlerin bunları taşıdığını denetler). */
 export type AvoidReads = keyof ExerciseTags | 'pattern';
 
-export type CareTags = ExerciseTags & { pattern?: MovementPattern | undefined };
+/** Dengeleyici kaslar yalnız el bileği ve dirsek ölçütünde okunur (tutuş; `regionWorked`). */
+export type CareTags = ExerciseTags & { pattern?: MovementPattern | undefined; stabilizerMuscles?: readonly string[] | undefined };
 
 export type AvoidTag = {
   /** PT'ye ("Kaçın: derin diz bükme"). */
@@ -343,9 +347,37 @@ export function avoidMatch(tag: AvoidTagId, tags: CareTags, region: ConstraintRe
   return and(regionGate(tags, region), AVOID_TAGS[tag].match(tags));
 }
 
+/** Dirseği bükenler ve açanlar (hedef ya da yardımcı). */
+const ELBOW_MOVERS: readonly string[] = ['biceps', 'triceps_long', 'triceps_lateral'];
+/** Ön kol: el bileğini hareket ettirir, tutuşu taşır; ortak başlangıçları dirsekte (epikondiller). */
+const FOREARM: readonly string[] = ['forearm_flexors', 'forearm_extensors'];
+/** Kalçayı hareket ettirenler; arka bacak ve ön bacak (iki eklemli) sayılmaz: leg curl ve leg extension kalçayı oynatmaz. */
+const HIP_MOVERS: readonly string[] = ['glutes', 'glute_medius', 'hip_flexors', 'adductors'];
+const HIP_PATTERNS: readonly MovementPattern[] = ['hinge', 'hip_extension', 'hip_abduction', 'hip_adduction'];
+/** Ayak bileğini hareket ettirenler (baldır, kaval önü). */
+const ANKLE_MOVERS: readonly string[] = ['gastroc_medial', 'gastroc_lateral', 'soleus', 'tibialis'];
+/** Ayak yerde, kaval kemiği ayağın üstünde öne gider (yük altında dorsifleksiyon) ya da yükle yürünür. */
+const ANKLE_PATTERNS: readonly MovementPattern[] = ['squat', 'lunge', 'calf_raise', 'carry'];
+/** Vücut ağırlığı ellerin üstünde: kapalı zincir itiş (şınav, dips). */
+const HAND_BEARING_PATTERNS: readonly MovementPattern[] = ['horizontal_push', 'vertical_push'];
+const KNEE_BEND_WINDOWS: readonly string[] = ['knee_flexion_45_90', 'knee_flexion_over_90'];
+
 /**
- * Görüşü alınmamış kırmızı bayrakta "bölgeyi çalıştıran" (§2.6): diz ve omuz `touches()`, omurga ve boyun eksenel
- * yük. Öteki bölgelerde güvenilir ölçüt yok: hayır.
+ * "Bölgeyi çalıştıran" (§2.6): görüşü alınmamış kırmızı bayrakta ve danışanın bakılmamış "şiddetli"sinde
+ * (`severeUnreviewed`) bu hareketler en az dikkat alır. Burada kuşkuda dikkat daha güvenli (bölge kapısından geniş),
+ * ama her ölçüt etiketin açıkça söylediğine dayanır **[sentez]**:
+ * - **diz, omuz:** `touches()` (eklemin pencereleri ya da kasları);
+ * - **omurga (bel, sırt), boyun:** eksenel yük (`axialLoading ∉ {none}`);
+ * - **dirsek:** dirseği büken ya da açan kas hedef/yardımcı, ya da ön kol herhangi bir düzeyde (tutuş, dengeleyici
+ *   dahil: kütüphane ön kolu yalnız tutuşun belirgin olduğu harekette yazar; kavrama epikondil ağrısını zorlar);
+ * - **el bileği:** ön kol herhangi bir düzeyde ya da vücut ağırlığı ellerin üstünde (kapalı zincir yatay/dikey itiş);
+ *   elde taşınan yük (bench'te bar, dambıl pressleri) etiketlerde yok, sayılmaz;
+ * - **kalça:** kalçayı hareket ettiren kas hedef/yardımcı, 90° üstü kalça bükme penceresi ya da kalça kalıbı
+ *   (menteşe, kalça itişi, açma, kapama);
+ * - **ayak bileği:** baldır ya da kaval önü hedef/yardımcı, squat/lunge/baldır/taşıma kalıbı ya da kapalı zincirde
+ *   45° üstü diz bükme;
+ * - **başka bir yer:** ölçüt yok (bölge adı bir eklem söylemez): hayır.
+ * Kas, pencere ve kalıp bilgisi hiç yoksa bilinmiyor (null): dikkat üretilmez.
  */
 export function regionWorked(tags: CareTags, region: ConstraintRegion): boolean | null {
   if (region === 'knee') return touches(tags, 'knee');
@@ -353,7 +385,27 @@ export function regionWorked(tags: CareTags, region: ConstraintRegion): boolean 
   if (region === 'lower_back' || region === 'upper_back' || region === 'neck') {
     return tags.axialLoading === undefined ? null : tags.axialLoading !== 'none';
   }
-  return false;
+  if (region === 'other') return false;
+  const movers = [...(tags.primaryMuscles ?? []), ...(tags.secondaryMuscles ?? [])];
+  const all = [...movers, ...(tags.stabilizerMuscles ?? [])];
+  if (all.length === 0 && tags.pattern === undefined && tags.jointWindows === undefined) return null;
+  const moves = (list: readonly string[]) => movers.some((muscle) => list.includes(muscle));
+  const grips = all.some((muscle) => FOREARM.includes(muscle));
+  const pattern = (list: readonly MovementPattern[]) => tags.pattern !== undefined && list.includes(tags.pattern);
+  switch (region) {
+    case 'elbow':
+      return moves(ELBOW_MOVERS) || grips;
+    case 'wrist_hand':
+      return grips || (tags.kineticChain === 'closed' && pattern(HAND_BEARING_PATTERNS));
+    case 'hip':
+      return moves(HIP_MOVERS) || Boolean(tags.jointWindows?.includes('hip_flexion_over_90')) || pattern(HIP_PATTERNS);
+    case 'ankle_foot':
+      return (
+        moves(ANKLE_MOVERS) ||
+        pattern(ANKLE_PATTERNS) ||
+        (tags.kineticChain === 'closed' && Boolean(tags.jointWindows?.some((window) => KNEE_BEND_WINDOWS.includes(window))))
+      );
+  }
 }
 
 /* --- sınırlar --- */
@@ -409,6 +461,17 @@ export function isEmergency(constraint: Pick<Constraint, 'conditionId'>): boolea
 /** Görüşü alınmamış kırmızı bayrak (yönlendirilmiş olsa da). */
 export function awaitsOpinion(constraint: Constraint): boolean {
   return isActive(constraint) && isRedFlag(constraint) && !constraint.clearance;
+}
+
+/**
+ * Danışanın PT'nin henüz bakmadığı "şiddetli"si (güvenli yön hemen, §2.4) **[sentez]**: onaylı kısıtta "Kötüleşti ·
+ * şiddetli" "Gördüm"e (ya da kapatmaya) kadar; karar bekleyen bildirimde şiddet "şiddetli"yse PT karar verene kadar.
+ * Bu sürece bölgeyi çalıştıran hareket en az dikkat alır (`constraint-filter.ts`), Dikkat maddesi kırmızı ünlemle en
+ * üste yakın durur (`attention.ts`). Arada "Düzeldi" demek bunu kaldırmaz: gevşeten yönü yalnız PT açar.
+ */
+export function severeUnreviewed(constraint: Constraint): boolean {
+  if (isPendingReport(constraint)) return constraint.severity === 'severe';
+  return isActive(constraint) && constraint.clientChange?.severity === 'severe';
 }
 
 /** Yasağına izin verilebilir mi: kırmızı bayrakta görüş alınmadan ve kauda ekinada hayır. */
@@ -983,28 +1046,36 @@ export function withdrawReport(record: HealthRecord, id: string, ctx: { now: str
 const SEVERITY_RANK: Record<Severity, number> = { mild: 1, moderate: 2, severe: 3 };
 
 /**
- * "Kötüleşti" (güvenli yön, hemen yazılır): şiddet görünür, PT'nin Dikkat maddesi doğar. Şiddet yalnız artar.
+ * "Kötüleşti" (güvenli yön, hemen yazılır): şiddet görünür, PT'nin Dikkat maddesi doğar. Şiddet yalnız artar. PT
+ * bakmadan ikinci kez kötüleşirse başlangıç ilk bakılmamış şiddettir ("hafif → şiddetli", aradaki "orta" değil).
  */
 export function reportWorse(record: HealthRecord, id: string, severity: Severity, ctx: { now: string }): HealthRecord {
   const { list, index, constraint } = findConstraint(record, id);
   if (!isActive(constraint)) throw new ConstraintError('Bu kısıt artık etkin değil.', 409);
   const before = constraint.severity;
   if (before && SEVERITY_RANK[severity] <= SEVERITY_RANK[before]) throw new ConstraintError('Şiddet şimdikinden yüksek olmalı.', 400);
+  const pending = constraint.clientChange && !constraint.clientChange.resolved ? constraint.clientChange : null;
+  const origin = pending ? pending.previousSeverity : before;
   const next: Constraint = {
     ...constraint,
     severity,
-    clientChange: { at: ctx.now, severity, ...(before ? { previousSeverity: before } : {}) },
+    clientChange: { at: ctx.now, severity, ...(origin ? { previousSeverity: origin } : {}) },
     updatedAt: ctx.now,
   };
   const from = before ? `${SEVERITY_LABELS[before].toLocaleLowerCase('tr')} → ` : '';
   return log(replaceAt(record, list, index, next), ctx.now, 'client', id, 'worsened', `${regionText(next)}: ${from}${SEVERITY_LABELS[severity].toLocaleLowerCase('tr')} (danışan)`);
 }
 
-/** "Düzeldi": kısıt PT onaylayana kadar kapanmaz (gevşeten yön). */
+/**
+ * "Düzeldi": kısıt PT onaylayana kadar kapanmaz (gevşeten yön). PT'nin bakmadığı bir kötüleşme varsa şiddeti
+ * güncellemede kalır: "şiddetli"nin dikkati "Düzeldi" ile değil PT'nin kararıyla kalkar (`severeUnreviewed`).
+ */
 export function reportBetter(record: HealthRecord, id: string, ctx: { now: string }): HealthRecord {
   const { list, index, constraint } = findConstraint(record, id);
   if (!isActive(constraint)) throw new ConstraintError('Bu kısıt artık etkin değil.', 409);
-  const next: Constraint = { ...constraint, clientChange: { at: ctx.now, resolved: true }, updatedAt: ctx.now };
+  const worse = constraint.clientChange?.severity ? constraint.clientChange : null;
+  const carried = worse ? { severity: worse.severity, ...(worse.previousSeverity ? { previousSeverity: worse.previousSeverity } : {}) } : {};
+  const next: Constraint = { ...constraint, clientChange: { at: ctx.now, resolved: true, ...carried }, updatedAt: ctx.now };
   return log(replaceAt(record, list, index, next), ctx.now, 'client', id, 'improved', `${regionText(next)}: düzeldi dedi (danışan)`);
 }
 
@@ -1097,6 +1168,8 @@ export function constraintCounts(record: Pick<HealthRecord, 'constraints' | 'con
   pending: number;
   changes: number;
   awaiting: number;
+  /** Danışanın PT'nin bakmadığı "şiddetli"si (onaylıda kötüleşme ya da şiddetli bildirim). */
+  severe: number;
 } {
   const list = constraintsOf(record);
   return {
@@ -1104,6 +1177,7 @@ export function constraintCounts(record: Pick<HealthRecord, 'constraints' | 'con
     pending: list.filter(isPendingReport).length,
     changes: list.filter((item) => isActive(item) && item.clientChange).length,
     awaiting: list.filter(awaitsOpinion).length,
+    severe: list.filter(severeUnreviewed).length,
   };
 }
 

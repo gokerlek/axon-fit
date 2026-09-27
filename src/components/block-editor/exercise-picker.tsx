@@ -1,7 +1,7 @@
 'use client';
 
 import { useDeferredValue, useMemo, useState } from 'react';
-import { Check, MagnifyingGlass, Plus, WarningCircle } from '@phosphor-icons/react';
+import { Check, MagnifyingGlass, PersonSimpleTaiChi, Plus, WarningCircle } from '@phosphor-icons/react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -89,17 +89,20 @@ export function ExercisePicker({
   const deferredQuery = useDeferredValue(query);
   const replacing = mode === 'replace';
 
+  // Danışanın kendi programında izinsiz yasaklı hareket hiç listelenmez, aramada da bulunmaz (`kisit-tarama.md` §3.7).
+  const available = useMemo(() => exercises.filter((exercise) => !exercise.blocked), [exercises]);
+
   const results = useMemo(() => {
     const muscles = MUSCLE_GROUPS.find((item) => item.id === group)?.muscles ?? null;
-    const pool = muscles ? exercises.filter((exercise) => muscles.some((muscle) => works(exercise, muscle))) : exercises;
+    const pool = muscles ? available.filter((exercise) => muscles.some((muscle) => works(exercise, muscle))) : available;
     return searchExercises(pool, deferredQuery, muscleNames);
-  }, [exercises, deferredQuery, group]);
+  }, [available, deferredQuery, group]);
 
   const suggestions = useMemo(() => {
     if (!replacing || !suggestFor) return [];
-    const source = exercises.find((exercise) => exercise.id === suggestFor);
-    return source ? exerciseAlternatives(source, exercises, 6).map((item) => item.exercise) : [];
-  }, [replacing, suggestFor, exercises]);
+    const original = exercises.find((exercise) => exercise.id === suggestFor);
+    return original ? exerciseAlternatives(original, available, 6).map((item) => item.exercise) : [];
+  }, [replacing, suggestFor, exercises, available]);
 
   const locked = disabled && !replacing;
   // Kısıt varken yaptırma alanlar listenin sonunda katlanmış grupta (kaybolmaz; arama onları da bulur).
@@ -113,14 +116,25 @@ export function ExercisePicker({
     const device = exercise.deviceId ? devices.get(exercise.deviceId)?.name : undefined;
     const verb = replacing ? 'seç' : 'ekle';
     const flag = flagOf(exercise);
-    const reason = flag?.decision ? flag.messages.join(' · ') : null;
+    // Taramanın açık ağrısı kalıbındaki harekete dikkat ekler (yasak değil); bilgi rozeti ayrı satırda (§4.6).
+    const mark = care && !replacing ? care.screening?.[exercise.id] : undefined;
+    const reasons = [...(flag?.decision ? flag.messages : []), ...(mark?.pain ?? [])];
+    const reason = reasons.length > 0 ? reasons.join(' · ') : null;
+    const tone = flag?.decision === 'cue' && !mark?.pain.length ? 'İpucu' : 'Dikkat';
     return (
       <Item
         key={exercise.id}
         variant="outline"
         size="sm"
         className="flex-nowrap text-left hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
-        render={<button type="button" disabled={locked} aria-label={`${exercise.title} ${verb}${reason ? ` · ${reason}` : ''}`} onClick={() => onPick(exercise)} />}>
+        render={
+          <button
+            type="button"
+            disabled={locked}
+            aria-label={`${exercise.title} ${verb}${reason ? ` · ${tone}: ${reason}` : ''}${mark?.info ? ` · ${mark.info.label}` : ''}`}
+            onClick={() => onPick(exercise)}
+          />
+        }>
         <ItemContent className="min-w-0">
           <ItemTitle className="w-full truncate">{exercise.title}</ItemTitle>
           <ItemDescription className="truncate text-xs">
@@ -130,9 +144,15 @@ export function ExercisePicker({
             <p title={reason} className="line-clamp-2 flex items-start gap-1 text-xs text-primary-text">
               <WarningCircle weight="fill" aria-hidden className="mt-px size-3.5 shrink-0" />
               <span>
-                {flag?.decision === 'cue' ? 'İpucu' : 'Dikkat'} · {reason}
+                {tone} · {reason}
               </span>
             </p>
+          ) : null}
+          {mark?.info ? (
+            <Badge variant="outline" title={mark.info.detail} className="max-w-full justify-start font-normal text-muted-foreground">
+              <PersonSimpleTaiChi weight="fill" aria-hidden />
+              <span className="truncate">{mark.info.label}</span>
+            </Badge>
           ) : null}
         </ItemContent>
         <ItemActions>

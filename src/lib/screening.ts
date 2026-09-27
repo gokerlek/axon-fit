@@ -51,7 +51,13 @@ export type ScreeningTest = {
   setup: string;
   points: readonly ScreeningPoint[];
   easier: string;
+  /** İpucunun "Kütüphanende aynı kalıptan"ı ve düzenleyicinin tarama rozeti (geniş eşleşme). */
   patterns: readonly MovementPattern[];
+  /**
+   * Gözden geçirilmemiş ağrıda düzenleyicide dikkat alan kalıplar (§4.6, faz 6) **[sentez]**: testin yüklediği
+   * kalıbın kendisi, `patterns`'tan dar (menteşe ağrısı kalça itişini, ters kürek ağrısı dikey çekişi dikkatli yapmaz).
+   */
+  painPatterns: readonly MovementPattern[];
   /** Etkin kısıt bu bölgelerdeyse: görüşü alınmamış kırmızı bayrakta "Yapılmadı (kısıt)" hazır gelir, asimetri bastırılır. */
   regions: readonly ConstraintRegion[];
   /** "Kısıt olarak ekle": önerilen bölge ve kaçınma. */
@@ -79,6 +85,7 @@ export const SCREENING_TESTS: Record<ScreeningTestId, ScreeningTest> = {
     ],
     easier: 'Diz hizasındaki kutuya otur-kalk, kollar önde.',
     patterns: ['squat'],
+    painPatterns: ['squat'],
     regions: ['knee', 'hip', 'ankle_foot'],
     constraintRegion: 'knee',
     avoid: 'deep_knee_flexion',
@@ -100,6 +107,7 @@ export const SCREENING_TESTS: Record<ScreeningTestId, ScreeningTest> = {
     ],
     easier: 'Kalçayla arkadaki duvara dokunma (duvar 15–20 cm geride).',
     patterns: ['hinge', 'hip_extension'],
+    painPatterns: ['hinge'],
     regions: ['lower_back'],
     constraintRegion: 'lower_back',
     avoid: 'forward_bend',
@@ -123,6 +131,7 @@ export const SCREENING_TESTS: Record<ScreeningTestId, ScreeningTest> = {
     ],
     easier: 'Bir elle duvara ya da çubuğa tutunarak.',
     patterns: ['lunge'],
+    painPatterns: ['lunge'],
     regions: ['knee', 'hip', 'ankle_foot'],
     constraintRegion: 'knee',
     avoid: 'deep_knee_flexion',
@@ -145,6 +154,7 @@ export const SCREENING_TESTS: Record<ScreeningTestId, ScreeningTest> = {
     ],
     easier: 'Parmak ucuyla duvara hafifçe dokunarak.',
     patterns: ['lunge'],
+    painPatterns: ['lunge'],
     regions: ['knee', 'hip', 'ankle_foot'],
     constraintRegion: 'knee',
     regress: ['makine-kalca-acma', 'glute-bridge'],
@@ -165,6 +175,7 @@ export const SCREENING_TESTS: Record<ScreeningTestId, ScreeningTest> = {
     ],
     easier: 'Eller sehpada (kalça hizasında).',
     patterns: ['horizontal_push'],
+    painPatterns: ['horizontal_push'],
     regions: ['shoulder'],
     constraintRegion: 'shoulder',
     avoid: 'behind_body',
@@ -186,6 +197,7 @@ export const SCREENING_TESTS: Record<ScreeningTestId, ScreeningTest> = {
     ],
     easier: 'Daha dik açı (gövde ~70°).',
     patterns: ['horizontal_pull', 'vertical_pull'],
+    painPatterns: ['horizontal_pull'],
     regions: ['shoulder'],
     constraintRegion: 'shoulder',
     regress: ['gogus-destekli-row', 'oturarak-kablo-row'],
@@ -207,6 +219,7 @@ export const SCREENING_TESTS: Record<ScreeningTestId, ScreeningTest> = {
     ],
     easier: 'Ayakta geniş duruş, daha hafif direnç.',
     patterns: ['anti_rotation', 'core_stability'],
+    painPatterns: ['anti_rotation'],
     regions: [],
     constraintRegion: 'lower_back',
     regress: ['dead-bug', 'bird-dog'],
@@ -228,6 +241,7 @@ export const SCREENING_TESTS: Record<ScreeningTestId, ScreeningTest> = {
     ],
     easier: 'Sırtüstü yatarak (bel yerde).',
     patterns: ['vertical_push'],
+    painPatterns: ['vertical_push', 'vertical_pull'],
     regions: ['shoulder'],
     constraintRegion: 'shoulder',
     avoid: 'overhead',
@@ -239,8 +253,10 @@ export const SCREENING_TESTS: Record<ScreeningTestId, ScreeningTest> = {
 
 /** Tek ayak dengede `time` noktası süreden hesaplanır (< 30 sn → kaçtı) **[sentez]**. */
 export const BALANCE_SECONDS = 30;
-/** Ön uzanmada bu kadar fark "büyük asimetri" (Plisky 2006). */
+/** Ön uzanmada 4 cm’yi aşan ham fark büyük asimetridir (Plisky 2006); tam 4 cm ve yüzde farkı bu eşik değildir. */
 export const REACH_ASYMMETRY_CM = 4;
+/** Bacak boyunun kabul edilen aralığı (cm; ASIS → iç ayak bileği kemiği, yetişkin ve genç). */
+export const LEG_LENGTH_CM = { min: 30, max: 150 } as const;
 /** Asimetri Dikkat maddesi son tarama bu kadar günden eskiyse düşer. */
 export const SCREENING_ALERT_DAYS = 28;
 /** Kayıtta en çok tarama günü (en eskisi yalnız git'te kalır). */
@@ -379,7 +395,8 @@ function cleanText(value: string | undefined, max: number): string | undefined {
 
 /**
  * Formdan gelen tarafı kayda çevirir: ağrıda yalnız ağrı ve notu (sürüm, noktalar, süre düşer); yapılmadıda
- * neden; yapılamadıda noktasız; bilinmeyen noktalar düşer; dengede süre ve uzanma yalnız o testte. Boşsa undefined.
+ * neden; yapılamadıda noktasız; bilinmeyen noktalar düşer; dengede süre, uzanma ve bacak boyu yalnız o testte.
+ * Boşsa undefined.
  */
 export function normalizeSide(testId: ScreeningTestId, entry: ScreeningSide | undefined): ScreeningSide | undefined {
   if (!entry) return undefined;
@@ -393,9 +410,13 @@ export function normalizeSide(testId: ScreeningTestId, entry: ScreeningSide | un
   const balance = testId === 'single_leg_balance';
   const seconds = balance && entry.seconds !== undefined ? Math.min(Math.max(Math.round(entry.seconds), 0), 300) : undefined;
   const reachCm = balance && entry.reachCm !== undefined ? Math.min(Math.max(Math.round(entry.reachCm * 10) / 10, 0), 250) : undefined;
-  const base: ScreeningSide = { result: entry.result, ...(seconds !== undefined ? { seconds } : {}), ...(reachCm !== undefined ? { reachCm } : {}) };
-  const missed = [...new Set(effectiveMissed(testId, { ...entry, ...base }))];
-  return { result: base.result, missed, ...(seconds !== undefined ? { seconds } : {}), ...(reachCm !== undefined ? { reachCm } : {}) };
+  const legCm =
+    balance && entry.legCm !== undefined
+      ? Math.min(Math.max(Math.round(entry.legCm * 10) / 10, LEG_LENGTH_CM.min), LEG_LENGTH_CM.max)
+      : undefined;
+  const measures = { ...(seconds !== undefined ? { seconds } : {}), ...(reachCm !== undefined ? { reachCm } : {}), ...(legCm !== undefined ? { legCm } : {}) };
+  const missed = [...new Set(effectiveMissed(testId, { ...entry, ...measures }))];
+  return { result: entry.result, missed, ...measures };
 }
 
 /** Bütün testleri temizler; boş testler kayda girmez. */
@@ -475,7 +496,7 @@ export function withPainReviewed(record: HealthRecord, date: string, key: string
 
 /* --- kısıtlar --- */
 
-type SideSuppress = (testId: ScreeningTestId, side: SideKey) => boolean;
+export type SideSuppress = (testId: ScreeningTestId, side: SideKey) => boolean;
 
 function constraintTouches(constraint: Constraint, testId: ScreeningTestId, side: SideKey): boolean {
   const test = SCREENING_TESTS[testId];
@@ -505,6 +526,37 @@ export function constraintSuppress(constraints: readonly Constraint[]): SideSupp
   return (testId, side) => active.some((constraint) => constraintTouches(constraint, testId, side));
 }
 
+/* --- ön uzanma ve bacak boyu --- */
+
+/**
+ * Tarafın bacak boyu (cm): kendi ölçümü, yoksa öbür tarafınki **[sentez]**: bacak boyu çoğu zaman bir kez ölçülür
+ * ve iki bacak arasındaki fark ön uzanmanın yüzdesini ancak ondalıkta oynatır; belirgin fark varsa PT iki tarafı
+ * ayrı girer.
+ */
+export function legLengthOf(tests: Pick<ScreeningTests, 'single_leg_balance'>, side: 'left' | 'right'): number | undefined {
+  const test = tests.single_leg_balance;
+  const other = side === 'left' ? 'right' : 'left';
+  return test?.[side]?.legCm ?? test?.[other]?.legCm;
+}
+
+/**
+ * Ön uzanmanın bacak boyuna oranı (%, bir ondalık): Plisky 2006 uzanmayı ASIS → iç ayak bileği kemiği boyuna böler
+ * (boylu danışan kısa danışandan doğal olarak uzağa uzanır). Yalnız gösterim ve karşılaştırma içindir: kaynaklı eşik
+ * yok (Plisky'nin %94'ü üç yönün bileşiğidir, bu protokolde yalnız ön yön var); büyük asimetri ham farkla (> 4 cm).
+ */
+export function reachPercent(reachCm: number | undefined, legCm: number | undefined): number | undefined {
+  if (reachCm === undefined || legCm === undefined || legCm <= 0) return undefined;
+  return Math.round((reachCm / legCm) * 1000) / 10;
+}
+
+/** Tarafın ön uzanması: ham cm ve (bacak boyu varsa) yüzdesi. */
+export function reachOf(tests: Pick<ScreeningTests, 'single_leg_balance'>, side: 'left' | 'right'): { cm: number; percent?: number } | null {
+  const cm = tests.single_leg_balance?.[side]?.reachCm;
+  if (cm === undefined || outcomeOf('single_leg_balance', tests.single_leg_balance?.[side]) === 'pain') return null;
+  const percent = reachPercent(cm, legLengthOf(tests, side));
+  return { cm, ...(percent !== undefined ? { percent } : {}) };
+}
+
 /* --- asimetri, ağrı, karşılaştırma --- */
 
 export type Asymmetry = {
@@ -516,13 +568,15 @@ export type Asymmetry = {
   right: Outcome;
   /** Ön uzanma farkı (cm), yalnız dengede ve ikisi de girildiyse. */
   reachDiff?: number;
+  /** Ön uzanma farkı, bacak boyunun yüzdesi olarak (bilgi; eşik değil). */
+  reachPercentDiff?: number;
   /** Zayıf taraf (sıraya, eşitse uzanmaya göre). */
   weaker: 'left' | 'right';
 };
 
 /**
  * İki taraflı testlerde asimetri (§4.4): iç sıra farkı 1 → asimetri, ≥ 2 → büyük asimetri **[sentez]**; ön uzanma
- * farkı ≥ 4 cm → büyük (Plisky 2006). Ağrılı, yapılmamış ya da bastırılan taraf girmez.
+ * farkı > 4 cm → büyük (Plisky 2006). Ağrılı, yapılmamış ya da bastırılan taraf girmez.
  */
 export function asymmetries(screening: Pick<Screening, 'tests'>, suppress: SideSuppress = () => false): Asymmetry[] {
   const list: Asymmetry[] = [];
@@ -537,10 +591,22 @@ export function asymmetries(screening: Pick<Screening, 'tests'>, suppress: SideS
     if (lr === null || rr === null || !lo || !ro || suppress(testId, 'left') || suppress(testId, 'right')) continue;
     const gap = Math.abs(lr - rr);
     const reachDiff = left?.reachCm !== undefined && right?.reachCm !== undefined ? Math.round(Math.abs(left.reachCm - right.reachCm) * 10) / 10 : undefined;
-    const major = gap >= 2 || (reachDiff !== undefined && reachDiff >= REACH_ASYMMETRY_CM);
+    const major = gap >= 2 || (reachDiff !== undefined && reachDiff > REACH_ASYMMETRY_CM);
     if (gap === 0 && !major) continue;
     const weaker = lr !== rr ? (lr < rr ? 'left' : 'right') : (left?.reachCm ?? 0) < (right?.reachCm ?? 0) ? 'left' : 'right';
-    list.push({ testId, kind: major ? 'major' : 'minor', gap, left: lo, right: ro, ...(reachDiff !== undefined ? { reachDiff } : {}), weaker });
+    const lp = testId === 'single_leg_balance' ? reachOf(screening.tests, 'left')?.percent : undefined;
+    const rp = testId === 'single_leg_balance' ? reachOf(screening.tests, 'right')?.percent : undefined;
+    const reachPercentDiff = lp !== undefined && rp !== undefined ? Math.round(Math.abs(lp - rp) * 10) / 10 : undefined;
+    list.push({
+      testId,
+      kind: major ? 'major' : 'minor',
+      gap,
+      left: lo,
+      right: ro,
+      ...(reachDiff !== undefined ? { reachDiff } : {}),
+      ...(reachPercentDiff !== undefined ? { reachPercentDiff } : {}),
+      weaker,
+    });
   }
   return list;
 }
@@ -564,6 +630,39 @@ export function painCells(screening: Pick<Screening, 'tests' | 'painReviewedAt'>
       ...(cell.entry.painNote ? { note: cell.entry.painNote } : {}),
       reviewed: Boolean(screening.painReviewedAt?.[cell.key]),
     }));
+}
+
+export type DatedPain = PainCell & { date: string };
+export type PainState = 'open' | 'reviewed' | 'resolved' | 'superseded';
+export type PainRow = DatedPain & { state: PainState; /** Ağrısız ya da yeniden ağrılı test edildiği sonraki tarama. */ laterDate?: string };
+
+/**
+ * Ağrı bayrağı taramalar boyunca (§4.4) **[sentez]**. Bir ağrının durumunu aynı testi ve tarafı **sonradan test eden
+ * ilk** tarama verir ("Yapılmadı" ve girilmemiş test sayılmaz):
+ * - sonra test edilmediyse ağrı "Gördüm"e kadar **açıktır** (Dikkat, uyarılar, düzenleyicide dikkat): yeni tarama
+ *   o testi yapmadıysa ağrıyı hiç sormamıştır;
+ * - sonraki test ağrısızsa gözden geçirilmemiş ağrı kendiliğinden kapanır: **ağrı geçti** (`resolved`);
+ * - sonraki test de ağrılıysa yenisi geçer (`superseded`: aynı ağrı iki kez sayılmaz, yeninin "Gördüm"ü eskiyi de
+ *   kapatır).
+ * `rows` bütün ağrılı hücreler (en yeni tarama önce), `open` yalnız açıklar. Farklı protokoller karşılaştırılmaz.
+ */
+export function painHistory(screenings: readonly Screening[]): { rows: PainRow[]; open: PainRow[] } {
+  const list = newestFirst(screenings).filter((item) => item.protocol === SCREENING_PROTOCOL);
+  const rows: PainRow[] = [];
+  /** Anahtar → daha yeni taramalardan onu test eden en eskisi (yürüyüş yeniden eskiye). */
+  const later = new Map<string, { date: string; pain: boolean }>();
+  for (const screening of list) {
+    const pains = new Map(painCells(screening).map((cell) => [cell.key, cell]));
+    for (const [key, cell] of pains) {
+      const next = later.get(key);
+      const state: PainState = next ? (next.pain ? 'superseded' : 'resolved') : cell.reviewed ? 'reviewed' : 'open';
+      rows.push({ ...cell, date: screening.date, state, ...(next ? { laterDate: next.date } : {}) });
+    }
+    for (const cell of cellsOf(screening)) {
+      if (cell.outcome !== 'not_tested') later.set(cell.key, { date: screening.date, pain: cell.outcome === 'pain' });
+    }
+  }
+  return { rows, open: rows.filter((row) => row.state === 'open') };
 }
 
 /** Testin yalın adı ("Kalça menteşesi"; kurulum ekinin öncesi). */
@@ -701,9 +800,14 @@ export type ClientScreeningRow = {
 
 /**
  * Danışanın Sağlık sayfasındaki tarama (§5.2): sözcük, taraf, önceki taramaya göre ok ve en çok bir odak (kaçan
- * ilk noktanın danışan dilindeki karşılığı). Sayı ve toplam yok.
+ * ilk noktanın danışan dilindeki karşılığı). Sayı ve toplam yok. `labels`: PT'nin İlerleme kartında tarama sayfasının
+ * sözcükleri (`OUTCOME_LABELS`).
  */
-export function clientScreeningRows(screening: Pick<Screening, 'tests'>, previous: Screening | null): ClientScreeningRow[] {
+export function clientScreeningRows(
+  screening: Pick<Screening, 'tests'>,
+  previous: Screening | null,
+  labels: Record<Outcome, string> = OUTCOME_CLIENT_LABELS,
+): ClientScreeningRow[] {
   const rows: ClientScreeningRow[] = [];
   for (const testId of SCREENING_TEST_IDS) {
     const test = SCREENING_TESTS[testId];
@@ -713,7 +817,7 @@ export function clientScreeningRows(screening: Pick<Screening, 'tests'>, previou
       const compared = compareCell(cell.outcome, previousOutcome(previous, testId, cell.side));
       const change: 'up' | 'down' | null =
         compared?.change === 'up' || compared?.change === 'pain_gone' ? 'up' : compared?.change === 'down' ? 'down' : null;
-      return { side: cell.side, label: SIDE_KEY_LABELS[cell.side], text: OUTCOME_CLIENT_LABELS[cell.outcome], outcome: cell.outcome, change };
+      return { side: cell.side, label: SIDE_KEY_LABELS[cell.side], text: labels[cell.outcome], outcome: cell.outcome, change };
     });
     const focusCell = cells.find((cell) => cell.outcome === 'compensated' || cell.outcome === 'easier');
     const focusId = focusCell ? effectiveMissed(testId, focusCell.entry)[0] : undefined;
@@ -721,4 +825,26 @@ export function clientScreeningRows(screening: Pick<Screening, 'tests'>, previou
     rows.push({ testId, title: testName(testId), sides, ...(focus ? { focus } : {}) });
   }
   return rows;
+}
+
+/* --- İlerleme'de tarama kartı (faz 6) --- */
+
+export type ProgressScreening = {
+  date: string;
+  /** Okların karşılaştırıldığı önceki tarama (aynı protokol); yoksa null. */
+  previousDate: string | null;
+  rows: ClientScreeningRow[];
+};
+
+/**
+ * İlerleme'deki tarama kartı (§6, faz 6): en yeni tarama sözcükle, önceki taramaya göre ↑ ↓ ve odak; puan, sayı ve
+ * toplam yok. Danışana Sağlık sayfasındaki metinler (`OUTCOME_CLIENT_LABELS`), PT'ye tarama sayfasının sözcükleri
+ * (`OUTCOME_LABELS`). Eski biçimdeki tarama (başka protokol) sayılmaz; tarama yoksa null.
+ */
+export function progressScreening(screenings: readonly Screening[] | undefined, viewer: 'client' | 'pt'): ProgressScreening | null {
+  const list = newestFirst(screenings ?? []).filter((item) => item.protocol === SCREENING_PROTOCOL);
+  const latest = list[0];
+  if (!latest) return null;
+  const previous = list[1] ?? null;
+  return { date: latest.date, previousDate: previous?.date ?? null, rows: clientScreeningRows(latest, previous, viewer === 'pt' ? OUTCOME_LABELS : OUTCOME_CLIENT_LABELS) };
 }

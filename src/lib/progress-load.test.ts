@@ -149,7 +149,7 @@ describe('İlerleme okuması', () => {
           return 3;
         },
       }),
-      { id: 'c_test', health: { readiness: true, pain: true, measurements: true } },
+      { id: 'c_test', health: { readiness: true, pain: true, measurements: true, screening: false } },
       now,
       today,
     );
@@ -157,11 +157,33 @@ describe('İlerleme okuması', () => {
     assert.equal(reads, 0);
     assert.equal(gh.calls.includes('read water.json'), false);
   });
+
+  test('antrenman yokken tarama onaylıysa sağlık kaydı okunur (tarama antrenmandan önce yapılabilir); öteki okumalar yok', async () => {
+    const gh = fakeSessionRepo();
+    let reads = 0;
+    const screening = { date: '2026-09-12', protocol: 1 as const, tests: { squat: { result: 'standard' as const, missed: [] } } };
+    const result = await loadProgressWith(
+      deps(gh, {
+        health: async () => {
+          reads += 1;
+          return { version: 2, checkIns: [], measurements: [], screenings: [screening] };
+        },
+      }),
+      { id: 'c_test', health: { readiness: true, pain: true, measurements: true, screening: true } },
+      now,
+      today,
+    );
+    assert.equal(reads, 1);
+    assert.equal(gh.calls.includes('read water.json'), false);
+    assert.ok(result.status === 'ok' && result.insights.screening.state === 'ok');
+    if (result.status !== 'ok' || result.insights.screening.state !== 'ok') return;
+    assert.deepEqual(result.insights.screening.screenings.map((item) => item.date), ['2026-09-12']);
+  });
 });
 
 describe('grafik bölümünün okumaları', () => {
-  const all = { readiness: true, pain: true, measurements: true };
-  const none = { readiness: false, pain: false, measurements: false };
+  const all = { readiness: true, pain: true, measurements: true, screening: true };
+  const none = { readiness: false, pain: false, measurements: false, screening: false };
   const record = { conditions: [], checkIns: [{ date: '2026-09-15', readiness: { sleep: 4, energy: 4, soreness: 4, stress: 4 }, painBaseline: 2 }], measurements: [], movementScreens: [] };
   const withEffort = [
     finished('s_aaaaaaa1', '2026-09-01', 60, { effort: { sessionRpe: 6, updatedAt: '2026-09-01T16:10:00.000Z' } }),
@@ -188,7 +210,10 @@ describe('grafik bölümünün okumaları', () => {
     assert.equal(result.status, 'ok');
     if (result.status !== 'ok') return;
     assert.equal(healthReads, 0);
-    assert.deepEqual([result.insights.readiness, result.insights.pain, result.insights.circumference], [{ state: 'off' }, { state: 'off' }, { state: 'off' }]);
+    assert.deepEqual(
+      [result.insights.readiness, result.insights.pain, result.insights.circumference, result.insights.screening],
+      [{ state: 'off' }, { state: 'off' }, { state: 'off' }, { state: 'off' }],
+    );
     assert.deepEqual(result.insights.rpe, [
       { date: '2026-09-01', value: 6 },
       { date: '2026-09-15', value: 8 },

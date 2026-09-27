@@ -12,7 +12,7 @@ import { readAppConfig } from '@/lib/config';
 import { careInputOf, evaluateCare, hasCare } from '@/lib/constraint-filter';
 import { AVOID_TAGS, constraintsOf, isPaired, regionText } from '@/lib/constraints';
 import { listExercises } from '@/lib/exercises';
-import { formatDay, formatNumber, todayIn } from '@/lib/format';
+import { formatDay, formatNumber, formatWithUnit, todayIn } from '@/lib/format';
 import { requirePt } from '@/lib/guards';
 import { loadHealthPart } from '@/lib/health';
 import type { Client } from '@/lib/schemas/client';
@@ -27,8 +27,9 @@ import {
   newestFirst,
   OUTCOME_LABELS,
   outcomeOf,
-  painCells,
+  painHistory,
   previousOutcome,
+  reachOf,
   SCREENING_PROTOCOL,
   SCREENING_TEST_IDS,
   SCREENING_TESTS,
@@ -50,7 +51,12 @@ export const metadata: Metadata = { title: 'Tarama' };
 
 const CHANGE_TEXT: Record<Change, string> = { up: '↑', down: '↓', same: '=', new: 'yeni', pain_new: 'yeni ağrı', pain_gone: 'ağrı geçti' };
 
-/** Hücrenin metni: sözcük; telafide kaçan noktalar; dengede süre ve uzanma. */
+/** Ön uzanma: ham cm ve bacak boyu girildiyse yüzdesi ("64 cm (%71,1)"; Plisky 2006). */
+function reachText(reach: { cm: number; percent?: number }): string {
+  return `${formatNumber(reach.cm)} cm${reach.percent !== undefined ? ` (${formatWithUnit(reach.percent, '%')})` : ''}`;
+}
+
+/** Hücrenin metni: sözcük; telafide kaçan noktalar; dengede süre ve uzanma (bacak boyuna göre yüzdesiyle). */
 function cellText(testId: ScreeningTestId, screening: Screening, side: SideKey): string {
   const entry = sideEntry(screening.tests, testId, side);
   const outcome = outcomeOf(testId, entry);
@@ -62,16 +68,29 @@ function cellText(testId: ScreeningTestId, screening: Screening, side: SideKey):
     if (missed.length > 0) parts.push(missed.join(', '));
   }
   if (entry.seconds !== undefined) parts.push(`${formatNumber(entry.seconds)} sn`);
-  if (entry.reachCm !== undefined) parts.push(`${formatNumber(entry.reachCm)} cm`);
+  const reach = side !== 'center' && testId === 'single_leg_balance' ? reachOf(screening.tests, side) : null;
+  if (reach) parts.push(reachText(reach));
+  const leg = side !== 'center' && testId === 'single_leg_balance' && entry.legCm !== undefined ? entry.legCm : undefined;
+  if (leg !== undefined) parts.push(`bacak ${formatNumber(leg)} cm`);
   return parts.join(' · ');
+}
+
+/** Ön uzanmanın önceki taramaya göre değişimi ("uzanma 61 → 64 cm (%68,5 → %71,9)"); ikisinde de yoksa boş. */
+function reachChange(current: Screening, previous: Screening, side: 'left' | 'right'): string {
+  const now = reachOf(current.tests, side);
+  const before = previous.protocol === SCREENING_PROTOCOL ? reachOf(previous.tests, side) : null;
+  if (!now || !before) return '';
+  const percent = now.percent !== undefined && before.percent !== undefined ? ` (${formatWithUnit(before.percent, '%')} → ${formatWithUnit(now.percent, '%')})` : '';
+  return `uzanma ${formatNumber(before.cm)} → ${formatNumber(now.cm)} cm${percent}`;
 }
 
 function changeText(testId: ScreeningTestId, current: Screening, previous: Screening | null): string {
   if (!previous) return '';
   const parts = sidesOf(testId).flatMap((side) => {
     const compared = compareCell(outcomeOf(testId, sideEntry(current.tests, testId, side)), previousOutcome(previous, testId, side));
-    if (!compared) return [];
-    const text = `${CHANGE_TEXT[compared.change]}${compared.significant ? ' (belirgin)' : ''}`;
+    const reach = testId === 'single_leg_balance' && side !== 'center' ? reachChange(current, previous, side) : '';
+    if (!compared && !reach) return [];
+    const text = [compared ? `${CHANGE_TEXT[compared.change]}${compared.significant ? ' (belirgin)' : ''}` : '', reach].filter(Boolean).join(', ');
     return [side === 'center' ? text : `${side === 'left' ? 'sol' : 'sağ'} ${text}`];
   });
   return parts.join(' · ');
@@ -130,7 +149,12 @@ async function Overview({ client, record, today, query }: { client: Client; reco
   // Kısıtlar yalnız onaylıysa asimetriyi bastırır ve "Kısıt olarak ekle" çıkar.
   const constraints = conditionsConsent ? constraintsOf(record) : [];
   const suppress = constraintSuppress(constraints);
-  const pains = painCells(current);
+  // Ağrı taramalar boyunca (`painHistory`, §4.4): bu günün ağrıları durumlarıyla; en yeni taramada, sonra test
+  // edilmediği için açık kalan eski ağrılar da; bu taramada ağrısız test edilip kapanan eski ağrılar "ağrı geçti".
+  const history = painHistory(record.screenings ?? []);
+  const newest = current.date === list[0]!.date;
+  const pains = [...history.rows.filter((row) => row.date === current.date), ...(newest ? history.open.filter((row) => row.date !== current.date) : [])];
+  const gone = history.rows.filter((row) => row.state === 'resolved' && row.laterDate === current.date);
   const asymmetry = majorAsymmetry(current, suppress);
   const exercises = await listExercises();
   const titles = new Map(exercises.map((exercise) => [exercise.id, exercise.title]));
@@ -150,28 +174,40 @@ async function Overview({ client, record, today, query }: { client: Client; reco
         <CompareSelect dates={list.map((item) => item.date)} current={current.date} previous={previous?.date ?? null} />
       </div>
 
-      {pains.length > 0 || asymmetry ? (
+      {pains.length > 0 || gone.length > 0 || asymmetry ? (
         <Card>
           <CardHeader>
             <CardTitle>Uyarılar</CardTitle>
-            <CardDescription>Ağrılı test öneri üretmez: önce değerlendirme. Asimetri risk değil, öncelik içindir.</CardDescription>
+            <CardDescription>
+              Ağrılı test öneri üretmez: önce değerlendirme. Ağrı, o test sonra ağrısız yapılana ya da &quot;Gördüm&quot; diyene kadar açık kalır. Asimetri
+              risk değil, öncelik içindir.
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 text-sm">
             {pains.map((cell) => {
               const test = SCREENING_TESTS[cell.testId];
               const draft = constraintFromCell(cell.testId, cell.side);
               const suggestion = `${regionText(draft)}${draft.avoid[0] ? ` · kaçın: ${AVOID_TAGS[draft.avoid[0]].label.toLocaleLowerCase('tr')}` : ''}`;
+              const carried = cell.date !== current.date;
               return (
-                <div key={cell.key} className="flex flex-col gap-2 rounded-lg border p-3">
+                <div key={`${cell.date}:${cell.key}`} className="flex flex-col gap-2 rounded-lg border p-3">
                   <p>
                     <span className="font-medium">⚑ Ağrı · {cellTitle(cell.testId, cell.side)}</span>
-                    {cell.note ? ` · “${cell.note}”` : ''}: önce değerlendirme.
-                    {cell.reviewed ? <span className="text-muted-foreground"> Gözden geçirildi.</span> : null}
+                    {carried ? ` · ${formatDay(cell.date)} taramasından; sonra test edilmedi` : ''}
+                    {cell.note ? ` · “${cell.note}”` : ''}
+                    {cell.state === 'open' || cell.state === 'reviewed' ? ': önce değerlendirme.' : '.'}
+                    {cell.state === 'reviewed' ? <span className="text-muted-foreground"> Gözden geçirildi.</span> : null}
+                    {cell.state === 'resolved' && cell.laterDate ? (
+                      <span className="text-muted-foreground"> {formatDay(cell.laterDate)} taramasında ağrı geçti.</span>
+                    ) : null}
+                    {cell.state === 'superseded' && cell.laterDate ? (
+                      <span className="text-muted-foreground"> {formatDay(cell.laterDate)} taramasında da ağrılı; o günün uyarısına bak.</span>
+                    ) : null}
                   </p>
-                  {!cell.reviewed ? (
+                  {cell.state === 'open' ? (
                     <PainActions
                       clientId={client.id}
-                      date={current.date}
+                      date={cell.date}
                       cellKey={cell.key}
                       title={cellTitle(cell.testId, cell.side)}
                       constraint={conditionsConsent ? draft : null}
@@ -181,11 +217,18 @@ async function Overview({ client, record, today, query }: { client: Client; reco
                 </div>
               );
             })}
+            {gone.map((cell) => (
+              <p key={`gone:${cell.date}:${cell.key}`}>
+                <span className="font-medium">✓ Ağrı geçti · {cellTitle(cell.testId, cell.side)}</span>: {formatDay(cell.date)} taramasında ağrılıydı, bu taramada
+                ağrısız.
+              </p>
+            ))}
             {asymmetry ? (
               <p>
                 <span className="font-medium">◐ Büyük asimetri · {testName(asymmetry.testId)}</span>: sol {OUTCOME_LABELS[asymmetry.left].toLocaleLowerCase('tr')} · sağ{' '}
                 {OUTCOME_LABELS[asymmetry.right].toLocaleLowerCase('tr')}
-                {asymmetry.reachDiff !== undefined ? ` · ön uzanma farkı ${formatNumber(asymmetry.reachDiff)} cm` : ''}.
+                {asymmetry.reachDiff !== undefined ? ` · ön uzanma farkı ${formatNumber(asymmetry.reachDiff)} cm` : ''}
+                {asymmetry.reachPercentDiff !== undefined ? ` (bacak boyuna göre ${formatWithUnit(asymmetry.reachPercentDiff, '%')})` : ''}.
               </p>
             ) : null}
           </CardContent>

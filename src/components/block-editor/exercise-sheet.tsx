@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { WarningCircle } from '@phosphor-icons/react';
+import { PersonSimpleTaiChi, WarningCircle } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useMediaQuery } from '@/hooks/use-media-query';
@@ -77,14 +77,26 @@ export function ExerciseSheet(props: SheetProps) {
 }
 
 /**
- * Sheet'in üst satırları (tasarım `kisit-tarama.md` §3.2): danışanın kısıtları ve karar bekleyen bildirimi; onay
- * yoksa yalnız durum (veri değil).
+ * Sheet'in üst satırları (tasarım `kisit-tarama.md` §3.2, §4.6): danışanın kısıtları, bakılmamış "şiddetli"si, karar
+ * bekleyen bildirimi ve taramanın açık ağrısı; kısıt onayı yoksa yalnız durum (veri değil).
  */
 function CareLines({ care }: { care: EditorCare }) {
-  if (care.unavailable) return <p className="text-sm text-muted-foreground">{care.unavailable}</p>;
-  if (care.summary.length === 0 && care.pending.length === 0) return null;
+  const severe = care.severe ?? [];
+  const pain = care.screeningPain ?? [];
+  if (care.unavailable && pain.length === 0) return <p className="text-sm text-muted-foreground">{care.unavailable}</p>;
+  if (care.summary.length === 0 && care.pending.length === 0 && pain.length === 0) return null;
   return (
     <div className="flex flex-col gap-1 text-sm">
+      {care.unavailable ? <p className="text-muted-foreground">{care.unavailable}</p> : null}
+      {severe.length > 0 ? (
+        <p className="flex items-start gap-1.5">
+          <WarningCircle weight="fill" aria-hidden className="mt-0.5 size-4 shrink-0 text-destructive" />
+          <span>
+            <span className="sr-only">Acil: </span>
+            Danışan şiddetli dedi: {severe.join(' · ')} · sen bakana kadar bölgeyi çalıştıran hareketler dikkat alıyor
+          </span>
+        </p>
+      ) : null}
       {care.summary.length > 0 ? (
         <p className="flex flex-wrap items-center gap-x-2">
           <span>Kısıtlar: {care.summary.join(' · ')}</span>
@@ -97,6 +109,17 @@ function CareLines({ care }: { care: EditorCare }) {
         <p className="flex items-start gap-1.5 text-muted-foreground">
           <WarningCircle weight="fill" className="mt-0.5 size-4 shrink-0 text-primary-text" />
           Danışan bildirdi: {care.pending.join(' · ')} · karar bekliyor
+        </p>
+      ) : null}
+      {pain.length > 0 ? (
+        <p className="flex flex-wrap items-center gap-x-2 text-muted-foreground">
+          <span className="flex items-start gap-1.5">
+            <PersonSimpleTaiChi weight="fill" aria-hidden className="mt-0.5 size-4 shrink-0 text-primary-text" />
+            Taramada ağrı: {pain.join(' · ')} · kalıbındaki hareketler dikkat alıyor, yasak değil
+          </span>
+          <Link href={`/dashboard/clients/${care.clientId}/screening`} className="underline-offset-4 hover:underline">
+            Tarama ›
+          </Link>
         </p>
       ) : null}
     </div>

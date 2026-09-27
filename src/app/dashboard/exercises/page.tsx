@@ -27,7 +27,7 @@ export default async function ExercisesPage({ searchParams }: { searchParams: Pr
   if (clientId && CLIENT_ID_PATTERN.test(clientId)) {
     const loaded = await loadClient(clientId).catch(() => null);
     if (loaded?.ok) {
-      const care = await loadEditorCare(loaded.client, exercises, todayIn(config.timeZone));
+      const care = await loadEditorCare(loaded.client, exercises, todayIn(config.timeZone), { screening: false });
       clientCare = {
         name: loaded.client.name,
         care: care ?? { clientId, unavailable: 'Kısıtlar bu danışanın sağlık modülünde seçili değil.', summary: [], pending: [], map: {} },

@@ -5,6 +5,7 @@ import { ExerciseProgress } from '@/components/progress/exercise-progress';
 import { AdherenceCard, EffortCard, PainCard, ReadinessCard, WaterCard, WeeklyLoadCard } from '@/components/progress/insight-charts';
 import { ProgressEmpty, ProgressNotice, ProgressStats } from '@/components/progress/progress-summary';
 import { RecordsCard } from '@/components/progress/records-card';
+import { ScreeningCard } from '@/components/progress/screening-card';
 import { StrengthProgress } from '@/components/progress/strength-progress';
 import { WeeklyProgress } from '@/components/progress/weekly-progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -22,7 +23,7 @@ export const metadata: Metadata = { title: 'İlerleme' };
  * Danışanın İlerleme sekmesi (tasarım §0, §8 satır 10; SPEC §6, §7.6): en üstte Gelişim (hangi kasında
  * güç kazandın: kas haritası, listeler, kasın hareketleri), üç sayı (antrenman, seri, rekor), hareket
  * başına grafik (en ağır set, tahmini maksimum, toplam; seçici aranabilir), grafikler (haftalık yük,
- * antrenman düzeni, haftalık kas yükü, onay varsa hazır oluşluk ve ağrı, zorluk, su), son rekorlar,
+ * antrenman düzeni, haftalık kas yükü, onay varsa hazır oluşluk, ağrı ve hareket taraması, zorluk, su), son rekorlar,
  * başarılar. Veri `sessions-index.json`, özetleri önbellekli antrenman dosyaları, `water.json` ve onay
  * varsa `health.json`'dan (`progress-data.ts`). Danışanın dilinde: "e1RM", "tonaj" yok. Yalnız telefon,
  * 375 px. Bölümler PT'nin danışan sayfasındaki İlerleme sekmesiyle ortak (`src/components/progress`,
@@ -58,6 +59,7 @@ export default async function ProgressPage({
       <main className="flex flex-col gap-6">
         {header}
         <ProgressEmpty viewer="client" />
+        <ScreeningCard viewer="client" screening={insights.screening} />
       </main>
     );
   }
@@ -80,6 +82,7 @@ export default async function ProgressPage({
       <WeeklyProgress viewer="client" weeks={view.weeks} />
       <ReadinessCard viewer="client" readiness={insights.readiness} today={today} low={LOW_READINESS} />
       <PainCard viewer="client" pain={insights.pain} />
+      <ScreeningCard viewer="client" screening={insights.screening} />
       <EffortCard viewer="client" rpe={insights.rpe} today={today} />
       <WaterCard viewer="client" water={insights.water} today={today} />
       <RecordsCard viewer="client" items={view.recentRecords} total={view.records} today={today} />

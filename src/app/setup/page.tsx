@@ -40,6 +40,7 @@ export default async function SetupPage() {
             accent: config.accent,
             theme: config.theme,
             radius: config.radius,
+            palette: config.palette,
           }}
         />
       </div>

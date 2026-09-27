@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { getDeepError, setInput, useField, useFieldArray } from '@formisch/react';
-import { ArrowsSplit, Bandaids, Barbell, CaretDown, LinkBreak, NoteBlank, Plus, TrendUp, Trash, UserCircle, WarningCircle } from '@phosphor-icons/react';
+import { ArrowsSplit, Bandaids, Barbell, CaretDown, LinkBreak, NoteBlank, PersonSimpleTaiChi, Plus, TrendUp, Trash, UserCircle, WarningCircle } from '@phosphor-icons/react';
 import { ARMED, CardBadge, CardFace, CardGrabber, ExerciseCard, ExerciseCardSection, PLACEHOLDER } from '@/components/exercise-card';
 import { LabeledSelect } from '@/components/labeled-select';
 import { SwipeRow, type SwipeAction } from '@/components/swipe/swipe-row';
@@ -232,12 +232,26 @@ function RowMeta({
   const target = clientTargets[row.id];
   // Danışanın kısıtı (tasarım `kisit-tarama.md` §3.3): yasak ya da dikkat; gerekçe ekran okuyucuda ve ipucunda.
   const flag = care?.map[row.exerciseId];
+  // Tarama (§4.6): açık ağrının kalıbında dikkat, yoksa son taramanın bilgi rozeti.
+  const mark = care?.screening?.[row.exerciseId];
   return (
     <>
       {text ? <span className="truncate tabular-nums">{text}</span> : <span className="truncate font-mono">{row.exerciseId}</span>}
       {flag?.decision ? (
         <Mark label={`Kısıt: ${flag.decision === 'block' ? 'bu danışana önerilmiyor' : 'dikkat'} · ${flag.messages.join(' · ')}`}>
           <Bandaids aria-hidden className={flag.decision === 'block' ? 'text-destructive' : 'text-primary-text'} />
+        </Mark>
+      ) : null}
+      {mark && (mark.pain.length > 0 || mark.info) ? (
+        <Mark label={mark.pain.length > 0 ? `Tarama: dikkat · ${mark.pain.join(' · ')}` : `${mark.info?.label ?? ''}. ${mark.info?.detail ?? ''}`.trim()}>
+          <PersonSimpleTaiChi aria-hidden weight={mark.pain.length > 0 ? 'fill' : 'regular'} className={mark.pain.length > 0 ? 'text-primary-text' : 'text-muted-foreground'} />
+        </Mark>
+      ) : null}
+      {/* Danışanın kendi programı (`kisit-tarama.md` §3.7): kopyayla gelmiş yasak sessizce kalmaz, yazıyla söylenir. */}
+      {exercise?.blocked ? <Badge variant="destructive">Sana önerilmiyor</Badge> : null}
+      {exercise?.caution ? (
+        <Mark label="Kısıtına uymayabilir">
+          <Bandaids aria-hidden className="text-primary-text" />
         </Mark>
       ) : null}
       {target && clientTargetState(row.sets, target) === 'active' ? (
@@ -559,6 +573,16 @@ function RowBody({
           <FieldError>{exerciseField.errors?.[0]}</FieldError>
         </ExerciseCardSection>
       )}
+
+      {exercise?.blocked ? (
+        <ExerciseCardSection className="flex flex-col gap-1.5 text-sm">
+          <p className="text-muted-foreground">
+            Kısıtın nedeniyle bu hareket şu an sana önerilmiyor; antrenörüne sor. Antrenmanda &apos;Değiştir&apos;den bir muadil seçebilir ya
+            da kartı silip yerine başka bir hareket ekleyebilirsin.
+          </p>
+          <FieldError>{exerciseField.errors?.[0]}</FieldError>
+        </ExerciseCardSection>
+      ) : null}
 
       {editor.clientTargets[row.id] ? <ClientTargetNote row={row} target={editor.clientTargets[row.id] as RowClientTarget} /> : null}
 

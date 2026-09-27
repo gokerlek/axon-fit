@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lastDateByDay, lastDateByProgram, ownLogLabel, programLine, ptUpdatedSince, scheduleText } from './own-program-text.ts';
+import { lastDateByDay, lastDateByProgram, ownLogLabel, programLine, ptUpdatedSince, scheduleText, sessionDayText } from './own-program-text.ts';
 import type { SessionIndexRow } from './schemas/session.ts';
 
 function row(id: string, date: string, extra: Partial<SessionIndexRow> = {}): SessionIndexRow {
@@ -22,6 +22,13 @@ function row(id: string, date: string, extra: Partial<SessionIndexRow> = {}): Se
 }
 
 describe('kendi program metinleri', () => {
+  test('antrenmanın gün adı: kendi programda programın adıyla, PT programında yalnız gün', () => {
+    assert.equal(sessionDayText({ dayName: 'Gün A', programName: 'Evde' }), 'Evde · Gün A');
+    assert.equal(sessionDayText({ dayName: 'Gün A' }), 'Gün A');
+    assert.equal(sessionDayText({ dayName: '', programName: 'Evde' }), 'Evde · Antrenman');
+    assert.equal(sessionDayText(undefined), 'Antrenman');
+  });
+
   test('satır: gün sayısı, haftalık sayı, günler, son antrenman', () => {
     assert.equal(programLine({ days: 2, weekdays: [4, 2] }, '2026-09-22'), '2 gün · haftada 2 · Sal, Per · son: 22 Eyl');
     assert.equal(programLine({ days: 3, weekdays: [], daysPerWeek: 3 }), '3 gün · haftada 3');

@@ -1,4 +1,5 @@
 import { formatDay, formatKg, formatNumber, todayIn } from './format.ts';
+import { sessionDayText } from './own-program-text.ts';
 import { EFFORT_LABELS } from './progression.ts';
 import type { SessionDoc, SessionIndex, SessionIndexRow, SkipReason } from './schemas/session.ts';
 import { volumeOf, waterOf, workingSetCount } from './session-index.ts';
@@ -54,7 +55,7 @@ function rowOf(row: SessionIndexRow): HistoryRow {
   const date = new Date(`${row.date}T00:00:00Z`);
   const prs = row.prs ?? 0;
   // Kendi programdan antrenman programın adıyla ("Evde · Gün A"): program silinse de anlık görüntü kalır.
-  const day = row.programName ? `${row.programName} · ${row.dayName || 'Antrenman'}` : row.dayName || 'Antrenman';
+  const day = sessionDayText(row);
   const title = [day, ...(row.durationMin !== undefined ? [minutesText(row.durationMin)] : [])].join(' · ');
   const meta = `${formatNumber(row.sets)} set · ${formatKg(row.volumeKg)}`;
   return {
@@ -178,7 +179,7 @@ export function sessionDetail(doc: SessionDoc, timeZone: string): SessionDetail 
   }
   const sets = workingSetCount(doc);
   const end = doc.finishedAt ?? doc.startedAt;
-  const dayName = doc.program?.programName ? `${doc.program.programName} · ${doc.program.dayName}` : (doc.program?.dayName ?? 'Antrenman');
+  const dayName = sessionDayText(doc.program);
   const title = `${dayName} · ${formatDay(doc.date)}`;
   return {
     id: doc.id,

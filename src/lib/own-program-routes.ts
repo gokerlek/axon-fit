@@ -1,8 +1,10 @@
 import * as v from 'valibot';
 import { originGuard, postGuard } from './client-auth-routes.ts';
-import { deleteOwnProgram, saveOwnProgram, selectOwnActive, shareOwnProgram, type OwnLibrary, type OwnSaveResult } from './own-program-files.ts';
+import { BLOCKED_TEXT } from './exercise-caution.ts';
+import { deleteOwnProgram, saveOwnProgram, selectOwnActive, shareOwnProgram, type OwnGuard, type OwnLibrary, type OwnSaveResult } from './own-program-files.ts';
 import { isOwnProgramId, OWN_PROGRAM_LIMITS } from './own-programs.ts';
 import type { DiffContext } from './program-diff.ts';
+import type { Client } from './schemas/client.ts';
 import { ownProgramActiveSchema, ownProgramSaveSchema, ownProgramShareSchema } from './schemas/own-program.ts';
 import { run, type SessionRouteDeps, type SessionRouteResult } from './session-routes.ts';
 
@@ -14,11 +16,15 @@ import { run, type SessionRouteDeps, type SessionRouteResult } from './session-r
  * - Kimlik yalnız oturumdan (`run()`: oturum, kayıt, GitHub hataları → 429/503). Durum değiştirenler yalnız bu
  *   siteden ve JSON'la (`postGuard`); DELETE gövdesiz, köken yeter (`originGuard`).
  * - `pid` yol kurulmadan önce `^op_[a-z0-9]{8}$` ile denetlenir; uymazsa 404 (dosya adı yalnız kimlikten).
+ * - Kayıtta kısıt denetimi (`guard`): kütüphaneden eklenen izinsiz yasaklı hareket 400, satırın alanında
+ *   "Bu hareket şu an sana önerilmiyor; antrenörüne sor." (409 değil: istemci 409'u bir kez yeniden dener).
  */
 
 export type OwnRouteDeps = SessionRouteDeps & {
   /** Kütüphane denetimi (egzersiz ve cihaz kimlikleri) ve geçmişin cümleleri için adlar. */
   library(): Promise<{ library: OwnLibrary; ctx: DiffContext }>;
+  /** Danışanın kısıtları (`conditions` onayıyla): kayıtta eklenen yasaklı hareketi reddetmek için; yoksa null. */
+  guard?(client: Client): Promise<OwnGuard | null>;
 };
 
 const MISSING = { status: 404, body: { error: 'Program bulunamadı.' } };
@@ -47,6 +53,8 @@ export function saveResponse(result: OwnSaveResult, by: 'client' | 'pt'): Sessio
       return { status: 200, body: { id: result.program.id, revision: result.program.revision, unchanged: true, droppedDevices: result.droppedDevices } };
     case 'invalid':
       return { status: 400, body: { error: 'Bilgileri kontrol et.', fields: result.errors } };
+    case 'blocked':
+      return { status: 400, body: { error: BLOCKED_TEXT, reason: 'blocked', fields: result.errors } };
     case 'missing':
       return { status: 404, body: { error: 'Program silindi.', reason: 'missing' } };
     case 'stale':
@@ -77,8 +85,8 @@ export function saveOwnRoute(deps: OwnRouteDeps, headers: Headers, origin: strin
     const parsed = v.safeParse(ownProgramSaveSchema, input);
     if (!parsed.success) return { status: 400, body: { error: 'Bilgileri kontrol et.', fields: fieldsOf(parsed.issues) } };
     if (parsed.output.baseRevision === null && parsed.output.name === undefined) return { status: 400, body: { error: 'Bilgileri kontrol et.', fields: { name: 'Ad gir.' } } };
-    const { library, ctx } = await deps.library();
-    const result = await saveOwnProgram(repo, { id: pid, body: parsed.output, by: 'client', library, ctx, now: deps.now() });
+    const [{ library, ctx }, guard] = await Promise.all([deps.library(), deps.guard ? deps.guard(client) : null]);
+    const result = await saveOwnProgram(repo, { id: pid, body: parsed.output, by: 'client', library, ctx, now: deps.now(), guard });
     if (result.status === 'created' || result.status === 'saved') deps.log(`[kendi program] ${client.id} ${result.status}`);
     return saveResponse(result, 'client');
   });

@@ -8,17 +8,12 @@ import {
   setInput,
   useForm,
 } from "@formisch/react";
-import { Check, WarningCircle } from "@phosphor-icons/react";
+import { WarningCircle } from "@phosphor-icons/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Field,
@@ -27,28 +22,20 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Item, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { brandStyle, readableOn } from "@/lib/color";
-import { cn } from "@/lib/utils";
 import { fetchJson } from "@/lib/query/errors";
 import { applyFieldErrors } from "@/lib/query/field-errors";
 import { useServiceMutation } from "@/lib/query/use-service";
 import { RADIUS_OPTIONS, type RadiusKey } from "@/lib/schemas/config";
 import {
-  ACCENT_PRESETS,
   setupFormSchema,
   type SetupForm as SetupValues,
 } from "@/lib/schemas/setup";
+import { PaletteEditor } from "./palette-editor";
 import { LogoPicker } from "./logo-picker";
-
-/**
- * "Tema" seçeneğinin düğme değeri. Formda `null`dır; düğmede boş olmayan bir değer
- * gerekir: Base UI `Toggle` boş değeri (`""`) kendi ürettiği bir kimlikle değiştirir,
- * o zaman seçenek hiç seçili görünmez ve seçilince forma geçersiz renk gider.
- */
-const THEME_ACCENT = "theme";
+import { AppearancePreview } from "./appearance-preview";
+import { useAppearancePreview } from "./use-appearance-preview";
 
 const THEMES = [
   { value: "dark", label: "Koyu" },
@@ -59,8 +46,8 @@ const THEMES = [
 /**
  * Tema ayarı: uygulama adı, logo, ana renk, köşe yuvarlaklığı, tema.
  *
- * Kaydedince PT'nin kendi repo'suna commit edilir. Renk ve köşe seçimi üstteki
- * önizlemede anında görünür (tema değişkenleri önizleme kutusuna uygulanır).
+ * Seçimler tüm ekranda anında önizlenir; Kaydet PT'nin repo'suna yazar.
+ * Kaydetmeden ayrılınca önceki görünüm geri gelir.
  */
 export function SetupForm({
   initial,
@@ -77,6 +64,12 @@ export function SetupForm({
   const router = useRouter();
   const form = useForm({ schema: setupFormSchema, initialInput: initial });
 
+  const current = getInput(form) as Partial<SetupValues>;
+  const rawAccent = current.accent === undefined ? initial.accent : current.accent;
+  const accent = rawAccent === null || /^#[0-9a-fA-F]{6}$/.test(rawAccent) ? rawAccent : initial.accent;
+  const appName = current.appName ?? initial.appName;
+  const appearance = useAppearancePreview(initial, accent, (current.radius ?? initial.radius ?? "subtle") as RadiusKey, current.palette);
+
   const save = useServiceMutation({
     fn: (values: SetupValues) =>
       fetchJson<{ ok: true }>("/api/setup/config", {
@@ -90,70 +83,16 @@ export function SetupForm({
       error: false,
     },
     onError: (error) => applyFieldErrors(form as never, error),
-    onSuccess: () => {
+    onSuccess: (_result, values) => {
+      appearance.commit(values);
       router.replace(afterSave);
       // Sunucu bileşenleri yeni ayarı okusun (başlık, renk, köşe, tema).
       router.refresh();
     },
   });
 
-  const current = getInput(form) as Partial<SetupValues>;
-  const accent = current.accent === undefined ? initial.accent : current.accent;
-  const appName = current.appName ?? initial.appName;
-  const radius =
-    RADIUS_OPTIONS[(current.radius ?? initial.radius) as RadiusKey].value;
-
-  // Önizleme kutusu vurguyu kendisi ezer (`data-brand`): PT'nin önceki seçimi <html>'de dursa da
-  // kutu seçilen rengi, "Tema"da temanın kendi rengini ve ondan türeyen tonları gösterir.
-  const previewStyle = {
-    ...brandStyle(accent),
-    "--radius": radius,
-  } as React.CSSProperties;
-
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-      {/* Canlı önizleme: telefonda üstte, masaüstünde sağda ve kaydırınca yerinde kalır.
-          Seçilen renk ve köşe yalnız bu kutuya uygulanır; kaydedince bütün uygulamaya geçer. */}
-      <Card
-        className="order-first lg:sticky lg:top-6 lg:order-last"
-        data-brand
-        style={previewStyle}
-      >
-        <CardHeader>
-          <CardTitle>Önizleme</CardTitle>
-          <CardDescription>Kaydetmeden nasıl görüneceği</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex items-center gap-3">
-            <Avatar className="size-11 rounded-md after:rounded-md">
-              <AvatarFallback className="rounded-md bg-primary text-lg font-bold text-primary-foreground">
-                {(appName || 'P').trim().charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              <p className="truncate font-semibold">
-                {appName || "Uygulama adı"}
-              </p>
-              <p className="text-sm text-muted-foreground">Antrenman takibi</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" size="sm" tabIndex={-1}>
-              Antrenmana başla
-            </Button>
-            <Button type="button" size="sm" variant="outline" tabIndex={-1}>
-              Geçmiş
-            </Button>
-            <Badge>Yeni rekor</Badge>
-          </div>
-          <Item variant="outline" size="sm">
-            <ItemContent>
-              <ItemTitle>Bench Press</ItemTitle>
-              <ItemDescription className="tabular-nums">4 set · 8 tekrar · 60 kg</ItemDescription>
-            </ItemContent>
-          </Item>
-        </CardContent>
-      </Card>
+    <div className="grid items-start gap-6 xl:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.15fr)]">
 
       <Card>
         <CardContent>
@@ -183,64 +122,7 @@ export function SetupForm({
 
             <LogoPicker hasLogo={hasLogo} />
 
-            <FormField of={form} path={["accent"]}>
-              {(field) => (
-                <Field>
-                  <FieldLabel id="setup-accent-label">Ana renk</FieldLabel>
-                  <ToggleGroup
-                    aria-labelledby="setup-accent-label"
-                    spacing={2}
-                    // Telefonda dört sütun: sekiz kutu 44 px'e sığmaz (SPEC §6 dokunma hedefi).
-                    className="grid w-full grid-cols-4 sm:grid-cols-8"
-                    // "Tema" seçeneği formda null; düğmede THEME_ACCENT ile temsil edilir.
-                    value={[field.input ?? THEME_ACCENT]}
-                    onValueChange={(value) => {
-                      if (value[0] === undefined) return;
-                      setInput(form, {
-                        path: ["accent"],
-                        input: value[0] === THEME_ACCENT ? null : value[0],
-                      });
-                    }}
-                  >
-                    {ACCENT_PRESETS.map((preset) => {
-                      const selected = (field.input ?? null) === preset.value;
-                      return (
-                        <ToggleGroupItem
-                          key={preset.label}
-                          value={preset.value ?? THEME_ACCENT}
-                          aria-label={preset.label}
-                          title={preset.label}
-                          className={cn(
-                            "h-11 w-full border-2 border-transparent p-0 data-pressed:border-foreground sm:aspect-square sm:h-auto",
-                            preset.value === null &&
-                              // Basılı düğmenin seçili zemini (`bg-primary-strong`) temanın rengini ezmesin.
-                              "bg-primary text-primary-foreground hover:bg-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground",
-                          )}
-                          // "Tema" kutusu temanın kendi rengini gösterir (PT'nin kayıtlı seçimi ezilir).
-                          data-brand={preset.value === null || undefined}
-                          style={
-                            preset.value
-                              ? {
-                                  background: preset.value,
-                                  color: readableOn(preset.value),
-                                }
-                              : (brandStyle(null) as React.CSSProperties)
-                          }
-                        >
-                          {selected ? (
-                            <Check
-                              className="size-4"
-                              aria-hidden
-                            />
-                          ) : null}
-                        </ToggleGroupItem>
-                      );
-                    })}
-                  </ToggleGroup>
-                  <FieldError>{field.errors?.[0]}</FieldError>
-                </Field>
-              )}
-            </FormField>
+            <PaletteEditor value={current.palette ?? null} onChange={(palette) => setInput(form, { path: ["palette"], input: palette })} onMode={(mode) => appearance.previewTheme(mode)} />
 
             <FormField of={form} path={["radius"]}>
               {(field) => (
@@ -277,8 +159,10 @@ export function SetupForm({
                     value={[field.input ?? "dark"]}
                     onValueChange={(value) => {
                       const next = value[0] as SetupValues["theme"] | undefined;
-                      if (next)
+                      if (next) {
+                        appearance.previewTheme(next);
                         setInput(form, { path: ["theme"], input: next });
+                      }
                     }}
                     className="w-full"
                   >
@@ -320,11 +204,12 @@ export function SetupForm({
                   : "Kaydet"}
             </Button>
             <p className="text-center text-xs text-muted-foreground">
-              Ayarlar kaydedilir; istediğin zaman değiştirebilirsin.
+              Değişiklikler anında görünür. Kalıcı olması için kaydet.
             </p>
           </Form>
         </CardContent>
       </Card>
+      <div className="min-w-0 xl:sticky xl:top-6"><AppearancePreview appName={appName} /></div>
     </div>
   );
 }

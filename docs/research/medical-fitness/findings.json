@@ -4259,5 +4259,135 @@
         "source_url": "https://pubmed.ncbi.nlm.nih.gov/11114441/"
       }
     ]
+  },
+  {
+    "topic": "Hareket taraması ve güvenlik eşikleri: temel hareket taraması (Cook 2006, Kritz 2009), tek ayak duruş normları (Springer 2007), yıldız denge testinde ön uzanma asimetrisi (Plisky 2006) ve akut ayak bileği/diz travmasında Ottawa kuralları (Stiell 1992, 1995)",
+    "summary": "Bu başlık, hareket taramasının (docs/design/kisit-tarama.md §4, protokol 1) ve kısıt bildirim sheet'indeki güvenlik uyarısının (§2.4) dayandığı altı kaynağı toplar; ilk 7 başlıklık taramadan sonra eklendi. Temel hareket taraması fikri Cook, Burton & Hoogenboom 2006'dan (N Am J Sports Phys Ther 1(2):62–72) gelir: temel kalıpları yük eklemeden önce gözlemek katılım öncesi taramanın parçası olabilir; yazarlar kavramı FMS'e bağlamaz, klinisyenin kendi kurduğu sisteme açık bırakır ve makale ampirik geçerlik ya da güvenilirlik verisi sunmaz. Sıralı ölçeğin genel biçimi (telafisiz → telafiyle → yapılamadı → ağrı) buradan alındı; test adları, kriterleri ve puanlama tablosu FMS'e ait olduğu için uygulamaya girmez (FMS başlığındaki lisans notu). Kritz, Cronin & Hume 2009 (Strength Cond J 31(1):76–85) yüklü squat kalıbından önce vücut ağırlığıyla iki ayaklı squat gözlemini önerir; uzman görüşüdür ve yalnız özet düzeyinde doğrulandı. Springer ve ark. 2007 (J Geriatr Phys Ther 30(1):8–15) 549 sağlıklı erişkinde tek ayak duruş süresinin yaşla belirgin düştüğünü, cinsiyetle ilişkili olmadığını ve 3 denemenin en iyisinin değerlendiriciler arasında çok tutarlı olduğunu gösterir (göz açık ICC 0,994); göz açık en iyi süre 18–39 yaşta ortalama ~45 sn, 80 yaş üstünde ~9 sn. Bu yüzden uygulama tek ayak süresini norma göre sınıflamaz, taraflar ve zaman arasında karşılaştırır; 30 sn üst sınır kendi kuralımızdır [sentez]. Plisky ve ark. 2006 (J Orthop Sports Phys Ther 36(12):911–919) 235 lise basketbolcusunda yıldız denge testinde sağ-sol ön uzanma farkı 4 cm'yi aşanlarda alt ekstremite sakatlığının ~2,5 kat sık olduğunu buldu; tek kohort ve dar popülasyon olduğu için uygulamada risk değil öncelik sinyalidir ('büyük asimetri') ve eşik kaynağın yazdığı gibi > 4 cm'dir. Ottawa kuralları (Stiell 1992 ayak bileği, Ann Emerg Med 21(4):384–390; Stiell 1995 diz, Ann Emerg Med 26(4):405–413) acil serviste röntgen kararı için türetilmiş yüksek duyarlıklı karar kurallarıdır; ortak ölçütleri yaralanmadan hemen sonra ve muayenede yük verememedir (diz kuralında 'dört adım' diye tanımlı). Uygulama bunları tanı ya da görüntüleme kararı için kullanmaz: yalnız danışanın kısıt bildirim sheet'indeki 'darbeden sonra üstüne basamama' uyarısının dayanağıdır; cevap istenmez, kaydedilmez. Bu başlık egzersiz süzgecine kontrendikasyon kaydı eklemez.",
+    "rules": [
+      {
+        "claim": "Temel hareket kalıplarını (bölüm 1'de squat, adım ve lunge) yük eklemeden önce gözlemek katılım öncesi taramaya eklenebilir; amaç kişinin antrenmanın gerektirdiği temel hareketleri yapıp yapamadığını görmektir. Yazarlar bu değerlendirmenin FMS ile ya da klinisyenin kendi kurduğu başka bir sistemle yapılabileceğini açıkça söyler; uygulamanın 8 testlik kendi protokolü bu açıklığa dayanır.",
+        "scope": "movement_screen_concept",
+        "confidence": "medium",
+        "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2953313/"
+      },
+      {
+        "claim": "Kalıplar dört basamaklı sıralı bir ölçekle değerlendirilir: telafisiz tam yapılış en üstte, telafiyle tamamlama bir altta, yapamama onun altındadır; testin herhangi bir anındaki ağrı sonucu en alta çeker ve testi durdurur. İki taraflı testlerde düşük taraf kaydedilir ama taraflar arası fark ayrıca not edilir. Uygulama yalnız bu genel biçimi sözcüklerle kullanır (Temiz · Telafiyle · Kolaylaştırılmış · Yapılamadı · Ağrılı); sayısal puan, toplam ve FMS'in test kriterleri alınmaz.",
+        "scope": "movement_screen_ordinal_scale",
+        "confidence": "high",
+        "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2953313/"
+      },
+      {
+        "claim": "Makale temel hareket taramasının sakatlık öngörüsü, geçerliği ya da güvenilirliği için ampirik veri sunmaz; yazarlar hareket temelli değerlendirmeler üzerine araştırmanın çok sınırlı olduğunu kabul eder. Bu yüzden kendi protokolümüz için de geçerlik ya da risk iddiası yazılmaz.",
+        "scope": "movement_screen_evidence_gap",
+        "confidence": "high",
+        "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2953313/"
+      },
+      {
+        "claim": "Back squat, front squat ve deadlift gibi squat kalıbındaki egzersizlere yük eklemeden önce vücut ağırlığıyla iki ayaklı squat gözlenmesi önerilir; gözlem ayak bileği ve kalça hareketliliği, diz ve bel stabilitesi, torasik hareketlilik ve baş konumu hakkında ipucu verir, görülen kısıt sinir-kas kontrolü, kuvvet ya da hareketlilik eksikliğiyle yorumlanır. Uzman görüşüdür, geçerlik verisi yoktur; uygulamada squat testinin (kollar önde) ve split squat noktalarının genel dayanağıdır.",
+        "scope": "movement_screen_squat",
+        "confidence": "low",
+        "source_url": "https://journals.lww.com/nsca-scj/fulltext/2009/02000/the_bodyweight_squat__a_movement_screen_for_the.14.aspx"
+      },
+      {
+        "claim": "Tek ayak duruş süresi göz açık ve göz kapalı koşulların ikisinde de yaşla anlamlı biçimde azalır ve cinsiyetle ilişkili değildir (18 yaş üstü 549 sağlıklı erişkin, 6 yaş grubu). Üç denemenin en iyisi için değerlendiriciler arası güvenilirlik mükemmeldir: ICC göz açık 0,994 (%95 GA 0,989–0,996), göz kapalı 0,998. Kayıtta 3 denemenin en iyisi tutulur.",
+        "scope": "performance_test_unipedal_stance_reliability",
+        "confidence": "high",
+        "source_url": "https://pubmed.ncbi.nlm.nih.gov/19839175/"
+      },
+      {
+        "claim": "Göz açık tek ayak duruşta 3 denemenin en iyisinin grup ortalaması (sn, kadın ve erkek birlikte): 18–39 yaş 44,7; 40–49 yaş 41,9; 50–59 yaş 41,2; 60–69 yaş 32,1; 70–79 yaş 21,5; 80–99 yaş 9,4. Göz kapalı karşılıkları 15,2 / 12,7 / 8,3 / 4,4 / 3,1 / 1,9 sn. 60 yaştan sonra standart sapma 12–17 sn olduğu için normdan 'yetersiz denge' etiketi üretilmez; süre kişinin iki tarafıyla ve önceki taramasıyla karşılaştırılır.",
+        "scope": "performance_test_unipedal_stance_norms",
+        "confidence": "high",
+        "source_url": "https://www.sralab.org/rehabilitation-measures/single-leg-stance-or-one-legged-stance-test"
+      },
+      {
+        "claim": "Sezon öncesi yıldız denge testinde sağ-sol ön uzanma farkı 4 cm'den büyük olan lise basketbolcularında sezon içinde alt ekstremite sakatlığı yaklaşık 2,5 kat daha sıktı (n=235, lojistik regresyon, P<0,05). Eşik 'büyüktür'dür: fark tam 4,0 cm iken değil, 4 cm'yi aşınca 'büyük asimetri' yazılır. Tek kohort ve dar popülasyon olduğu için uygulamada risk değil öncelik sinyalidir.",
+        "scope": "performance_test_sebt_anterior_asymmetry",
+        "confidence": "medium",
+        "source_url": "https://pubmed.ncbi.nlm.nih.gov/17193868/"
+      },
+      {
+        "claim": "Bacak boyuna normalize bileşik uzanma (ön, arka-iç ve arka-dış yönlerin toplamı) bacak boyunun %94'ünden az olan kızlarda alt ekstremite sakatlığı yaklaşık 6,5 kat daha sıktı. Bileşik skor bacak boyu ölçümü ister; uygulama şimdilik yalnız ham ön uzanmayı (cm) alır, bacak boyuna göre yüzde sonraya kaldı.",
+        "scope": "performance_test_sebt_composite",
+        "confidence": "medium",
+        "source_url": "https://pubmed.ncbi.nlm.nih.gov/17193868/"
+      },
+      {
+        "claim": "Yıldız denge testi bileşenlerinin güvenilirliği ICC(3,1) 0,82–0,87, bacak boyu ölçümünün 0,99'dur; ön uzanma farkı bu ölçüm gürültüsünün üstünde yorumlanmalıdır.",
+        "scope": "performance_test_sebt_reliability",
+        "confidence": "high",
+        "source_url": "https://pubmed.ncbi.nlm.nih.gov/17193868/"
+      },
+      {
+        "claim": "Akut künt ayak bileği yaralanmasında malleollerin çevresinde ağrı varken şu üçünden biri varsa ayak bileği röntgeni gerekir: 55 yaş ve üstü, malleollerden birinin arka kenarında ya da ucunda lokal kemik hassasiyeti, ya da hem yaralanmadan hemen sonra hem acil serviste yük verememe. Türetme kuralı 689 ayak bileği röntgeninde 70 önemli malleol kırığının hepsini yakaladı (duyarlılık %100, özgüllük %40,1). Orta ayakta ağrıyla birlikte 5. metatars tabanı, küboid ya da naviküler kemikte hassasiyet ayak röntgeni gerektirir (230 röntgendeki 32 kırığın hepsi).",
+        "scope": "red_flag_ottawa_ankle",
+        "confidence": "high",
+        "source_url": "https://pubmed.ncbi.nlm.nih.gov/1554175/"
+      },
+      {
+        "claim": "Akut diz yaralanmasında şu beş bulgudan biri varsa diz röntgeni gerekir: 55 yaş ve üstü, fibula başında hassasiyet, yalnız patellada hassasiyet, dizi 90°'ye bükememe, hem yaralanmadan hemen sonra hem acil serviste yük verememe (dört adım). Kural 1047 erişkindeki 68 kırığın hepsini yakaladı (duyarlılık 1,0; özgüllük 0,54) ve röntgen kullanımını göreli %28 azaltırdı; yazarlar klinik kullanımdan önce prospektif doğrulama ister.",
+        "scope": "red_flag_ottawa_knee",
+        "confidence": "high",
+        "source_url": "https://pubmed.ncbi.nlm.nih.gov/7574120/"
+      },
+      {
+        "claim": "Darbe ya da düşmeden sonra o bacağa yük verememe (dört adım) iki Ottawa kuralının ortak ölçütüdür. Kurallar röntgen kararı için türetildi, egzersiz kararı için değil; uygulamada tanı ya da görüntüleme önerisi üretmez, yalnız danışanın kısıt bildirim sheet'indeki 'antrenmandan önce bir sağlık profesyoneline görün' uyarısını gerekçelendirir. Cevap istenmez, kaydedilmez.",
+        "scope": "red_flag_unable_to_bear_weight",
+        "confidence": "medium",
+        "source_url": "https://pubmed.ncbi.nlm.nih.gov/7574120/"
+      }
+    ],
+    "contraindications": [],
+    "sources": [
+      {
+        "title": "Cook G, Burton L, Hoogenboom B. Pre-participation screening: the use of fundamental movements as an assessment of function – part 1. N Am J Sports Phys Ther 2006;1(2):62-72",
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2953313/",
+        "kind": "narrative_review",
+        "machine_readable": true,
+        "note": "PMID 21522216, PMCID PMC2953313 (DOI yok); künye Europe PMC ile doğrulandı, tam metin PMC'de okundu. İki bölümlük dizinin ilki (bölüm 2: PMC2953359, 1(3):132-139). FMS'i tanıtır ama temel hareketleri gözleme fikrini başka sistemlere açık bırakır; ampirik geçerlik/güvenilirlik verisi yok. kisit-tarama.md'de yalnız kavram ve sıralı ölçeğin genel biçimi kullanıldı; FMS test adları ve kriterleri tescilli."
+      },
+      {
+        "title": "Kritz M, Cronin J, Hume P. The bodyweight squat: a movement screen for the squat pattern. Strength Cond J 2009;31(1):76-85",
+        "url": "https://journals.lww.com/nsca-scj/fulltext/2009/02000/the_bodyweight_squat__a_movement_screen_for_the.14.aspx",
+        "kind": "narrative_review",
+        "machine_readable": false,
+        "note": "DOI 10.1519/SSC.0b013e318195eb2f; künye (yazarlar, 31(1):76-85, Şubat 2009) Crossref API ile doğrulandı. PubMed'de indeksli değil. LWW sayfası ücretli ve Cloudflare arkasında (402/403); içerik yalnız özet düzeyinde (arama özeti ve Semantic Scholar TLDR) doğrulandı, kontrol noktalarının ayrıntısı tam metinden teyit edilmeli. Uygulayıcı dergisinde uzman görüşü."
+      },
+      {
+        "title": "Springer BA, Marin R, Cyhan T, Roberts H, Gill NW. Normative values for the unipedal stance test with eyes open and closed. J Geriatr Phys Ther 2007;30(1):8-15",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/19839175/",
+        "kind": "cross_sectional_measurement_study",
+        "machine_readable": true,
+        "note": "PMID 19839175, DOI 10.1519/00139143-200704000-00003. Özet NCBI E-utilities ile okundu; tam metin ücretli (LWW/Ovid 402). n=549 sağlıklı erişkin, üçüncü basamak tıp merkezi (Walter Reed), 6 yaş grubu, göz açık/kapalı, 3 denemenin ortalaması ve en iyisi. Yaş × cinsiyet norm tablosu bir sonraki kaynaktan (SRA Lab) doğrulandı."
+      },
+      {
+        "title": "Single Leg Stance or \"One-Legged Stance Test\" — Shirley Ryan AbilityLab Rehabilitation Measures Database (Springer 2007 norm tablosu)",
+        "url": "https://www.sralab.org/rehabilitation-measures/single-leg-stance-or-one-legged-stance-test",
+        "kind": "dataset_api",
+        "machine_readable": false,
+        "note": "Springer 2007'nin yaş × cinsiyet tablosunu (göz açık/kapalı; 3 denemenin en iyisi ve ortalaması; SS) yeniden yayımlıyor; sayfa HTML'inden okundu. Tablo iç tutarlı: grup n'leri 549'a tamamlanıyor, her satırda en iyi ≥ ortalama. Birincil makale ücretli olduğundan değerler buradan alındı; üretime norm olarak alınırsa birincil tablodan teyit edilmeli."
+      },
+      {
+        "title": "Plisky PJ, Rauh MJ, Kaminski TW, Underwood FB. Star Excursion Balance Test as a predictor of lower extremity injury in high school basketball players. J Orthop Sports Phys Ther 2006;36(12):911-919",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/17193868/",
+        "kind": "primary_study",
+        "machine_readable": true,
+        "note": "PMID 17193868, DOI 10.2519/jospt.2006.2244 (yayıncı: https://www.jospt.org/doi/10.2519/jospt.2006.2244, 403). Prospektif kohort, n=235, 2004 sezonu. Özet E-utilities ile okundu. Eşik özette 'greater than 4 cm'; SEBT derlemesi (J Athl Train 2012, PMC3392165) de 4 cm'yi aşan fark diye aktarıyor. Tek çalışma, dar popülasyon; bu taramada replikasyon aranmadı."
+      },
+      {
+        "title": "Stiell IG, Greenberg GH, McKnight RD, Nair RC, McDowell I, Worthington JR. A study to develop clinical decision rules for the use of radiography in acute ankle injuries. Ann Emerg Med 1992;21(4):384-390",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/1554175/",
+        "kind": "primary_study",
+        "machine_readable": true,
+        "note": "PMID 1554175, DOI 10.1016/s0196-0644(05)82656-3. Ottawa ayak bileği kuralının türetme çalışması (pilot 155 + ana çalışma 750 erişkin, iki üniversite hastanesi acili). Özet E-utilities ile okundu; Ann Emerg Med tam metni 403. Özette yük verememe 'hemen sonra ve acilde' diye geçer, 'dört adım' tanımı özette yok. Kural 1993'te inceltilip prospektif doğrulandı (JAMA 269(9):1127-1132, PMID 8433468). Röntgen kararı için türetildi, egzersiz kararı için değil."
+      },
+      {
+        "title": "Stiell IG, Greenberg GH, Wells GA, McKnight RD, Cwinn AA, Cacciotti T, McDowell I, Smith NA. Derivation of a decision rule for the use of radiography in acute knee injuries. Ann Emerg Med 1995;26(4):405-413",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/7574120/",
+        "kind": "primary_study",
+        "machine_readable": true,
+        "note": "PMID 7574120, DOI 10.1016/s0196-0644(95)70106-0. Ottawa diz kuralının türetme çalışması (1047 erişkin, iki üniversite hastanesi acili). Özet E-utilities ile okundu. Yük verememe özette 'dört adım' diye tanımlı. Yazarlar klinik kullanımdan önce prospektif doğrulama gerektiğini belirtir."
+      }
+    ]
   }
 ]

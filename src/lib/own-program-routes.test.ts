@@ -26,7 +26,7 @@ const PATH = `own-programs/${OWN_ID}.json`;
 
 const headers = (origin = ORIGIN, type = 'application/json') => new Headers({ origin, 'content-type': type });
 
-function setup(options: { session?: ClientSession | null; gh?: FakeSessionRepo } = {}) {
+function setup(options: { session?: ClientSession | null; gh?: FakeSessionRepo; blocked?: string[] } = {}) {
   const gh = options.gh ?? fakeSessionRepo({ 'program.json': programFile() });
   const deps: OwnRouteDeps = {
     session: options.session === undefined ? SESSION : options.session,
@@ -39,6 +39,7 @@ function setup(options: { session?: ClientSession | null; gh?: FakeSessionRepo }
       library: { exercises: EXERCISES, deviceIds: new Set(DEVICES.keys()) },
       ctx: { exercises: new Map([...EXERCISES.values()].map((item) => [item.id, { title: item.title, trackingType: item.trackingType }])), devices: new Map() },
     }),
+    ...(options.blocked ? { guard: async () => ({ blocked: new Set(options.blocked), templateExercises: async () => null }) } : {}),
   };
   return { gh, deps };
 }
@@ -74,6 +75,17 @@ describe('kendi program uçları', () => {
     assert.equal((await saveOwnRoute(deps, headers(), ORIGIN, OWN_ID, createBody({ name: 'Başka' }))).status, 409);
   });
 
+  test('kütüphaneden eklenen yasaklı hareket 400: satırın alanında danışanın cümlesi, yazma yok', async () => {
+    const { deps, gh } = setup({ blocked: ['crunch'] });
+    const phases = structuredClone(program.phases);
+    phases[0]!.days[1]!.blocks.push({ id: 'b_crncha', kind: 'single', restSeconds: 60, rows: [{ id: 'r_crncha', exerciseId: 'crunch', sets: [{ min: 10, max: 15 }] }] });
+    const refused = await saveOwnRoute(deps, headers(), ORIGIN, OWN_ID, createBody({ phases }));
+    assert.deepEqual([refused.status, refused.body.reason, refused.body.error], [400, 'blocked', 'Bu hareket şu an sana önerilmiyor; antrenörüne sor.']);
+    assert.deepEqual(Object.keys(refused.body.fields as Record<string, string>), ['phases.0.days.1.blocks.1.rows.0.exerciseId']);
+    assert.equal(gh.commitCount(), 0);
+    assert.equal((await saveOwnRoute(deps, headers(), ORIGIN, OWN_ID, createBody())).status, 201);
+  });
+
   test('eski sürümle kayıt 412', async () => {
     const { deps } = setup();
     await saveOwnRoute(deps, headers(), ORIGIN, OWN_ID, createBody());
@@ -105,4 +117,13 @@ describe('kendi program uçları', () => {
     assert.equal((gh.get(OWN_INDEX_PATH) as OwnIndex).active?.programId, OWN_ID);
     assert.equal((await activeOwnRoute(deps, headers(), ORIGIN, { programId: '../x' })).status, 400);
   });
+});
+
+
+test('kısıt kontrolü okunamazsa program yazılmaz', async () => {
+  const { deps, gh } = setup();
+  deps.guard = async () => { throw new Error('Health read unavailable'); };
+  const result = await saveOwnRoute(deps, headers(), ORIGIN, OWN_ID, createBody());
+  assert.equal(result.status, 502);
+  assert.equal(gh.get(PATH), undefined);
 });

@@ -5,6 +5,7 @@ import { ExerciseProgress } from '@/components/progress/exercise-progress';
 import { AdherenceCard, EffortCard, PainCard, ReadinessCard, WaterCard, WeeklyLoadCard } from '@/components/progress/insight-charts';
 import { ProgressEmpty, ProgressNotice, ProgressStats } from '@/components/progress/progress-summary';
 import { RecordsCard } from '@/components/progress/records-card';
+import { ScreeningCard } from '@/components/progress/screening-card';
 import { StrengthProgress } from '@/components/progress/strength-progress';
 import { WeeklyProgress } from '@/components/progress/weekly-progress';
 import { SectionHeader } from '@/components/section-header';
@@ -27,7 +28,8 @@ export const metadata: Metadata = { title: 'İlerleme' };
  * hesap (`src/components/progress`, `viewer="pt"`): üç sayı, Gelişim (kas başına güç gelişimi: harita,
  * listeler, kasın hareketleri ve grafikleri, onay varsa çevre değişimi), hareket başına grafik ve rekorlar,
  * haftalık yük, antrenman düzeni (plana göre), haftalık kas yükü, antrenman zorluğu, su, son rekorlar,
- * başarılar. Hazır oluşluk ve ağrı yalnız danışanın onayı o parçayı kapsadıkça (danışandaki kural):
+ * başarılar. Hazır oluşluk, ağrı ve hareket taraması (tarama sayfasına bağlantıyla) yalnız danışanın onayı o parçayı
+ * kapsadıkça (danışandaki kural):
  * onay yoksa `health.json` hiç okunmaz (`progress-data.ts`, SPEC §9.4). Veri danışanınkiyle aynı önbellekli
  * okumadan (index + blob kimliğiyle antrenman özetleri).
  *
@@ -83,6 +85,7 @@ export default async function ClientProgressPage({
       <div className="flex flex-col gap-6">
         {header}
         <ProgressEmpty viewer="pt" name={name} />
+        <ScreeningCard viewer="pt" screening={insights.screening} clientId={id} />
       </div>
     );
   }
@@ -113,9 +116,10 @@ export default async function ClientProgressPage({
           <EffortCard viewer="pt" name={name} rpe={insights.rpe} today={today} />
           <ReadinessCard viewer="pt" readiness={insights.readiness} today={today} low={LOW_READINESS} />
           <PainCard viewer="pt" name={name} pain={insights.pain} />
+          <ScreeningCard viewer="pt" screening={insights.screening} clientId={id} />
           <WaterCard viewer="pt" name={name} water={insights.water} today={today} />
           {health !== 'granted' ? (
-            <p className="text-sm text-muted-foreground">{HEALTH_STATE_LABELS[health]}: hazır oluşluk, ağrı ve çevre ölçümleri burada gösterilmez.</p>
+            <p className="text-sm text-muted-foreground">{HEALTH_STATE_LABELS[health]}: hazır oluşluk, ağrı, çevre ölçümleri ve tarama burada gösterilmez.</p>
           ) : null}
         </div>
       </div>

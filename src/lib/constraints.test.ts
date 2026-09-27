@@ -28,6 +28,8 @@ import {
   redFlagStep,
   referConstraint,
   regionText,
+  regionWorked,
+  severeUnreviewed,
   removeConstraint,
   removeOverride,
   reportBetter,
@@ -258,7 +260,7 @@ describe('danışanın bildirimi', () => {
     assert.deepEqual(record.constraintLog?.[0], { at: NOW, by: 'client', id: 'k_rrrrrr', kind: 'reported', text: 'Sol diz bildirildi (orta)' });
     assert.equal(v.safeParse(healthRecordSchema, record).success, true);
     assert.equal(clientConstraintView(constraint!).state, 'pending');
-    assert.deepEqual(constraintCounts(record), { active: 0, pending: 1, changes: 0, awaiting: 0 });
+    assert.deepEqual(constraintCounts(record), { active: 0, pending: 1, changes: 0, awaiting: 0, severe: 0 });
   });
 
   test('başlangıç seçenekleri', () => {
@@ -361,5 +363,25 @@ describe('kayıt', () => {
     assert.equal(record.constraintLog?.length, 200);
     const long = removeConstraint(added({}, 'k_bbbbbb'), 'k_bbbbbb', { now: NOW });
     assert.ok((long.constraintLog?.[0]?.text.length ?? 0) <= 300);
+  });
+});
+
+
+describe('yeni bölgeler ve bakılmamış şiddetli değişiklik', () => {
+  test('dirsek, el bileği, kalça ve ayak bileği: ilişkili hareket ve bilinmeyen bilgi', () => {
+    for (const region of ['elbow', 'wrist_hand', 'hip', 'ankle_foot'] as const) assert.equal(regionWorked({}, region), null);
+    assert.equal(regionWorked({ primaryMuscles: ['biceps'] }, 'elbow'), true);
+    assert.equal(regionWorked({ pattern: 'horizontal_push', kineticChain: 'closed' }, 'wrist_hand'), true);
+    assert.equal(regionWorked({ pattern: 'hinge' }, 'hip'), true);
+    assert.equal(regionWorked({ pattern: 'calf_raise' }, 'ankle_foot'), true);
+    assert.equal(regionWorked({ pattern: 'elbow_flexion' }, 'hip'), false);
+  });
+  test('şiddetli kötüleşme Düzeldi ile kalkmaz, PT Gördüm ile kalkar', () => {
+    let record = reportWorse(added(), 'k_aaaaaa', 'severe', { now: LATER });
+    assert.equal(severeUnreviewed(constraintsOf(record)[0]!), true);
+    record = reportBetter(record, 'k_aaaaaa', { now: LATER });
+    assert.equal(severeUnreviewed(constraintsOf(record)[0]!), true);
+    record = ackClientChange(record, 'k_aaaaaa', { now: LATER });
+    assert.equal(severeUnreviewed(constraintsOf(record)[0]!), false);
   });
 });

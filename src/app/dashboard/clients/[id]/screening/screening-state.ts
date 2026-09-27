@@ -1,4 +1,5 @@
-import type { ScreeningSide, ScreeningTests } from '@/lib/schemas/health';
+// Göreli ve uzantılı içe aktarma: taslak `node --test` ile de sınanır (`screening-state.test.ts`).
+import type { ScreeningSide, ScreeningTests } from '../../../../../lib/schemas/health.ts';
 import {
   SCREENING_TEST_IDS,
   SCREENING_TESTS,
@@ -7,19 +8,28 @@ import {
   sidesOf,
   type NotTestedReason,
   type ResultChoice,
-} from '@/lib/screening';
+} from '../../../../../lib/screening.ts';
 
 /*
  * Tarama formunun taslağı: sunucu sayfası başlangıcı kurar (`initialScreeningState`), form gönderirken kayda çevirir
  * (`testsOf`). `'use client'` dosyasından ayrı: sunucu bileşeni istemci modülünün işlevini çağıramaz.
  */
 
-/** Bir tarafın formdaki hâli (sayılar metin: boş alan girilmedi). */
-export type SideState = { pain: boolean; painNote: string; result?: ResultChoice; reason?: NotTestedReason; missed: string[]; seconds: string; reachCm: string };
+/** Bir tarafın formdaki hâli (sayılar metin: boş alan girilmedi). `legCm`: bacak boyu (yalnız dengede). */
+export type SideState = {
+  pain: boolean;
+  painNote: string;
+  result?: ResultChoice;
+  reason?: NotTestedReason;
+  missed: string[];
+  seconds: string;
+  reachCm: string;
+  legCm: string;
+};
 export type TestExtra = { note: string; heelSupportHelps?: boolean };
 export type ScreeningDraftState = { sides: Record<string, SideState>; extras: Record<string, TestExtra>; note: string; date: string };
 
-export const EMPTY_SIDE: SideState = { pain: false, painNote: '', missed: [], seconds: '', reachCm: '' };
+export const EMPTY_SIDE: SideState = { pain: false, painNote: '', missed: [], seconds: '', reachCm: '', legCm: '' };
 
 export function decimal(text: string): number | undefined {
   const value = Number(text.replace(',', '.'));
@@ -32,12 +42,15 @@ export function toEntry(state: SideState | undefined): ScreeningSide | undefined
   if (!state.result) return undefined;
   const seconds = decimal(state.seconds);
   const reachCm = decimal(state.reachCm);
+  // Eski taslakta (sessionStorage) alan yok.
+  const legCm = decimal(state.legCm ?? '');
   return {
     result: state.result,
     ...(state.result === 'not_tested' && state.reason ? { reason: state.reason } : {}),
     ...(state.result === 'standard' || state.result === 'easier' ? { missed: state.missed } : {}),
     ...(seconds !== undefined ? { seconds } : {}),
     ...(reachCm !== undefined ? { reachCm } : {}),
+    ...(legCm !== undefined ? { legCm } : {}),
   };
 }
 
@@ -69,6 +82,7 @@ function stateOfSide(entry: ScreeningSide | undefined): SideState {
     missed: entry.missed ?? [],
     seconds: entry.seconds !== undefined ? String(entry.seconds) : '',
     reachCm: entry.reachCm !== undefined ? String(entry.reachCm).replace('.', ',') : '',
+    legCm: entry.legCm !== undefined ? String(entry.legCm).replace('.', ',') : '',
   };
 }
 

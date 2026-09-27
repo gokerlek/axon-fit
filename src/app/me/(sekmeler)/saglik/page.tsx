@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowDown, ArrowUp, FirstAidKit } from '@phosphor-icons/react/dist/ssr';
+import { FirstAidKit } from '@phosphor-icons/react/dist/ssr';
+import { ScreeningRows } from '@/components/progress/screening-card';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { canRecordHealth } from '@/lib/client-status';
 import { readAppConfig } from '@/lib/config';
@@ -8,34 +9,11 @@ import { clientConstraintView, constraintsOf, type ClientConstraintView } from '
 import { formatDay } from '@/lib/format';
 import { currentClient } from '@/lib/guards';
 import { readHealthIfAllowed } from '@/lib/health';
-import type { Screening } from '@/lib/schemas/health';
 import { clientScreeningRows, newestFirst, SCREENING_PROTOCOL } from '@/lib/screening';
 import { ClientHeader } from '../../client-header';
 import { HealthConstraints } from './health-constraints';
 
 export const metadata: Metadata = { title: 'Sağlık' };
-
-function ScreeningRows({ screening, previous }: { screening: Screening; previous: Screening | null }) {
-  const rows = clientScreeningRows(screening, previous);
-  return (
-    <ul className="flex flex-col divide-y rounded-lg border">
-      {rows.map((row) => (
-        <li key={row.testId} className="flex flex-col gap-1 p-3 text-sm">
-          <p className="font-medium">{row.title}</p>
-          {row.sides.map((side) => (
-            <p key={side.side} className="flex items-start gap-2">
-              {side.label ? <span className="w-8 shrink-0 text-muted-foreground">{side.label}</span> : null}
-              <span className="flex-1">{side.text}</span>
-              {side.change === 'up' ? <ArrowUp weight="bold" className="mt-0.5 size-4 shrink-0 text-primary" aria-label="bir önceki taramaya göre iyileşti" /> : null}
-              {side.change === 'down' ? <ArrowDown weight="bold" className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-label="bir önceki taramaya göre geriledi" /> : null}
-            </p>
-          ))}
-          {row.focus ? <p className="text-muted-foreground">Odak: {row.focus}</p> : null}
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 /**
  * Danışanın Sağlık sayfası (tasarım `kisit-tarama.md` §5.2; avatar menüsünden, dock'ta etkin sekme yok). Yalnız
@@ -99,7 +77,7 @@ export default async function ClientHealthPage() {
           {latest ? (
             <Card size="sm">
               <CardContent className="flex flex-col gap-2 px-0">
-                <ScreeningRows screening={latest} previous={screenings[1] ?? null} />
+                <ScreeningRows rows={clientScreeningRows(latest, screenings[1] ?? null)} />
                 {screenings[1] ? <p className="px-3 text-xs text-muted-foreground">↑ ↓: bir önceki taramaya göre ({formatDay(screenings[1].date)}).</p> : null}
               </CardContent>
             </Card>
@@ -111,7 +89,7 @@ export default async function ClientHealthPage() {
                 {screenings.slice(1).map((item, index) => (
                   <div key={item.date} className="flex flex-col gap-2">
                     <p className="font-medium">{formatDay(item.date)}</p>
-                    <ScreeningRows screening={item} previous={screenings[index + 2] ?? null} />
+                    <ScreeningRows rows={clientScreeningRows(item, screenings[index + 2] ?? null)} />
                   </div>
                 ))}
               </div>

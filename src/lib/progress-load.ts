@@ -17,7 +17,8 @@ import { parseWaterFile, WATER_PATH } from './water.ts';
  * - Okunamayan dosya sayfayı durdurmaz: sayılır (`skipped`), grafik ve rekorlar onsuz; sayılar ve
  *   haftalar index'ten olduğu için eksilmez. Index okunamazsa (ağ, yetki) danışana dönük hata.
  * - Grafik bölümü (`progress-insights.ts`): `water.json` bir okuma; `health.json` yalnız onaylı parça
- *   (hazır oluşluk, ağrı, ölçüm) varsa okunur. İkisi de okunamazsa sayfa durmaz, o grafik "okunamadı" der.
+ *   (hazır oluşluk, ağrı, ölçüm, tarama) varsa okunur. İkisi de okunamazsa sayfa durmaz, o grafik "okunamadı" der.
+ *   Antrenman yokken de tarama onaylıysa okunur: tarama antrenmandan önce yapılabilir (boş sayfada tarama kartı).
  */
 
 export type ProgressLoad = { status: 'ok'; view: ProgressView; insights: ProgressInsights } | { status: 'error'; message: string };
@@ -73,7 +74,7 @@ async function readWater(repo: SessionRepo): Promise<ReturnType<typeof parseWate
   }
 }
 
-const NO_HEALTH: HealthParts = { readiness: false, pain: false, measurements: false };
+const NO_HEALTH: HealthParts = { readiness: false, pain: false, measurements: false, screening: false };
 
 export async function loadProgressWith<E extends PlanExercise>(
   deps: ProgressDeps<E>,
@@ -102,7 +103,7 @@ export async function loadProgressWith<E extends PlanExercise>(
   // Antrenman yoksa sayfa boş durumdur: grafik bölümü için hiçbir şey okunmaz. Onaylı parça yoksa sağlık
   // kaydı hiç okunmaz (SPEC §9.4: gösterim de işlemedir).
   const idle = finished.length === 0;
-  const wantsHealth = !idle && Boolean(deps.health) && (consent.readiness || consent.pain || consent.measurements);
+  const wantsHealth = Boolean(deps.health) && ((!idle && (consent.readiness || consent.pain || consent.measurements)) || consent.screening);
   const [digests, water, health, plannedDays] = await Promise.all([
     mapLimit(rows, deps.concurrency ?? 6, async (row) => {
       try {

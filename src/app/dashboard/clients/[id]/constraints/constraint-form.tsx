@@ -393,7 +393,7 @@ export function ConstraintFormView({
         <Card>
           <CardHeader>
             <CardTitle>Şiddet ve başlangıç</CardTitle>
-            <CardDescription>Şiddet gösterim ve “kötüleşti” içindir; süzgeci değiştirmez.</CardDescription>
+            <CardDescription>Şiddet gösterim ve “kötüleşti” içindir; süzgeci değiştirmez. Yalnız danışanın “şiddetli” demesi, sen bakana kadar bölgeyi çalıştıran hareketlere dikkat ekler.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
             <Field>

@@ -4,7 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Drop, Play } from '@phosphor-icons/react';
+import { Play } from '@phosphor-icons/react';
+import { WaterGlass } from '@/components/water-glass';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -250,14 +251,14 @@ export function WaterCard({ clientId }: { clientId: string }) {
   const total = Math.max(0, (data?.water.file ?? 0) + (data?.water.sessions ?? 0) + activeWater + pending.reduce((sum, item) => sum + item.d, 0));
 
   return (
-    <Card size="sm" className="flex-row items-center gap-3 py-1 pr-1 pl-4">
-      <Drop className="size-5 shrink-0 text-primary" />
+    <Card size="sm" className="flex-row flex-wrap items-center gap-x-3 gap-y-1 border-sky-500/20 bg-sky-500/5 p-3">
+      <WaterGlass count={total} />
       <p className="min-w-0 flex-1 text-sm">
-        Su · bugün{' '}
+        <span className="mb-1 block text-muted-foreground">Su · bugün</span>
         {isPending && !data ? (
           <span aria-hidden className="inline-block h-4 w-4 animate-pulse rounded-md bg-muted align-middle" />
         ) : (
-          <motion.b key={total} initial={{ scale: 1.15 }} animate={{ scale: 1 }} transition={tween(DURATION.fast)} className="inline-block font-semibold tabular-nums">
+          <motion.b key={total} initial={{ scale: 1.15 }} animate={{ scale: 1 }} transition={tween(DURATION.fast)} className="inline-block text-3xl font-semibold tabular-nums">
             {formatNumber(total)}
           </motion.b>
         )}{' '}
@@ -265,14 +266,14 @@ export function WaterCard({ clientId }: { clientId: string }) {
       </p>
       <AnimatePresence initial={false}>
         {undo ? (
-          <motion.div key="undo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={tween(DURATION.fast)}>
+          <motion.div className="order-last w-full text-right" key="undo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={tween(DURATION.fast)}>
             <Button variant="ghost" className="h-11 px-3 text-[0.8125rem]" onClick={revert}>
               +1 · Geri al
             </Button>
           </motion.div>
         ) : null}
       </AnimatePresence>
-      <Button variant="secondary" className="h-11 min-w-14 text-base" onClick={add} aria-label="Bir bardak su ekle">
+      <Button variant="outline" className="h-12 min-w-14 border-sky-500/40 bg-sky-500/10 text-base text-sky-700 hover:bg-sky-500/20 dark:text-sky-300" onClick={add} aria-label="Bir bardak su ekle">
         +1
       </Button>
     </Card>

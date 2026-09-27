@@ -28,7 +28,9 @@ export function UserMenu({ login, appName }: { login: string; appName: string })
       // Düzenleyici taslakları sayfa gerçekten kapanınca gider (aynı tarayıcıyı başkası kullanabilir); tarayıcının
       // "Ayrıl?" sorusunda kalınırsa taslak ve otomatik yazım sürer. Düzenleyicilerin pagehide yazımından sonra çalışır.
       window.addEventListener('pagehide', () => discardAllDrafts(), { once: true });
-      // Tam yenileme: istemcideki önbellek ve oturumla ilgili her şey temizlensin.
+      // Tam yenileme: istemcideki önbellek ve oturumla ilgili her şey temizlensin (Next'in çıkış önerisi,
+      // `preserving-ui-state` rehberi); yukarıdaki `pagehide` de ancak belge gerçekten kapanınca çalışır.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- tam yenileme bilerek
       window.location.href = '/login';
     });
   }

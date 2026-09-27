@@ -186,8 +186,8 @@ describe('su', () => {
 });
 
 describe('bölümler ve onay', () => {
-  const none: HealthParts = { readiness: false, pain: false, measurements: false };
-  const all: HealthParts = { readiness: true, pain: true, measurements: true };
+  const none: HealthParts = { readiness: false, pain: false, measurements: false, screening: false };
+  const all: HealthParts = { readiness: true, pain: true, measurements: true, screening: true };
   const base = {
     weeks: [week('2026-09-14', 2), week('2026-09-21', 1)],
     plannedDays: 3,
@@ -208,12 +208,25 @@ describe('bölümler ve onay', () => {
 
   test('onay yoksa sağlık bölümleri kapalı: kayıt verilse de hesaplanmaz', () => {
     const result = buildInsights({ ...base, health: record, consent: none });
-    assert.deepEqual([result.readiness, result.pain, result.circumference], [{ state: 'off' }, { state: 'off' }, { state: 'off' }]);
+    assert.deepEqual([result.readiness, result.pain, result.circumference, result.screening], [{ state: 'off' }, { state: 'off' }, { state: 'off' }, { state: 'off' }]);
   });
 
   test('onay var, kayıt okunamadı: "okunamadı"', () => {
     const result = buildInsights({ ...base, health: 'unavailable', consent: all });
-    assert.deepEqual([result.readiness, result.pain, result.circumference], [{ state: 'unavailable' }, { state: 'unavailable' }, { state: 'unavailable' }]);
+    assert.deepEqual(
+      [result.readiness, result.pain, result.circumference, result.screening],
+      [{ state: 'unavailable' }, { state: 'unavailable' }, { state: 'unavailable' }, { state: 'unavailable' }],
+    );
+  });
+
+  test('tarama: yalnız onayla, son iki gün (en yenisi önce); kayıt yoksa boş', () => {
+    const day = (date: string) => ({ date, protocol: 1 as const, tests: { squat: { result: 'standard' as const, missed: [] } } });
+    const result = buildInsights({ ...base, health: { ...record, screenings: [day('2026-06-01'), day('2026-09-12'), day('2026-08-01')] }, consent: { ...none, screening: true } });
+    assert.ok(result.screening.state === 'ok');
+    if (result.screening.state !== 'ok') return;
+    assert.deepEqual(result.screening.screenings.map((item) => item.date), ['2026-09-12', '2026-08-01']);
+    assert.deepEqual(result.readiness, { state: 'off' });
+    assert.deepEqual(buildInsights({ ...base, health: null, consent: { ...none, screening: true } }).screening, { state: 'ok', screenings: [] });
   });
 
   test('yalnız onaylı parça; dosya yoksa boş seriler', () => {

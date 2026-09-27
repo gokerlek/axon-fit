@@ -358,11 +358,19 @@ Yeni Dikkat türleri: `constraint` ("Kısıt") ve `screening` ("Tarama"). Özet 
 | "Kısıt kötüleşti: Sol diz orta → şiddetli" / "Danışan düzeldi dedi: Bel" | danışanın kötüleşme ya da düzelme güncellemesi bekliyor | 72 | Kısıtlar | PT "Gördüm" / karar |
 | "Programda kısıtla çelişen 2 hareket" | izinsiz `block`, sıradaki günde değil | 66 | Program | program ya da izin değişince |
 | "Profesyonel görüşü bekleniyor · Sol diz · 12 gün" | `referredAt` var, `clearance` yok | 40 | Kısıtlar | görüş ya da kısıt kapanınca |
-| "Taramada büyük asimetri: split squat" | son tarama ≤ 28 gün; sıra farkı ≥ 2 ya da ön uzanma farkı ≥ 4 cm; ağrılı, yapılmamış ya da etkin kısıtlı taraf sayılmaz; **tarama başına tek madde** | 38 | Tarama | 28 gün ya da yeni tarama |
+| "Taramada büyük asimetri: split squat" | son tarama ≤ 28 gün; sıra farkı ≥ 2 ya da ön uzanma farkı > 4 cm; ağrılı, yapılmamış ya da etkin kısıtlı taraf sayılmaz; **tarama başına tek madde** | 38 | Tarama | 28 gün ya da yeni tarama |
 
 Mevcut ölçekte (kaçan günler 90, öneriler 75 … bekleyen davet 25) yönlendirme en üstte, sıradaki güne düşen çelişki kaçan günlerle önerinin arasında, bekleyen görüş ve asimetri ölçüm eğiliminin (45) altındadır. **Bildirimler**'e `constraint` türü ("Kısıt"): değişiklik kaydının danışan satırlarından, 14 günlük pencerede ("Kısıt bildirildi: Sol diz (orta)", "Kısıt güncellendi: Sol diz · kötüleşti", "Bildirim geri çekildi: Sol diz"); yalnız onay sürdükçe (bugünkü ağrı bildirimleri gibi).
 
 ---
+
+### 3.7 Açık maddelerin tamamlanması (2026-09-27)
+
+- **Kendi programı:** izinsiz yasaklı hareket danışanın kütüphane listesinde ve aramasında görünmez; sunucu yeni satırı da reddeder. Önceki kaydın aynı hareketi taşıyan satırı korunur. PT gününden kopyalanan harekete yalnız ilgili `copiedFrom.dayId`, açık şablondan kopyalanana yalnız ilgili günün `source.templateId` kaynağı izin verir; başka günün kaynağı istisna sağlamaz. Korunan satırda "Sana önerilmiyor" görünür. Sağlık okuma hatası kaydı durdurur. Paylaşılan programı düzenleyen PT kısıt ve tarama işaretlerini görür.
+- **Kırmızı ünlem:** şiddetli bildirim/kötüleşme 92 öncelikle öneri onayının üstünde durur. Sonradan "Düzeldi" denmesi, PT incelemeden şiddetli uyarıyı kaldırmaz. Önceden verilmiş hareket izni de yeni şiddetli dikkati susturmaz.
+- **Ağrı geçmişi:** aynı test ve taraf yeni taramada ağrısız yapılınca eski ağrı kapanır; tekrar ağrılıysa yeni kayıt eskisinin yerini alır. Test yapılmadıysa eski ağrı açık kalır; PT "Gördüm" ile kapatabilir.
+- **Bitiş kısayolu:** bu seansta ve önceki 42 gün içindeki en yeni 6 ağrılı seanstan birinde aynı hareket ağrıyla geçildiyse bildirim teklif edilir [sentez]. Yalnız kısıt ve ağrı takibi onaylıyken; aynı bölgede etkin kısıt/bekleyen bildirim varsa yeniden teklif edilmez. En çok iki bölge; önerilen bölgeyi danışan değiştirir, hiçbir bildirim kendiliğinden gönderilmez.
+- **İlerleme:** PT ve danışan ekranında son tarama ve öncekiyle karşılaştırma; yalnız tarama onayıyla. Özet ve antrenman sonrası zorluk kartı kendi programının adını da taşır.
 
 ## 4. Hareket taraması
 
@@ -410,12 +418,12 @@ Kurulum metni ekranda testin kartında durur; aşağıdakiler PT'ye dönük kont
 
 **Ek gözlem ve sayılar (isteğe bağlı):**
 - Squat'ta "Topuk altına 2–5 cm destekle düzeldi mi?" (evet/hayır). Evet ise ipucu ayak bileğini gösterir ve Ölçümler'deki **duvar lunge testine** bağlanır: dorsifleksiyon kısıtlanınca squat'ta diz içe kayması artar, kalça kinematiği değişmez (Macrum 2012); diz içe kayan grupta kalça kuvveti farklı değil, dorsifleksiyon kısıtı belirgin (Bell 2008).
-- Tek ayak dengede **süre** (sn) ve **ön uzanma** (cm; yıldız denge testinin ön yönü). v1'in Y-Balance ekranından yalnız kaynaklı eşiği olan ön yön alındı. Bacak boyuna göre yüzde sonra.
+- Tek ayak dengede **süre** (sn) ve **ön uzanma** (cm; yıldız denge testinin ön yönü). v1'in Y-Balance ekranından yalnız kaynaklı eşiği olan ön yön alındı. İsteğe bağlı bacak boyu (ASIS → iç ayak bileği kemiği, cm) girilince ön uzanma / bacak boyu × 100 de gösterilir. Yüzdeye risk eşiği uygulanmaz; asimetri eşiği ham santimetredir.
 - Her testte kısa not (≤ 140).
 
 ### 4.4 Asimetri ve ağrı
 
-- **Asimetri** (iki taraflı testler, iki tarafın da sonucu varsa): iç sıra farkı 1 → "asimetri" (tabloda görünür, madde yok), ≥ 2 → "büyük asimetri" **[sentez]**. Ön uzanmada fark ≥ 4 cm → "büyük asimetri": lise basketbolcularında bu farkla alt ekstremite sakatlığı yaklaşık 2,5 kat sıktı (Plisky 2006; tek çalışma, dar popülasyon, "risk" diye yazılmaz). Tek ayak süresindeki fark gösterilir, sınıflanmaz (kaynaklı eşik yok). Ağrılı, yapılmamış ya da etkin kısıtlı (testin bölgesinde, o tarafta ya da iki tarafta) taraf asimetriye girmez. Dikkat'e **tarama başına tek madde** düşer (en büyük farkla).
+- **Asimetri** (iki taraflı testler, iki tarafın da sonucu varsa): iç sıra farkı 1 → "asimetri" (tabloda görünür, madde yok), ≥ 2 → "büyük asimetri" **[sentez]**. Ön uzanmada fark > 4 cm → "büyük asimetri": lise basketbolcularında 4 cm'yi aşan farkla alt ekstremite sakatlığı yaklaşık 2,5 kat sıktı (Plisky 2006; tek çalışma, dar popülasyon, "risk" diye yazılmaz). Tek ayak süresindeki fark gösterilir, sınıflanmaz (kaynaklı eşik yok). Ağrılı, yapılmamış ya da etkin kısıtlı (testin bölgesinde, o tarafta ya da iki tarafta) taraf asimetriye girmez. Dikkat'e **tarama başına tek madde** düşer (en büyük farkla).
 - **Ağrı** sonucun yerine geçer (§4.2); o test ve taraf "Ağrılı" görünür, ipucu üretmez, Dikkat'e düşer. PT'nin iki eylemi: **Gördüm** (`painReviewedAt`; "değerlendirmeye yönlendirdim") ve **Kısıt olarak ekle** (conditions onayı varsa): kısa onaydan sonra kısıt yazılır — bölge ve taraf testten, `type: 'limitation'`, `origin: 'screening'`, **tanı yok**, testin kaçınma önerisi (kol kaldırma → `overhead`, şınav → `behind_body`, ters kürek → yok, menteşe → `forward_bend`, squat/split squat → `deep_knee_flexion`); ağrı "gözden geçirildi" olur ve kısıtın düzenleme sayfası açılır. Otomatik kısıt yazılmaz.
 - Test → bölge önerisi: kol kaldırma, şınav, ters kürek → omuz; menteşe → bel; squat, split squat, denge → diz (PT değiştirir); dönmeye direnç → bel.
 
@@ -500,7 +508,7 @@ squat ve denge "Yapılmadı (kısıt)" olarak hazır; istersen değiştir.
 - **İpuçları (yalnız PT, [sentez]):** Ağrılı → öneri yok, "önce değerlendirme"; Yapılamadı → kalıbı yükleme, destekli ve kısa aralıkla başla; Kolaylaştırılmış → kolaylaştırılmış sürümle çalış (testin gerileme listesi); Telafiyle → yüklenebilir, kaçan noktanın ipucu; Temiz → ilerlet (testin ilerleme listesi); asimetri → zayıf taraftan başla, iki tarafa eşit iş. **Sıra: ağrı → en düşük sonuç → asimetri**, eşitlikte test sırası; ötesi PT'nin hedefidir (uygulama hedef bilmez). Hareketlilik → kontrol → kalıp basamakları kullanılmaz (§4.1).
 - **Gerileme ve ilerleme listeleri** test başına paketteki kütüphanenin kimlikleriyle `screening.ts`'te sabittir; kütüphane testi (`libraries.test.ts`) kimliklerin var olduğunu denetler. Altında "Kütüphanende aynı kalıptan" PT'nin kendi hareketleri (`pattern` eşleşmesi).
 - **Dikkat gerektirenler:** ağrı (78) ve tarama başına tek büyük asimetri (38), §3.6.
-- **Süzgeç:** tarama hareketi yasaklamaz. Sonraki fazda ağrılı testin kalıbındaki hareketler düzenleyicide "dikkat" alır, ipucu rozeti bilgi olarak görünür (§6, faz 6 — sonra).
+- **Süzgeç:** tarama hareketi yasaklamaz. Açık ağrılı testin kalıbındaki hareketler PT düzenleyicisinde "dikkat" alır; son taramanın sonucu ve ipucu bilgi rozeti olarak görünür. Yalnız tarama onayı varken okunur.
 
 ---
 
@@ -668,7 +676,7 @@ Her faz tek başına yayınlanır; PT ekranları masaüstünde, danışan ekranl
 | 3 | Süzgeç entegrasyonu | **ön koşul: kütüphanenin etiketlenmesi ve aile testi**; `constraint-filter.ts`; düzenleyici sheet'i (işaret, katlanmış grup, "Yine de ekle"), kart rozeti, program sayfası uyarısı; Dikkat: yönlendirme, bekleyen görüş, çelişki |
 | 4 | Danışan | `/me/saglik`, bildir sheet'i (iki kademeli güvenlik metni), düzelt/geri çek/kötüleşti/düzeldi, PT karar akışı; Bildirimler ve Dikkat (bildirildi, kötüleşti); "Değiştir" sırası; hareket kartı notu; `conditions` ve `screening` onay sürümü `2026-10` |
 | 5 | Tarama | `screening.ts`; genel görünüm, giriş (tablet), düzenleme, karşılaştırma, ipuçları, uçlar; Dikkat (ağrı, asimetri); "Kısıt olarak ekle"; danışanın tarama bölümü; FMS adlarının koddan kalkması |
-| 6 | Sonra | ağrılı test kalıbının düzenleyicide "dikkat" alması ve tarama rozetleri; antrenman bitişinde ağrıyla iki kez geçilen harekette "Antrenörüne kısıt olarak bildir" kısayolu; İlerleme'de tarama kartı; ön uzanmanın bacak boyuna göre yüzdesi; dirsek, el bileği, kalça ve ayak bileği için "bölgeyi çalıştıran" ölçütü |
+| 6 | Tamamlandı | ağrılı test kalıbının düzenleyicide "dikkat" alması ve tarama rozetleri; antrenman bitişinde ağrıyla iki kez geçilen harekette "Antrenörüne kısıt olarak bildir" kısayolu; İlerleme'de tarama kartı; ön uzanmanın bacak boyuna göre yüzdesi; dirsek, el bileği, kalça ve ayak bileği için "bölgeyi çalıştıran" ölçütü |
 
 **Gözden geçirme (QA):** "Test Gelişim" (`c_zmrbywaz`, kısıtlar/hazır oluşluk/ağrı/ölçüm açık) modülüne Tarama da eklenir; kısıtların ve taramanın sürümü değiştiği için danışan olarak (`/api/dev/login?role=client&client=c_zmrbywaz`) yeniden onay verilir (ağrı takibi ve ölçümler bu arada sürer); kısıt, bildirim, yönlendirme, izin ve tarama akışları burada. "Test Öneri" (`c_sflqg2b9`) programlı danışanda düzenleyici sheet'i ve "Değiştir". "Test Ölçüm" (`c_b4b572ef`, yalnız ölçüm onayı) kilitli Kısıtlar ve Tarama sayfalarını ve alt şeridin pasif parçalarını gösterir; ölçüm girişi sürüm artışından etkilenmez. Gerçek danışana (`c_uc942qx6`) hiçbir koşulda yazılmaz; yalnız okuma.
 
@@ -697,7 +705,7 @@ Her faz tek başına yayınlanır; PT ekranları masaüstünde, danışan ekranl
 Sekiz maddenin sekizi de alındı. Değiştirerek alınan ya da alınmayan kısımlar, nedenleriyle:
 
 - **Madde 1 (parça başına sürüm):** alındı. Kapsamın genişlemesi (`enabledAt`) parça başına yapılmadı: çıkarılıp geri eklenen parça, eski onayın kapsamında görünürdü; modülü yeniden açmak ya da parça eklemek PT'nin bilinçli eylemidir ve bugün de bütün onayı yeniler.
-- **Madde 2 (yönlendirme ve görüş):** alındı. "Bölgeyi çalıştıran" ölçütü yalnız diz, omuz, omurga ve boyunda var; dirsek, el bileği, kalça, ayak bileği ve "başka yer"de dikkat üretilmez (güvenilir ölçüt yok; faz 6). Boyun, eleştirinin önerdiği omurga ölçütüne (eksenel yük) katıldı.
+- **Madde 2 (yönlendirme ve görüş):** alındı. "Bölgeyi çalıştıran" ölçütü diz, omuz, omurga ve boynun yanında dirsek, el bileği, kalça ve ayak bileğini de kapsar; kas, kalıp ve eklem pencerelerinden türetilmiş muhafazakâr eşlemedir [sentez]. "Başka yer" ve etiketsiz harekette bölgeden tahmin yapılmaz. Boyun, eleştirinin önerdiği omurga ölçütüne (eksenel yük) katıldı.
 - **Madde 5 (bölge kapısı):** alındı, dizde `touches()` yerine daha dar bir ölçütle: `touches()` arka bacak kaslarını dize sayar ve Kettlebell Swing'i yine yakalardı; kapı ön bacak ya da diz penceresi ister. Kaçınma listesinden `spine_end_range` çıkarıldı (kütüphanede hiçbir harekette yok, her harekette "eksik bilgi" üretirdi); "dirsek gövdenin arkasında, yüklü" yüklü şartı eksenel yükten değil pencereden okunur (bench'in eksenel yükü yok).
 - **Madde 7 (tarama girişi):** alındı; ön-seçim yalnız görüşü alınmamış kırmızı bayrak bölgesinde, öteki etkin kısıtlar başlıkta söylenir ve asimetriyi bastırır.
 - **Madde 3, 4, 6, 8:** olduğu gibi alındı.
@@ -727,11 +735,9 @@ Araştırma klasöründekiler (`docs/research/medical-fitness/findings.json`, ba
 - Macrum E ve ark. Effect of limiting ankle-dorsiflexion range of motion on lower extremity kinematics and muscle-activation patterns during a squat. *J Sport Rehabil* 2012 (PubMed 22100617).
 - Saraceni N ve ark. To flex or not to flex? Is there a relationship between lumbar spine flexion during lifting and low back pain? A systematic review with meta-analysis. *J Orthop Sports Phys Ther* 2020 (PubMed 31775556).
 - Finucane LM ve ark. International framework for red flags for potential serious spinal pathologies. *J Orthop Sports Phys Ther* 2020;50(7):350–372.
-
-Klasörde olmayanlar (araştırma klasörüne eklenecek):
-- Cook G, Burton L, Hoogenboom B. Pre-participation screening: the use of fundamental movements as an assessment of function – part 1. *N Am J Sports Phys Ther* 2006;1(2):62–72. Yalnız kavram ve sıralı ölçeğin genel biçimi.
-- Kritz M, Cronin J, Hume P. The bodyweight squat: a movement screen for the squat pattern. *Strength Cond J* 2009;31(1):76–85. ([LWW](https://journals.lww.com/nsca-scj/fulltext/2009/02000/the_bodyweight_squat__a_movement_screen_for_the.14.aspx))
-- Springer BA, Marin R, Cyhan T, Roberts H, Gill NW. Normative values for the unipedal stance test with eyes open and closed. *J Geriatr Phys Ther* 2007;30(1):8–15. ([PubMed 19839175](https://pubmed.ncbi.nlm.nih.gov/19839175/))
-- Plisky PJ, Rauh MJ, Kaminski TW, Underwood FB. Star Excursion Balance Test as a predictor of lower extremity injury in high school basketball players. *J Orthop Sports Phys Ther* 2006;36(12):911–919. ([JOSPT](https://www.jospt.org/doi/10.2519/jospt.2006.2244))
-- Stiell IG, Greenberg GH, McKnight RD, Nair RC, McDowell I, Worthington JR. A study to develop clinical decision rules for the use of radiography in acute ankle injuries. *Ann Emerg Med* 1992;21(4):384–390. (Ottawa ayak bileği kuralı: "dört adım basamama".)
-- Stiell IG, Greenberg GH, Wells GA ve ark. Derivation of a decision rule for the use of radiography in acute knee injuries. *Ann Emerg Med* 1995;26(4):405–413. (Ottawa diz kuralı.)
+- Cook G, Burton L, Hoogenboom B. Pre-participation screening: the use of fundamental movements as an assessment of function – part 1. *N Am J Sports Phys Ther* 2006;1(2):62–72 (PMC2953313). Yalnız kavram ve sıralı ölçeğin genel biçimi.
+- Kritz M, Cronin J, Hume P. The bodyweight squat: a movement screen for the squat pattern. *Strength Cond J* 2009;31(1):76–85 (DOI 10.1519/SSC.0b013e318195eb2f).
+- Springer BA, Marin R, Cyhan T, Roberts H, Gill NW. Normative values for the unipedal stance test with eyes open and closed. *J Geriatr Phys Ther* 2007;30(1):8–15 (PubMed 19839175). Yaş grubu normları klasörde Shirley Ryan AbilityLab tablosuyla.
+- Plisky PJ, Rauh MJ, Kaminski TW, Underwood FB. Star Excursion Balance Test as a predictor of lower extremity injury in high school basketball players. *J Orthop Sports Phys Ther* 2006;36(12):911–919 (PubMed 17193868). Eşik "4 cm'den büyük".
+- Stiell IG, Greenberg GH, McKnight RD, Nair RC, McDowell I, Worthington JR. A study to develop clinical decision rules for the use of radiography in acute ankle injuries. *Ann Emerg Med* 1992;21(4):384–390 (PubMed 1554175). Ottawa ayak bileği kuralı: yaralanmadan hemen sonra ve acilde yük verememe.
+- Stiell IG, Greenberg GH, Wells GA ve ark. Derivation of a decision rule for the use of radiography in acute knee injuries. *Ann Emerg Med* 1995;26(4):405–413 (PubMed 7574120). Ottawa diz kuralı; yük verememe "dört adım" diye tanımlı.

@@ -17,7 +17,7 @@ import {
 } from '../constraints.ts';
 import { isCalendarDate } from '../measurement-log.ts';
 import { MEASUREMENT_IDS } from '../measurements.ts';
-import { NOT_TESTED_REASONS, RESULT_CHOICES, SCREENING_LIMIT, SCREENING_PROTOCOL } from '../screening.ts';
+import { LEG_LENGTH_CM, NOT_TESTED_REASONS, RESULT_CHOICES, SCREENING_LIMIT, SCREENING_PROTOCOL } from '../screening.ts';
 
 /**
  * Danışanın sağlık kaydı — `client-<id>` repo'sunda `health.json` (SPEC §4).
@@ -250,6 +250,14 @@ export const screeningSideSchema = v.object({
   painNote: v.optional(text(140)),
   seconds: v.optional(v.pipe(v.number('Sayı gir.'), v.minValue(0, 'Negatif olamaz.'), v.maxValue(300, 'En fazla 300 sn.'))),
   reachCm: v.optional(v.pipe(v.number('Sayı gir.'), v.minValue(0, 'Negatif olamaz.'), v.maxValue(250, 'En fazla 250 cm.'))),
+  /** Bacak boyu (cm; ASIS → iç ayak bileği kemiği): ön uzanma bununla yüzdeye çevrilir (Plisky 2006). İsteğe bağlı. */
+  legCm: v.optional(
+    v.pipe(
+      v.number('Sayı gir.'),
+      v.minValue(LEG_LENGTH_CM.min, `En az ${LEG_LENGTH_CM.min} cm.`),
+      v.maxValue(LEG_LENGTH_CM.max, `En fazla ${LEG_LENGTH_CM.max} cm.`),
+    ),
+  ),
 });
 export type ScreeningSide = v.InferOutput<typeof screeningSideSchema>;
 

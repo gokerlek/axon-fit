@@ -1,7 +1,7 @@
 import { circumferenceByWindow, type CircumferenceChange, type StrengthWindow } from './muscle-progress.ts';
 import { mondayOf } from './program-plan.ts';
 import { addDays, PROGRESS_WEEKS, type SessionDigest, type WeekView } from './progress.ts';
-import type { HealthCheckIn, HealthRecord } from './schemas/health.ts';
+import type { HealthCheckIn, HealthRecord, Screening } from './schemas/health.ts';
 import type { SessionIndex, WaterTap } from './schemas/session.ts';
 import { readinessScore } from './session-check.ts';
 import { normalizePoints, type Point } from './trend.ts';
@@ -13,8 +13,9 @@ import { sessionWaterOn } from './workout-plan.ts';
  *
  * - Antrenman düzeni: haftada antrenman günü ve planlanan gün (Bugün'deki "bu hafta x/y"nin y'si).
  * - Seans zorluğu (CR-10): antrenman verisidir (SPEC §4), onaya bağlı değildir.
- * - Hazır oluşluk, ağrı ve çevre ölçümleri sağlık verisidir: yalnız o parçanın onayı varsa hesaplanır;
- *   onay yoksa `health.json` hiç okunmaz (`progress-data.ts`), bölüm çizilmez (`off`).
+ * - Hazır oluşluk, ağrı, çevre ölçümleri ve hareket taraması sağlık verisidir: yalnız o parçanın onayı varsa
+ *   hesaplanır; onay yoksa `health.json` hiç okunmaz (`progress-data.ts`), bölüm çizilmez (`off`). Taramadan yalnız
+ *   son iki gün gider (kart sözcük ve ok gösterir, `screening.ts` → `progressScreening`).
  * - Su: son 30 gün, `water.json` + bitmiş antrenmanların suyu (Bugün'deki toplamla aynı kural).
  */
 
@@ -27,7 +28,12 @@ export const WATER_DAYS = 30;
 export type Gated<T> = { state: 'off' } | { state: 'unavailable' } | ({ state: 'ok' } & T);
 
 /** Sağlık kaydının İlerleme'de gösterilebilen parçaları (`canRecordHealth`). */
-export type HealthParts = { readiness: boolean; pain: boolean; measurements: boolean };
+export type HealthParts = { readiness: boolean; pain: boolean; measurements: boolean; screening: boolean };
+
+/** İlerleme'deki tarama kartı için son iki tarama günü (en yenisi önce); kart sözcükleri görene göre kurar. */
+export function recentScreenings(screenings: readonly Screening[] | undefined): Screening[] {
+  return [...(screenings ?? [])].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, 2);
+}
 
 /** Haftalık grafiklerin ve sağlık grafiklerinin ilk günü: haftalık görünümle aynı 12 hafta (pazartesiden). */
 export function chartStart(today: string): string {
@@ -150,6 +156,8 @@ export type ProgressInsights = {
   pain: Gated<{ before: Point[]; peak: Point[] }>;
   /** Kaslara bağlı çevre değişimleri, Gelişim'in her penceresi için. */
   circumference: Gated<{ byWindow: Record<StrengthWindow, CircumferenceChange[]> }>;
+  /** Hareket taraması: son iki gün (en yenisi önce); tarama yoksa boş. */
+  screening: Gated<{ screenings: Screening[] }>;
 };
 
 /**
@@ -163,14 +171,14 @@ export function buildInsights(input: {
   digests: readonly Pick<SessionDigest, 'date' | 'rpe'>[];
   index: SessionIndex;
   water: readonly Pick<WaterTap, 'd' | 'at'>[] | 'unavailable';
-  health: Pick<HealthRecord, 'checkIns' | 'measurements'> | null | 'unavailable';
+  health: Pick<HealthRecord, 'checkIns' | 'measurements' | 'screenings'> | null | 'unavailable';
   consent: HealthParts;
   today: string;
   timeZone: string;
 }): ProgressInsights {
   const from = chartStart(input.today);
   const health = input.health;
-  const gated = <T>(allowed: boolean, build: (record: Pick<HealthRecord, 'checkIns' | 'measurements'>) => T): Gated<T> => {
+  const gated = <T>(allowed: boolean, build: (record: Pick<HealthRecord, 'checkIns' | 'measurements' | 'screenings'>) => T): Gated<T> => {
     if (!allowed) return { state: 'off' };
     if (health === 'unavailable') return { state: 'unavailable' };
     return { state: 'ok' as const, ...build(health ?? { checkIns: [], measurements: [] }) };
@@ -185,5 +193,6 @@ export function buildInsights(input: {
     readiness: gated(input.consent.readiness, (record) => ({ points: readinessPoints(record.checkIns, from) })),
     pain: gated(input.consent.pain, (record) => painPoints(record.checkIns, from)),
     circumference: gated(input.consent.measurements, (record) => ({ byWindow: circumferenceByWindow(record.measurements, input.today) })),
+    screening: gated(input.consent.screening, (record) => ({ screenings: recentScreenings(record.screenings) })),
   };
 }

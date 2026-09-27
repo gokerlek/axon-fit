@@ -1,13 +1,16 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { CheckCircle, PencilSimple } from '@phosphor-icons/react/dist/ssr';
+import { Bandaids, CheckCircle, PencilSimple } from '@phosphor-icons/react/dist/ssr';
 import { ChangeLog } from '@/components/program/change-log';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { loadCareInput } from '@/lib/client-care';
 import { readAppConfig } from '@/lib/config';
+import { programConflicts } from '@/lib/constraint-filter';
 import { listExercises } from '@/lib/exercises';
+import { formatNumber, todayIn } from '@/lib/format';
 import { currentClient } from '@/lib/guards';
 import { activeProgramId } from '@/lib/own-program-index';
 import { lastDateByDay, programLine } from '@/lib/own-program-text';
@@ -27,7 +30,8 @@ const LOG_INITIAL = 5;
  * Kendi programın (`docs/design/kendi-program.md` §2.3): günler salt okuma ("sıradaki", "son: 19 Eyl"), Düzenle,
  * Bugün'ün programı (rozet ya da tek dokunuşla seçim), antrenörle paylaşım, değişiklikler (etiketler görene göre,
  * §7.3) ve silme. Adresteki kimlik kalıba uymuyorsa ya da program yoksa 404. Açılınca PT'nin düzenlemesi görüldü
- * sayılır (rozet düşer).
+ * sayılır (rozet düşer). Kısıtlar onaylıyken kısıtının yasakladığı satırlar en üstte (`kisit-tarama.md` §3.7): gerekçe
+ * yok, gün ve hareket.
  */
 export default async function OwnProgramPage({ params }: { params: Promise<{ pid: string }> }) {
   const [client, config, { pid }] = await Promise.all([currentClient(), readAppConfig(), params]);
@@ -57,6 +61,8 @@ export default async function OwnProgramPage({ params }: { params: Promise<{ pid
   const item = overview?.state.index.items.find((row) => row.id === pid);
   const byId = new Map(exercises.map((exercise) => [exercise.id, exercise]));
   const lastByDay = overview ? lastDateByDay(overview.sessions) : new Map<string, string>();
+  const careInput = await loadCareInput(client, todayIn(config.timeZone));
+  const conflicts = careInput ? programConflicts(program, byId, careInput) : [];
 
   return (
     <main className="flex flex-col gap-6">
@@ -73,6 +79,17 @@ export default async function OwnProgramPage({ params }: { params: Promise<{ pid
           <MakeActiveButton programId={pid} name={program.name} className="h-11 self-start" />
         )}
       </div>
+
+      {conflicts.length > 0 ? (
+        <Alert>
+          <Bandaids weight="fill" />
+          <AlertTitle>Kısıtın nedeniyle sana önerilmeyen {formatNumber(conflicts.length)} hareket</AlertTitle>
+          <AlertDescription>
+            <p>{conflicts.map((conflict) => `${conflict.dayName} · ${conflict.title}`).join(' · ')}</p>
+            <p>Antrenmanda &apos;Değiştir&apos;den bir muadil seçebilir ya da programı düzenleyebilirsin. Emin değilsen antrenörüne sor.</p>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {phase ? <ProgramDays days={phase.days} exercises={byId} nextId={nextDayId(program)} lastByDay={lastByDay} /> : null}
 

@@ -10,3 +10,6 @@ dist/
 next-env.d.ts
 .DS_Store
 .omc/
+
+# Local agent checkouts are not application source
+.claude/worktrees/

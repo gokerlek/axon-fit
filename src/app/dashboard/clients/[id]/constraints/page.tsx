@@ -26,6 +26,7 @@ import {
   redFlagStep,
   regionText,
   SEVERITY_LABELS,
+  severeUnreviewed,
   triggersText,
 } from '@/lib/constraints';
 import { listExercises, type ExerciseWithSource } from '@/lib/exercises';
@@ -38,6 +39,7 @@ import { readProgramFile } from '@/lib/programs';
 import type { Client } from '@/lib/schemas/client';
 import type { Constraint, HealthRecord } from '@/lib/schemas/health';
 import type { Program } from '@/lib/schemas/program';
+import { cn } from '@/lib/utils';
 import { HealthLockAlert, HealthStrip } from '../health-page';
 import { MeasurementProblemAlert, measurementClient } from '../measurements/measurement-page';
 import { ChangeActions, OverrideRemove, RedFlagActions, ReportActions } from './constraint-actions';
@@ -91,6 +93,7 @@ function ConstraintCard({
   const base = `/dashboard/clients/${client.id}`;
   const step = redFlagStep(constraint);
   const change = constraint.clientChange;
+  const severe = severeUnreviewed(constraint);
   const diagnosis = diagnosisLine(constraint);
   const finding = findingLine(constraint);
   return (
@@ -111,14 +114,27 @@ function ConstraintCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
         {change ? (
-          <div className="flex flex-col gap-2 rounded-lg border border-primary/40 bg-primary/5 p-3">
-            <p>
-              {change.resolved
-                ? 'Danışan düzeldi dedi.'
-                : `Danışan güncelledi · ${change.previousSeverity ? `${SEVERITY_LABELS[change.previousSeverity].toLocaleLowerCase('tr')} → ` : ''}${change.severity ? SEVERITY_LABELS[change.severity].toLocaleLowerCase('tr') : 'kötüleşti'} dedi`}
-              {' · '}
-              {formatDay(change.at.slice(0, 10))}
+          <div className={cn('flex flex-col gap-2 rounded-lg border p-3', severe ? 'border-destructive/40' : 'border-primary/40 bg-primary/5')}>
+            <p className={cn(severe && 'flex items-start gap-2')}>
+              {severe ? (
+                <>
+                  <WarningCircle weight="fill" aria-hidden className="mt-0.5 size-4 shrink-0 text-destructive" />
+                  <span className="sr-only">Acil: </span>
+                </>
+              ) : null}
+              <span>
+                {change.resolved
+                  ? `Danışan düzeldi dedi${change.severity === 'severe' ? ' (önce şiddetli demişti)' : ''}.`
+                  : `Danışan güncelledi · ${change.previousSeverity ? `${SEVERITY_LABELS[change.previousSeverity].toLocaleLowerCase('tr')} → ` : ''}${change.severity ? SEVERITY_LABELS[change.severity].toLocaleLowerCase('tr') : 'kötüleşti'} dedi`}
+                {' · '}
+                {formatDay(change.at.slice(0, 10))}
+              </span>
             </p>
+            {severe ? (
+              <p className="text-muted-foreground">
+                Sen karar verene kadar bu bölgeyi çalıştıran hareketler dikkat alır, danışan kartta not görür.
+              </p>
+            ) : null}
             <ChangeActions clientId={client.id} id={constraint.id} baseUpdatedAt={constraint.updatedAt} kind={change.resolved ? 'better' : 'worse'} />
           </div>
         ) : null}
@@ -213,6 +229,15 @@ function Overview({
                 {regionText(report)} · {constraintMeta(report)}
               </p>
               {report.triggers?.length ? <p>Zorlayanlar: {triggersText(report.triggers)} (şimdiden dikkat olarak işliyor)</p> : null}
+              {severeUnreviewed(report) ? (
+                <p className="flex items-start gap-2">
+                  <WarningCircle weight="fill" aria-hidden className="mt-0.5 size-4 shrink-0 text-destructive" />
+                  <span>
+                    <span className="sr-only">Acil: </span>
+                    Şiddetli: karar verene kadar bu bölgeyi çalıştıran hareketler de dikkat alır.
+                  </span>
+                </p>
+              ) : null}
               {report.reportNote ? <p className="text-muted-foreground">“{report.reportNote}”</p> : null}
               <p className="text-muted-foreground">
                 {suggested.length > 0 ? `Olduğu gibi onaylarsan kaçınılır: ${avoidText(suggested)}.` : 'Zorlayan seçilmedi: olduğu gibi kaydedersen hiçbir hareket değişmez.'}

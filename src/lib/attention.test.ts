@@ -12,7 +12,7 @@ import {
   screeningFactsOf,
   type AttentionFacts,
 } from './attention.ts';
-import { addConstraint, clearConstraint, referConstraint, removeConstraint, reportConstraint, reportWorse } from './constraints.ts';
+import { reportBetter, ackClientChange, addConstraint, clearConstraint, referConstraint, removeConstraint, reportConstraint, reportWorse } from './constraints.ts';
 import type { Client, Invite } from './schemas/client.ts';
 import type { HealthRecord } from './schemas/health.ts';
 import { programSchema } from './schemas/program.ts';
@@ -412,7 +412,7 @@ describe('dikkat: kısıtlar ve tarama (kisit-tarama.md §3.6)', () => {
     assert.deepEqual(attentionItems(facts({ constraints: constraintFactsOf(cleared, []) }), ctx), []);
   });
 
-  test('kötüleşme 72; sıradaki günde olmayan çelişki 66', () => {
+  test('şiddetli kötüleşme 92; sıradaki günde olmayan çelişki 66', () => {
     let record: HealthRecord = { version: 2, checkIns: [], measurements: [] };
     record = addConstraint(record, { region: 'knee', side: 'left', type: 'injury', severity: 'moderate', avoid: ['ballistic'] }, { id: 'k_dddddd', now: at });
     record = reportWorse(record, 'k_dddddd', 'severe', { now: at });
@@ -421,7 +421,7 @@ describe('dikkat: kısıtlar ve tarama (kisit-tarama.md §3.6)', () => {
     assert.deepEqual(
       items.map((item) => [item.urgency, item.text]),
       [
-        [ATTENTION_URGENCY.constraintChange, 'Kısıt kötüleşti: Sol diz orta → şiddetli'],
+        [ATTENTION_URGENCY.constraintSevere, 'Kısıt kötüleşti: Sol diz orta → şiddetli'],
         [ATTENTION_URGENCY.conflict, 'Programda kısıtla çelişen 2 hareket'],
       ],
     );
@@ -455,4 +455,20 @@ describe('dikkat: kısıtlar ve tarama (kisit-tarama.md §3.6)', () => {
     const knee = addConstraint(record, { region: 'knee', side: 'right', type: 'injury', avoid: [] }, { id: 'k_eeeeee', now: at });
     assert.equal(screeningFactsOf(knee)?.asymmetry, null);
   });
+});
+
+
+test('şiddetli kötüleşmenin ardından Düzeldi hâlâ PT incelemesi bekler: kırmızı ve öneriden üstte', () => {
+  let record: HealthRecord = { version: 2, checkIns: [], measurements: [] };
+  const at = '2026-09-26T10:00:00.000Z';
+  record = addConstraint(record, { region: 'knee', side: 'left', type: 'injury', severity: 'moderate', avoid: [] }, { id: 'k_dddddd', now: at });
+  record = reportWorse(record, 'k_dddddd', 'severe', { now: at });
+  record = reportBetter(record, 'k_dddddd', { now: at });
+  const items = attentionItems(facts({ constraints: constraintFactsOf(record, []) }), ctx);
+  assert.equal(items.length, 1);
+  assert.equal(items[0]?.tone, 'danger');
+  assert.equal(items[0]?.urgency, ATTENTION_URGENCY.constraintSevere);
+  assert.match(items[0]?.text ?? '', /şiddetli.*düzeldi/i);
+  record = ackClientChange(record, 'k_dddddd', { now: at });
+  assert.equal(attentionItems(facts({ constraints: constraintFactsOf(record, []) }), ctx).length, 0);
 });

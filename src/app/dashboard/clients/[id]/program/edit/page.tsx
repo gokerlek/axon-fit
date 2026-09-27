@@ -34,8 +34,6 @@ export default async function EditProgramPage({ params }: { params: Promise<{ id
   const file = await readProgramFile(id);
   if (!file) redirect(`/dashboard/clients/${id}/program/new`);
 
-  const detailHref = `/dashboard/clients/${id}`;
-
   if (!file.program) {
     return (
       <div className="flex flex-col gap-6">

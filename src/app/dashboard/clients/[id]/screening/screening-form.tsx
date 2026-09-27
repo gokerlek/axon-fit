@@ -14,11 +14,13 @@ import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group';
 import { Spinner } from '@/components/ui/spinner';
 import { Toggle } from '@/components/ui/toggle';
-import { formatDay } from '@/lib/format';
+import { formatDay, formatNumber } from '@/lib/format';
 import { fetchJson } from '@/lib/query/errors';
 import { useServiceMutation } from '@/lib/query/use-service';
 import {
   BALANCE_SECONDS,
+  LEG_LENGTH_CM,
+  reachPercent,
   NOT_TESTED_REASON_LABELS,
   NOT_TESTED_REASONS,
   OUTCOME_LABELS,
@@ -86,6 +88,7 @@ function SideInput({
   const outcome = outcomeOf(testId, toEntry(state));
   const pointsOpen = !state.pain && (state.result === 'standard' || state.result === 'easier');
   const seconds = decimal(state.seconds);
+  const percent = reachPercent(decimal(state.reachCm), decimal(state.legCm ?? ""));
   return (
     <div className="flex flex-col gap-3 rounded-lg border p-3">
       {side !== 'center' ? <p className="text-sm font-medium">{SIDE_KEY_LABELS[side]}</p> : null}
@@ -168,6 +171,18 @@ function SideInput({
                 <InputGroupText>cm</InputGroupText>
               </InputGroupAddon>
             </InputGroup>
+          </Field>
+          <Field className="col-span-2">
+            <FieldLabel htmlFor={`${id}-leg`} className="text-xs">Bacak boyu (isteğe bağlı)</FieldLabel>
+            <InputGroup>
+              <InputGroupInput id={`${id}-leg`} inputMode="decimal" value={state.legCm ?? ''}
+                onChange={(event) => onChange({ ...state, legCm: event.currentTarget.value })} />
+              <InputGroupAddon align="inline-end"><InputGroupText>cm</InputGroupText></InputGroupAddon>
+            </InputGroup>
+            <FieldDescription>
+              Leğen kemiğinin ön üst çıkıntısından iç ayak bileği kemiğine; {LEG_LENGTH_CM.min}–{LEG_LENGTH_CM.max} cm.
+              {percent !== undefined ? ` Ön uzanma: bacak boyunun %${formatNumber(percent)} kadarı.` : ' Ön uzanmayı bacak boyuna göre yüzde olarak gösterir.'}
+            </FieldDescription>
           </Field>
         </div>
       ) : null}

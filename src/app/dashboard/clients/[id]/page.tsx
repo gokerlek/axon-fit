@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowSquareOut, Barbell, CaretRight, ListChecks, Plus, QrCode } from '@phosphor-icons/react/dist/ssr';
+import { ArrowSquareOut, Barbell, CaretRight, ListChecks, Plus, QrCode, WarningCircle } from '@phosphor-icons/react/dist/ssr';
 import { EditButton } from '@/components/edit-button';
 import { SectionHeader } from '@/components/section-header';
 import { Badge } from '@/components/ui/badge';
@@ -17,12 +17,13 @@ import { serverEnv } from '@/lib/env';
 import { listExercises, type ExerciseWithSource } from '@/lib/exercises';
 import { formatDate, formatDayShort, formatNumber, todayIn } from '@/lib/format';
 import type { HealthRecord } from '@/lib/schemas/health';
-import { newestFirst, painCells } from '@/lib/screening';
+import { newestFirst, painHistory } from '@/lib/screening';
 import { clientRepoName } from '@/lib/github/client';
 import { countDays, currentPhaseOf, frequencyLabel, nextDayId, phaseStatus, phaseStatusLabel } from '@/lib/program-plan';
 import { readProgramFile, type ProgramFile } from '@/lib/programs';
 import { CLIENT_ID_PATTERN, CLIENT_STATUS_LABELS, HEALTH_FIELD_INFO, TRAINING_EXPERIENCE_LABELS, type HealthField } from '@/lib/schemas/client';
 import { templateSummary } from '@/lib/template-plan';
+import { cn } from '@/lib/utils';
 import { HEALTH_STATE_DETAILS, HEALTH_STATE_LABELS } from '../health-state';
 import { AccessBadge, accessDetail, accessOf, passwordOf } from '../invite-state';
 import { requirePt } from '@/lib/guards';
@@ -39,24 +40,27 @@ const RECENT_SESSIONS = 3;
 
 /**
  * Sağlık modülü kartındaki parçanın özeti (tasarım `kisit-tarama.md` §1): "2 etkin · 1 bildirim bekliyor",
- * "son 12 Eyl · 1 ağrı". Yalnız onaylı parçada ve kayıt okunduysa; yoksa null.
+ * "son 12 Eyl · 1 ağrı". Yalnız onaylı parçada ve kayıt okunduysa; yoksa null. `danger`: danışanın PT'nin bakmadığı
+ * "şiddetli"si var (Dikkat gerektirenler'deki kırmızı ünlemin aynısı).
  */
-function healthSummary(field: HealthField, record: HealthRecord | null): string | null {
+function healthSummary(field: HealthField, record: HealthRecord | null): { text: string; danger?: true } | null {
   if (!record) return null;
   if (field === 'conditions') {
     const counts = constraintCounts(record);
     const parts = [
       `${formatNumber(counts.active)} etkin`,
+      counts.severe ? `${formatNumber(counts.severe)} şiddetli (bakılmadı)` : null,
       counts.pending ? `${formatNumber(counts.pending)} bildirim bekliyor` : null,
       counts.awaiting ? `${formatNumber(counts.awaiting)} görüş bekliyor` : null,
     ];
-    return parts.filter(Boolean).join(' · ');
+    return { text: parts.filter(Boolean).join(' · '), ...(counts.severe ? { danger: true as const } : {}) };
   }
   if (field === 'screening') {
     const latest = newestFirst(record.screenings ?? [])[0];
-    if (!latest) return 'henüz tarama yok';
-    const pain = painCells(latest).filter((cell) => !cell.reviewed).length;
-    return `son ${formatDayShort(latest.date)}${pain ? ` · ${formatNumber(pain)} ağrı` : ''}`;
+    if (!latest) return { text: 'henüz tarama yok' };
+    // Açık ağrılar (gözden geçirilmemiş, sonra ağrısız test edilmemiş): yeni tarama o testi yapmadıysa eskisininki de.
+    const pain = painHistory(record.screenings ?? []).open.length;
+    return { text: `son ${formatDayShort(latest.date)}${pain ? ` · ${formatNumber(pain)} ağrı` : ''}` };
   }
   return null;
 }
@@ -392,8 +396,14 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                         ) : (
                           <span>{HEALTH_FIELD_INFO[field].label}</span>
                         )}
-                        <span className="text-right text-xs text-muted-foreground">
-                          {state === 'granted' ? (summary ?? 'onaylı') : state === 'outdated' && consent?.granted ? 'yeni onay bekleniyor' : 'onay yok'}
+                        <span className={cn('text-right text-xs text-muted-foreground', summary?.danger && 'text-foreground')}>
+                          {summary?.danger ? (
+                            <>
+                              <WarningCircle weight="fill" aria-hidden className="mr-1 inline size-3.5 align-[-0.125rem] text-destructive" />
+                              <span className="sr-only">Acil: </span>
+                            </>
+                          ) : null}
+                          {state === 'granted' ? (summary?.text ?? 'onaylı') : state === 'outdated' && consent?.granted ? 'yeni onay bekleniyor' : 'onay yok'}
                         </span>
                       </li>
                     );

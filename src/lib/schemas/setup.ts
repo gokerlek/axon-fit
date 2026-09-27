@@ -1,5 +1,5 @@
 import * as v from 'valibot';
-import { appConfigSchema } from './config';
+import { appConfigSchema } from './config.ts';
 
 /**
  * Kurulum sihirbazı formu — şema hem formda hem sunucuda kullanılır.
@@ -13,6 +13,7 @@ export const setupFormSchema = v.object({
   accent: v.nullable(v.pipe(v.string(), v.regex(/^#[0-9a-fA-F]{6}$/, 'Renk #RRGGBB biçiminde olmalı.'))),
   theme: appConfigSchema.entries.theme,
   radius: appConfigSchema.entries.radius,
+  palette: appConfigSchema.entries.palette,
 });
 
 export type SetupForm = v.InferOutput<typeof setupFormSchema>;

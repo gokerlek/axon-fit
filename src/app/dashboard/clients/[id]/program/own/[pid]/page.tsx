@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
-import { WarningCircle } from '@phosphor-icons/react/dist/ssr';
+import Link from 'next/link';
+import { Bandaids, WarningCircle } from '@phosphor-icons/react/dist/ssr';
 import { EditorBackLink } from '@/components/block-editor/editor-back-link';
 import { EditButton } from '@/components/edit-button';
 import { SectionHeader } from '@/components/section-header';
@@ -9,11 +10,14 @@ import { DayPlan } from '@/components/program/day-plan';
 import { PhaseLoad } from '@/components/program/phase-load';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { loadCareInput } from '@/lib/client-care';
 import { loadClient } from '@/lib/clients';
 import { readAppConfig } from '@/lib/config';
+import { programConflicts } from '@/lib/constraint-filter';
 import { listExercises } from '@/lib/exercises';
-import { formatDate, formatNumber } from '@/lib/format';
+import { formatDate, formatNumber, todayIn } from '@/lib/format';
 import { requirePt } from '@/lib/guards';
 import { exerciseSetWeights } from '@/lib/muscles';
 import { programLine } from '@/lib/own-program-text';
@@ -29,7 +33,8 @@ export const metadata: Metadata = { title: 'Danışanın programı' };
 /**
  * Danışanın paylaştığı kendi programı (`docs/design/kendi-program.md` §4): PT program sayfasının evresiz hâli —
  * günler (`DayPlan`), planlanan kas yükü ve değişiklikler (etiketler PT'ye göre, §7.3). Tek eylem [Düzenle]; öneri,
- * evre geçişi ve silme yok. Paylaşılmamış dosyanın içeriği gösterilmez.
+ * evre geçişi ve silme yok. Paylaşılmamış dosyanın içeriği gösterilmez. Kısıtlarla çelişen satırlar program
+ * sayfasındaki gibi en üstte (`kisit-tarama.md` §3.3; yalnız kısıtların onayı sürdükçe).
  */
 export default async function OwnProgramViewPage({ params }: { params: Promise<{ id: string; pid: string }> }) {
   await requirePt();
@@ -69,13 +74,34 @@ export default async function OwnProgramViewPage({ params }: { params: Promise<{
   const load = phase ? phaseMuscleLoad(phase, byId, exerciseSetWeights) : null;
   const missingRows = missingExerciseDays(program.phases, new Set(byId.keys())).reduce((sum, item) => sum + item.rowIds.length, 0);
   const description = [programLine(ownSummaryOf(program)), `${formatDate(program.createdAt, timeZone)} tarihinde oluşturuldu`].join(' · ');
+  const careInput = await loadCareInput(loaded.client, todayIn(timeZone));
+  const conflicts = careInput ? programConflicts(program, byId, careInput) : [];
+  const editHref = `/dashboard/clients/${id}/program/own/${pid}/edit`;
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
         {back}
-        <SectionHeader title={program.name} description={description} actions={<EditButton href={`/dashboard/clients/${id}/program/own/${pid}/edit`} />} />
+        <SectionHeader title={program.name} description={description} actions={<EditButton href={editHref} />} />
       </div>
+
+      {conflicts.length > 0 ? (
+        <Alert>
+          <Bandaids weight="fill" />
+          <AlertTitle>Kısıtlarla çelişen {formatNumber(conflicts.length)} hareket</AlertTitle>
+          <AlertDescription className="flex flex-col gap-2">
+            <p>{conflicts.map((conflict) => `${conflict.dayName} · ${conflict.title} (${conflict.message})`).join(' · ')}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" nativeButton={false} render={<Link href={editHref} />}>
+                Programı düzenle
+              </Button>
+              <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/dashboard/clients/${id}/constraints`} />}>
+                Kısıtlar
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {missingRows > 0 ? (
         <Alert>

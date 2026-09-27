@@ -10,6 +10,7 @@ import {
   pendingReports,
   regionText,
   regionWorked,
+  severeUnreviewed,
   TRIGGER_AVOID,
   TRIGGER_LABELS,
   yourRegion,
@@ -19,6 +20,7 @@ import {
 } from './constraints.ts';
 import { evaluateExercise, isTagged, type Decision, type FilterContext, type FilterGroup, type FilterSummary } from './exercise-filter.ts';
 import { currentPhaseOf, nextDayId } from './program-plan.ts';
+import type { ScreeningMark } from './screening-care.ts';
 import type { Constraint, HealthRecord, Override } from './schemas/health.ts';
 import type { Program } from './schemas/program.ts';
 
@@ -32,12 +34,15 @@ import type { Program } from './schemas/program.ts';
  * - **Kaçınmalar** (`avoid`) kısıtın kendi kuralları: bölge kapısı, üç değerli mantık, etiket eksikse kalıp yedeği
  *   (ailedeyse dikkat, değilse eksik bilgi; hiçbir zaman "uygun" değil).
  * - **Görüşü alınmamış kırmızı bayrak:** bölgeyi çalıştıran harekete en az dikkat.
- * - **Bekleyen bildirim:** yalnız zorlayanları, yalnız dikkat (güvenli yön hemen, §2.4); bölgeden tahmin yok.
+ * - **Bekleyen bildirim:** yalnız zorlayanları, yalnız dikkat (güvenli yön hemen, §2.4); bölgeden tahmin yok —
+ *   bildirim "şiddetli" değilse.
+ * - **Danışanın bakılmamış "şiddetli"si** (`severeUnreviewed`: onaylı kısıtta "Kötüleşti · şiddetli", ya da şiddetli
+ *   bildirim): PT bakana kadar bölgeyi çalıştıran harekete en az dikkat **[sentez]**.
  * - **İzin** (`overrides`): o kısıtın bulguları o harekette susar; görüşü alınmamış kırmızı bayrakta ve kauda
- *   ekinada susmaz.
+ *   ekinada susmaz; izinden sonra gelen "şiddetli"nin dikkati de susmaz.
  */
 
-export type CareKind = 'rule' | 'avoid' | 'fallback' | 'referral' | 'report';
+export type CareKind = 'rule' | 'avoid' | 'fallback' | 'referral' | 'report' | 'severe';
 
 export type CareReason = {
   constraintId: string;
@@ -178,10 +183,23 @@ function constraintReasons(tags: CareTags, constraint: Constraint, input: CareIn
       kind: 'referral',
     });
   }
+  if (severeUnreviewed(constraint) && regionWorked(tags, constraint.region)) {
+    reasons.push({
+      constraintId: constraint.id,
+      label,
+      decision: 'warn',
+      message: `${label}: danışan şiddetli kötüleşti dedi; sen bakana kadar dikkat`,
+      kind: 'severe',
+    });
+  }
   return { reasons, unassessed };
 }
 
-/** Bekleyen bildirimin zorlayanları: yalnız dikkat (etiket eksikse ailedeyse). */
+/**
+ * Bekleyen bildirimin zorlayanları: yalnız dikkat (etiket eksikse ailedeyse). Bildirim "şiddetli"yse ve hiçbir
+ * zorlayan bu harekete değmiyorsa bölgeyi çalıştıran hareket de dikkat alır (bildirim sonrası metin danışana zaten
+ * "bu bölgeyi zorlayan hareketleri yapma" der, §2.4).
+ */
 function reportReasons(tags: CareTags, report: Constraint): CareReason[] {
   const label = regionText(report);
   const reasons: CareReason[] = [];
@@ -198,6 +216,15 @@ function reportReasons(tags: CareTags, report: Constraint): CareReason[] {
       });
     }
   }
+  if (reasons.length === 0 && severeUnreviewed(report) && regionWorked(tags, report.region)) {
+    reasons.push({
+      constraintId: report.id,
+      label,
+      decision: 'warn',
+      message: `Danışan bildirdi (karar bekliyor): ${label} · şiddetli; bölgeyi çalıştırıyor`,
+      kind: 'report',
+    });
+  }
   return reasons;
 }
 
@@ -212,7 +239,9 @@ export function evaluateCare(tags: CareTags & { id: string }, input: CareInput):
     const own = constraintReasons(tags, constraint, input);
     const permitted = overridable(constraint) && input.overrides.some((item) => item.exerciseId === tags.id && item.source === constraint.id);
     if (permitted) {
-      silenced.push(...own.reasons);
+      // İzin yasağa verildi; sonradan gelen "şiddetli"nin dikkati PT bakana kadar kalır.
+      silenced.push(...own.reasons.filter((reason) => reason.kind !== 'severe'));
+      reasons.push(...own.reasons.filter((reason) => reason.kind === 'severe'));
       continue;
     }
     reasons.push(...own.reasons);
@@ -261,12 +290,14 @@ export function orderByCare<T>(items: readonly T[], resultOf: (item: T) => CareR
 
 /**
  * Kısıtların damgası: telefonda saklanan gün planı kısıtlar ya da izinler değişince (ya da onay çekilince) eskir
- * (`programStamp`'in arkasına eklenir; Bugün ve gün planı aynı hesabı yapar). Onay yoksa boş.
+ * (`programStamp`'in arkasına eklenir; Bugün ve gün planı aynı hesabı yapar). Onay yoksa boş. Danışanın bakılmamış
+ * "şiddetli"si ayrıca işaretlenir (`!`): kart notu doğunca ve PT "Gördüm" deyince plan yenilenir (`updatedAt` elle
+ * değiştirilmemiş dosyada da).
  */
 export function careStampOf(record: Pick<HealthRecord, 'constraints' | 'conditions' | 'surgeryDate' | 'overrides'> | null): string {
   if (!record) return '';
   const parts = [
-    ...constraintsOf(record).map((item) => `${item.id}@${item.updatedAt}`),
+    ...constraintsOf(record).map((item) => `${item.id}@${item.updatedAt}${severeUnreviewed(item) ? '!' : ''}`),
     ...overridesOf(record).map((item) => `${item.exerciseId}:${item.source}@${item.at}`),
   ].sort();
   let hash = 5381;
@@ -276,7 +307,7 @@ export function careStampOf(record: Pick<HealthRecord, 'constraints' | 'conditio
 
 /* --- danışanın hareket kartı --- */
 
-export type RowCareKind = 'note' | 'avoid' | 'report' | 'referral';
+export type RowCareKind = 'note' | 'avoid' | 'report' | 'referral' | 'severe';
 
 /**
  * Günün planındaki satırın notu (§3.5): tanı adı yok, bölge ve taraf var. `own`: hareketi danışan seçti (muadil ya da
@@ -284,12 +315,12 @@ export type RowCareKind = 'note' | 'avoid' | 'report' | 'referral';
  */
 export type RowCare = { kind: RowCareKind; label: string; region: ConstraintRegion; side?: ConstraintSide; note?: string; own?: true };
 
-const KIND_ORDER: Record<RowCareKind, number> = { avoid: 4, referral: 3, report: 2, note: 1 };
+const KIND_ORDER: Record<RowCareKind, number> = { avoid: 5, referral: 4, severe: 3, report: 2, note: 1 };
 
 /**
- * Satırın notu: izinsiz yasak (`avoid`: "Değiştir'den bir muadil seç") > görüş bekleniyor > bekleyen bildirim >
- * onaylı kısıtın dikkat/ipucu bulgusu ya da izinli yasak (`note`, PT'nin danışana notuyla). Etiketi eksik
- * kalıp yedeği dikkat olarak not üretir; eksik bilgi ve etiketsiz hareket not üretmez.
+ * Satırın notu: izinsiz yasak (`avoid`: "Değiştir'den bir muadil seç") > görüş bekleniyor > danışanın bakılmamış
+ * "şiddetli"si > bekleyen bildirim > onaylı kısıtın dikkat/ipucu bulgusu ya da izinli yasak (`note`, PT'nin danışana
+ * notuyla). Etiketi eksik kalıp yedeği dikkat olarak not üretir; eksik bilgi ve etiketsiz hareket not üretmez.
  */
 export function rowCareOf(result: CareResult, input: CareInput): RowCare | null {
   const byId = new Map([...input.active, ...input.reports].map((item) => [item.id, item]));
@@ -302,6 +333,7 @@ export function rowCareOf(result: CareResult, input: CareInput): RowCare | null 
   for (const id of result.blockedBy) consider('avoid', id);
   for (const reason of result.reasons) {
     if (reason.kind === 'referral') consider('referral', reason.constraintId);
+    else if (reason.kind === 'severe') consider('severe', reason.constraintId);
     else if (reason.kind === 'report') consider('report', reason.constraintId);
     else if (reason.decision !== 'block') consider('note', reason.constraintId);
   }
@@ -331,6 +363,11 @@ export function rowCareText(care: RowCare): { title: string; text: string } {
       return { title, text: 'Antrenörün bu bölge için sağlık profesyonelinin görüşünü bekliyor. Ağrı yaparsa hareketi geç.' };
     case 'report':
       return { title, text: `Bildirdiğin ${care.label.toLocaleLowerCase('tr')} için zorlayabilir; ağrı yaparsa geç.` };
+    case 'severe':
+      return {
+        title,
+        text: `Kötüleştiğini bildirdiğin ${care.label.toLocaleLowerCase('tr')} için zorlayabilir. Antrenörün bakana kadar ağrı yaparsa geç ya da Değiştir'e dokun.`,
+      };
     default:
       return {
         title,
@@ -347,7 +384,7 @@ export function rowCareText(care: RowCare): { title: string; text: string } {
 export function optionCareText(result: CareResult): string | null {
   const first = result.reasons.find((reason) => reason.decision === 'warn' || reason.decision === 'cue');
   if (!first) return null;
-  return first.kind === 'report' ? `Bildirdiğin ${first.label.toLocaleLowerCase('tr')} için dikkatli` : `${first.label} için dikkatli`;
+  return first.kind === 'report' || first.kind === 'severe' ? `Bildirdiğin ${first.label.toLocaleLowerCase('tr')} için dikkatli` : `${first.label} için dikkatli`;
 }
 
 /* --- PT: sheet, önizleme, çelişkiler --- */
@@ -387,15 +424,23 @@ export type EditorCare = {
   summary: string[];
   /** Karar bekleyen danışan bildirimleri ("Sol diz"). */
   pending: string[];
+  /** Danışanın bakılmamış "şiddetli"si ("Sol diz"): bölgeyi çalıştıran hareketler dikkat alıyor. */
+  severe?: string[];
   /** Egzersiz → işaret (yalnız uygun olmayanlar). */
   map: Record<string, SheetCare>;
+  /** Taramanın izi (yalnız `screening` onayıyla; `screening-care.ts`): ağrı dikkati ve bilgi rozeti. */
+  screening?: Record<string, ScreeningMark>;
+  /** Açık tarama ağrıları ("Kol kaldırma (sağ)"). */
+  screeningPain?: string[];
 };
 
 export function editorCareOf(clientId: string, items: readonly (CareTags & { id: string })[], input: CareInput): EditorCare {
+  const severe = [...input.active, ...input.reports].filter(severeUnreviewed).map(regionText);
   return {
     clientId,
     summary: input.active.map(regionText),
     pending: input.reports.map(regionText),
+    ...(severe.length > 0 ? { severe } : {}),
     map: careMap(items, input),
   };
 }

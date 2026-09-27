@@ -17,6 +17,7 @@ import {
   painCells,
   parseScreeningKey,
   presetFromConstraints,
+  progressScreening,
   rankOf,
   screeningHints,
   screeningKey,
@@ -117,7 +118,7 @@ describe('asimetri ve ağrı', () => {
     { painReviewedAt: {} },
   );
 
-  test('sıra farkı 1 asimetri, ≥ 2 büyük; ön uzanmada ≥ 4 cm büyük; ağrılı taraf girmez', () => {
+  test("sıra farkı 1 asimetri, ≥ 2 büyük; ön uzanmada 4 cm'yi aşan fark büyük; ağrılı taraf girmez", () => {
     const list = asymmetries(s);
     assert.deepEqual(
       list.map((item) => [item.testId, item.kind, item.gap, item.weaker, item.reachDiff]),
@@ -128,6 +129,16 @@ describe('asimetri ve ağrı', () => {
       ],
     );
     assert.equal(majorAsymmetry(s)?.testId, 'split_squat');
+  });
+
+  test('ön uzanma eşiği Plisky 2006 gibi: tam 4 cm büyük değil, 4,1 cm büyük', () => {
+    const balance = (right: number) =>
+      screening({ single_leg_balance: { left: { result: 'standard', missed: [], reachCm: 64 }, right: { result: 'standard', missed: [], reachCm: right } } }, '2026-09-12');
+    assert.deepEqual(asymmetries(balance(60)), []);
+    assert.deepEqual(
+      asymmetries(balance(59.9)).map((item) => [item.kind, item.reachDiff, item.weaker]),
+      [['major', 4.1, 'right']],
+    );
   });
 
   test('etkin kısıtlı taraf asimetriye girmez', () => {
@@ -200,5 +211,20 @@ describe('ipuçları ve danışan', () => {
     const shoulder = rows.find((row) => row.testId === 'shoulder_flexion')!;
     assert.equal(shoulder.sides[1]?.text, 'Ağrı not edildi. Antrenörün seninle konuşacak.');
     assert.equal(JSON.stringify(rows).match(/\d/), null);
+  });
+
+  test('İlerleme kartı: en yeni tarama, önceki taramaya göre ok; PT tarama sayfasının sözcükleriyle; eski protokol ve boş liste yok', () => {
+    const previous = screening({ squat: { result: 'easier', missed: [] } }, '2026-08-01');
+    const legacy = { ...screening({ squat: { result: 'standard', missed: [] } }, '2026-09-20'), protocol: 0 } as unknown as Screening;
+    const client = progressScreening([previous, s, legacy], 'client')!;
+    assert.deepEqual([client.date, client.previousDate], ['2026-09-12', '2026-08-01']);
+    assert.deepEqual(client.rows.find((row) => row.testId === 'squat')?.sides[0], { side: 'center', label: '', text: 'Telafiyle', outcome: 'compensated', change: 'up' });
+    const pt = progressScreening([s, previous], 'pt')!;
+    const right = pt.rows.find((row) => row.testId === 'split_squat')?.sides[1];
+    assert.deepEqual([right?.text, pt.rows.find((row) => row.testId === 'shoulder_flexion')?.sides[1]?.text], ['Kolaylaştırılmış', 'Ağrılı']);
+    assert.equal(progressScreening([s], 'client')?.previousDate, null);
+    assert.equal(progressScreening([], 'pt'), null);
+    assert.equal(progressScreening(undefined, 'client'), null);
+    assert.equal(JSON.stringify(client.rows).match(/\d/), null);
   });
 });

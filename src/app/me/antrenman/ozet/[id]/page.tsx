@@ -7,6 +7,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { readAppConfig } from '@/lib/config';
 import { currentClient } from '@/lib/guards';
 import { loadSummary } from '@/lib/history-store';
+import { loadPainReport } from '@/lib/pain-report-store';
 import { SummaryCarousel } from './summary-carousel';
 
 export const metadata: Metadata = { title: 'Özet' };
@@ -15,7 +16,8 @@ export const metadata: Metadata = { title: 'Özet' };
  * Antrenman özeti (tasarım §2.8): bitişten hemen sonra ve geçmişten ("Özeti aç", `?from=gecmis`) açılır.
  * Tam ekran, dock yok (`/me/antrenman` gibi sekmeler grubunun dışında). Sayfa yetkiyi kendisi denetler
  * (SPEC §5); hesaplar `history-store.ts` → `workout-summary.ts`. Bitmemiş antrenman antrenman ekranına döner;
- * silinmiş ya da olmayan antrenmanda dönüş bağlantısı.
+ * silinmiş ya da olmayan antrenmanda dönüş bağlantısı. Bitişten açıldıysa ağrıyla yine geçilen hareketin
+ * "Antrenörüne kısıt olarak bildir" kısayolu (`pain-report-store.ts`; kısıtlar ve ağrı takibi onaylıyken).
  */
 export default async function SummaryPage({
   params,
@@ -26,7 +28,10 @@ export default async function SummaryPage({
 }) {
   const [client, config, { id }, query] = await Promise.all([currentClient(), readAppConfig(), params, searchParams]);
   const from = query.from === 'gecmis' ? 'history' : 'finish';
-  const loaded = await loadSummary(client.id, id, config.timeZone);
+  const [loaded, painOffers] = await Promise.all([
+    loadSummary(client.id, id, config.timeZone),
+    from === 'finish' ? loadPainReport(client, id) : Promise.resolve([]),
+  ]);
   if (loaded.status === 'active') redirect('/me/antrenman');
   if (loaded.status !== 'ok') {
     return (
@@ -51,5 +56,5 @@ export default async function SummaryPage({
     );
   }
   const firstName = client.name.split(/\s+/)[0] ?? client.name;
-  return <SummaryCarousel summary={loaded.value} firstName={firstName} from={from} />;
+  return <SummaryCarousel summary={loaded.value} firstName={firstName} from={from} painOffers={painOffers} />;
 }
