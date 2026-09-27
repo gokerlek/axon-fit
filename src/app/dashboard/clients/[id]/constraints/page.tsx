@@ -210,7 +210,7 @@ function Overview({
             </CardHeader>
             <CardContent className="flex flex-col gap-2 text-sm">
               <p className="font-medium">
-                {regionText(report)} · {constraintMeta(report).toLocaleLowerCase('tr')}
+                {regionText(report)} · {constraintMeta(report)}
               </p>
               {report.triggers?.length ? <p>Zorlayanlar: {triggersText(report.triggers)} (şimdiden dikkat olarak işliyor)</p> : null}
               {report.reportNote ? <p className="text-muted-foreground">“{report.reportNote}”</p> : null}

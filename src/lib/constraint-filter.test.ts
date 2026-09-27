@@ -2,10 +2,14 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EXERCISE_LIBRARY } from '../data/exercise-library.ts';
 import {
+  careCounts,
   careGroup,
   careInputOf,
   careMap,
   careRank,
+  careStampOf,
+  careSummary,
+  editorCareOf,
   contextFor,
   evaluateCare,
   optionCareText,
@@ -192,6 +196,22 @@ describe('PT: sheet ve çelişkiler', () => {
     // Uygun hareket haritada yok; etiketsiz hareket "kontrol edilmedi" rozetiyle var.
     assert.equal(map.plank, undefined);
     assert.equal(map['halter-biceps-curl']?.group, 'untagged');
+  });
+
+  test('düzenleyicinin kısıt bilgisi ve listenin özeti aynı kümeler; damga kısıt değişince değişir', () => {
+    const health = record([{ region: 'knee', side: 'left', avoid: ['deep_knee_flexion'] }]);
+    const editor = editorCareOf('c_testolcm', EXERCISE_LIBRARY, input(health));
+    assert.deepEqual([editor.summary, editor.pending], [['Sol diz'], []]);
+    const summary = careSummary(EXERCISE_LIBRARY, editor.map);
+    const direct = careCounts(EXERCISE_LIBRARY, input(health));
+    assert.deepEqual(summary.counts, direct);
+    assert.equal(summary.groups.get('hack-squat'), 'blocked');
+    assert.equal(summary.cards.get('hack-squat')?.message, 'Sol diz: derin diz bükme (90° üstü)');
+    const stamp = careStampOf(health);
+    assert.match(stamp, /^\|k1\./);
+    assert.equal(careStampOf(null), '');
+    const edited = addOverride(health, { exerciseId: 'hack-squat', source: 'k_000000' }, { now: NOW, title: 'Hack Squat' });
+    assert.notEqual(careStampOf(edited), stamp);
   });
 
   test('programdaki çelişkiler: şu anki evre, sıradaki gün işaretli', () => {

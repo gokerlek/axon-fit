@@ -35,7 +35,7 @@
 
 **Alt şerit:** yalnız modülde seçili parçalar etkin; seçili olmayan parça pasif ve "seçili değil" notlu (`TabsNavLink disabled note`). Bekleyen danışan bildirimi ya da gözden geçirilmemiş tarama ağrısı varsa parçanın adının yanında nokta (ekran okuyucuya "bekleyen var").
 
-**Kilit:** `measurementLock` → `healthLock(client, part)` diye genelleşir; `HEALTH_LOCK_INFO` metinleri parçanın adıyla ("Kısıtlar seçili değil", "Hareket taraması seçili değil") yazılır. Kilit parça başına onaya bakar (§5.1): kısıtların onayı yenilenecekken ölçümler açık kalır. Kilitliyken sayfa dosyayı okumaz (gösterim de işlemedir).
+**Kilit:** `measurementLock` → `healthLock(client, part)` diye genelleşir; `healthLockInfo(part, lock)` metinleri parçanın adıyla ("Kısıtlar seçili değil", "Hareket taraması seçili değil") yazılır. Kilit parça başına onaya bakar (§5.1): kısıtların onayı yenilenecekken ölçümler açık kalır. Kilitliyken sayfa dosyayı okumaz (gösterim de işlemedir).
 
 **Genel sekmesi:** "Sağlık modülü" kartındaki parça listesi özet taşır: "Kısıtlar · 2 etkin · 1 bildirim bekliyor ›", "Hareket taraması · son 12 Eyl · 1 ağrı ›" (yalnız o parçanın onayı sürdükçe; yoksa "onay yok" ya da "yeni onay bekleniyor"). Ölçüm kartı yerinde kalır.
 
@@ -325,7 +325,7 @@ Yalnız danışanın programında (şablonda danışan yok) ve `conditions` onay
 
 Günün planı (`/api/me/workout`) satır başına isteğe bağlı `care: { label: 'Sol diz', kind, note? }` taşır:
 
-| `kind` | Ne zaman | Metin (sheet) |
+| `kind` | Ne zaman | Metin (çip açılınca) |
 |---|---|---|
 | `note` | onaylı etkin kısıtın dikkat ya da ipucu bulgusu, ya da izinli yasak | PT'nin `clientNote`'u; yoksa "Antrenörün bu hareketi sol dizini düşünerek planladı. Ağrısız aralıkta kal; ağrı artarsa hareketi geç ya da Değiştir'e dokun." |
 | `avoid` | **izinsiz yasak** programda kalmış (kısıt program yazıldıktan sonra eklendi) | "Antrenörün bu hareketi sol dizin için değiştirecek. Bugün 'Değiştir'den bir muadil seç." Ana düğme **Değiştir** |
@@ -338,7 +338,7 @@ Günün planı (`/api/me/workout`) satır başına isteğe bağlı `care: { labe
 │ ( i  Sol diz için not )                 │ 44 px çip
 ```
 
-Birden çok kısıt aynı satıra değiyorsa en ağırı (`avoid` > `referral` > `report` > `note`). "Yasak", "risk", tanı adı yazılmaz. Not telefonda saklanan gün planının parçasıdır (danışanın kendi cihazı; yoklama girdisiyle aynı yaklaşım); planın damgası kısıtların son değişimini ve onay durumunu da taşır, onay çekilince bir sonraki açılışta not düşer.
+Çip kartın öteki çipleri gibi (planın gerekçesi, PT'nin notu) dokununca kartın içinde açılır, sheet açmaz; `avoid`'de altında **Değiştir** düğmesi. Birden çok kısıt aynı satıra değiyorsa en ağırı (`avoid` > `referral` > `report` > `note`). "Yasak", "risk", tanı adı yazılmaz. Not telefonda saklanan gün planının parçasıdır (danışanın kendi cihazı; yoklama girdisiyle aynı yaklaşım); planın damgası kısıtların son değişimini ve onay durumunu da taşır, onay çekilince bir sonraki açılışta not düşer.
 
 ### 3.6 Dikkat gerektirenler ve Bildirimler
 
