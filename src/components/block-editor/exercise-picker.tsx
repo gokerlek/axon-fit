@@ -98,6 +98,7 @@ export function ExercisePicker({
           </ItemDescription>
         </ItemContent>
         <ItemActions>
+          {exercise.caution ? <Badge variant="outline">Kısıtına uymayabilir</Badge> : null}
           {count > 0 ? <Badge variant="secondary">şablonda ×{count}</Badge> : null}
           {replacing ? (
             <span className="text-xs font-medium text-primary-text">Seç</span>

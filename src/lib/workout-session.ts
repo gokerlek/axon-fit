@@ -93,6 +93,8 @@ export function newSessionDoc(day: WorkoutDay, input: { today: string; now: Date
       dayName: day.dayName,
       ...(day.plannedDayId ? { plannedDayId: day.plannedDayId } : {}),
       ...(day.plannedDayId && day.plannedDayId !== day.dayId && day.plannedDayName ? { plannedDayName: day.plannedDayName } : {}),
+      // Kendi program: sunucu günü, bitişin kipini ve geçmişin rozetini buradan bilir (yoksa PT'nin programı sanılır).
+      ...(day.source === 'own' && day.programId ? { programId: day.programId, ...(day.programName ? { programName: day.programName } : {}) } : {}),
     },
     writer: input.writer,
     entries: [],

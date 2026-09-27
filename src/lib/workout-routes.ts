@@ -11,7 +11,12 @@ import type { TrackingType } from './progression.ts';
 import { parseProposals, PROPOSALS_PATH } from './proposals.ts';
 import type { Client } from './schemas/client.ts';
 import { EQUIPMENT_LABELS, type Category, type Equipment } from './schemas/exercise.ts';
-import { clientScheduleBodySchema, programSchema, type Program } from './schemas/program.ts';
+import { readOwnProgram, readOwnState, scheduleOwnProgram, type OwnState } from './own-program-files.ts';
+import { activeProgramId, shownProgram } from './own-program-index.ts';
+import { lastDateByProgram } from './own-program-text.ts';
+import { isOwnProgramId, PT_PROGRAM_NAME } from './own-programs.ts';
+import { scheduleBodySchema } from './schemas/own-program.ts';
+import { programSchema, type Program } from './schemas/program.ts';
 import { parseStoredSession, type SessionDoc, type SessionIndex } from './schemas/session.ts';
 import { readIndex, type SessionRepo, type StoredJson } from './session-files-core.ts';
 import { run, type SessionRouteDeps, type SessionRouteResult } from './session-routes.ts';
@@ -25,6 +30,7 @@ import {
   buildWorkoutDay,
   dayBody,
   dayExerciseIds,
+  dayRowIds,
   extraKey,
   historyRows,
   lastDoneDates,
@@ -36,6 +42,9 @@ import {
   weekOf,
   type ExtraRow,
   type ExtraRows,
+  type HistoryWindow,
+  type PlanOwner,
+  type PlanProgram,
   type WeekCount,
   type WorkoutDay,
   type WorkoutDevice,
@@ -57,14 +66,18 @@ import {
  *   silinmiş tarayıcı verisiyle sürdürülen antrenman aynı hareketlerle açılır. Günün set artışı adayları
  *   (§5.6, `set-suggestions.ts`) planda (`day.setIncrease`): `proposals.json` (bu haftaki öneriler) ve
  *   sağlık onayı varken `health.json` (son hazır oluşluk) bunun için okunur.
- * - `GET /api/me/workout/alternatives?day=&row=`: satırın muadilleri ("Değiştir", §2.6), ekipmana göre
+ *   Kendi programlar (`docs/design/kendi-program.md` §2.6, §3.2): `?program=op_…|pt` ("Yalnız bugün") planı o
+ *   programdan kurar; yarım antrenman varsa onun programı, yoksa adresteki, o da yoksa kalıcı seçim
+ *   (`shownProgram`). En az bir kendi program varken yanıtta seçim (`selection`) de gelir.
+ * - `GET /api/me/workout/alternatives?day=&row=[&program=]`: satırın muadilleri ("Değiştir", §2.6), ekipmana göre
  *   gruplu (`alternatives.ts`); her biri kendi geçmişiyle planlı. Bugünün öteki hareketleri önerilmez.
- * - `GET /api/me/workout/exercises[?add=]`: "Hareket ekle"nin kütüphanesi; `add` verilirse o egzersizin
- *   varsayılan setleriyle planı.
+ * - `GET /api/me/workout/exercises[?add=][&program=]`: "Hareket ekle"nin kütüphanesi; `add` verilirse o egzersizin
+ *   varsayılan setleriyle planı. `program` (muadil ve eklenen için): `op_…` kendi program, yok ya da `pt` PT'nin.
  * - `POST /api/me/water`: antrenman dışı su dokunuşları `water.json`'a, kimlikle birleşerek
  *   (idempotent); değişiklik yoksa yazılmaz, çakışmada taze okuyup bir kez daha. Bozuk dosya ezilmez.
  * - `POST /api/me/schedule`: danışanın antrenman günleri (§2.11) `program.json` → `clientSchedule`;
- *   revision artmaz, program geçmişine `client` kaydı, PT'nin bildirim özeti düşer.
+ *   revision artmaz, program geçmişine `client` kaydı, PT'nin bildirim özeti düşer. `programId` bir kendi
+ *   programsa günler o programa yazılır (`scheduleOwnProgram`); null PT'nin programı, verilmezse kalıcı seçim.
  */
 
 export type WorkoutRouteDeps = SessionRouteDeps & {
@@ -79,6 +92,22 @@ export type WorkoutRouteDeps = SessionRouteDeps & {
 /** Muadil listesinin en çok uzunluğu (PT'nin sabitledikleri dahil). */
 export const ALTERNATIVES_LIMIT = 8;
 
+/** Bugün'ün program seçimi (`docs/design/kendi-program.md` §2.6): yalnız en az bir kendi program varken. */
+export type WorkoutSelection = {
+  /** Kalıcı seçim: kendi programın kimliği ya da null (PT'nin programı). */
+  active: string | null;
+  /** Kalıcı seçimin anı (kaçan gün penceresi, yeni PT programı satırı). */
+  activeAt?: string;
+  /** Gösterilen program (tek seferlikte adresteki). */
+  shown: string | null;
+  /** Gösterilen, kalıcı seçimden farklı ("Yalnız bugün"). */
+  oneOff: boolean;
+  /** Seçim sheet'inin satırları: PT'nin programı (varsa) ve kendi programlar; son antrenman günü. */
+  choices: { id: string | null; name: string; lastDate?: string }[];
+  /** Seçili program okunamadı: PT'nin programı gösterildi ("Evde şu an açılamıyor."). */
+  problem?: string;
+};
+
 export type WorkoutResponse = {
   /** Uygulamanın saat dilimindeki bugün: yeni antrenmanın tarihi. */
   today: string;
@@ -91,7 +120,13 @@ export type WorkoutResponse = {
     nextDayId: string | null;
     /** Şu anki evrenin günleri; `lastDate`: son yapıldığı gün ("Başka gün seç"). */
     days: { id: string; name: string; lastDate?: string }[];
+    /** Planın kaynağı: PT'nin programı ya da kendi program (kimliği ve adı). Eski yanıtta yok (PT). */
+    source?: 'pt' | 'own';
+    id?: string;
+    name?: string;
   } | null;
+  /** Program seçimi; kendi program yoksa yok. */
+  selection?: WorkoutSelection;
   /** Program okunamıyorsa danışana dönük metin. */
   problem?: string;
   day: WorkoutDay | null;
@@ -151,9 +186,12 @@ async function readSessionBlob(repo: SessionRepo, sha: string): Promise<SessionD
   }
 }
 
-/** Geçmiş: index'ten seçilen antrenmanlar, blob kimliğiyle (okunamayan düşer). Özetin "Gelecek sefer"i de bununla. */
-export async function readHistory(repo: SessionRepo, index: SessionIndex, exerciseIds: ReadonlySet<string>): Promise<SessionDoc[]> {
-  const rows = historyRows(index, exerciseIds);
+/**
+ * Geçmiş: index'ten seçilen antrenmanlar (`historyRows`: günün egzersizleri, satırları ve programı), blob
+ * kimliğiyle (okunamayan düşer). Özetin "Gelecek sefer"i de bununla.
+ */
+export async function readHistory(repo: SessionRepo, index: SessionIndex, select: ReadonlySet<string> | HistoryWindow): Promise<SessionDoc[]> {
+  const rows = historyRows(index, select);
   return (await Promise.all(rows.map((row) => readSessionBlob(repo, row.sha)))).filter((doc): doc is SessionDoc => doc !== null);
 }
 
@@ -161,6 +199,37 @@ function parseProgram(file: StoredJson | null | 'broken'): { program: Program | 
   const parsed = file && file !== 'broken' ? v.safeParse(programSchema, file.content) : null;
   const program = parsed?.success ? parsed.output : null;
   return { program, ...(file === 'broken' || (parsed && !parsed.success) ? { problem: PROGRAM_PROBLEM } : {}) };
+}
+
+/** Planın programı: PT'nin programı ya da kendi program (sahibiyle); okunamadıysa danışana dönük sorun. */
+type PlanSource = { program: PlanProgram | null; owner: PlanOwner; problem?: string };
+
+/**
+ * Gösterilecek program (`docs/design/kendi-program.md` §3.2, §5.4): yarım antrenman varsa onun programı (seçimden
+ * bağımsız); yoksa adresteki (`program=op_…|pt`, "Yalnız bugün"); o da yoksa kalıcı seçim. Seçilen kendi program
+ * okunamazsa PT'nin programı (sorunuyla); yarım antrenmanın programı okunamazsa plan yok.
+ */
+async function planSource(input: {
+  repo: SessionRepo;
+  own: OwnState;
+  pt: { program: Program | null; problem?: string };
+  current: SessionDoc | null;
+  param: string | null;
+}): Promise<{ source: PlanSource; shown: string | null; oneOff: boolean; selectionProblem?: string }> {
+  const { own, pt, current, param } = input;
+  const choice = current ? { shown: current.program?.programId ?? null, oneOff: false } : shownProgram(own.index, own.unreadable, param);
+  const { shown, oneOff } = choice;
+  const ptSource: PlanSource = { program: pt.program, owner: null, ...(pt.problem ? { problem: pt.problem } : {}) };
+  // Kalıcı seçim okunamayan programı gösteriyor (onarımda listeden düştü): PT'nin programı, sorunuyla.
+  const broken = 'broken' in choice ? choice.broken : undefined;
+  if (broken) return { source: ptSource, shown: null, oneOff: false, selectionProblem: `${broken.name ?? 'Seçtiğin program'} şu an açılamıyor.` };
+  if (!shown) return { source: ptSource, shown: null, oneOff };
+  const cached = own.programs.get(shown);
+  const read = cached ? { status: 'ok' as const, program: cached } : await readOwnProgram(input.repo, shown, own.head.commit);
+  if (read.status === 'ok') return { source: { program: read.program, owner: { programId: shown, name: read.program.name } }, shown, oneOff };
+  const name = own.index.items.find((item) => item.id === shown)?.name ?? current?.program?.programName ?? 'Programın';
+  if (current) return { source: { program: null, owner: null, problem: `${name} şu an açılamıyor.` }, shown, oneOff: false };
+  return { source: ptSource, shown: null, oneOff: false, selectionProblem: `${name} şu an açılamıyor.` };
 }
 
 type Catalog = { exercises: ReadonlyMap<string, WorkoutExercise>; devices: ReadonlyMap<string, WorkoutDevice> };
@@ -193,6 +262,7 @@ export function sessionExtras(input: {
 }): ExtraRows {
   const { day, doc, catalog } = input;
   if (doc.program?.dayId !== day.dayId) return {};
+  const programId = day.programId ?? null;
   const first = firstForMuscleRowIds(dayBody(day), catalog.exercises);
   const extras: ExtraRows = {};
   for (const entry of doc.entries) {
@@ -212,6 +282,7 @@ export function sessionExtras(input: {
         history: input.history,
         firstForMuscle: first.has(row.id),
         insight: input.insight,
+        programId,
       });
     } else if (entry.added && !entry.rowId) {
       extras[extraKey(entry.id, exercise.id)] = addedRowFor({
@@ -221,16 +292,19 @@ export function sessionExtras(input: {
         history: input.history,
         setCount: entry.plannedSets,
         insight: input.insight,
+        programId,
       });
     }
   }
   return extras;
 }
 
-export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null): Promise<SessionRouteResult> {
+export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null, programParam: string | null = null): Promise<SessionRouteResult> {
   return run(deps, null, 'workout', async ({ client, repo }) => {
-    const [repaired, programFile, waterFile, catalog, timeZone, proposalsFile, healthFile] = await Promise.all([
-      readIndex(repo),
+    const head = await repo.head();
+    const [repaired, own, programFile, waterFile, catalog, timeZone, proposalsFile, healthFile] = await Promise.all([
+      readIndex(repo, head),
+      readOwnState(repo, head),
       readTolerant(repo, 'program.json'),
       readTolerant(repo, WATER_PATH),
       catalogOf(deps),
@@ -242,22 +316,25 @@ export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null): P
     const now = deps.now();
     const today = todayIn(timeZone, now);
     const index = repaired.index;
-    const { program, problem } = parseProgram(programFile);
+    const pt = parseProgram(programFile);
 
     const unfinished = activeRow(index);
     const active = unfinished ? await readSessionBlob(repo, unfinished.sha) : null;
     const current = active?.status === 'active' ? active : null;
+    // Yarım antrenman seçimden bağımsız kendi programıyla sürer; yoksa adresteki ya da kalıcı seçim (§3.2, §5.4).
+    const chosen = await planSource({ repo, own, pt, current, param: programParam });
+    const { program, owner, problem } = chosen.source;
 
     let day: WorkoutDay | null = null;
     let extras: ExtraRows = {};
     if (program) {
       const requested = dayParam && DAY_ID_PATTERN.test(dayParam) ? dayParam : (current?.program?.dayId ?? null);
       const dayId = resolveDay(program, requested)?.day.id ?? null;
-      // Yarım antrenmanın muadil ve eklenen hareketlerinin geçmişi de okunur.
+      // Yarım antrenmanın muadil ve eklenen hareketlerinin geçmişi de okunur; satır başına ve aynı programdan pencere (§3.9).
       const ids = new Set([...dayExerciseIds(program, dayId), ...(current?.entries.map((entry) => entry.exerciseId) ?? [])]);
-      const history = await readHistory(repo, index, ids);
+      const history = await readHistory(repo, index, { exerciseIds: ids, rowIds: dayRowIds(program, dayId), programId: owner?.programId ?? null });
       const insight = insightOf(index, now, client);
-      day = buildWorkoutDay({ program, dayId, exercises: catalog.exercises, devices: catalog.devices, history, insight });
+      day = buildWorkoutDay({ program, dayId, exercises: catalog.exercises, devices: catalog.devices, history, insight, owner });
       if (day && current) extras = sessionExtras({ day, doc: current, catalog, history, insight });
       if (day) {
         const setIncrease = setSuggestionsFor({
@@ -277,6 +354,9 @@ export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null): P
 
     const phase = program ? currentPhaseOf(program)?.phase : undefined;
     const last = lastDoneDates(index);
+    // Kalıcı seçimin anı gösterilen program kalıcı seçimse pencereyi açar (seçimden önceki günler kaçmış sayılmaz).
+    const activeAt = !chosen.oneOff ? own.index.active?.at : undefined;
+    const selection = selectionOf({ own, pt: pt.program, index, shown: chosen.shown, oneOff: chosen.oneOff, problem: chosen.selectionProblem });
     const body: WorkoutResponse = {
       today,
       timeZone,
@@ -284,16 +364,19 @@ export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null): P
         program && phase
           ? {
               revision: program.revision,
-              stamp: programStamp(program),
+              stamp: programStamp(program, owner?.programId ?? null),
               phaseId: phase.id,
               nextDayId: nextDayId(program),
               days: phase.days.map((item) => ({ id: item.id, name: item.name, ...(last[item.id] ? { lastDate: last[item.id] } : {}) })),
+              source: owner ? 'own' : 'pt',
+              ...(owner ? { id: owner.programId, name: owner.name } : {}),
             }
           : null,
+      ...(selection ? { selection } : {}),
       ...(problem ? { problem } : {}),
       day,
       week: weekOf(index, program, now, timeZone),
-      schedule: program ? scheduleOf(program, { client, timeZone }) : null,
+      schedule: program ? scheduleOf(program, { client, timeZone, activeAt }) : null,
       water: {
         file: waterFile && waterFile !== 'broken' ? waterOnDay(parseWaterFile(waterFile.content).file.taps, today, timeZone) : 0,
         sessions: sessionWaterOn(index, today),
@@ -306,7 +389,40 @@ export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null): P
   });
 }
 
+/** Seçim sheet'inin verisi: yalnız en az bir kendi program (ya da okunamayan) varken. */
+function selectionOf(input: {
+  own: OwnState;
+  pt: Program | null;
+  index: SessionIndex;
+  shown: string | null;
+  oneOff: boolean;
+  problem?: string | undefined;
+}): WorkoutSelection | null {
+  const { own } = input;
+  if (own.index.items.length === 0 && !input.problem) return null;
+  const last = lastDateByProgram(input.index);
+  const lastOf = (key: string) => (last.get(key) ? { lastDate: last.get(key) as string } : {});
+  const active = activeProgramId(own.index);
+  return {
+    active,
+    ...(own.index.active?.at ? { activeAt: own.index.active.at } : {}),
+    shown: input.shown,
+    oneOff: input.oneOff,
+    choices: [
+      ...(input.pt ? [{ id: null, name: PT_PROGRAM_NAME, ...lastOf('pt') }] : []),
+      ...own.index.items.map((item) => ({ id: item.id, name: item.name, ...lastOf(item.id) })),
+    ],
+    ...(input.problem ? { problem: input.problem } : {}),
+  };
+}
+
 const BAD_REQUEST = { status: 400, body: { error: 'İstek geçersiz.' } };
+
+/** Muadil ve eklenen hareketin programı: `op_…` kendi program, yok ya da `pt` PT'nin programı; bozuksa undefined. */
+function ownParam(value: string | null): string | null | undefined {
+  if (value === null || value === 'pt') return null;
+  return isOwnProgramId(value) ? value : undefined;
+}
 const ROW_GONE = { status: 404, body: { error: 'Bu hareket programında artık yok; muadilleri açılamadı.' } };
 
 /**
@@ -314,11 +430,24 @@ const ROW_GONE = { status: 404, body: { error: 'Bu hareket programında artık y
  * sabitledikleri önce, sonra aynı kalıp ve aynı kaslar (`rankAlternatives`); bugünün öteki hareketleri
  * önerilmez. Her muadil satırın set düzeniyle ve kendi geçmişiyle planlanır: "30 kg ile başla".
  */
-export function alternativesRoute(deps: WorkoutRouteDeps, dayParam: string | null, rowParam: string | null): Promise<SessionRouteResult> {
+export function alternativesRoute(
+  deps: WorkoutRouteDeps,
+  dayParam: string | null,
+  rowParam: string | null,
+  programQuery: string | null = null,
+): Promise<SessionRouteResult> {
   if (!dayParam || !DAY_ID_PATTERN.test(dayParam) || !rowParam || !ROW_ID_PATTERN.test(rowParam)) return Promise.resolve(BAD_REQUEST);
+  const programParam = ownParam(programQuery);
+  if (programParam === undefined) return Promise.resolve(BAD_REQUEST);
   return run(deps, null, 'workout-alternatives', async ({ client, repo }) => {
-    const [repaired, programFile, catalog] = await Promise.all([readIndex(repo), readTolerant(repo, 'program.json'), catalogOf(deps)]);
-    const { program } = parseProgram(programFile);
+    // Günün programı: kendi programda `program=op_…` (gün kimlikleri bütün programlarda benzersiz).
+    const [repaired, programFile, catalog, ownRead] = await Promise.all([
+      readIndex(repo),
+      programParam ? Promise.resolve(null) : readTolerant(repo, 'program.json'),
+      catalogOf(deps),
+      programParam ? readOwnProgram(repo, programParam) : Promise.resolve(null),
+    ]);
+    const program: PlanProgram | null = ownRead ? (ownRead.status === 'ok' ? ownRead.program : null) : parseProgram(programFile).program;
     const found = program ? resolveDay(program, dayParam) : null;
     if (!found || found.day.id !== dayParam) return ROW_GONE;
     const block = found.day.blocks.find((item) => item.rows.some((row) => row.id === rowParam));
@@ -331,7 +460,8 @@ export function alternativesRoute(deps: WorkoutRouteDeps, dayParam: string | nul
     const today = new Set(found.day.blocks.flatMap((item) => item.rows.map((other) => other.exerciseId)));
     const candidates = catalog.list.filter((exercise) => !today.has(exercise.id));
     const ranked = rankAlternatives(source, candidates, deps.familyOf, { limit: ALTERNATIVES_LIMIT });
-    const history = await readHistory(repo, repaired.index, new Set(ranked.map((item) => item.exercise.id)));
+    const programId = programParam ?? null;
+    const history = await readHistory(repo, repaired.index, { exerciseIds: new Set(ranked.map((item) => item.exercise.id)), rowIds: new Set([row.id]), programId });
     const kept = found.day.blocks.flatMap((item) => {
       const rows = item.rows.filter((other) => catalog.exercises.has(other.exerciseId));
       return rows.length > 0 ? [{ ...item, rows }] : [];
@@ -345,7 +475,7 @@ export function alternativesRoute(deps: WorkoutRouteDeps, dayParam: string | nul
         exerciseId: exercise.id,
         title: exercise.title,
         pinned,
-        extra: swapRowFor({ row, blockId: block.id, original: source, exercise, devices: catalog.devices, history, firstForMuscle, insight }),
+        extra: swapRowFor({ row, blockId: block.id, original: source, exercise, devices: catalog.devices, history, firstForMuscle, insight, programId }),
       })),
     }));
     const body: AlternativesResponse = { rowId: row.id, exerciseId: source.id, groups };
@@ -358,8 +488,10 @@ export function alternativesRoute(deps: WorkoutRouteDeps, dayParam: string | nul
  * varsayılan setleri ve dinlenmesi, kendi geçmişiyle. Anahtar egzersizin kimliği; telefon kaydı açınca
  * kaydın kimliğiyle değiştirir.
  */
-export function exercisesRoute(deps: WorkoutRouteDeps, addParam: string | null): Promise<SessionRouteResult> {
+export function exercisesRoute(deps: WorkoutRouteDeps, addParam: string | null, programQuery: string | null = null): Promise<SessionRouteResult> {
   if (addParam !== null && !/^[a-z0-9-]{2,60}$/.test(addParam)) return Promise.resolve(BAD_REQUEST);
+  const programParam = ownParam(programQuery);
+  if (programParam === undefined) return Promise.resolve(BAD_REQUEST);
   return run(deps, null, 'workout-exercises', async ({ client, repo }) => {
     const catalog = await catalogOf(deps);
     if (addParam === null) {
@@ -380,9 +512,10 @@ export function exercisesRoute(deps: WorkoutRouteDeps, addParam: string | null):
     const exercise = catalog.exercises.get(addParam);
     if (!exercise) return { status: 404, body: { error: 'Bu hareket kütüphanede yok.' } };
     const repaired = await readIndex(repo);
-    const history = await readHistory(repo, repaired.index, new Set([exercise.id]));
+    const programId = programParam ?? null;
+    const history = await readHistory(repo, repaired.index, { exerciseIds: new Set([exercise.id]), programId });
     const insight = insightOf(repaired.index, deps.now(), client);
-    const body: AddedRowResponse = { extra: addedRowFor({ key: exercise.id, exercise, devices: catalog.devices, history, insight }) };
+    const body: AddedRowResponse = { extra: addedRowFor({ key: exercise.id, exercise, devices: catalog.devices, history, insight, programId }) };
     return { status: 200, body };
   });
 }
@@ -432,9 +565,23 @@ export function scheduleRoute(deps: SessionRouteDeps, headers: Headers, origin: 
   const blocked = postGuard(headers, origin);
   if (blocked) return Promise.resolve(blocked);
   return run(deps, null, 'schedule', async ({ client, repo }) => {
-    const parsed = v.safeParse(clientScheduleBodySchema, input);
+    const parsed = v.safeParse(scheduleBodySchema, input);
     if (!parsed.success) return { status: 400, body: { error: 'En az bir gün seç.' } };
     const timeZone = await deps.timeZone();
+    // Gösterilen program (`docs/design/kendi-program.md` §3.2): verilmezse kalıcı seçim; kendi programda doğrudan
+    // `schedule` (program + index tek commit), PT'ninkinde danışanın katmanı.
+    const target = parsed.output.programId !== undefined ? parsed.output.programId : activeProgramId((await readOwnState(repo)).index);
+    if (target) {
+      const result = await scheduleOwnProgram(repo, target, parsed.output.weekdays, deps.now());
+      if (!('program' in result)) {
+        return result.status === 'missing'
+          ? { status: 404, body: { error: 'Bu program artık yok.' } }
+          : { status: 409, body: { error: 'Programın şu an açılamıyor.' } };
+      }
+      if (result.status === 'saved') deps.log(`[kendi program] ${client.id} günler`);
+      const body: ScheduleResponse = { schedule: scheduleOf(result.program, { client, timeZone }), ...(result.status === 'unchanged' ? { unchanged: true as const } : {}) };
+      return { status: 200, body };
+    }
     for (let attempt = 0; ; attempt += 1) {
       // Bozuk JSON 500 fırlatır: dosya ezilmez.
       const file = await repo.read('program.json');

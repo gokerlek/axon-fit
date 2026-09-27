@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { GearSix, House, SignOut } from '@phosphor-icons/react';
+import { GearSix, SignOut } from '@phosphor-icons/react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -26,13 +26,12 @@ function initials(name: string): string {
 }
 
 /**
- * Danışanın sağ üstteki avatar menüsü (PT'ninkiyle aynı yerde): programı, ayarlar (sağlık takibi,
- * şifre) ve çıkış. Yalnız telefon: düğme ve öğeler 44 px. Çıkış onay penceresiyle. Gezinme alttaki
- * dock'ta (`client-dock.tsx`); Ayarlar ve Çıkış yalnız burada. "Programım" şimdilik `/me`'yi (dock'taki
- * Bugün) açar; programın bütün günlerini ve geçmişini gösteren `/me/program` gelince oraya bağlanır
- * (docs/design/antrenman-ekrani.md, açık soru 12).
+ * Danışanın sağ üstteki avatar menüsü (PT'ninkiyle aynı yerde): ayarlar (sağlık takibi, şifre) ve
+ * çıkış. Yalnız telefon: düğme ve öğeler 44 px. Çıkış onay penceresiyle. Gezinme alttaki dock'ta
+ * (`client-dock.tsx`); Ayarlar ve Çıkış yalnız burada. Programlar dock'un 4. sekmesi olunca "Programım"
+ * kalktı (docs/design/kendi-program.md, karar 1; antrenman-ekrani.md açık soru 12).
  */
-export function ClientMenu({ name, appName, hasPassword }: { name: string; appName: string; hasPassword: boolean }) {
+export function ClientMenu({ clientId, name, appName, hasPassword }: { clientId: string; name: string; appName: string; hasPassword: boolean }) {
   const [leaving, setLeaving] = useState(false);
   return (
     <>
@@ -53,10 +52,6 @@ export function ClientMenu({ name, appName, hasPassword }: { name: string; appNa
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuItem className="min-h-11" render={<Link href="/me" />}>
-              <House />
-              Programım
-            </DropdownMenuItem>
             <DropdownMenuItem className="min-h-11" render={<Link href="/me/ayarlar" />}>
               <GearSix />
               Ayarlar
@@ -69,7 +64,7 @@ export function ClientMenu({ name, appName, hasPassword }: { name: string; appNa
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <LogoutDialog open={leaving} onOpenChange={setLeaving} hasPassword={hasPassword} />
+      <LogoutDialog open={leaving} onOpenChange={setLeaving} hasPassword={hasPassword} clientId={clientId} />
     </>
   );
 }

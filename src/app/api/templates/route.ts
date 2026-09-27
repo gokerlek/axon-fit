@@ -32,7 +32,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Bilgileri kontrol et.', fields }, { status: 400 });
   }
 
-  const { id: requestedId, baseSha, name, description, blocks } = parsed.output;
+  const { id: requestedId, baseSha, name, description, blocks, sharedWithClients } = parsed.output;
+  /** Bayrak yalnız açıkken yazılır; göndermeyen eski sekme kayıttakini korur (kendi-program.md §3.8). */
+  const flag = (stored?: boolean) => ((sharedWithClients ?? stored) ? { sharedWithClients: true as const } : {});
   try {
     const [exercises, devices] = await Promise.all([listExercises(), listDevices()]);
     const normalized = normalizeTemplate(
@@ -59,6 +61,7 @@ export async function POST(request: Request) {
         name,
         description,
         blocks: normalized.blocks,
+        ...flag(stored.template?.sharedWithClients),
         createdAt: stored.template?.createdAt ?? now,
         updatedAt: now,
       };
@@ -69,7 +72,7 @@ export async function POST(request: Request) {
     // Kimlik rastgele; çok düşük ihtimalle var olan bir dosyaya denk gelirse GitHub reddeder
     // (409), istemci bir kez yeniden dener ve yeni kimlik alır.
     const id = randomId('t', 8, new Set());
-    const template: Template = { id, name, description, blocks: normalized.blocks, createdAt: now, updatedAt: now };
+    const template: Template = { id, name, description, blocks: normalized.blocks, ...flag(), createdAt: now, updatedAt: now };
     const { sha } = await writeTemplate(template, { message: `Şablon eklendi: ${name}` });
     return NextResponse.json({ id, sha }, { status: 201 });
   } catch (error) {

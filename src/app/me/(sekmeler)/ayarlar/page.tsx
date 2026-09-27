@@ -4,9 +4,10 @@ import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/ca
 import { canSetPassword, hasPassword, healthConsentState } from '@/lib/client-status';
 import { readAppConfig } from '@/lib/config';
 import { currentClient } from '@/lib/guards';
-import { readProgramFile } from '@/lib/programs';
+import { activeItem } from '@/lib/own-program-index';
+import { readOwnOverview, readOwnProgramOf } from '@/lib/own-programs-store';
 import { readClientSession } from '@/lib/session';
-import { scheduleOf } from '@/lib/workout-plan';
+import { scheduleOf, type PlanProgram } from '@/lib/workout-plan';
 import { ClientHeader } from '../../client-header';
 import { ConsentCard } from '../../consent-card';
 import { PasswordCard } from '../../password-card';
@@ -25,14 +26,24 @@ export default async function ClientSettingsPage() {
   const [client, config, session] = await Promise.all([currentClient(), readAppConfig(), readClientSession()]);
   const health = healthConsentState(client);
   const passwordSet = hasPassword(client.access);
-  // Program okunamıyorsa ya da yoksa günler satırı çıkmaz (Bugün sorunu anlatır).
-  const program = (await readProgramFile(client.id).catch(() => null))?.program ?? null;
+  // Bugün'ün programının (kalıcı seçim; kendi programsa onun) günleri. Okunamıyorsa ya da yoksa satır çıkmaz (Bugün
+  // sorunu anlatır).
+  const overview = await readOwnOverview(client.id).catch(() => null);
+  const selected = activeItem(overview?.state.index);
+  const own = selected ? await readOwnProgramOf(client.id, selected.id).catch(() => null) : null;
+  const program: PlanProgram | null = own?.status === 'ok' ? own.program : selected ? null : (overview?.pt?.program ?? null);
+  const activeAt = overview?.state.index.active?.at;
 
   return (
     <main className="flex flex-col gap-6">
       <ClientHeader client={client} appName={config.appName} title="Ayarlar" back={{ href: '/me', label: 'Bugün' }} />
 
-      {program ? <TrainingDaysCard schedule={scheduleOf(program, { client, timeZone: config.timeZone })} /> : null}
+      {program ? (
+        <TrainingDaysCard
+          schedule={scheduleOf(program, { client, timeZone: config.timeZone, activeAt })}
+          own={own?.status === 'ok' ? { programId: own.program.id, name: own.program.name } : null}
+        />
+      ) : null}
 
       {health === 'off' ? (
         <Card size="sm">

@@ -3,6 +3,7 @@ import { formatDayShort, formatNumber, formatSignedWithUnit, todayIn } from './f
 import { SIDE_LABELS } from './measurement-log.ts';
 import { measurementAlerts, type LineKey } from './measurement-trends.ts';
 import { MEASUREMENT_UNIT_LABELS, MEASUREMENTS, type MeasurementId } from './measurements.ts';
+import { activeItem, type OwnIndex } from './own-program-index.ts';
 import { currentPhaseOf, phaseStatus } from './program-plan.ts';
 import { parseProposals, pendingProposals } from './proposals.ts';
 import { stallCounts } from './recommend.ts';
@@ -112,8 +113,11 @@ export type AttentionFacts = {
   /** Antrenman yapılan günler (bitmiş, yarım ya da hiç bitirilmemiş), yakın geçmiş. */
   sessionDays: string[];
   stalls: StallFact[];
-  /** Evre sürüyor ve sonrası var: bitiş anı gelince geçiş önerilir. */
-  phase: { name: string; next: string; endsAt: string } | null;
+  /**
+   * Evre sürüyor ve sonrası var: bitiş anı gelince geçiş önerilir. `own`: danışan o sırada kendi programıyla
+   * çalışıyor (adı; `docs/design/kendi-program.md` §4): madde bunu söyler.
+   */
+  phase: { name: string; next: string; endsAt: string; own?: string } | null;
   proposals: { count: number; at: string; text?: string } | null;
   measurements: MeasurementDecline[];
 };
@@ -192,10 +196,19 @@ export function measurementDeclines(entries: readonly MeasurementEntry[]): Measu
     }));
 }
 
+/** İki andan yenisi (biri yoksa öteki). */
+function later(a: string | undefined, b: string | undefined): string | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  return Date.parse(b) > Date.parse(a) ? b : a;
+}
+
 /**
  * Danışanın dosyalarından özet. `index` onarılmış index (`readIndex`: başlanıp hiç bitirilmemiş antrenmanlar da
  * satırdır, o gün kaçan sayılmaz), `proposals` ham dosya, `measurements` yalnız ölçüm onayı sürüyorsa (yoksa
- * null). `now` davetin durumu, evre ve pencereler için.
+ * null). `now` davetin durumu, evre ve pencereler için. `own`: kendi programların index'i (seçim): kalıcı seçim
+ * kendi programsa günler onun (index satırından), pencere seçimin anından da sonra başlar (`docs/design/kendi-program.md`
+ * §3.2, §4); PT'nin programına dönüşün anı da pencereyi açar.
  */
 export function attentionFactsOf(input: {
   client: Pick<Client, 'status' | 'access' | 'statusChangedAt'>;
@@ -205,16 +218,23 @@ export function attentionFactsOf(input: {
   proposals: unknown;
   measurements: readonly MeasurementEntry[] | null;
   now: Date;
+  own?: OwnIndex | null | undefined;
 }): AttentionFacts {
   const { client, program, now } = input;
   const access = accessState(client.access, input.invite, now);
   const invite = input.invite && !input.invite.used ? input.invite : null;
+  const selected = activeItem(input.own);
+  const activeAt = input.own?.active?.at;
 
   let schedule: AttentionFacts['schedule'] = null;
-  if (program) {
+  if (selected) {
+    // Kendi program: günleri index satırında; pencere programın kurulduğu, günlerin değiştiği ve seçildiği andan sonra.
+    const since = later(scheduleSince({ createdAt: selected.createdAt, schedule: { weekdays: selected.weekdays, at: selected.weekdaysAt } }, client), activeAt);
+    if (selected.weekdays.length > 0 && since) schedule = { weekdays: normalizeWeekdays(selected.weekdays), since };
+  } else if (program) {
     const days = effectiveSchedule(program);
-    // Günler programdan, günlerin son değişmesinden, ilk girişten ve duraklatmadan dönüşten önce sayılmaz (Bugün'ün şeridiyle aynı kural).
-    const since = scheduleSince(program, client);
+    // Günler programdan, günlerin son değişmesinden, ilk girişten, duraklatmadan dönüşten ve PT'nin programına dönüşten önce sayılmaz (Bugün'ün şeridiyle aynı kural).
+    const since = later(scheduleSince(program, client), activeAt);
     if (days.weekdays.length > 0 && since) schedule = { weekdays: days.weekdays, since };
   }
 
@@ -226,7 +246,9 @@ export function attentionFactsOf(input: {
   const next = current ? program?.phases[current.index + 1] : undefined;
   if (program && current && next) {
     const status = phaseStatus(program, now);
-    if (status.kind === 'running' || status.kind === 'due') phase = { name: current.phase.name, next: next.name, endsAt: status.endsAt };
+    if (status.kind === 'running' || status.kind === 'due') {
+      phase = { name: current.phase.name, next: next.name, endsAt: status.endsAt, ...(selected ? { own: selected.name } : {}) };
+    }
   }
 
   const pending = pendingProposals(parseProposals(input.proposals));
@@ -383,7 +405,9 @@ export function attentionItems(
       key: 'phase',
       kind: 'phase',
       urgency: ATTENTION_URGENCY.phase,
-      text: `'${facts.phase.name}' evresinin süresi doldu; sıradaki evre '${facts.phase.next}'`,
+      text: facts.phase.own
+        ? `Danışan ${facts.phase.own} ile çalışıyor · '${facts.phase.name}' evresinin süresi doldu`
+        : `'${facts.phase.name}' evresinin süresi doldu; sıradaki evre '${facts.phase.next}'`,
       target: 'program',
     });
   }

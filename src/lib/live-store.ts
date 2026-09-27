@@ -7,7 +7,9 @@ import { activeSessionOf, liveSessionOf, sessionFileOfCommit, withinLiveWindow }
 import type { LiveClient, LiveResponse, LiveSession } from './live-text';
 import { readClientDigest } from './notices-store';
 import { mapLimit } from './progress-load';
+import { isOwnProgramId, ownProgramPath } from './own-programs';
 import { PROGRAM_PATH } from './programs';
+import { ownProgramSchema } from './schemas/own-program';
 import { programSchema, type Program } from './schemas/program';
 import { SESSIONS_DIR } from './schemas/session';
 
@@ -21,17 +23,19 @@ import { SESSIONS_DIR } from './schemas/session';
  * (`sessionWriter`): 5xx'te bir kez dener, sınırda Route Handler'ın içinde beklemez; tazeleme bir sonrakine kalır.
  */
 
-/** Ayrıştırılmış programlar, dosyanın `sha`'sıyla (değişmez). */
-const programs = new Map<string, Program | null>();
+/** Ayrıştırılmış programların günleri, dosyanın `sha`'sıyla (değişmez). */
+const programs = new Map<string, Pick<Program, 'phases'> | null>();
 const PROGRAM_CACHE = 100;
 
-async function programOf(repo: string): Promise<Program | null> {
-  const file = await readJsonConditional<unknown>(repo, PROGRAM_PATH, sessionWriter()).catch(() => null);
+/** Antrenmanın programı: kendi programdan antrenmanda o dosya (`docs/design/kendi-program.md` §5.4), yoksa `program.json`. */
+async function programOf(repo: string, programId: string | undefined): Promise<Pick<Program, 'phases'> | null> {
+  const path = programId && isOwnProgramId(programId) ? ownProgramPath(programId) : PROGRAM_PATH;
+  const file = await readJsonConditional<unknown>(repo, path, sessionWriter()).catch(() => null);
   if (!file) return null;
   const key = `${repo}@${file.sha}`;
   if (!programs.has(key)) {
-    const parsed = v.safeParse(programSchema, file.content);
-    programs.set(key, parsed.success ? parsed.output : null);
+    const parsed = programId ? v.safeParse(ownProgramSchema, file.content) : v.safeParse(programSchema, file.content);
+    programs.set(key, parsed.success ? (parsed.output as Pick<Program, 'phases'>) : null);
     if (programs.size > PROGRAM_CACHE) programs.delete(programs.keys().next().value as string);
   }
   return programs.get(key) ?? null;
@@ -54,7 +58,7 @@ export async function readLiveSession(clientId: string, now: Date = new Date()):
   }
   const doc = activeSessionOf(raw);
   if (!doc) return null;
-  return liveSessionOf({ doc, program: await programOf(repo), committedAt: latest.date, now });
+  return liveSessionOf({ doc, program: await programOf(repo, doc.program?.programId), committedAt: latest.date, now });
 }
 
 /** Sayfanın ilk çizimi için (`GET /api/clients/[id]/live` ile aynı yanıt); okunamazsa null, tarayıcı kendisi sorar. */

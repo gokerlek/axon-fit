@@ -4,9 +4,11 @@ import { exercisesRoute } from '@/lib/workout-routes';
 
 /**
  * "Hareket ekle" (tasarım §2.6): kütüphane; `?add=<egzersiz>` verilirse o hareketin bu antrenman için
- * planı (varsayılan setler, kendi geçmişi). Kurallar `workout-routes.ts`'te. Kimlik yalnız oturumdan.
+ * planı (varsayılan setler, kendi geçmişi; kendi programda `&program=op_…`: önce o programın geçmişi).
+ * Kurallar `workout-routes.ts`'te. Kimlik yalnız oturumdan.
  */
 export async function GET(request: NextRequest) {
-  const result = await exercisesRoute(await workoutRouteDeps(), request.nextUrl.searchParams.get('add'));
+  const params = request.nextUrl.searchParams;
+  const result = await exercisesRoute(await workoutRouteDeps(), params.get('add'), params.get('program'));
   return NextResponse.json(result.body, { status: result.status, headers: result.headers });
 }

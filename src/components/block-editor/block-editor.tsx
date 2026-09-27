@@ -64,6 +64,7 @@ import {
   type BlocksFormStore,
   type BlocksPath,
   type Editor,
+  type EditorVariant,
   type ItemActions,
   type RowClientTarget,
 } from './editor-context';
@@ -232,6 +233,7 @@ export function BlockEditor({
   listLabel = 'Şablondaki hareketler',
   addLabel = 'Hareket ekle',
   clientTargets = NO_TARGETS,
+  variant = 'full',
 }: {
   form: BlocksFormStore;
   path: BlocksPath;
@@ -256,6 +258,11 @@ export function BlockEditor({
   addLabel?: string;
   /** Programda danışanın satır hedefleri: kartta "Danışan güncelledi" rozeti (tasarım §6.2). */
   clientTargets?: Readonly<Record<string, RowClientTarget>>;
+  /**
+   * `simple`: danışanın kendi programı (`docs/design/kendi-program.md` §2.5): ilerleme kuralı, RIR ve yüzdeli set
+   * düzeni yok; set sayısı, tekrar ya da süre, dinlenme, cihaz, not ve süperset kalır.
+   */
+  variant?: EditorVariant;
 }) {
   const exerciseById = useMemo(() => new Map(exercises.map((exercise) => [exercise.id, exercise])), [exercises]);
   const deviceById = useMemo(() => new Map(devices.map((device) => [device.id, device])), [devices]);
@@ -735,6 +742,7 @@ export function BlockEditor({
     nudgeId,
     onNudged,
     clientTargets,
+    variant,
   };
 
   return (

@@ -33,6 +33,10 @@ import {
 
 export const PHASE_ID_PATTERN = /^p_[a-z0-9]{6}$/;
 export const DAY_ID_PATTERN = /^d_[a-z0-9]{6}$/;
+/** Danışanın kendi programı (`docs/design/kendi-program.md` §3.1): `op_` + 8; dosya yolu yalnız bundan kurulur. */
+export const OWN_PROGRAM_ID_PATTERN = /^op_[a-z0-9]{8}$/;
+/** Kendi programın adı en fazla (seansın ve index'in anlık görüntüsü de). */
+export const OWN_PROGRAM_NAME_MAX = 40;
 
 export const PROGRAM_LIMITS = {
   phases: 12,
@@ -48,14 +52,19 @@ export const PROGRAM_LIMITS = {
   changeText: 300,
 } as const;
 
-/** `client`: danışanın kendi değişikliği (antrenman günleri, bitişte kilo ve tekrar hedefi); revision artmaz. */
-export const LOG_KINDS = ['create', 'edit', 'phase', 'client'] as const;
+/**
+ * `client`: danışanın kendi değişikliği (antrenman günleri, bitişte kilo ve tekrar hedefi); PT programında
+ * revision artmaz. `share`: danışanın kendi programını paylaşması ya da kapatması (yalnız kendi programda,
+ * `docs/design/kendi-program.md` §5.2; revision artmaz).
+ */
+export const LOG_KINDS = ['create', 'edit', 'phase', 'client', 'share'] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
 export const LOG_KIND_LABELS: Record<LogKind, string> = {
   create: 'Oluşturuldu',
   edit: 'Düzenlendi',
   phase: 'Evre geçişi',
   client: 'Danışan güncelledi',
+  share: 'Paylaşım',
 };
 
 export const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -91,9 +100,10 @@ export type ProgramRotation = { lastDayId?: string; lastCompletedAt?: string };
 export type ProgramChange = { scope?: string; text: string };
 /**
  * Geçmiş kaydı. `sessionId`: antrenman bitişinde yazılan danışan kaydının seansı (tasarım §6.3); aynı
- * seansın kaydı ikinci kez eklenmez (bitişin yeniden denenmesi çoğaltmaz).
+ * seansın kaydı ikinci kez eklenmez (bitişin yeniden denenmesi çoğaltmaz). `by: 'pt'`: kaydı PT yaptı (yalnız
+ * danışanın kendi programında; yoksa danışan). `program.json` yazmaz.
  */
-export type ProgramLogEntry = { at: string; revision: number; kind: LogKind; sessionId?: string; changes: ProgramChange[] };
+export type ProgramLogEntry = { at: string; revision: number; kind: LogKind; sessionId?: string; by?: 'pt'; changes: ProgramChange[] };
 /**
  * PT'nin antrenman günleri (tasarım §2.11). `at`: geçerli günlerin son değiştiği an (PT'nin değişikliği, "PT'nin
  * günlerine dön", danışanın PT'nin günlerine dönmesi); kaçan gün penceresi bundan önce sayılmaz (`attention.ts`).

@@ -6,6 +6,10 @@ import type { SessionDoc } from './schemas/session.ts';
 import type { ClientSession } from './session-core.ts';
 import { fakeSessionRepo, type FakeSessionRepo } from './testing/fake-session-repo.ts';
 import { at, DAY_A, DAY_B, programFile, sessionDoc, sessionEntry, workingSet } from './testing/session-fixtures.ts';
+import { gitBlobSha, jsonText } from './github/blob.ts';
+import { emptyOwnIndex, ownIndexItemOf, upsertOwnItem } from './own-program-index.ts';
+import { OWN_INDEX_PATH, type OwnProgram } from './own-programs.ts';
+import { OWN_DAY_A, OWN_DAY_B, OWN_ID, OWN_ROW_GOBLET, ownProgram } from './testing/own-fixtures.ts';
 import { DEVICES, EXERCISES } from './testing/workout-fixtures.ts';
 import {
   alternativesRoute,
@@ -314,6 +318,11 @@ describe('muadil ve eklenen hareketler', () => {
     assert.equal((await alternativesRoute(deps, DAY_A, 'r_zzzzzz')).status, 404);
     assert.equal((await alternativesRoute(deps, DAY_B, 'r_aaaaaa')).status, 404);
     assert.equal((await alternativesRoute(setup(undefined, { session: null }).deps, DAY_A, 'r_aaaaaa')).status, 401);
+    // Program adres parçası: `pt` PT'nin programıdır (telefon planın programını hep yollar), bozuk değer 400.
+    assert.equal((await alternativesRoute(deps, DAY_A, 'r_aaaaaa', 'pt')).status, 200);
+    assert.equal((await alternativesRoute(deps, DAY_A, 'r_aaaaaa', '../x')).status, 400);
+    assert.equal((await exercisesRoute(deps, 'push-up', 'pt')).status, 200);
+    assert.equal((await exercisesRoute(deps, 'push-up', 'op_../..')).status, 400);
   });
 
   test('"Hareket ekle": kütüphane ada göre; seçilenin varsayılan setleri ve dinlenmesiyle planı', async () => {
@@ -434,5 +443,73 @@ describe('POST /api/me/schedule', () => {
     gh.putText('program.json', '{ bozuk');
     assert.equal((await scheduleRoute(setup({}, { gh }).deps, headers(), ORIGIN, { weekdays: [1] })).status, 500);
     assert.equal(gh.commitCount(), 1);
+  });
+});
+
+describe('kendi programlar (kendi-program.md §3.2, §5.4)', () => {
+  const OWN_PATH = `own-programs/${OWN_ID}.json`;
+  const evde = ownProgram();
+  const indexWith = (active?: { programId: string | null; at: string }) => ({
+    ...upsertOwnItem(emptyOwnIndex(), ownIndexItemOf(evde, gitBlobSha(jsonText(evde)))),
+    ...(active ? { active } : {}),
+  });
+  const files = (active?: { programId: string | null; at: string }) => ({ 'program.json': programFile(), [OWN_PATH]: evde, [OWN_INDEX_PATH]: indexWith(active) });
+  const body = (result: Awaited<ReturnType<typeof workoutRoute>>) => result.body as unknown as WorkoutResponse;
+
+  test('kalıcı seçim kendi programsa plan ondan; kaynak, kimlik, ad ve seçim listesi', async () => {
+    const data = body(await workoutRoute(setup(files({ programId: OWN_ID, at: '2026-09-20T10:00:00.000Z' })).deps, null));
+    assert.deepEqual([data.program?.source, data.program?.id, data.program?.name], ['own', OWN_ID, 'Evde']);
+    assert.deepEqual([data.day?.source, data.day?.programId, data.day?.dayId], ['own', OWN_ID, OWN_DAY_A]);
+    assert.deepEqual(data.selection?.choices.map((choice) => [choice.id, choice.name]), [[null, 'Antrenörünün programı'], [OWN_ID, 'Evde']]);
+    assert.deepEqual([data.selection?.active, data.selection?.shown, data.selection?.oneOff], [OWN_ID, OWN_ID, false]);
+    assert.match(data.program?.stamp ?? '', new RegExp(`^${OWN_ID}\\|`));
+  });
+
+  test('"Yalnız bugün": adresteki program; hiçbir şey yazılmaz', async () => {
+    const { deps, gh } = setup(files());
+    const data = body(await workoutRoute(deps, null, OWN_ID));
+    assert.deepEqual([data.program?.source, data.selection?.oneOff, data.selection?.active], ['own', true, null]);
+    const pt = body(await workoutRoute(setup(files({ programId: OWN_ID, at: '2026-09-20T10:00:00.000Z' })).deps, null, 'pt'));
+    assert.deepEqual([pt.program?.source, pt.selection?.oneOff], ['pt', true]);
+    assert.equal(gh.commitCount(), 0);
+    // Bilinmeyen program kalıcı seçime döner.
+    assert.equal(body(await workoutRoute(deps, null, 'op_yokyok01')).program?.source, 'pt');
+  });
+
+  test('yarım antrenman seçimden bağımsız kendi programıyla sürer', async () => {
+    const half = sessionDoc({ program: { revision: 1, dayId: OWN_DAY_B, dayName: 'Gün B', programId: OWN_ID, programName: 'Evde' }, entries: [] });
+    const { deps } = setup({ ...files({ programId: null, at: '2026-09-25T10:00:00.000Z' }), [`sessions/${half.id}.json`]: half });
+    const data = body(await workoutRoute(deps, null, 'pt'));
+    assert.deepEqual([data.day?.dayId, data.day?.programId, data.active?.id], [OWN_DAY_B, OWN_ID, half.id]);
+  });
+
+  test('seçili program okunamıyorsa PT\'nin programı ve sorun', async () => {
+    const gh = fakeSessionRepo(files({ programId: OWN_ID, at: '2026-09-20T10:00:00.000Z' }));
+    gh.putText(OWN_PATH, '{ bozuk');
+    const data = body(await workoutRoute(setup({}, { gh }).deps, null));
+    assert.equal(data.program?.source, 'pt');
+    assert.equal(data.selection?.problem, 'Evde şu an açılamıyor.');
+  });
+
+  test('Günlerini değiştir kendi programa (program + index tek commit); gösterilmezse kalıcı seçim', async () => {
+    const headers = new Headers({ origin: ORIGIN, 'content-type': 'application/json' });
+    const { deps, gh } = setup(files({ programId: OWN_ID, at: '2026-09-20T10:00:00.000Z' }));
+    const result = await scheduleRoute(deps, headers, ORIGIN, { weekdays: [2, 4] });
+    assert.equal(result.status, 200);
+    assert.deepEqual((gh.get(OWN_PATH) as OwnProgram).schedule?.weekdays, [2, 4]);
+    assert.equal((gh.get('program.json') as { clientSchedule?: unknown }).clientSchedule, undefined, 'PT programına dokunulmaz');
+    assert.deepEqual(gh.lastChanged(), [OWN_INDEX_PATH, OWN_PATH].sort());
+    const pt = await scheduleRoute(deps, headers, ORIGIN, { weekdays: [1], programId: null });
+    assert.equal(pt.status, 200);
+    assert.deepEqual((gh.get('program.json') as { clientSchedule?: { weekdays: number[] } }).clientSchedule?.weekdays, [1]);
+  });
+
+  test('muadiller kendi programın gününden; kalıba uymayan program 400', async () => {
+    const { deps } = setup(files());
+    const result = await alternativesRoute(deps, OWN_DAY_A, OWN_ROW_GOBLET, OWN_ID);
+    assert.equal(result.status, 200);
+    assert.equal((result.body as unknown as AlternativesResponse).exerciseId, 'goblet-squat');
+    assert.equal((await alternativesRoute(deps, OWN_DAY_A, OWN_ROW_GOBLET)).status, 404, 'PT programında bu gün yok');
+    assert.equal((await alternativesRoute(deps, OWN_DAY_A, OWN_ROW_GOBLET, '../x')).status, 400);
   });
 });

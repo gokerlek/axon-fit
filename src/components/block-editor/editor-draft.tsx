@@ -71,10 +71,15 @@ export function discardDraft(key: string): void {
 
 /** Bütün taslakları atar: PT çıkış yapınca (aynı tarayıcıyı başkası kullanabilir). */
 export function discardAllDrafts(): void {
-  for (const set of stoppers.values()) for (const stop of set) stop();
+  discardDrafts(DRAFT_PREFIX);
+}
+
+/** Öneki tutan taslakları atar: danışan çıkış yapınca yalnız kendi programlarının taslakları (`ownDraftPrefix`). */
+export function discardDrafts(prefix: string): void {
+  for (const [key, set] of stoppers) if (key.startsWith(prefix)) for (const stop of set) stop();
   try {
     const store = window.localStorage;
-    const keys = Array.from({ length: store.length }, (_, index) => store.key(index)).filter((key) => key?.startsWith(DRAFT_PREFIX));
+    const keys = Array.from({ length: store.length }, (_, index) => store.key(index)).filter((key) => key?.startsWith(prefix));
     for (const key of keys) if (key) store.removeItem(key);
   } catch {
     // Depo kapalı: taslak da yok.

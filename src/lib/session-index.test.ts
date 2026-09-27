@@ -4,6 +4,7 @@ import { gitBlobSha, jsonText } from './github/blob.ts';
 import { emptySessionIndex, sessionPath, type SessionDoc } from './schemas/session.ts';
 import { durationOf, indexRowOf, removeIndexRow, repairIndex, upsertIndexRow, volumeOf, waterOf } from './session-index.ts';
 import { tombstoneOf } from './session-merge.ts';
+import { OWN_DAY_A, OWN_DAY_B, OWN_ID } from './testing/own-fixtures.ts';
 import { at, DAY_A, DAY_B, sessionDoc, sessionEntry, workingSet } from './testing/session-fixtures.ts';
 
 const shaOf = (content: unknown) => gitBlobSha(jsonText(content));
@@ -37,6 +38,14 @@ describe('index satırı: PT bildirimlerinin ayrıntısı', () => {
   test('sıradaki gün aynıysa ad yazılmaz; bildirim yoksa ayrıntı da yok', () => {
     const row = indexRowOf(finished('s_aaaaaaaa', 0, { program: { revision: 3, dayId: DAY_A, dayName: 'Gün A', plannedDayId: DAY_A } }), 'f'.repeat(40));
     assert.equal('plannedDayName' in row || 'progress' in row || 'overloads' in row, false);
+  });
+
+  test('kendi programda başka gün yok (plan danışanın): sıradaki gün farklı olsa da bayrak ve ad yazılmaz', () => {
+    const program = { revision: 1, dayId: OWN_DAY_B, dayName: 'Gün B', plannedDayId: OWN_DAY_A, plannedDayName: 'Gün A', programId: OWN_ID, programName: 'Evde' };
+    const row = indexRowOf(finished('s_aaaaaaaa', 0, { program }), 'f'.repeat(40));
+    assert.equal(row.otherDay, false);
+    assert.equal('plannedDayName' in row, false);
+    assert.deepEqual([row.programId, row.programName], [OWN_ID, 'Evde']);
   });
 });
 

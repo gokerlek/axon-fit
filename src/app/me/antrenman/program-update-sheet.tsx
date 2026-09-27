@@ -10,12 +10,15 @@ import { Spinner } from '@/components/ui/spinner';
 import { formatNumber } from '@/lib/format';
 import { DURATION, tween } from '@/lib/motion';
 import { feedbackSummary, type FeedbackItem } from '@/lib/program-feedback';
+import { dative } from '@/lib/turkish';
 import { cn } from '@/lib/utils';
 
 const BOTTOM = 'gap-0 rounded-t-2xl pb-[env(safe-area-inset-bottom)]';
 
 /** Sheet'in alt metni: neyin hemen değiştiği, neyin antrenöre gittiği. */
-function explainer(items: readonly FeedbackItem[]): string {
+function explainer(items: readonly FeedbackItem[], ownName: string | null): string {
+  // Kendi programda her madde doğrudan programa yazılır (`docs/design/kendi-program.md` §2.9).
+  if (ownName) return `Seçtiklerin ${ownName} programına yazılır.`;
   const direct = items.some((item) => item.mode === 'direct');
   const proposal = items.some((item) => item.mode === 'proposal');
   if (direct && proposal) return 'Kilo ve tekrar hedefin hemen değişir; set sayısını ve hareket değişikliğini antrenörün onaylar.';
@@ -38,16 +41,21 @@ export type ProgramAnswer = { answer: 'yes' | 'no' | 'pick'; picked?: ReadonlySe
  * maddeleri açar: her biri tam genişlik tek satır ve tek onay kutusu ("Programa yazılır" ya da "Antrenörüne
  * öner"), altta [Kaydet]. Hiçbir madde seçili gelmiyorsa doğrudan tek tek seçim açılır. Sheet kararsız
  * kapanırsa (`onDismiss`) cevapsız sayılır: yukarı ağırlık yazılır, aşağısı bu seferlik, öneri gitmez.
+ * Kendi programda (`ownName`) soru programın adıyla ("Evde programını güncelleyelim mi?"), birincil düğme
+ * "Evde'ye yaz"; "Antrenörüne öner" yok (`docs/design/kendi-program.md` §2.9).
  */
 export function ProgramUpdateSheet({
   items,
   busy,
+  ownName = null,
   onAnswer,
   onDismiss,
 }: {
   /** Maddeler; null iken sheet kapalı. */
   items: readonly FeedbackItem[] | null;
   busy: boolean;
+  /** Kendi programın adı; PT'nin programında null. */
+  ownName?: string | null;
   onAnswer: (answer: ProgramAnswer) => void;
   onDismiss: () => void;
 }) {
@@ -58,13 +66,23 @@ export function ProgramUpdateSheet({
         if (!open && !busy) onDismiss();
       }}>
       <SheetContent side="bottom" showCloseButton={false} className={cn(BOTTOM, 'max-h-[calc(100dvh-max(1rem,env(safe-area-inset-top)))]')}>
-        {items ? <UpdateBody key={items.map((item) => item.key).join('|')} items={items} busy={busy} onAnswer={onAnswer} /> : null}
+        {items ? <UpdateBody key={items.map((item) => item.key).join('|')} items={items} busy={busy} ownName={ownName} onAnswer={onAnswer} /> : null}
       </SheetContent>
     </Sheet>
   );
 }
 
-function UpdateBody({ items, busy, onAnswer }: { items: readonly FeedbackItem[]; busy: boolean; onAnswer: (answer: ProgramAnswer) => void }) {
+function UpdateBody({
+  items,
+  busy,
+  ownName,
+  onAnswer,
+}: {
+  items: readonly FeedbackItem[];
+  busy: boolean;
+  ownName: string | null;
+  onAnswer: (answer: ProgramAnswer) => void;
+}) {
   const initial = new Set(items.filter((item) => item.checked).map((item) => item.key));
   const [mode, setMode] = useState<'summary' | 'pick'>(initial.size > 0 ? 'summary' : 'pick');
   const [picked, setPicked] = useState<ReadonlySet<string>>(initial);
@@ -96,9 +114,9 @@ function UpdateBody({ items, busy, onAnswer }: { items: readonly FeedbackItem[];
           <>
             <SheetHeader className="gap-1.5 pt-5">
               <SheetTitle ref={title} tabIndex={-1} className="text-lg font-semibold outline-none">
-                Programını güncelleyelim mi?
+                {ownName ? `${ownName} programını güncelleyelim mi?` : 'Programını güncelleyelim mi?'}
               </SheetTitle>
-              <SheetDescription>{explainer(items)}</SheetDescription>
+              <SheetDescription>{explainer(items, ownName)}</SheetDescription>
             </SheetHeader>
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-4">
               <ul className="flex flex-col gap-1.5 text-sm">
@@ -124,7 +142,7 @@ function UpdateBody({ items, busy, onAnswer }: { items: readonly FeedbackItem[];
             <SheetFooter className="pt-3">
               <Button size="lg" className="h-14 w-full text-base" disabled={busy} onClick={() => answer({ answer: 'yes' })}>
                 {busy && pending === 'yes' ? <Spinner data-icon="inline-start" /> : null}
-                Evet, güncelle
+                {ownName ? `${dative(ownName)} yaz` : 'Evet, güncelle'}
               </Button>
               <Button variant="outline" className="h-11 w-full" disabled={busy} onClick={() => answer({ answer: 'no' })}>
                 {busy && pending === 'no' ? <Spinner data-icon="inline-start" /> : null}
@@ -141,7 +159,7 @@ function UpdateBody({ items, busy, onAnswer }: { items: readonly FeedbackItem[];
               <SheetTitle ref={title} tabIndex={-1} className="text-lg font-semibold outline-none">
                 Tek tek seç
               </SheetTitle>
-              <SheetDescription>{explainer(items)}</SheetDescription>
+              <SheetDescription>{explainer(items, ownName)}</SheetDescription>
             </SheetHeader>
             <div role="group" aria-label="Program değişiklikleri" className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-4">
               {items.map((item) => {

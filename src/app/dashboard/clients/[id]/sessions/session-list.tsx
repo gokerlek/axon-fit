@@ -62,6 +62,8 @@ export function SessionRow({ clientId, row }: { clientId: string; row: HistoryRo
               {formatNumber(row.prs)} rekor
             </Badge>
           ) : null}
+          {/* Danışanın kendi programından (adı başlıkta, "Evde · Gün A"). */}
+          {row.program ? <Badge variant="outline">Kendi programı</Badge> : null}
           {row.otherDay ? <Badge variant="secondary">başka gün</Badge> : null}
           {row.unfinished ? <Badge variant="outline">yarım</Badge> : null}
         </ItemTitle>

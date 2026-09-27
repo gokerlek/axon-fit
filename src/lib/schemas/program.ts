@@ -163,6 +163,8 @@ export const programLogEntrySchema = v.object({
   kind: v.picklist(LOG_KINDS),
   /** Bitişte yazılan danışan kaydının seansı: aynı seansın kaydı ikinci kez eklenmez. */
   sessionId: v.optional(v.pipe(v.string(), v.regex(SESSION_ID_PATTERN))),
+  /** Kaydı PT yaptı (yalnız danışanın kendi programında); yoksa danışan. */
+  by: v.optional(v.literal('pt')),
   changes: v.pipe(v.array(programChangeSchema), v.minLength(1), v.maxLength(L.changesPerEntry)),
 });
 

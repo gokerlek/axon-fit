@@ -77,6 +77,8 @@ export function ptSessionDetail(
   });
 
   const flags: string[] = [];
+  // Danışanın kendi programından (kendi-program.md §4); adı başlıkta ("Evde · Gün A", anlık görüntü).
+  if (doc.program?.programId) flags.push('kendi programı');
   if (base.otherDay) flags.push(doc.program?.plannedDayName ? `${doc.program.plannedDayName} yerine seçildi` : 'başka gün seçildi');
   const unfinished = doc.notices.find((notice) => notice.kind === 'unfinished');
   if (unfinished) {

@@ -326,6 +326,15 @@ export function SetsSummary({ row, exercise }: Pick<RowProps, 'row' | 'exercise'
   const unit = exercise?.trackingType === 'duration' ? ' sn' : '';
   const suffix = shape === 'pyramid' ? ' · piramit' : shape === 'backoff' ? ' · back-off' : '';
   const text = `${steps}${unit}${suffix}`;
+  // Kendi programda set düzeni seçilmez: kopyalanan satırın düzeni yalnız okunur ("Setleri eşitle" aşağıda).
+  if (editor.variant === 'simple') {
+    return (
+      <div className="flex min-w-0 basis-full flex-col gap-1.5 sm:basis-auto">
+        <span className="text-xs text-muted-foreground">Hedef</span>
+        <span className="text-sm tabular-nums">{text}</span>
+      </div>
+    );
+  }
   return (
     <div className="flex min-w-0 basis-full flex-col gap-1.5 sm:basis-auto">
       <span className="text-xs text-muted-foreground" aria-hidden>
@@ -521,6 +530,21 @@ export function SetsSection({ blockIndex, rowIndex, row, exercise, title, open, 
     editor.setSetsOpen(row.id, true);
     editor.updateWithUndo((before) => applySetPreset(before, row.id, preset), PRESET_MESSAGES[preset]);
   };
+
+  // Kendi program (kendi-program.md §2.5): yüzde, AMRAP ve düzen seçimi yok. Kopyalanan satırda antrenörün düzeni
+  // varsa yalnız okunur ve tek dokunuşla düz sete çevrilir.
+  if (editor.variant === 'simple') {
+    const plain = isStraight(row.sets) && row.sets.every((set) => set.loadPct === undefined && !set.amrap);
+    if (plain) return null;
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t px-3 py-3">
+        <p className="text-sm text-muted-foreground">Antrenörünün set düzeni{rules ? ` · ${rules}` : ''}</p>
+        <Button type="button" variant="outline" size="sm" className="touch:h-11" onClick={() => editor.updateWithUndo((before) => applySetPreset(before, row.id, 'straight'), PRESET_MESSAGES.straight)}>
+          Setleri eşitle
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="border-t">

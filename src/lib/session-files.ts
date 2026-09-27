@@ -28,6 +28,7 @@ export function sessionRepo(clientId: string): SessionRepo {
     read: (path, ref) => readJson<unknown>(repo, path, { ref, api }),
     readBlob: (sha) => readBlobJson(repo, sha, api),
     listSessions: (tree) => listFolder(repo, tree, SESSIONS_DIR, api),
+    listFolder: (tree, folder) => listFolder(repo, tree, folder, api),
     write: (path, content, options) => writeJson(repo, path, content, { ...options, api }),
     commit: async (input) => {
       const result = await commitFiles(repo, input, api);

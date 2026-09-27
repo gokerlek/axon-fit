@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { emptySessionIndex, type SessionDoc } from './schemas/session.ts';
 import { indexRowOf, upsertIndexRow } from './session-index.ts';
 import { deleteCopy, deletePatch, firstHistoryRows, historyList, sessionDetail, DELETE_BODY, DELETE_DETAIL, type HistoryMonth } from './session-history.ts';
+import { OWN_DAY_A, OWN_DAY_B, OWN_ID } from './testing/own-fixtures.ts';
 import { at, DAY_A, DAY_B, sessionDoc, sessionEntry, workingSet } from './testing/session-fixtures.ts';
 
 const TZ = 'Europe/Istanbul';
@@ -115,6 +116,13 @@ describe('antrenmanın detayı', () => {
       { id: 'st_bbbbbbbb', label: '2', text: '60 kg × 9', effort: 'Zor', warmup: false, extra: false },
     ]);
     assert.equal(detail.subject, 'Gün A · 26 Eylül 2026 · 2 set ve özeti');
+  });
+
+  test('kendi programın antrenmanı: başlıkta programın adı; başka gün rozeti yok', () => {
+    const own = finished('s_bbbbbbbb', 0, { program: { revision: 1, dayId: OWN_DAY_B, dayName: 'Gün B', plannedDayId: OWN_DAY_A, programId: OWN_ID, programName: 'Evde' } });
+    const detail = sessionDetail(own, TZ);
+    assert.equal(detail.title, 'Evde · Gün B · 26 Eylül 2026');
+    assert.equal(detail.otherDay, false);
   });
 
   test('silme onayının metni: set, hareket, antrenman; metin "kalır" der', () => {

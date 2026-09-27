@@ -6,12 +6,15 @@ import { readClient } from './client-record';
 import { canRecordHealth } from './client-status';
 import { clientRepoName, GithubError, sessionWriter } from './github/client';
 import { listFolder, readBlobJson, readJson, repoHead } from './github/files';
-import { clientNotices, sessionHealthOf, type ClientDigest } from './notices';
+import { clientNotices, NOTICE_WINDOW_DAYS, sessionHealthOf, type ClientDigest } from './notices';
+import { readOwnProgram, readOwnState, type OwnState } from './own-program-files';
+import type { OwnIndex } from './own-program-index';
+import type { ProgramLogEntry } from './program-plan';
 import { inviteSchema, type Client } from './schemas/client';
 import { healthRecordSchema } from './schemas/health';
 import { programSchema } from './schemas/program';
 import { SESSIONS_DIR } from './schemas/session';
-import { readIndex, type SessionReader } from './session-files-core';
+import { readIndex, type OwnReader, type RepoHead } from './session-files-core';
 
 /**
  * PT'nin Genel bakış'ı (bildirimler ve "Dikkat gerektirenler") — GitHub'a ve Next'e bağlama. Türetme
@@ -50,15 +53,41 @@ async function readTolerant(repo: string, path: string): Promise<unknown> {
  * için döngü olmasın diye burada). Eksik ya da bozuk index boş sayılır ve dosyalardan kurulur; ağ ve yetki hataları
  * yukarı çıkar.
  */
-function sessionReader(repo: string): SessionReader {
+function sessionReader(repo: string): OwnReader {
   const api = sessionWriter();
   return {
     head: () => repoHead(repo, api),
     read: (path, ref) => readJson<unknown>(repo, path, { ref, api }),
     readBlob: (sha) => readBlobJson(repo, sha, api),
     listSessions: (tree) => listFolder(repo, tree, SESSIONS_DIR, api),
+    listFolder: (tree, folder) => listFolder(repo, tree, folder, api),
     log: (message) => console.error(message),
   };
+}
+
+/**
+ * Kendi programlar (`docs/design/kendi-program.md` §7.1): onarılmış index ve yalnız danışanın son düzenlemesi
+ * pencerede olan paylaşılmış programların geçmişi (program başına okuma yok). Okunamazsa bildirimsiz sürer.
+ */
+async function ownFacts(reader: OwnReader, head: RepoHead, now: Date): Promise<{ index: OwnIndex | null; logs: Map<string, ProgramLogEntry[]> }> {
+  const logs = new Map<string, ProgramLogEntry[]>();
+  let state: OwnState;
+  try {
+    state = await readOwnState(reader, head);
+  } catch (error) {
+    if (error instanceof GithubError && error.status >= 500) return { index: null, logs };
+    throw error;
+  }
+  const since = now.getTime() - NOTICE_WINDOW_DAYS * 86_400_000;
+  const edited = state.index.items.filter((item) => item.shared && item.clientEditedAt && Date.parse(item.clientEditedAt) >= since);
+  await Promise.all(
+    edited.map(async (item) => {
+      const known = state.programs.get(item.id);
+      const read = known ? { status: 'ok' as const, program: known } : await readOwnProgram(reader, item.id, head.commit);
+      if (read.status === 'ok') logs.set(item.id, read.program.log);
+    }),
+  );
+  return { index: state.index, logs };
 }
 
 /** Giriş yapmış (ve erişimi sonradan kapatılmamış) danışanın davet dosyası okunmaz. */
@@ -80,8 +109,12 @@ async function buildDigest(id: string): Promise<ClientOverview | null> {
     readiness: canRecordHealth(client, 'readiness'),
     measurements: canRecordHealth(client, 'measurements'),
   };
-  const [repaired, programRaw, proposals, healthRaw, inviteRaw] = await Promise.all([
-    readIndex(sessionReader(repo)),
+  const reader = sessionReader(repo);
+  const head = await reader.head();
+  const now = new Date();
+  const [repaired, own, programRaw, proposals, healthRaw, inviteRaw] = await Promise.all([
+    readIndex(reader, head),
+    ownFacts(reader, head, now),
     readTolerant(repo, 'program.json'),
     readTolerant(repo, 'proposals.json'),
     consent.pain || consent.readiness || consent.measurements ? readTolerant(repo, 'health.json') : Promise.resolve(null),
@@ -89,12 +122,12 @@ async function buildDigest(id: string): Promise<ClientOverview | null> {
   ]);
   const program = programRaw === null ? null : v.safeParse(programSchema, programRaw);
   const index = repaired.index;
-  const now = new Date();
   const notices = clientNotices({
     index,
     log: program?.success ? program.output.log : [],
     proposals,
     health: sessionHealthOf(healthRaw, consent),
+    own,
     now,
   });
   const health = consent.measurements && healthRaw !== null ? v.safeParse(healthRecordSchema, healthRaw) : null;
@@ -108,6 +141,8 @@ async function buildDigest(id: string): Promise<ClientOverview | null> {
     // Onay yoksa ya da dosya okunamıyorsa ölçüm maddesi yok.
     measurements: health?.success ? health.output.measurements : null,
     now,
+    // Kalıcı seçim kendi programsa günler ve pencere ondan (kendi-program.md §4).
+    own: own.index,
   });
   return { id, name: client.name, ...(client.inbox?.seenAt ? { seenAt: client.inbox.seenAt } : {}), notices, attention };
 }

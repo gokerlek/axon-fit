@@ -49,15 +49,17 @@ export function activeSessionOf(raw: unknown): SessionDoc | null {
 }
 
 /** Açık antrenmanın özeti; son yazım pencerenin dışındaysa null. */
-export function liveSessionOf(input: { doc: SessionDoc; program: Program | null; committedAt: string; now: Date }): LiveSession | null {
+export function liveSessionOf(input: { doc: SessionDoc; program: Pick<Program, 'phases'> | null; committedAt: string; now: Date }): LiveSession | null {
   const { doc } = input;
   if (doc.status !== 'active' || !withinLiveWindow(input.committedAt, input.now)) return null;
   const day = dayOf(input.program, doc.program?.dayId);
   const counts = day ? completion(doc, day) : null;
   const lastSetAt = doc.entries.flatMap((entry) => entry.sets.map((set) => set.at)).sort().at(-1) ?? null;
+  // Kendi programdan antrenman programın adıyla ("Evde · Gün A").
+  const dayName = doc.program?.dayName ?? 'Antrenman';
   return {
     sessionId: doc.id,
-    dayName: doc.program?.dayName ?? 'Antrenman',
+    dayName: doc.program?.programName ? `${doc.program.programName} · ${dayName}` : dayName,
     done: counts ? counts.done : workingSetCount(doc),
     planned: counts && counts.planned > 0 ? counts.planned : null,
     startedAt: doc.startedAt,

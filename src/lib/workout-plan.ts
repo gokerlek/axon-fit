@@ -5,7 +5,7 @@ import { exposureOf, type Stage } from './exposure.ts';
 import { todayIn } from './format.ts';
 import type { SetSuggestion } from './program-feedback.ts';
 import { currentPhaseOf, mondayOf, nextDayId } from './program-plan.ts';
-import { planSession, warmupSets, type LoadSpec, type ProgressionRule, type SessionPlan, type TrackingType } from './progression.ts';
+import { planSession, warmupSets, type LoadSpec, type ProgressionRule, type SessionPlan, type SessionResult, type TrackingType } from './progression.ts';
 import { recommend, type Why } from './recommend.ts';
 import type { TrainingExperience } from './schemas/client.ts';
 import type { Program } from './schemas/program.ts';
@@ -57,6 +57,22 @@ import type { PreviousSet } from './workout-cursor.ts';
 
 /** Motorun okuduğu son bitmiş antrenman sayısı (tasarım §4.1: "son ~8 seans dosyası"). */
 export const HISTORY_SESSIONS = 8;
+/**
+ * Satır başına ayrıca okunan en yeni antrenman (`docs/design/kendi-program.md` §3.9): başka programla çok
+ * çalışılsa da satırın kendi serisi pencereden düşmez. Aynı programın günün egzersizlerini içeren en yeni
+ * antrenmanları da bu kadar.
+ */
+export const HISTORY_PER_ROW = 4;
+
+/**
+ * Planın okuduğu program: PT'nin programı (`program.json`) ya da danışanın kendi programı
+ * (`own-programs/<id>.json`). Gövde aynı; kendi programda `clientSchedule` ve `clientTargets` yok.
+ */
+export type PlanProgram = Pick<Program, 'revision' | 'createdAt' | 'updatedAt' | 'phases' | 'current' | 'rotation' | 'schedule'> &
+  Partial<Pick<Program, 'clientSchedule' | 'clientTargets'>>;
+
+/** Planın sahibi: kendi programda kimliği ve adı; yoksa PT'nin programı. */
+export type PlanOwner = { programId: string; name: string } | null;
 
 /** Plan için egzersiz alanları: kural, yük, kaslar, başlık; muadil sıralaması için kalıp, tutuş, PT'nin sabitledikleri. */
 export type WorkoutExercise = PlanExercise & { loadStepKg: number; minLoadKg: number } & Pick<AlternativeCandidate, 'pattern' | 'grip' | 'alternatives'>;
@@ -133,6 +149,13 @@ export type WorkoutDay = {
   dayName: string;
   phaseId: string;
   revision: number;
+  /**
+   * Günün programı (`docs/design/kendi-program.md` §2.9): PT'ninki ya da danışanın kendi programı. Kendi
+   * programda kimliği ve adı da; seans bunları taşır (`programId`, `programName`). Eski anlık görüntüde yok (PT).
+   */
+  source?: 'pt' | 'own';
+  programId?: string;
+  programName?: string;
   /** Rotasyonda sıradaki gün; `dayId`'den farklıysa başka gün seçildi. */
   plannedDayId: string | null;
   /** Sıradaki günün adı (başka gün seçildiyse PT'nin bildirimi için). */
@@ -183,7 +206,7 @@ export function dayBody(day: Pick<WorkoutDay, 'blocks'>): TemplateBody {
 }
 
 /** Günü bulur: önce şu anki evrede, sonra bütün evrelerde (antrenman sürerken evre değişmiş olabilir). */
-function findDay(program: Program, dayId: string): { phase: Program['phases'][number]; day: Program['phases'][number]['days'][number] } | null {
+function findDay(program: PlanProgram, dayId: string): { phase: Program['phases'][number]; day: Program['phases'][number]['days'][number] } | null {
   const current = currentPhaseOf(program)?.phase;
   const phases = current ? [current, ...program.phases.filter((phase) => phase.id !== current.id)] : program.phases;
   for (const phase of phases) {
@@ -200,50 +223,53 @@ function previousSets(entry: SessionEntry): PreviousSet[] {
     .map((set, position) => ({ setIndex: set.setIndex ?? position, ...(set.kg !== undefined ? { kg: set.kg } : {}), value: set.reps ?? set.seconds ?? 0 }));
 }
 
-/**
- * Geçen seferki setler: en yeni bitmiş antrenmanda aynı satırın kaydı; satırın hiç kaydı yoksa aynı
- * egzersiz ve cihazın en yeni kaydı. Bulunamazsa boş ("—").
- */
-export function lastTimeOf(
-  history: readonly Pick<SessionDoc, 'status' | 'startedAt' | 'entries'>[],
-  select: { rowId: string; exerciseId: string; deviceId?: string | undefined },
-): PreviousSet[] {
-  const finished = history.filter((doc) => doc.status === 'finished').sort((a, b) => time(b.startedAt) - time(a.startedAt));
-  const matches = (test: (entry: SessionEntry) => boolean) => {
-    for (const doc of finished) {
-      const entry = doc.entries.find((item) => test(item) && previousSets(item).length > 0);
-      if (entry) return previousSets(entry);
-    }
-    return null;
-  };
-  return (
-    matches((entry) => entry.rowId === select.rowId && entry.exerciseId === select.exerciseId) ??
-    matches((entry) => entry.exerciseId === select.exerciseId && entry.deviceId === select.deviceId) ??
-    []
-  );
+/** Seansın programı: kendi programın kimliği, PT'nin programında null. */
+export function programIdOf(doc: Partial<Pick<SessionDoc, 'program'>>): string | null {
+  return doc.program?.programId ?? null;
 }
 
+type HistoryDoc = Pick<SessionDoc, 'status' | 'startedAt' | 'entries'> & Partial<Pick<SessionDoc, 'program'>>;
+/** Geçmişte arama: satır, egzersiz ve cihaz; `programId` verilirse (PT'nin programında null) önce aynı programın kaydı. */
+type HistorySelect = { rowId: string; exerciseId: string; deviceId?: string | undefined; programId?: string | null | undefined };
+
 /**
- * Geçen seferki ayar notu: aynı satırın (yoksa aynı egzersiz ve cihazın) en yeni kaydındaki. Not o
- * kayıtta silinmişse yok: danışanın sildiği not geri gelmez (kayıt açılırken not taşındığı için
- * dokunulmayan not da her seferinde sürer).
+ * Bitmiş antrenmanlarda en yeni eşleşen kayıt: önce satırın kendisi, sonra aynı programda aynı egzersiz ve cihaz,
+ * sonra (başka programlar da) aynı egzersiz ve cihaz (`docs/design/kendi-program.md` §3.9).
  */
-export function setupNoteOf(
-  history: readonly Pick<SessionDoc, 'status' | 'startedAt' | 'entries'>[],
-  select: { rowId: string; exerciseId: string; deviceId?: string | undefined },
-): string | undefined {
+function latestEntry(history: readonly HistoryDoc[], select: HistorySelect, usable: (entry: SessionEntry) => boolean): SessionEntry | undefined {
   const finished = history.filter((doc) => doc.status === 'finished').sort((a, b) => time(b.startedAt) - time(a.startedAt));
-  const find = (test: (entry: SessionEntry) => boolean) => {
-    for (const doc of finished) {
-      const entry = doc.entries.find(test);
+  const find = (docs: readonly HistoryDoc[], test: (entry: SessionEntry) => boolean) => {
+    for (const doc of docs) {
+      const entry = doc.entries.find((item) => test(item) && usable(item));
       if (entry) return entry;
     }
     return undefined;
   };
-  const entry =
-    find((item) => item.rowId === select.rowId && item.exerciseId === select.exerciseId) ??
-    find((item) => item.exerciseId === select.exerciseId && item.deviceId === select.deviceId);
-  return entry?.setupNote || undefined;
+  const sameDevice = (entry: SessionEntry) => entry.exerciseId === select.exerciseId && entry.deviceId === select.deviceId;
+  const sameProgram = select.programId === undefined ? [] : finished.filter((doc) => programIdOf(doc) === select.programId);
+  return (
+    find(finished, (entry) => entry.rowId === select.rowId && entry.exerciseId === select.exerciseId) ??
+    find(sameProgram, sameDevice) ??
+    find(finished, sameDevice)
+  );
+}
+
+/**
+ * Geçen seferki setler: en yeni bitmiş antrenmanda aynı satırın kaydı; satırın hiç kaydı yoksa aynı
+ * egzersiz ve cihazın en yeni kaydı (önce aynı programda). Bulunamazsa boş ("—").
+ */
+export function lastTimeOf(history: readonly HistoryDoc[], select: HistorySelect): PreviousSet[] {
+  const entry = latestEntry(history, select, (item) => previousSets(item).length > 0);
+  return entry ? previousSets(entry) : [];
+}
+
+/**
+ * Geçen seferki ayar notu: aynı satırın (yoksa aynı egzersiz ve cihazın, önce aynı programda) en yeni
+ * kaydındaki. Not o kayıtta silinmişse yok: danışanın sildiği not geri gelmez (kayıt açılırken not taşındığı
+ * için dokunulmayan not da her seferinde sürer).
+ */
+export function setupNoteOf(history: readonly HistoryDoc[], select: HistorySelect): string | undefined {
+  return latestEntry(history, select, () => true)?.setupNote || undefined;
 }
 
 /**
@@ -289,9 +315,30 @@ export function warmupsFor(
 }
 
 /**
+ * Motorun geçmişi satır için (`docs/design/kendi-program.md` §3.9): satırın kendi kaydı varsa bütün geçmiş
+ * (seri satırın kayıtlarından kurulur, `planSession`'ın `rowId`'si); yoksa `programId` verildiyse (PT'nin
+ * programında null) yalnız aynı programın antrenmanları; orada da yoksa başka programların en yeni antrenmanı
+ * yalnız çeviri kaynağıdır (`convertOnly`: seri kurulmaz). `programId` verilmezse (eski çağrılar) bütün geçmiş.
+ */
+export function rowHistory(
+  history: readonly SessionDoc[],
+  select: { rowId: string; exerciseId: string; deviceId?: string | undefined; programId?: string | null | undefined },
+): { results: SessionResult[]; convertOnly: boolean } {
+  const pick = { exerciseId: select.exerciseId, deviceId: select.deviceId };
+  const results = exerciseHistory(history, pick);
+  const own = results.some((session) => session.every((set) => set.rowId === undefined || set.rowId === select.rowId));
+  if (own || select.programId === undefined || results.length === 0) return { results, convertOnly: false };
+  const same = exerciseHistory(
+    history.filter((doc) => programIdOf(doc) === select.programId),
+    pick,
+  );
+  return same.length > 0 ? { results: same, convertOnly: false } : { results, convertOnly: true };
+}
+
+/**
  * Satırın planı: satırın kuralı ve setleri (`planInputFor`), cihazın ızgarası (`loadSpecFor`), geçmiş
- * yalnız aynı egzersiz ve cihazla; "Önceki", ısınma ve ayar notu. `history` bitmiş antrenmanlar.
- * `insight` verilirse öneri katmanı (aşama, gerekçe).
+ * yalnız aynı egzersiz ve cihazla (satırın serisi, yoksa aynı program: `rowHistory`); "Önceki", ısınma ve
+ * ayar notu. `history` bitmiş antrenmanlar. `insight` verilirse öneri katmanı (aşama, gerekçe).
  */
 export function workoutRowFor(input: {
   row: TemplateRow;
@@ -303,13 +350,16 @@ export function workoutRowFor(input: {
   /** Programın günü: satırın önceki antrenmandaki kaydı (`previous`) bununla bulunur; muadil ve eklenende yok. */
   dayId?: string;
   insight?: WorkoutInsight | undefined;
+  /** Satırın programı (kendi programın kimliği, PT'ninkinde null): serisi olmayan satır yalnız aynı programa bakar. */
+  programId?: string | null | undefined;
 }): WorkoutRow {
   const { row, exercise, insight } = input;
   const deviceId = effectiveDeviceId(row, exercise, new Set(input.devices.keys()));
   const device = deviceId ? input.devices.get(deviceId) : undefined;
   const spec = loadSpecFor(exercise, device);
   const { rule, sets } = planInputFor(row, exercise);
-  const results = exerciseHistory(input.history, { exerciseId: row.exerciseId, deviceId });
+  const { results, convertOnly } = rowHistory(input.history, { rowId: row.id, exerciseId: row.exerciseId, deviceId, programId: input.programId });
+  const only = convertOnly ? { convertOnly: true } : {};
   const recommended = insight
     ? recommend({
         spec,
@@ -317,13 +367,15 @@ export function workoutRowFor(input: {
         sets,
         history: results,
         rowId: row.id,
+        ...only,
         exercise,
         exposure: exposureOf(row.exerciseId, insight.index, insight.now, { experience: insight.experience }),
       })
     : null;
-  const plan = recommended?.plan ?? planSession({ spec, rule, sets, history: results, rowId: row.id });
+  const plan = recommended?.plan ?? planSession({ spec, rule, sets, history: results, rowId: row.id, ...only });
   const warmups = warmupsFor(exercise, spec, plan, input.firstForMuscle);
-  const setupNote = setupNoteOf(input.history, { rowId: row.id, exerciseId: row.exerciseId, deviceId });
+  const select = { rowId: row.id, exerciseId: row.exerciseId, deviceId, programId: input.programId };
+  const setupNote = setupNoteOf(input.history, select);
   const previous = input.dayId ? previousRowOf(input.history, { dayId: input.dayId, rowId: row.id, exerciseId: row.exerciseId }) : undefined;
   return {
     rowId: row.id,
@@ -335,7 +387,7 @@ export function workoutRowFor(input: {
     spec,
     rule,
     plan,
-    lastTime: lastTimeOf(input.history, { rowId: row.id, exerciseId: row.exerciseId, deviceId }),
+    lastTime: lastTimeOf(input.history, select),
     ...(row.note ? { note: row.note } : {}),
     ...(warmups.length > 0 ? { warmups } : {}),
     ...(setupNote ? { setupNote } : {}),
@@ -364,6 +416,7 @@ export function swapRowFor(input: {
   history: readonly SessionDoc[];
   firstForMuscle: boolean;
   insight?: WorkoutInsight | undefined;
+  programId?: string | null | undefined;
 }): ExtraRow {
   const { row, exercise } = input;
   const sets = valueKind(input.original.trackingType) === valueKind(exercise.trackingType) ? row.sets : defaultSets(exercise, row.sets.length);
@@ -378,6 +431,7 @@ export function swapRowFor(input: {
       history: input.history,
       firstForMuscle: input.firstForMuscle,
       insight: input.insight,
+      programId: input.programId,
     }),
     template,
   };
@@ -395,6 +449,7 @@ export function addedRowFor(input: {
   history: readonly SessionDoc[];
   setCount?: number | undefined;
   insight?: WorkoutInsight | undefined;
+  programId?: string | null | undefined;
 }): ExtraRow {
   const { exercise } = input;
   const template: TemplateRow = { id: input.key, exerciseId: exercise.id, sets: defaultSets(exercise, input.setCount ?? DEFAULT_SETS[exercise.category]) };
@@ -408,6 +463,7 @@ export function addedRowFor(input: {
       history: input.history,
       firstForMuscle: false,
       insight: input.insight,
+      programId: input.programId,
     }),
     template,
     restSeconds: DEFAULT_REST_SECONDS[exercise.category],
@@ -420,15 +476,26 @@ export function rekeyExtra(extra: ExtraRow, key: string): ExtraRow {
 }
 
 /** İstenen gün (programda yoksa) ya da rotasyonda sıradaki gün; program boşsa null. */
-export function resolveDay(program: Program, dayId?: string | null) {
+export function resolveDay(program: PlanProgram, dayId?: string | null) {
   const planned = nextDayId(program);
   return (dayId ? findDay(program, dayId) : null) ?? (planned ? findDay(program, planned) : null);
 }
 
+/** Gün programda var mı (bütün evrelerde; sıradakine dönmeden). İlk yazımda seansın günü böyle denetlenir. */
+export function hasDay(program: Pick<PlanProgram, 'phases'>, dayId: string): boolean {
+  return program.phases.some((phase) => phase.days.some((day) => day.id === dayId));
+}
+
 /** Günün egzersizleri: geçmişten yalnız bunları içeren antrenmanlar okunur (`historyRows`). */
-export function dayExerciseIds(program: Program, dayId?: string | null): Set<string> {
+export function dayExerciseIds(program: PlanProgram, dayId?: string | null): Set<string> {
   const found = resolveDay(program, dayId);
   return new Set(found?.day.blocks.flatMap((block) => block.rows.map((row) => row.exerciseId)) ?? []);
+}
+
+/** Günün satırları: satır başına geçmiş penceresi (`historyRows`). */
+export function dayRowIds(program: PlanProgram, dayId?: string | null): Set<string> {
+  const found = resolveDay(program, dayId);
+  return new Set(found?.day.blocks.flatMap((block) => block.rows.map((row) => row.id)) ?? []);
 }
 
 /**
@@ -437,12 +504,14 @@ export function dayExerciseIds(program: Program, dayId?: string | null): Set<str
  * setleri danışanın geçerli hedefleriyle (`clientTargets`, tasarım §6.2): antrenman ve bitişin farkı onlarla.
  */
 export function buildWorkoutDay(input: {
-  program: Program;
+  program: PlanProgram;
   dayId?: string | null | undefined;
   exercises: ReadonlyMap<string, WorkoutExercise>;
   devices: ReadonlyMap<string, WorkoutDevice>;
   history: readonly SessionDoc[];
   insight?: WorkoutInsight | undefined;
+  /** Kendi programda kimliği ve adı (`source: 'own'`); verilmezse ya da null ise PT'nin programı. */
+  owner?: PlanOwner | undefined;
 }): WorkoutDay | null {
   const planned = nextDayId(input.program);
   const found = resolveDay(input.program, input.dayId);
@@ -470,14 +539,18 @@ export function buildWorkoutDay(input: {
         firstForMuscle: first.has(row.id),
         dayId: day.id,
         insight: input.insight,
+        programId: input.owner?.programId ?? null,
       });
     }
   }
+  const owner = input.owner ?? null;
   return {
     dayId: day.id,
     dayName: day.name,
     phaseId: phase.id,
     revision: input.program.revision,
+    source: owner ? 'own' : 'pt',
+    ...(owner ? { programId: owner.programId, programName: owner.name } : {}),
     plannedDayId: planned,
     ...(plannedName ? { plannedDayName: plannedName } : {}),
     rotationDays: (current?.days ?? []).map((item) => ({ id: item.id, name: item.name })),
@@ -488,12 +561,37 @@ export function buildWorkoutDay(input: {
 
 /* --- index'ten --- */
 
-/** Planın okuyacağı antrenmanlar: bugünkü egzersizlerden birini içeren en yeni `limit` bitmiş antrenman. */
-export function historyRows(index: SessionIndex, exerciseIds: ReadonlySet<string>, limit = HISTORY_SESSIONS): SessionIndexRow[] {
-  return index.items
-    .filter((row) => row.finishedAt && row.exercises.some((item) => exerciseIds.has(item.exerciseId)))
-    .sort((a, b) => time(b.startedAt ?? b.date) - time(a.startedAt ?? a.date))
-    .slice(0, limit);
+/** `historyRows`'un seçimi: günün egzersizleri, satırları ve programı (kendi programın kimliği, PT'ninkinde null). */
+export type HistoryWindow = { exerciseIds: ReadonlySet<string>; rowIds?: ReadonlySet<string> | undefined; programId?: string | null | undefined };
+
+/**
+ * Planın okuyacağı antrenmanlar (`docs/design/kendi-program.md` §3.9), en yeniden eskiye, birleşim: bugünkü
+ * egzersizlerden birini içeren en yeni `limit` bitmiş antrenman; günün her satırı için o satırı içeren en yeni
+ * `perRow` antrenman (başka programla çok çalışılsa da satırın serisi pencereden düşmez); `programId` verilirse
+ * aynı programdan günün egzersizlerini içeren en yeni `perRow` antrenman (serisi olmayan satırın kaynağı).
+ * Eski çağrı biçimi: yalnız egzersizler.
+ */
+export function historyRows(
+  index: SessionIndex,
+  select: ReadonlySet<string> | HistoryWindow,
+  limit = HISTORY_SESSIONS,
+  perRow = HISTORY_PER_ROW,
+): SessionIndexRow[] {
+  const window: HistoryWindow = select instanceof Set ? { exerciseIds: select } : (select as HistoryWindow);
+  const rowIds = window.rowIds ?? new Set<string>();
+  const hasExercise = (row: SessionIndexRow) => row.exercises.some((item) => window.exerciseIds.has(item.exerciseId));
+  const rows = index.items
+    .filter((row) => row.finishedAt && (hasExercise(row) || row.exercises.some((item) => item.rowId !== undefined && rowIds.has(item.rowId))))
+    .sort((a, b) => time(b.startedAt ?? b.date) - time(a.startedAt ?? a.date) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const picked = new Set(rows.filter(hasExercise).slice(0, limit).map((row) => row.id));
+  for (const rowId of rowIds) {
+    for (const row of rows.filter((item) => item.exercises.some((exercise) => exercise.rowId === rowId)).slice(0, perRow)) picked.add(row.id);
+  }
+  if (window.programId !== undefined) {
+    const same = rows.filter((row) => (row.programId ?? null) === window.programId && hasExercise(row));
+    for (const row of same.slice(0, perRow)) picked.add(row.id);
+  }
+  return rows.filter((row) => picked.has(row.id));
 }
 
 /** Yarım kalan (bitmemiş) en yeni antrenman: "Kaldığın yerden devam et". */
@@ -518,7 +616,7 @@ export type WeekCount = {
  * geçen ya da ertesi gün bitirilen antrenman başladığı günde, Geçmiş'le aynı), pazartesi başlayan hafta,
  * uygulamanın saat diliminde; y seçili gün sayısı, yoksa şu anki evrenin sıklığı.
  */
-export function weekOf(index: SessionIndex, program: Program | null, now: Date, timeZone: string): WeekCount {
+export function weekOf(index: SessionIndex, program: PlanProgram | null, now: Date, timeZone: string): WeekCount {
   const today = todayIn(timeZone, now);
   const start = mondayOf(today);
   const days = [...new Set(index.items.flatMap((row) => (row.finishedAt && row.date >= start && row.date <= today ? [row.date] : [])))].sort();
@@ -556,15 +654,23 @@ export function afterFinish<T extends { today: string; week: WeekCount; water: {
 export type WorkoutSchedule = EffectiveSchedule & { daysPerWeek: number | null; since: string | null };
 
 export function scheduleOf(
-  program: Program,
-  context: { client: Parameters<typeof scheduleSince>[1]; timeZone: string },
+  program: PlanProgram,
+  context: { client: Parameters<typeof scheduleSince>[1]; timeZone: string; activeAt?: string | undefined },
 ): WorkoutSchedule {
-  const since = scheduleSince(program, context.client);
+  // Kalıcı seçimin anı da pencereyi açar (`docs/design/kendi-program.md` §3.2): seçimden önceki günler kaçmış sayılmaz.
+  const since = latestSince(scheduleSince(program, context.client), context.activeAt);
   return {
     ...effectiveSchedule(program),
     daysPerWeek: currentPhaseOf(program)?.phase.daysPerWeek ?? null,
     since: since ? todayIn(context.timeZone, new Date(since)) : null,
   };
+}
+
+/** İki andan yenisi (biri yoksa öteki). */
+export function latestSince(a: string | undefined, b: string | undefined): string | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  return time(b) > time(a) ? b : a;
 }
 
 /**
@@ -573,9 +679,12 @@ export function scheduleOf(
  * Bugün sunucuda taze okunan programın damgasını verir, eskiyen plan "Antrenmana başla"da kullanılmaz.
  */
 export function programStamp(
-  program: Pick<Program, 'revision' | 'createdAt' | 'updatedAt' | 'current' | 'rotation' | 'schedule' | 'clientSchedule' | 'clientTargets'>,
+  program: Pick<PlanProgram, 'revision' | 'createdAt' | 'updatedAt' | 'current' | 'rotation' | 'schedule' | 'clientSchedule' | 'clientTargets'>,
+  /** Kendi programın kimliği (`docs/design/kendi-program.md` §3.2): seçim değişince saklanan plan eskir. */
+  programId?: string | null,
 ): string {
   return [
+    programId ?? 'pt',
     program.revision,
     program.createdAt,
     program.updatedAt,
