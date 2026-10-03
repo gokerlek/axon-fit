@@ -17,6 +17,7 @@ export default async function SettingsPage() {
     <div className="flex flex-col gap-6">
       <PageHeader title="Görünüm" description="Danışanların göreceği ad, logo, renk, köşeler ve tema." />
       <Link href="/dashboard/settings/updates" className="self-start text-sm text-primary underline">Uygulama sürümü ve güncellemeler</Link>
+      <Link href="/dashboard/settings/ai" className="self-start text-sm text-primary underline">Yapay zekâ ve Gemini anahtarı</Link>
       <SetupForm
         firstRun={false}
         hasLogo={Boolean(config.logo)}

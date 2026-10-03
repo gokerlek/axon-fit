@@ -10,6 +10,8 @@ Antrenör programı hazırlar ve danışanını davet eder. Danışan telefonund
 
 Env olmadan ilk yayın `/install` sihirbazını açar. Sihirbaz bu kopyanın içinde çalışır: kendi GitHub tokenını ve OAuth App bilgilerini gir, callback adresini al, rastgele oturum anahtarıyla `.env` ayarlarını hazırla. Son adımda kendi geçici Vercel tokenınla ayarları otomatik Production ortamına yazıp yeni yayın başlat; bu token saklanmaz. İstersen .env çıktısını manuel aktarabilirsin. **Ortak kurulum servisi, Vercel entegrasyonu, geliştiricinin anahtarı veya DB gerekmez.** [Adım adım bağımsız kurulum](docs/INSTALLER.md).
 
+Gemini anahtarını kurulumda atladıysan sonradan **Ayarlar → Yapay zekâ ve Gemini anahtarı** ekranından ekleyebilirsin. Panelde girilen anahtar kendi özel veri reposunda şifrelenerek saklanır; Vercel tokenı veya yeniden deployment gerekmez.
+
 Geliştiricinin reposuna yalnız isteğe bağlı sürüm kontrolü/güncellemede bağlanılır; mevcut uygulama kullanımı bu bağlantıya bağlı değildir. PT panelindeki Ayarlar → Uygulama sürümü kararlı sürümleri kontrol eder. Güncelleme kod değişikliklerinin üzerine yazılacağını açıkça onaylatır, önce yedek alır ve yalnız ayrı kod reposunu günceller. [Otomatik ve manuel güncelleme](docs/UPDATES.md).
 
 ## Neler yapar?
