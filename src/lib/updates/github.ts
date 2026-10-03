@@ -3,21 +3,20 @@ import * as v from 'valibot';
 import {serverEnv} from '@/lib/env';
 import {codeRepository,newerRelease,UPSTREAM,WORKFLOW,RELEASE_PATTERN,validUpdateCommit} from './core';
 import pkg from '../../../package.json';
+import {githubRequest} from './request';
+import {requireUpdateWorkflow} from './readiness';
 
 async function github<T>(path:string, init:RequestInit={}, allowMissing=false):Promise<T|null> {
-  const response = await fetch(`https://api.github.com${path}`, {...init,headers:{Authorization:`Bearer ${serverEnv().githubToken}`,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Content-Type':'application/json',...init.headers},cache:'no-store',signal:AbortSignal.timeout(20000)});
-  if(allowMissing && response.status===404) return null;
-  if(!response.ok) throw new Error(`GitHub işlemi tamamlanamadı (${response.status}). Repo erişimini ve Actions izinlerini kontrol et.`);
-  return response.status===204 ? null : response.json();
+  return githubRequest<T>(serverEnv().githubToken,path,init,allowMissing);
 }
 const releaseSchema=v.object({tag_name:v.string(),draft:v.boolean(),prerelease:v.boolean()});
 const manifestSchema=v.object({version:v.string(),automaticUpdate:v.boolean(),dataMigration:v.boolean()});
 export async function availableRelease() {
-  const raw=await github<unknown>(`/repos/${UPSTREAM}/releases/latest`,{},true);
+  const raw=await githubRequest<unknown>(undefined,`/repos/${UPSTREAM}/releases/latest`,{},true);
   if(!raw)return null;
   const release=v.parse(releaseSchema,raw);
   if(release.draft || release.prerelease || !newerRelease(release.tag_name,pkg.version))return null;
-  const content=await github<{content:string}>(`/repos/${UPSTREAM}/contents/axon-release.json?ref=${encodeURIComponent(release.tag_name)}`,{},true);
+  const content=await githubRequest<{content:string}>(undefined,`/repos/${UPSTREAM}/contents/axon-release.json?ref=${encodeURIComponent(release.tag_name)}`,{},true);
   if(!content)return {tag:release.tag_name,automatic:false};
   const manifest=v.safeParse(manifestSchema,JSON.parse(Buffer.from(content.content,'base64').toString('utf8')));
   return {tag:release.tag_name,automatic:manifest.success && manifest.output.automaticUpdate && !manifest.output.dataMigration && `v${manifest.output.version}`===release.tag_name};
@@ -31,6 +30,10 @@ export async function updateStatus() {
   const repo=updateRepo();
   const metadata=await github<{default_branch:string}>(`/repos/${repo}`);
   checkProductionBranch(metadata!.default_branch);
+  await requireUpdateWorkflow(repo,
+    async()=>Boolean(await github(`/repos/${repo}/contents/.github/workflows/${WORKFLOW}?ref=${encodeURIComponent(metadata!.default_branch)}`,{},true)),
+    ()=>github<{state:string}>(`/repos/${repo}/actions/workflows/${WORKFLOW}`,{},true),
+  );
   const result=await github<{workflow_runs:Run[]}>(`/repos/${repo}/actions/workflows/${WORKFLOW}/runs?event=workflow_dispatch&per_page=1`,{},true);
   const run=result?.workflow_runs[0];
   if(!run || run.head_branch!==metadata!.default_branch) return null;

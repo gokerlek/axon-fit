@@ -13,6 +13,16 @@ PT panelinde Ayarlar → Uygulama sürümü açılır. Danışanlar bu sayfaya v
 
 Danışan/veri repoları ve ortam değişkenleri güncelleme tarafından değiştirilmez. Repo'ya yanlışlıkla veri veya `.env` koyduysan otomatik güncelleme kullanma. Workflow dosyaları eski sürümden korunur; bunların güncellenmesi ayrı manuel işlemdir. İhtiyaç kalmayan `axon-update-*` dallarını GitHub'dan silebilirsin; bu dallar Vercel'de Preview yayını oluşturabilir.
 
+### Güncellemeyi hazırlarken 404 alıyorsan
+
+Önce kendi kod reponun **Actions** ekranını aç. **Axon update** görünmeli ve etkin olmalı. **Enable workflow** veya **Enable Actions** bildirimi varsa repo sahibinin etkinleştirmesi gerekir.
+
+Workflow hiç yoksa kod reponun varsayılan dalında `.github/workflows/axon-update.yml` dosyasını kontrol et. Dosya kopyanda eksikse [ana repodaki dosyanın](https://github.com/gokerlek/axon-fit/blob/main/.github/workflows/axon-update.yml) içeriğini aynı yola ekle. GitHub'ın web editöründen **Add file → Create new file** ile ekleyebilirsin. Bu tek seferlik onarımdan sonra uygulamada yeniden sürüm kontrolü yapıp hazırlığı başlat.
+
+Dosya ve etkin workflow mevcutsa Vercel'deki `GITHUB_TOKEN` anahtarının **kod reposuna** erişimini kontrol et. Yalnız veri reposuna izin veren bir anahtar güncelleme yapamaz. Classic token için `repo`, fine-grained token için ilgili kod reposunda Contents okuma/yazma ve Actions okuma/yazma gerekir. Workflow dosyalarını API veya Git ile değiştirmek ayrıca workflow izni gerektirebilir; sırf workflow çalıştırmak için bu ek izin gerekmez.
+
+Sürüm kontrolü artık yeni sürümü göstermek ile otomatik güncellemenin hazır olup olmadığını ayrı raporlar. Eksik workflow veya repo erişiminde otomatik işlem açılmaz; sürüm bilgisi kaybolmaz.
+
 ## Kod değişikliklerini koruyarak manuel yol
 
 Çalışma ağacı temizken kendi kod reponu bilgisayara indir, önce bir yedek al. Upstream remote ekle, tag'ları al ve yayımlanan kararlı sürümü kendi değişikliklerinle merge et. Çakışmaları çöz, sürüm notlarındaki env/veri değişikliklerini uygula, typecheck/test/build çalıştır ve kendi Production dalına push et. Workflow dosyası değişiyorsa GitHub'ın gerekli workflow izinlerini de kullan.

@@ -3,11 +3,12 @@ import * as v from 'valibot';
 import {readPtSession} from '@/lib/session';
 import {sameOrigin} from '@/lib/updates/core';
 import {availableRelease,currentVersion,startUpdate,updateStatus,applyUpdate} from '@/lib/updates/github';
+import {checkUpdates} from '@/lib/updates/check';
 
 export const dynamic='force-dynamic';
 export async function GET() {
   if(!(await readPtSession()))return NextResponse.json({error:'Bu işlem yalnız PT’ye açık.'},{status:403});
-  try {return NextResponse.json({current:currentVersion,release:await availableRelease(),run:await updateStatus()},{headers:{'Cache-Control':'no-store'}});}
+  try {return NextResponse.json(await checkUpdates(currentVersion,availableRelease,updateStatus),{headers:{'Cache-Control':'no-store'}});}
   catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Sürüm kontrol edilemedi.'},{status:502});}
 }
 const schema=v.variant('action',[
