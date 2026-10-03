@@ -1,3 +1,4 @@
+import { environmentStatus } from '@/lib/installation/readiness';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { GithubLogo, WarningCircle } from '@phosphor-icons/react/dist/ssr';
@@ -29,6 +30,7 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ error?: string | string[]; next?: string | string[] }>;
 }) {
+  if (environmentStatus(process.env) !== 'ready') redirect('/install');
   const { error: code, next: rawNext } = await searchParams;
   // Oturumsuz açılan PT sayfası (`requirePt`): girişten sonra oraya dönülür. Yalnız aynı kökende
   // `/dashboard` altı; başka her şey yok sayılır.

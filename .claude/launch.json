@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev"],
       "port": 3000,
       "autoPort": false
+    },
+    {
+      "name": "pulsecoach-v1",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "export PATH=/opt/homebrew/bin:$PATH && cd /Users/goker/Projects/pulsecoach && npx expo start --web --port 8081"],
+      "port": 8081,
+      "autoPort": false
     }
   ]
 }

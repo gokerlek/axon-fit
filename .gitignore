@@ -13,3 +13,6 @@ next-env.d.ts
 
 # Local agent checkouts are not application source
 .claude/worktrees/
+
+# Guided setup export contains the owner credentials
+axon-fit.env

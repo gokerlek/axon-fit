@@ -1,4 +1,5 @@
 import 'server-only';
+import { environmentStatus } from './installation/readiness';
 import { revalidateTag, unstable_cache } from 'next/cache';
 import { appRepo } from './github/client';
 import { sleep } from './github/errors';
@@ -39,6 +40,7 @@ const access = configAccess(
  * önbelleğe girmez). Yazmanın tabanı ya da kurulum kapısı olamaz.
  */
 export function readAppConfig(): Promise<AppConfig> {
+  if (environmentStatus(process.env) !== 'ready') return Promise.resolve(defaultConfig);
   return access.display();
 }
 

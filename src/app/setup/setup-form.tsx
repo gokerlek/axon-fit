@@ -203,6 +203,7 @@ export function SetupForm({
                   ? "Kurulumu tamamla"
                   : "Kaydet"}
             </Button>
+            {firstRun && <Button type="button" variant="outline" disabled={save.isPending} onClick={() => save.mutate(initial)}>Görünümü şimdilik atla</Button>}
             <p className="text-center text-xs text-muted-foreground">
               Değişiklikler anında görünür. Kalıcı olması için kaydet.
             </p>

@@ -33,6 +33,7 @@ export default async function SetupPage() {
         </header>
 
         <SetupForm
+          afterSave="/setup/complete"
           firstRun={firstRun}
           hasLogo={Boolean(config.logo)}
           initial={{

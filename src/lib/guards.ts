@@ -1,4 +1,5 @@
 import 'server-only';
+import { environmentStatus } from './installation/readiness';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { loginPath, PATH_HEADER } from './navigation';
@@ -20,6 +21,7 @@ import { readClientSession, readPtSession, sessionClient, type ClientSession, ty
 
 /** PT oturumu; yoksa girişe, istenen sayfa dönüş yolu olarak (`/login?next=…`, yalnız `/dashboard` altı). */
 export async function requirePt(): Promise<PtSession> {
+  if (environmentStatus(process.env) !== 'ready') redirect('/install');
   const session = await readPtSession();
   if (!session) redirect(loginPath((await headers()).get(PATH_HEADER)));
   return session;

@@ -1,0 +1,55 @@
+name: Axon update
+run-name: Axon update ${{ inputs.release }}
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        required: true
+        type: string
+      expected_head:
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: axon-update
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Prepare release without changing the production branch
+        env:
+          RELEASE: ${{ inputs.release }}
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          OWNER_ID: ${{ github.repository_owner_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$EXPECTED_HEAD" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$GITHUB_REF_NAME" == "$DEFAULT_BRANCH" ]]
+          git fetch origin "$DEFAULT_BRANCH"
+          [[ "$(git rev-parse FETCH_HEAD)" == "$EXPECTED_HEAD" ]]
+          git fetch https://github.com/gokerlek/axon-fit.git "refs/tags/$RELEASE"
+          release_commit=$(git rev-parse FETCH_HEAD)
+          manifest=$(git show "$release_commit:axon-release.json")
+          jq -e --arg version "${RELEASE#v}" '.version == $version and .automaticUpdate == true and .dataMigration == false' <<< "$manifest"
+          # Preserve workflow files: updates of these need a separately reviewed manual change.
+          git read-tree "$release_commit"
+          git rm -r -f --cached --ignore-unmatch .github/workflows
+          if git cat-file -e "$EXPECTED_HEAD:.github/workflows" 2>/dev/null; then
+            git restore --source="$EXPECTED_HEAD" --staged .github/workflows
+          fi
+          tree=$(git write-tree)
+          git config user.name "$REPOSITORY_OWNER"
+          git config user.email "$OWNER_ID+$REPOSITORY_OWNER@users.noreply.github.com"
+          commit=$(printf 'Axon update %s' "$RELEASE" | git commit-tree "$tree" -p "$EXPECTED_HEAD")
+          git push origin "$commit:refs/heads/axon-update-$GITHUB_RUN_ID"
+          printf 'Prepared %s. Publish from the PT settings screen.\n' "$RELEASE" >> "$GITHUB_STEP_SUMMARY"

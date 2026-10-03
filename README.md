@@ -6,6 +6,12 @@ Antrenör programı hazırlar ve danışanını davet eder. Danışan telefonund
 
 > **Bir kurulum = bir antrenör.** Bu sürüm, herkesin aynı sitede GitHub ile kaydolup ayrı antrenör hesabı açtığı bir SaaS değildir. Yönetici girişi yalnız `GITHUB_OWNER` kullanıcısına açıktır. Başka bir antrenör kendi GitHub hesabı, Vercel projesi ve veri repolarıyla ayrı kurulum yapar. Danışanların GitHub hesabı gerekmez.
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fgokerlek%2Faxon-fit)
+
+Env olmadan ilk yayın `/install` sihirbazını açar. Sihirbaz bu kopyanın içinde çalışır: kendi GitHub tokenını ve OAuth App bilgilerini gir, callback adresini al, rastgele oturum anahtarıyla `.env` ayarlarını hazırla. Son adımda kendi geçici Vercel tokenınla ayarları otomatik Production ortamına yazıp yeni yayın başlat; bu token saklanmaz. İstersen .env çıktısını manuel aktarabilirsin. **Ortak kurulum servisi, Vercel entegrasyonu, geliştiricinin anahtarı veya DB gerekmez.** [Adım adım bağımsız kurulum](docs/INSTALLER.md).
+
+Geliştiricinin reposuna yalnız isteğe bağlı sürüm kontrolü/güncellemede bağlanılır; mevcut uygulama kullanımı bu bağlantıya bağlı değildir. PT panelindeki Ayarlar → Uygulama sürümü kararlı sürümleri kontrol eder. Güncelleme kod değişikliklerinin üzerine yazılacağını açıkça onaylatır, önce yedek alır ve yalnız ayrı kod reposunu günceller. [Otomatik ve manuel güncelleme](docs/UPDATES.md).
+
 ## Neler yapar?
 
 - **Danışan yönetimi:** danışan oluşturma, davet/erişim yönetimi, profil ve takip ekranları.
@@ -31,7 +37,7 @@ Next.js uygulaması (Vercel)
 axon-fit                       → uygulamanın kaynak kodu (bu repo)
 ```
 
-`GITHUB_TOKEN` yalnız sunucuda kullanılır. Tarayıcı GitHub veri repolarına doğrudan bağlanmaz. GitHub OAuth antrenörün kimliğini doğrular; veri okuma/yazma için kullanılan token ayrıdır. Danışanlar uygulamanın davet akışıyla erişir.
+`GITHUB_TOKEN` uygulama çalışırken yalnız sunucuda kullanılır. Tarayıcı GitHub veri repolarına doğrudan bağlanmaz. PT kendi veri tokenını Vercel Production ortamına Secret olarak ekler; GitHub OAuth girişte yalnız kimliği doğrular. Kurulum sihirbazındaki sırlar açık sekmede hazırlanır; otomatik aktarımda yalnız kendi uygulamanın sunucusundan kendi Vercel projenine gönderilir. Manuel .env çıktısı sunucuya gönderilmez. Danışanlar uygulamanın davet akışıyla erişir.
 
 **`APP_REPO` kod reposundan farklı ve private olmalıdır.** Örneğin kod `axon-fit`, veri `axon-fit-data`. Veri reposunu önceden oluşturman gerekmez; ilk kurulum kaydında uygulama oluşturur. Var olan repo kullanılıyorsa private olmalı ve fork olmamalıdır. Danışan repoları da uygulama tarafından oluşturulur.
 

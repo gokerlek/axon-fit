@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { loadAppConfig } from '@/lib/config';
 import { SetupForm } from '@/app/setup/setup-form';
@@ -15,6 +16,7 @@ export default async function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Görünüm" description="Danışanların göreceği ad, logo, renk, köşeler ve tema." />
+      <Link href="/dashboard/settings/updates" className="self-start text-sm text-primary underline">Uygulama sürümü ve güncellemeler</Link>
       <SetupForm
         firstRun={false}
         hasLogo={Boolean(config.logo)}
