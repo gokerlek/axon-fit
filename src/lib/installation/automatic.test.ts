@@ -9,6 +9,7 @@ function fixture() {
   const gateway:InstallGateway={
     async project(id){calls.push(`project:${id}`);return {id,name:'app',link:{type:'github',org:'coach',repo:'coach-app',repoId:123,productionBranch:'main'}};},
     async env(){return env;},async githubOwner(){return {login:'coach',scopes:['repo','delete_repo']};},
+    async ensureWorkflow(token,repo,branch){assert.equal(token,values.githubToken);calls.push(`workflow:${repo}:${branch}`);},
     async create(id,items){calls.push(`create:${id}`);created.push(...items);env.push(...items);},
     async deploy(project){calls.push(`deploy:${project.id}`);return {id:'deployment-test'};},
   };
@@ -16,7 +17,7 @@ function fixture() {
 }
 test('automatic setup touches only its injected current project and writes only PT production values',async()=>{
   const f=fixture();await automaticInstall('current-project',values,false,f.gateway);
-  assert.deepEqual(f.calls,['project:current-project','create:current-project','deploy:current-project']);
+  assert.deepEqual(f.calls,['project:current-project','workflow:coach/coach-app:main','create:current-project','deploy:current-project']);
   assert.ok(f.created.length>0);
   for(const item of f.created){assert.deepEqual(item.target,['production']);if(/TOKEN|SECRET/.test(item.key)){assert.equal(item.type,'sensitive');assert.equal(item.visibility,'secret');}}
   assert.ok(!f.created.some(e=>/VERCEL|INSTALLER|INTEGRATION|BOOTSTRAP/.test(e.key)));
@@ -51,4 +52,16 @@ test('partial env failure never starts a deployment or reports success',async()=
   await assert.rejects(automaticInstall('current-project',values,false,f.gateway));
   assert.ok(!f.calls.some(call=>call.startsWith('deploy:')));
   await assert.rejects(automaticInstall('current-project',values,true,f.gateway));
+});
+test('workflow failure stops before persisting secrets or deploying',async()=>{
+  const f=fixture();f.gateway.ensureWorkflow=async()=>{throw new Error('workflow permission missing');};
+  await assert.rejects(automaticInstall('current-project',values,false,f.gateway),/workflow permission/);
+  assert.equal(f.created.length,0);
+  assert.ok(!f.calls.some(call=>call.startsWith('deploy:')));
+});
+test('retry also verifies the token owner before touching the workflow',async()=>{
+  const f=fixture();await automaticInstall('current-project',values,false,f.gateway);
+  f.calls.length=0;f.gateway.githubOwner=async()=>({login:'another-account',scopes:['repo','delete_repo']});
+  await assert.rejects(automaticInstall('current-project',values,true,f.gateway),/PT hesabına/);
+  assert.deepEqual(f.calls,['project:current-project']);
 });

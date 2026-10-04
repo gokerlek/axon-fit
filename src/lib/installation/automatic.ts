@@ -12,6 +12,7 @@ export type InstallGateway={
   project:(id:string)=>Promise<Project>;
   env:(id:string)=>Promise<Environment[]>;
   githubOwner:(token:string)=>Promise<{login:string;scopes:string[]}>;
+  ensureWorkflow:(token:string,repo:string,branch:string,scopes:string[])=>Promise<void>;
   create:(id:string,items:EnvironmentItem[])=>Promise<void>;
   deploy:(project:Project)=>Promise<{id:string}>;
 };
@@ -34,9 +35,12 @@ export async function automaticInstall(projectId:string,values:WizardValues,resu
     }
   }else{
     if(existing.some(e=>Object.keys(entries).includes(e.key)))throw new InstallationError('Bu projede kurulum ayarları zaten var. Mevcut sırların üzerine yazılmadı. Vercel’den yeni yayın başlat veya kaydettiğin ayarları kontrol et.');
-    const user=await gateway.githubOwner(values.githubToken.trim());
-    if(user.login.toLowerCase()!==values.owner.trim().toLowerCase())throw new InstallationError('GitHub tokenı girilen PT hesabına ait değil.');
-    if(!['repo','delete_repo'].every(scope=>user.scopes.includes(scope)))throw new InstallationError('GitHub tokenında repo ve delete_repo izinleri olmalı.');
+  }
+  const user=await gateway.githubOwner(values.githubToken.trim());
+  if(user.login.toLowerCase()!==values.owner.trim().toLowerCase())throw new InstallationError('GitHub tokenı girilen PT hesabına ait değil.');
+  if(!['repo','delete_repo'].every(scope=>user.scopes.includes(scope)))throw new InstallationError('GitHub tokenında repo ve delete_repo izinleri olmalı.');
+  await gateway.ensureWorkflow(values.githubToken.trim(),`${project.link.org}/${project.link.repo}`,project.link.productionBranch,user.scopes);
+  if(!resumeOnly){
     const items:EnvironmentItem[]=Object.entries(entries).map(([key,value])=>({key,value,target:['production'],type:/TOKEN|SECRET|API_KEY/.test(key)?'sensitive':'plain',visibility:/TOKEN|SECRET|API_KEY/.test(key)?'secret':'config'}));
     await gateway.create(project.id,items);
   }

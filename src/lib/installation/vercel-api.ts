@@ -1,4 +1,5 @@
 import type {Environment,EnvironmentItem,InstallGateway,Project} from './automatic.ts';
+import {ensureUpdateWorkflow} from './update-workflow.ts';
 
 class VercelError extends Error {
   readonly status:number;
@@ -35,6 +36,7 @@ export function vercelGateway(token:string,fetcher:typeof fetch=fetch):InstallGa
       const result=await api<{failed?:unknown[];error?:unknown}>(`/v10/projects/${encodeURIComponent(id)}/env`,{method:'POST',body:JSON.stringify(items)});
       if(result.failed?.length || result.error)throw new Error('Bazı ayarlar kaydedilemedi; yayın başlatılmadı. Kendi Vercel env ekranını kontrol et. Mevcut sırlar değiştirilmedi.');
     },
+    async ensureWorkflow(githubToken,repo,branch,scopes){await ensureUpdateWorkflow(githubToken,repo,branch,scopes,fetcher);},
     async deploy(project){return api<{id:string}>('/v13/deployments',{method:'POST',body:JSON.stringify({name:project.name,project:project.id,target:'production',gitSource:{type:'github',repoId:Number(project.link!.repoId),ref:project.link!.productionBranch}})});},
   };
 }

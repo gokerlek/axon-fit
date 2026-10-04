@@ -61,6 +61,7 @@ Gerekli kapsamlar:
 | --- | --- |
 | `repo` | Özel veri repolarını oluşturmak, okumak ve güncellemek. |
 | `delete_repo` | Uygulamadaki danışan silme akışında danışanın veri reposunu silmek. |
+| `workflow` | Otomatik kurulumda eksik güncelleme YAML dosyasını kendi kod reposuna eklemek. Mevcut workflow değiştirilmez. |
 
 Token'ı `GITHUB_TOKEN` olarak kullan. Token'ın sahibi ile `GITHUB_OWNER` aynı kişisel hesap olmalıdır; uygulama repoları bu hesap altında oluşturur. Classic token bu kapsamlarla hesabındaki diğer repolara da erişebilir; yalnız bu uygulama için üret ve paylaşma. Hesap ayrımı istiyorsan uygulamayı ayrı bir GitHub hesabıyla kur.
 

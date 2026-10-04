@@ -82,11 +82,11 @@ export function InstallationWizard({homepage,initial,automaticAvailable,demo=fal
         <p className="text-sm text-muted-foreground">{initial.owner?'Uygulama bağlantısını bulduk.':'GitHub hesabını anahtardan otomatik tanıyacağız.'} Kod ve yayın ayarlarını senin için hazırlıyoruz; danışanlarının verileri için ayrı, özel bir alanı da otomatik oluşturacağız.</p>
         <ol className="list-decimal space-y-3 pl-5 text-sm">
           <li>Aşağıdaki düğmeyle GitHub’da anahtar oluşturma ekranını aç.</li>
-          <li>Adı <strong>Axon Fit</strong> olsun. <strong>repo</strong> ve <strong>delete_repo</strong> seçeneklerinin işaretli olduğunu kontrol et. Bir geçerlilik süresi seç.</li>
+          <li>Adı <strong>Axon Fit</strong> olsun. <strong>repo</strong>, <strong>delete_repo</strong> ve <strong>workflow</strong> seçeneklerinin işaretli olduğunu kontrol et. Bir geçerlilik süresi seç.</li>
           <li><strong>Generate token</strong> düğmesine bas. Oluşan anahtarı kopyalayıp aşağıya yapıştır.</li>
         </ol>
-        <a href="https://github.com/settings/tokens/new?scopes=repo%2Cdelete_repo&description=Axon%20Fit" target="_blank" rel="noreferrer" className="text-primary underline">GitHub’da anahtar oluştur</a>
-        {field('githubToken','GitHub’dan kopyaladığın anahtar','Özel verilerini kendi GitHub hesabında saklamak için kullanılır. Hesabını bu anahtardan otomatik tanıyacağız.','password')}
+        <a href="https://github.com/settings/tokens/new?scopes=repo%2Cdelete_repo%2Cworkflow&description=Axon%20Fit" target="_blank" rel="noreferrer" className="text-primary underline">GitHub’da anahtar oluştur</a>
+        {field('githubToken','GitHub’dan kopyaladığın anahtar','Verilerini kendi GitHub hesabında saklar. workflow izni, eksik güncelleme dosyasını kod repona eklemek için kullanılır; mevcut dosyan değiştirilmez.','password')}
       </>}
       {step===1 && <>
         <h2 className="text-xl font-semibold">GitHub ile girişini hazırla</h2>

@@ -19,6 +19,8 @@ Danışan/veri repoları ve ortam değişkenleri güncelleme tarafından değiş
 
 Workflow hiç yoksa kod reponun varsayılan dalında `.github/workflows/axon-update.yml` dosyasını kontrol et. Dosya kopyanda eksikse [ana repodaki dosyanın](https://github.com/gokerlek/axon-fit/blob/main/.github/workflows/axon-update.yml) içeriğini aynı yola ekle. GitHub'ın web editöründen **Add file → Create new file** ile ekleyebilirsin. Bu tek seferlik onarımdan sonra uygulamada yeniden sürüm kontrolü yapıp hazırlığı başlat.
 
+Güncel otomatik kurulum sihirbazı bu dosya eksikse kendisi oluşturur. İlk kurulum anahtarındaki `workflow` izni bunun içindir; dosya zaten varsa üzerine yazılmaz. Kurulu eski kopyalar için yukarıdaki tek seferlik manuel onarım geçerlidir.
+
 Dosya ve etkin workflow mevcutsa Vercel'deki `GITHUB_TOKEN` anahtarının **kod reposuna** erişimini kontrol et. Yalnız veri reposuna izin veren bir anahtar güncelleme yapamaz. Classic token için `repo`, fine-grained token için ilgili kod reposunda Contents okuma/yazma ve Actions okuma/yazma gerekir. Workflow dosyalarını API veya Git ile değiştirmek ayrıca workflow izni gerektirebilir; sırf workflow çalıştırmak için bu ek izin gerekmez.
 
 Sürüm kontrolü artık yeni sürümü göstermek ile otomatik güncellemenin hazır olup olmadığını ayrı raporlar. Eksik workflow veya repo erişiminde otomatik işlem açılmaz; sürüm bilgisi kaybolmaz.
