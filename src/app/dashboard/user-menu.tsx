@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { GearSix, SignOut, User } from '@phosphor-icons/react';
+import { ArrowsClockwise, GearSix, SignOut, Sparkle, User } from '@phosphor-icons/react';
 import { discardAllDrafts } from '@/components/block-editor/editor-draft';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -59,6 +59,14 @@ export function UserMenu({ login, appName }: { login: string; appName: string })
           <DropdownMenuItem className="touch:min-h-11" render={<Link href="/dashboard/settings" />}>
             <GearSix />
             Görünüm ayarları
+          </DropdownMenuItem>
+          <DropdownMenuItem className="touch:min-h-11" render={<Link href="/dashboard/settings/ai" />}>
+            <Sparkle />
+            Yapay zekâ ayarları
+          </DropdownMenuItem>
+          <DropdownMenuItem className="touch:min-h-11" render={<Link href="/dashboard/settings/updates" />}>
+            <ArrowsClockwise />
+            Sürüm ve güncellemeler
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
