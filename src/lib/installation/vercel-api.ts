@@ -1,11 +1,12 @@
 import type {Environment,EnvironmentItem,InstallGateway,Project} from './automatic.ts';
 import {ensureUpdateWorkflow} from './update-workflow.ts';
+import {verifyGithubOAuth} from './oauth.ts';
 
 class VercelError extends Error {
   readonly status:number;
   constructor(status:number){super(`Vercel işlemi tamamlanamadı (${status}). Tokenın kapsamını ve proje erişimini kontrol et.`);this.status=status;}
 }
-export function vercelGateway(token:string,fetcher:typeof fetch=fetch):InstallGateway {
+export function vercelGateway(token:string,fetcher:typeof fetch=fetch,callback?:string):InstallGateway {
   let teamId:string|undefined;
   async function api<T>(path:string,init:RequestInit={},team=teamId):Promise<T> {
     const url=new URL(path,'https://api.vercel.com');
@@ -37,6 +38,7 @@ export function vercelGateway(token:string,fetcher:typeof fetch=fetch):InstallGa
       if(result.failed?.length || result.error)throw new Error('Bazı ayarlar kaydedilemedi; yayın başlatılmadı. Kendi Vercel env ekranını kontrol et. Mevcut sırlar değiştirilmedi.');
     },
     async ensureWorkflow(githubToken,repo,branch,scopes){await ensureUpdateWorkflow(githubToken,repo,branch,scopes,fetcher);},
+    async validateOAuth(clientId,clientSecret){await verifyGithubOAuth(clientId,clientSecret,callback,fetcher);},
     async deploy(project){return api<{id:string}>('/v13/deployments',{method:'POST',body:JSON.stringify({name:project.name,project:project.id,target:'production',gitSource:{type:'github',repoId:Number(project.link!.repoId),ref:project.link!.productionBranch}})});},
   };
 }

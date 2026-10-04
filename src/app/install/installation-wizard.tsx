@@ -31,7 +31,7 @@ export function InstallationWizard({homepage,initial,automaticAvailable,demo=fal
       try{
         let owner=initial.owner||'ornek-pt';
         if(!demo){
-          const response=await fetch('/api/install/github',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:values.githubToken})});
+          const response=await fetch('/api/install/github',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:values.githubToken,automatic:automaticAvailable})});
           const account=await response.json() as {owner?:string;error?:string};
           if(!response.ok||!account.owner){setErrors({githubToken:account.error??'Anahtar doğrulanamadı.'});return;}
           owner=account.owner;
@@ -46,6 +46,15 @@ export function InstallationWizard({homepage,initial,automaticAvailable,demo=fal
     }
     const nextErrors=validateStep(step,values);setErrors(nextErrors);
     if(Object.keys(nextErrors).length)return;
+    if(step===1&&!demo){
+      setBusy(true);setNotice('');
+      try{
+        const response=await fetch('/api/install/oauth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientId:values.clientId,clientSecret:values.clientSecret})});
+        const result=await response.json() as {error?:string};
+        if(!response.ok){setErrors({clientSecret:result.error??'GitHub giriş bilgileri doğrulanamadı.'});return;}
+      }catch{setErrors({clientSecret:'GitHub’a bağlanılamadı. Bağlantını kontrol edip tekrar dene.'});return;}
+      finally{setBusy(false);}
+    }
     setNotice('');setStep(previous=>Math.min(previous+1,3));
   }
   async function copy(text:string,environment=false) {
@@ -90,7 +99,7 @@ export function InstallationWizard({homepage,initial,automaticAvailable,demo=fal
       </>}
       {step===1 && <>
         <h2 className="text-xl font-semibold">GitHub ile girişini hazırla</h2>
-        <p className="text-sm text-muted-foreground">GitHub, giriş bağlantısını kendi hesabında onaylamanı istiyor. Aşağıdaki düğmeyi aç ve uygulama adı olarak <strong>Axon Fit</strong> yaz.</p>
+        <p className="text-sm text-muted-foreground">Bu adımı <strong>{values.owner}</strong> GitHub hesabında tamamla. Aşağıdaki düğmeyi aç ve uygulama adı olarak <strong>Axon Fit</strong> yaz.</p>
         <a href="https://github.com/settings/applications/new" target="_blank" rel="noreferrer" className="text-sm text-primary underline">GitHub OAuth App oluştur</a>
         <div className="space-y-4 rounded-lg bg-muted p-4 text-sm"><p>Uygulamanın adresini otomatik bulduk. Bağlı bir özel domainin varsa onu kullanıyoruz. Bu iki hazır adresi GitHub’daki aynı adlı alanlara kopyala.</p><Field><FieldLabel htmlFor="homepage">Homepage URL</FieldLabel><Input id="homepage" value={homepage} readOnly /><Button type="button" variant="outline" onClick={()=>copy(homepage)}>Homepage adresini kopyala</Button></Field><Field><FieldLabel htmlFor="callback">Authorization callback URL</FieldLabel><Input id="callback" value={`${homepage}/api/auth/github/callback`} readOnly /><Button type="button" variant="outline" onClick={()=>copy(`${homepage}/api/auth/github/callback`)}>Callback adresini kopyala</Button></Field></div>
         <p className="text-sm">GitHub’da <strong>Register application</strong> düğmesine bas. Açılan ekrandaki <strong>Client ID</strong> değerini kopyala; <strong>Generate a new client secret</strong> ile giriş anahtarını oluştur. İkisini aşağıya yapıştır.</p>
@@ -99,7 +108,7 @@ export function InstallationWizard({homepage,initial,automaticAvailable,demo=fal
       </>}
       {step===2 && <>
         <h2 className="text-xl font-semibold">Gemini anahtarı eklemek ister misin?</h2>
-        <p className="text-sm text-muted-foreground">Bu adımı boş bırakarak devam edebilirsin. AI sohbeti sonraki aşamada eklenecek; anahtar eklemek bu sürümde AI özelliğini açmaz.</p>
+        <p className="text-sm text-muted-foreground">Bu adımı boş bırakarak devam edebilirsin. Anahtarını sonradan Ayarlar → Yapay zekâ ve Gemini anahtarı ekranından ekleyebilirsin.</p>
         <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="text-sm text-primary underline">Kendi Gemini anahtarımı oluştur</a>
         {field('geminiKey','Gemini API anahtarı · isteğe bağlı',undefined,'password')}
       </>}
@@ -113,7 +122,7 @@ export function InstallationWizard({homepage,initial,automaticAvailable,demo=fal
           <Field><FieldLabel htmlFor="vercelToken">Vercel’den kopyaladığın anahtar</FieldLabel><Input id="vercelToken" name="vercelToken" type="password" value={vercelToken} onChange={event=>setVercelToken(event.target.value)} autoComplete="new-password" maxLength={1000} disabled={busy} /></Field>
           <p className="text-xs text-muted-foreground">Ayarlar yalnız kendi uygulamanın sunucusu üzerinden kendi Vercel projenine gönderilir. Vercel tokenı env, DB veya çerezde saklanmaz. Kurulum bitince Vercel’den iptal edebilirsin.</p>
           {automaticError && <p role="alert" className="text-sm text-destructive">{automaticError}</p>}
-          <Button type="button" disabled={busy} onClick={()=>automatic(canRetryDeploy)}>{busy?'Ayarlar aktarılıyor…':canRetryDeploy?'Yayını tekrar başlat':'Otomatik kur ve yayınla'}</Button>
+          <Button type="button" disabled={busy} onClick={()=>automatic(canRetryDeploy)}>{busy?'Ayarlar aktarılıyor…':canRetryDeploy?'Kurulumu tamamlamayı tekrar dene':'Otomatik kur ve yayınla'}</Button>
         </div>:<p className="rounded-lg bg-muted p-4 text-sm text-muted-foreground">Otomatik aktarım kendi Vercel Production yayınında açılır. Yerel veya Preview ortamında aşağıdaki manuel aktarımı kullanabilirsin.</p>}
         <details className="rounded-lg border p-4" open={!automaticAvailable}><summary className="cursor-pointer font-medium">Manuel aktarım</summary><div className="flex flex-col gap-4 pt-4">
           <ol className="list-decimal space-y-3 pl-5 text-sm text-muted-foreground"><li>Kendi Vercel projenin Settings → Environment Variables ekranını aç.</li><li>Ayarları kopyala veya dosyayı indir. Vercel’e yapıştır/aktar ve Production ortamını seç. Token, Secret ve API anahtarlarını Secret olarak kaydet.</li><li>Yeni ayarların kullanılması için yeni Production yayını başlat.</li></ol>
@@ -124,7 +133,7 @@ export function InstallationWizard({homepage,initial,automaticAvailable,demo=fal
         </div></details>
       </>}
       {notice && <p role="status" className="text-sm text-primary">{notice}</p>}
-      <div className="flex justify-between gap-3 pt-2">{step>0?<Button type="button" variant="outline" disabled={busy} onClick={()=>{setStep(previous=>previous-1);setErrors({});setNotice('');setCanRetryDeploy(false);}}>Geri</Button>:<span />}{step<3 && <Button type="submit" disabled={busy}>{busy?'Hesabın doğrulanıyor…':step===2 && !values.geminiKey?'AI anahtarını atla':'Devam et'}</Button>}</div>
+      <div className="flex justify-between gap-3 pt-2">{step>0?<Button type="button" variant="outline" disabled={busy} onClick={()=>{setStep(previous=>previous-1);setErrors({});setNotice('');setCanRetryDeploy(false);}}>Geri</Button>:<span />}{step<3 && <Button type="submit" disabled={busy}>{busy?step===1?'GitHub girişi doğrulanıyor…':'Hesabın doğrulanıyor…':step===2 && !values.geminiKey?'AI anahtarını atla':'Devam et'}</Button>}</div>
     </form>
     {step<3 && <p className="text-xs text-muted-foreground">Bilgiler yalnız bu açık sekmede tutulur. Sayfayı yenilersen yeniden girmen gerekir.</p>}
   </CardContent></Card>;

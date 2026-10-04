@@ -61,7 +61,7 @@ Gerekli kapsamlar:
 | --- | --- |
 | `repo` | Özel veri repolarını oluşturmak, okumak ve güncellemek. |
 | `delete_repo` | Uygulamadaki danışan silme akışında danışanın veri reposunu silmek. |
-| `workflow` | Otomatik kurulumda eksik güncelleme YAML dosyasını kendi kod reposuna eklemek. Mevcut workflow değiştirilmez. |
+| `workflow` | Vercel kurulumunda eksik güncelleme YAML dosyasını kendi kod reposuna eklemek. Mevcut workflow değiştirilmez. |
 
 Token'ı `GITHUB_TOKEN` olarak kullan. Token'ın sahibi ile `GITHUB_OWNER` aynı kişisel hesap olmalıdır; uygulama repoları bu hesap altında oluşturur. Classic token bu kapsamlarla hesabındaki diğer repolara da erişebilir; yalnız bu uygulama için üret ve paylaşma. Hesap ayrımı istiyorsan uygulamayı ayrı bir GitHub hesabıyla kur.
 
@@ -134,7 +134,7 @@ OAuth olmadan yalnız yerelde arayüz geliştirmek için `http://localhost:3000/
 
 1. [Vercel New Project](https://vercel.com/new) sayfasından GitHub'daki `axon-fit` reposunu **Import** et. Başka antrenör kuruyorsa önce kendi hesabına fork almalı.
 2. Framework **Next.js**, Root Directory repo kökü (`./`), Node.js **22.x** seç.
-3. Install Command `npm ci`; Build Command için burada doğrulanan `npm run build -- --webpack` kullan. Output Directory alanını Next.js varsayılanında bırak. Projenin normal `npm run build` komutu Turbopack kullanır; Webpack alternatifidir.
+3. Install Command `npm ci`; Build Command için burada doğrulanan `npm run build` kullan. Output Directory alanını Next.js varsayılanında bırak. Standart build komutu doğrulanan Webpack derlemesini kullanır.
 4. Environment Variables bölümüne 3. adımdaki değerleri **Production** ortamı için ekle. `.env.local` dosyasını yükleme veya repoya koyma.
 5. Canlı OAuth App'in Client ID/Secret değerlerini kullan. Henüz alan adın belli değilse ilk deploy sonrası verilen kalıcı proje alan adını OAuth App'in Homepage ve callback alanlarına yaz. İlk deploy'da da geçerli giriş bilgileri tanımlı olmalı.
 6. **Deploy** et. Ortam değişkenlerini sonradan değiştirdiysen **Redeploy** yap.
@@ -158,7 +158,7 @@ Normal bir tarayıcı sekmesinden açıldığında adres çubuğu görünmesi be
 npm run typecheck
 npm run lint
 npm test
-npm run build -- --webpack
+npm run build
 npm start
 ```
 

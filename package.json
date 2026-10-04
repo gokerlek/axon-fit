@@ -1,6 +1,6 @@
 {
   "name": "pulsecoach",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Tek antrenörlük PT ve danışan uygulaması. Veritabanı yok: veriler antrenörün kendi GitHub repolarında JSON olarak durur.",
   "type": "module",
@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/clean-build-cache.mjs && next build --webpack",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -25,13 +25,13 @@
     "class-variance-authority": "^0.7.1",
     "cn": "^0.3.2",
     "embla-carousel-react": "^8.6.0",
-    "jose": "latest",
+    "jose": "6.2.12",
     "motion": "^13.4.0",
-    "next": "latest",
+    "next": "16.3.5",
     "next-themes": "^0.4.6",
     "octokit": "^5.0.5",
-    "react": "latest",
-    "react-dom": "latest",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "recharts": "^3.8.0",
     "shadcn": "^4.21.0",
     "sonner": "^2.0.8",
@@ -42,12 +42,12 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@tanstack/react-query-devtools": "^5.103.1",
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "eslint": "latest",
-    "eslint-config-next": "latest",
+    "@types/node": "26.6.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.5",
     "tailwindcss": "^4.3.3",
-    "typescript": "latest"
+    "typescript": "6.0.3"
   }
 }

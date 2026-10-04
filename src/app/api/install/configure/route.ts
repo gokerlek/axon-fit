@@ -4,6 +4,7 @@ import {automaticInstall,automaticSchema,InstallationError} from '@/lib/installa
 import {vercelGateway} from '@/lib/installation/vercel';
 import {environmentStatus} from '@/lib/installation/readiness';
 import {sameOrigin} from '@/lib/updates/core';
+import {callbackUrl} from '@/lib/urls';
 
 export const maxDuration=60;
 export async function POST(request:Request) {
@@ -17,7 +18,7 @@ export async function POST(request:Request) {
   const input=v.safeParse(automaticSchema,await request.json().catch(()=>null));
   if(!input.success)return NextResponse.json({error:'Gerekli hesap ve anahtar bilgilerini kontrol et.'},{status:400});
   try{
-    const deployed=await automaticInstall(projectId,input.output.values,input.output.resumeOnly,vercelGateway(input.output.vercelToken));
+    const deployed=await automaticInstall(projectId,input.output.values,input.output.resumeOnly,vercelGateway(input.output.vercelToken,fetch,callbackUrl(request)));
     return NextResponse.json({status:'publishing',deploymentId:deployed.id},{headers:{'Cache-Control':'no-store'}});
   }catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Kurulum tamamlanamadı.',canRetryDeploy:error instanceof InstallationError && error.canRetryDeploy},{status:502,headers:{'Cache-Control':'no-store'}});}
 }
