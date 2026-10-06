@@ -1,3 +1,4 @@
+import {freezeWeeklyGoals} from './weekly-goals';
 import 'server-only';
 import { unstable_cache } from 'next/cache';
 import { canRecordHealth } from './client-status';
@@ -44,6 +45,7 @@ export function loadProgress(
         const [exercises, devices] = await Promise.all([listExercises(), listDevices()]);
         return { exercises, deviceNames: new Map(devices.map((device) => [device.id, device.name])) };
       },
+      weeklyGoals: (index,target)=>freezeWeeklyGoals(sessionRepo(client.id),index,target),
       weeklyTarget: async () => {
         const current = await readProgram();
         return current ? currentPhaseOf(current)?.phase.daysPerWeek : undefined;

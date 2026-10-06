@@ -1,3 +1,4 @@
+import { CoachLauncher } from '@/components/coach/coach-launcher';
 import { redirect } from 'next/navigation';
 import { loadAppConfig } from '@/lib/config';
 import { requirePt } from '@/lib/guards';
@@ -40,6 +41,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </div>
 
       <DashboardDock />
+      <CoachLauncher role="pt" />
     </>
   );
 }

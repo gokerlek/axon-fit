@@ -1,3 +1,4 @@
+import {epley,E1RM_MAX_REPS} from './personal-records.ts';
 import type { SessionIndex, SessionIndexExercise, SessionIndexRow, SessionSet } from './schemas/session.ts';
 
 /**
@@ -14,24 +15,22 @@ import type { SessionIndex, SessionIndexExercise, SessionIndexRow, SessionSet } 
  */
 
 /** Tahmini 1RM'de en çok bu kadar tekrar sayılır (v1: 1–12 tekrar güvenilir). */
-export const E1RM_MAX_REPS = 12;
+export {E1RM_MAX_REPS};
 
 /** Ağırlık başına en çok tekrar (ağırlıksızda 0 kg). */
 export type RepPoint = { kg: number; reps: number };
 /** Hareketin bir antrenmandaki (ya da o güne dek) en iyileri. */
-export type ExerciseBest = { sets?: RepPoint[]; seconds?: number };
+export type ExerciseBest = { sets?: RepPoint[]; seconds?: number; e1rm?: RepPoint | null };
 
 const centi = (kg: number) => Math.round(kg * 100);
 
 /**
  * Tahmini 1RM (Epley, v1'in formülü): kg × (1 + tekrar / 30), tek tekrarda ağırlığın kendisi; ağırlıksız
- * ya da tekrarsızda null. 12'nin üstü 12 sayılır (v1 hiç saymıyordu): index ağırlık başına yalnız en çok
- * tekrarı sakladığı için 15 tekrarlık set aynı ağırlıktaki 10 tekrarlık seti gölgelemesin; temkinli tahmin.
+ * ya da tekrarsızda null. Bütün ekranlar personal-records.ts içindeki aynı 1–12 tekrar kuralını kullanır.
+ * Index, yüksek tekrar kaydı geçerli düşük tekrar tahminini silmesin diye e1rm adayını ayrıca korur.
  */
 export function oneRepMax(kg: number, reps: number): number | null {
-  if (!(kg > 0) || !(reps >= 1)) return null;
-  const counted = Math.min(Math.floor(reps), E1RM_MAX_REPS);
-  return counted === 1 ? kg : Math.round(kg * (1 + counted / 30) * 100) / 100;
+  return epley(kg,reps);
 }
 
 function pointsOf(map: ReadonlyMap<number, number>): RepPoint[] {
@@ -47,12 +46,19 @@ function addPoint(map: Map<number, number>, kg: number, reps: number): void {
 export function bestOf(sets: readonly Pick<SessionSet, 'type' | 'kg' | 'reps' | 'seconds'>[]): ExerciseBest {
   const byKg = new Map<number, number>();
   let seconds = 0;
+  let valid: RepPoint | null = null;
+  let high = false;
   for (const set of sets) {
     if (set.type !== 'working') continue;
     if (set.seconds !== undefined) seconds = Math.max(seconds, set.seconds);
-    else if (set.reps !== undefined && set.reps >= 1) addPoint(byKg, set.kg ?? 0, set.reps);
+    else if (set.reps !== undefined && set.reps >= 1) {
+      addPoint(byKg, set.kg ?? 0, set.reps);
+      const estimate=epley(set.kg,set.reps);
+      if (estimate !== null && (!valid || estimate > epley(valid.kg,valid.reps)!)) valid={kg:set.kg!,reps:set.reps};
+      if ((set.kg??0)>0 && set.reps>E1RM_MAX_REPS) high=true;
+    }
   }
-  return { ...(byKg.size > 0 ? { sets: pointsOf(byKg) } : {}), ...(seconds > 0 ? { seconds } : {}) };
+  return { ...(byKg.size > 0 ? { sets: pointsOf(byKg) } : {}), ...(seconds > 0 ? { seconds } : {}), ...(high?{e1rm:valid}:{}) };
 }
 
 /** İki en iyinin birleşimi (ağırlık başına en çok tekrar, en uzun süre). */
@@ -60,7 +66,10 @@ export function mergeBest(a: ExerciseBest | undefined, b: ExerciseBest | undefin
   const byKg = new Map<number, number>();
   for (const point of [...(a?.sets ?? []), ...(b?.sets ?? [])]) addPoint(byKg, point.kg, point.reps);
   const seconds = Math.max(a?.seconds ?? 0, b?.seconds ?? 0);
-  return { ...(byKg.size > 0 ? { sets: pointsOf(byKg) } : {}), ...(seconds > 0 ? { seconds } : {}) };
+  const high=pointsOf(byKg).some(p=>p.kg>0 && p.reps>E1RM_MAX_REPS);
+  const candidates=[strongestOf(a),strongestOf(b)].filter((p):p is RepPoint & {e1rm:number}=>p!==null).sort((x,y)=>y.e1rm-x.e1rm);
+  const top=candidates[0];
+  return { ...(byKg.size > 0 ? { sets: pointsOf(byKg) } : {}), ...(seconds > 0 ? { seconds } : {}), ...(high?{e1rm:top?{kg:top.kg,reps:top.reps}:null}:{}) };
 }
 
 /** Rekorun anahtarı: egzersiz ve cihaz. */
@@ -78,7 +87,7 @@ export function heaviestOf(best: ExerciseBest | undefined): RepPoint | null {
 /** Tahmini 1RM'si en yüksek set; eşitlikte ağır olan. */
 export function strongestOf(best: ExerciseBest | undefined): (RepPoint & { e1rm: number }) | null {
   let top: (RepPoint & { e1rm: number }) | null = null;
-  for (const point of best?.sets ?? []) {
+  for (const point of [...(best?.sets ?? []),...(best?.e1rm?[best.e1rm]:[])]) {
     const e1rm = oneRepMax(point.kg, point.reps);
     if (e1rm === null) continue;
     if (!top || centi(e1rm) > centi(top.e1rm) || (centi(e1rm) === centi(top.e1rm) && point.kg > top.kg)) top = { ...point, e1rm };
@@ -254,5 +263,5 @@ export function compareWithLast(index: SessionIndex, id: string): LastComparison
 
 /** En iyisi hesaplanmamış eski satır (bu alan eklenmeden yazılmış): onarım dosyasından yeniden kurar. */
 export function lacksRecords(row: Pick<SessionIndexRow, 'finishedAt' | 'exercises'>): boolean {
-  return row.finishedAt !== undefined && row.exercises.some((exercise) => exercise.best === undefined);
+  return row.finishedAt !== undefined && row.exercises.some((exercise) => exercise.best === undefined || (exercise.best.sets?.some(p=>p.kg>0 && p.reps>E1RM_MAX_REPS) && exercise.best.e1rm === undefined));
 }

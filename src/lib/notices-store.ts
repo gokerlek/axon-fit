@@ -1,4 +1,8 @@
 import 'server-only';
+import { createHash } from 'node:crypto';
+import { coachAccess } from './ai/coach-contract';
+import { ASSISTANT_PATH } from './ai/assistant-contract';
+import { assistantNotices } from './ai/assistant-notices';
 import { revalidateTag, unstable_cache } from 'next/cache';
 import * as v from 'valibot';
 import { attentionFactsOf, constraintFactsOf, screeningFactsOf, type AttentionFacts, type ConstraintFacts } from './attention';
@@ -120,13 +124,14 @@ async function buildDigest(id: string): Promise<ClientOverview | null> {
   const reader = sessionReader(repo);
   const head = await reader.head();
   const now = new Date();
-  const [repaired, own, programRaw, proposals, healthRaw, inviteRaw] = await Promise.all([
+  const [repaired, own, programRaw, proposals, healthRaw, inviteRaw, assistantRaw] = await Promise.all([
     readIndex(reader, head),
     ownFacts(reader, head, now),
     readTolerant(repo, 'program.json'),
     readTolerant(repo, 'proposals.json'),
     anyHealth ? readTolerant(repo, 'health.json') : Promise.resolve(null),
     joined(client) ? Promise.resolve(null) : readTolerant(repo, 'invite.json'),
+    coachAccess(client) === 'ready' ? readTolerant(repo, ASSISTANT_PATH) : Promise.resolve(null),
   ]);
   const program = programRaw === null ? null : v.safeParse(programSchema, programRaw);
   const index = repaired.index;
@@ -141,6 +146,10 @@ async function buildDigest(id: string): Promise<ClientOverview | null> {
     constraintLog: consent.conditions && record ? constraintLogOf(record) : [],
     now,
   });
+  const permission = createHash('sha256').update(JSON.stringify({ status: client.status, modules: client.modules, consents: client.consents })).digest('hex');
+  notices.push(...assistantNotices(assistantRaw, permission, own.index, now));
+  notices.sort((a, b) => b.at.localeCompare(a.at));
+  notices.splice(10);
   const invite = inviteRaw === null ? null : v.safeParse(inviteSchema, inviteRaw);
   const programOk = program?.success ? program.output : null;
   let constraints: ConstraintFacts | null = null;

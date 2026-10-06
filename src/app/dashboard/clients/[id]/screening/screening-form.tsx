@@ -1,4 +1,5 @@
 'use client';
+import { DatePicker } from '@/components/date-picker';
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
@@ -303,7 +304,7 @@ export function ScreeningForm({
   return (
     <div className="flex flex-col gap-6">
       <SectionHeader
-        back={{ href: base, label: 'Tarama' }}
+        back={{ href: base, label: 'PT değerlendirmesi' }}
         title={title}
         description={description}
         actions={
@@ -345,7 +346,7 @@ export function ScreeningForm({
       {mode.kind === 'new' ? (
         <Field className="max-w-xs">
           <FieldLabel htmlFor="screening-date">Tarama günü</FieldLabel>
-          <Input id="screening-date" type="date" max={mode.today} value={state.date} onChange={(event) => update({ ...state, date: event.currentTarget.value })} />
+          <DatePicker id="screening-date" max={mode.today} value={state.date} onValueChange={value => update({ ...state, date: value })} />
           {taken ? <FieldDescription>{formatDay(state.date)} tarihinde tarama var: kaydedersen o günün yerine geçer.</FieldDescription> : null}
         </Field>
       ) : null}

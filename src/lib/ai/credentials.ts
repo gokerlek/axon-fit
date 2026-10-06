@@ -1,7 +1,8 @@
 import {createCipheriv,createDecipheriv,createHash,randomBytes} from 'node:crypto';
 import * as v from 'valibot';
 
-export const geminiKeySchema=v.pipe(v.string(),v.trim(),v.minLength(20,'Gemini anahtarının tamamını yapıştır.'),v.maxLength(200),v.regex(/^[A-Za-z0-9_-]+$/,'Anahtarı boşluksuz yapıştır.'));
+import { geminiKeySchema } from './gemini-key-input.ts';
+export { geminiKeySchema } from './gemini-key-input.ts';
 const recordSchema=v.strictObject({version:v.literal(1),encrypted:v.nullable(v.string())});
 export type KeyRecord=v.InferOutput<typeof recordSchema>;
 export type KeyStatus={configured:boolean;source:'settings'|'environment'|null};

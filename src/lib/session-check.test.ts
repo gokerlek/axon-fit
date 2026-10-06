@@ -73,6 +73,7 @@ function finished(daysAgo: number, reps: number[], kg = 60, rowId = 'r_aaaaaa'):
             setIndex: index,
             kg,
             reps: value,
+            effort: 'good',
             target: { min: 8, max: 10 },
             plannedSetCount: reps.length,
           }),

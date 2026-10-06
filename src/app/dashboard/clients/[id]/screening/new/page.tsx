@@ -15,7 +15,7 @@ import { MeasurementProblemAlert, measurementClient } from '../../measurements/m
 import { ScreeningForm } from '../screening-form';
 import { initialScreeningState } from '../screening-state';
 
-const TITLE = 'Tarama yap';
+const TITLE = 'PT hareket testi';
 
 export const metadata: Metadata = { title: TITLE };
 
@@ -64,7 +64,7 @@ export default async function NewScreeningPage({ params }: { params: Promise<{ i
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeader back={{ href: `/dashboard/clients/${id}/screening`, label: 'Tarama' }} title={TITLE} />
+      <SectionHeader back={{ href: `/dashboard/clients/${id}/screening`, label: 'PT değerlendirmesi' }} title={TITLE} />
       {!loaded.ok ? <MeasurementProblemAlert title="Danışan kaydı okunamadı" problem={loaded.problem} /> : null}
       {view?.state === 'locked' ? <HealthLockAlert field="screening" lock={view.lock} clientId={id} /> : null}
       {view?.state === 'broken' ? <MeasurementProblemAlert title="Sağlık kaydı okunamadı" problem={view.problem} /> : null}

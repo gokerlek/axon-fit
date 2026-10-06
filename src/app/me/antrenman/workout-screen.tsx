@@ -1,4 +1,5 @@
 'use client';
+import {WorkoutSwitchSheet} from './workout-switch-sheet';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -17,6 +18,7 @@ import { EFFORT_LABELS } from '@/lib/progression';
 import { ApiError, fetchJson } from '@/lib/query/errors';
 import { feedbackItems, feedbackMessage, resolveFeedback, withFeedbackFlags, type FeedbackItem, type FeedbackOutcome } from '@/lib/program-feedback';
 import type { FinishFeedback, FinishHealth, RotationChoice, SessionDoc } from '@/lib/schemas/session';
+import {achievementNotice} from '@/lib/workout-achievements';
 import { waterOf } from '@/lib/session-index';
 import { cn } from '@/lib/utils';
 import { rowKeyOf } from '@/lib/workout-cursor';
@@ -30,6 +32,7 @@ import {
   firstSkippedKey,
   flowView,
   restoreAt,
+  reorderAt,
   skipAt,
   skipMessage,
   swapRow,
@@ -260,6 +263,8 @@ export function WorkoutScreen({
   const [elsewhere, setElsewhere] = useState<{ server: SessionDoc; count: number } | null>(null);
   const [elsewhereBusy, setElsewhereBusy] = useState(false);
   const [announcement, setAnnouncement] = useState('');
+  const [switchOpen,setSwitchOpen]=useState(false);
+  const switchHref=useRef<string|null>(null);
   const [flowOpen, setFlowOpen] = useState(false);
   const [swapTarget, setSwapTarget] = useState<SwapTarget | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -624,9 +629,11 @@ export function WorkoutScreen({
         extra: next.extra === true,
         stamp: stampOf(current),
       });
+      const achievement = row?achievementNotice(current.doc,doc,row,row.achievements,current.achievementSeen):null;
       const after = afterLog(plan, current.doc, doc);
-      commit(withChange({ ...current, draft: null, rest: null, timer: null }, doc, { send: true }));
+      commit(withChange({ ...current, draft: null, rest: null, timer: null, ...(achievement?{achievementSeen:[...(current.achievementSeen??[]),achievement.key]}:{}) }, doc, { send: true }));
       outbox.schedule();
+      if(achievement){toast.success(achievement.title,{id:`achievement-${doc.id}-${achievement.key}`,description:`${row?.title} · ${achievement.description}`,duration:6000});if(achievement.kind==='record')vibrate([20,40,20]);}
       setTransition(null);
       setFresh(setId);
       setSaving({ next: { ...next, value } });
@@ -905,9 +912,17 @@ export function WorkoutScreen({
         });
         // Tarih sunucunun (ilk yazımda koyduğu); yanıt gelmediyse telefondaki.
         const saved = result.doc ?? doc;
+        void queryClient.invalidateQueries({ queryKey: ['coach', clientId, 'highlights'] });
         queryClient.setQueriesData<WorkoutResponse>({ queryKey: WORKOUT_OVERVIEW_KEY }, (old) => (old ? afterFinish(old, saved) : old));
         release();
-        router.replace(`/me/antrenman/ozet/${current.doc.id}`);
+        if (switchHref.current) {
+          const href = switchHref.current;
+          switchHref.current = null;
+          router.replace(href);
+          toast.success('Yaptığın setler kaydedildi; seçtiğin antrenman açılıyor.');
+        } else {
+          router.replace(`/me/antrenman/ozet/${current.doc.id}`);
+        }
         // Kendi programda mesaj programın adıyla; yazılamayan madde varsa [Programı aç] (§2.9).
         const ownPlan = current.plan.source === 'own' && current.plan.programId ? { id: current.plan.programId, name: current.plan.programName ?? 'Programın' } : null;
         const message = result.feedback ? feedbackMessage(result.feedback, ownPlan) : null;
@@ -927,6 +942,7 @@ export function WorkoutScreen({
           leave('Bu antrenman silinmiş.', 'info');
           return;
         }
+        switchHref.current = null;
         outbox.resume();
         setFinishing(false);
         setUpdate(null);
@@ -939,7 +955,7 @@ export function WorkoutScreen({
         );
       }
     },
-    [outbox, leave, release, router, commit, queryClient],
+    [clientId, outbox, leave, release, router, commit, queryClient],
   );
 
   /**
@@ -1251,6 +1267,7 @@ export function WorkoutScreen({
       try {
         await fetchJson(`/api/me/sessions/${current.doc.id}`, { method: 'DELETE' });
       } catch (error) {
+        switchHref.current = null;
         outbox.resume();
         setFinishing(false);
         toast.error(error instanceof ApiError ? error.message : 'Antrenman iptal edilemedi.');
@@ -1390,6 +1407,7 @@ export function WorkoutScreen({
               <span className="sr-only">Su: {water} bardak</span>
             </span>
           ) : null}
+          <Button variant="ghost" size="sm" className="h-11 shrink-0" onClick={()=>setSwitchOpen(true)}>Değiştir</Button>
           <Button variant="ghost" size="icon" className="size-11 shrink-0" aria-label="Antrenman akışı" aria-haspopup="dialog" onClick={() => setFlowOpen(true)}>
             <List weight="bold" className="size-5.5" />
           </Button>
@@ -1551,11 +1569,47 @@ export function WorkoutScreen({
         onFinish={(reason, choice) => void onFinish(reason, choice)}
         onCancelWorkout={onCancelWorkout}
       />
+      <WorkoutSwitchSheet
+        open={switchOpen}
+        onOpenChange={setSwitchOpen}
+        onSwitch={async (program, day) => {
+          const current = localRef.current;
+          if (!current || finishing) return;
+          if (program === (current.plan.programId ?? 'pt') && day === current.plan.dayId) {
+            toast('Zaten bu antrenmandasın.');
+            return;
+          }
+          const href = `/me/antrenman?program=${encodeURIComponent(program)}&day=${encodeURIComponent(day)}`;
+          setSwitchOpen(false);
+          if (!current.doc.entries.some(entry => entry.sets.length > 0)) {
+            setFinishing(true);
+            outbox.stop();
+            try {
+              if (current.acked || current.lastSentAt !== null) {
+                await fetchJson(`/api/me/sessions/${current.doc.id}`, { method: 'DELETE' });
+              }
+              release();
+              router.replace(href);
+            } catch (error) {
+              outbox.resume();
+              setFinishing(false);
+              toast.error(error instanceof ApiError ? error.message : 'Antrenman değiştirilemedi.');
+            }
+            return;
+          }
+          switchHref.current = href;
+          const ready = ensureEntries(planOf(current), current.doc, stampOf(current));
+          const changed = withFinishReason(planOf(current), ready, 'other', stampOf(current));
+          commit(withChange(current, changed.doc, { send: false }));
+          await submitFinish(null, undefined, undefined);
+        }}
+      />
       <FlowSheet
         open={flowOpen}
         onOpenChange={setFlowOpen}
         view={flow}
         highlight={flowHighlight}
+        onReorder={(from,to)=>{const current=localRef.current;if(!current || saving)return;commitFlow(current,reorderAt(planOf(current),current.doc,from,to,stampOf(current)));announce('Antrenman sırası değiştirildi.');}}
         onJump={onJump}
         onSkip={onSkip}
         onRestore={onRestore}

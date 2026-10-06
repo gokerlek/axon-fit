@@ -53,6 +53,8 @@ export type LocalWorkout = {
   extras: ExtraRows;
   /** Sağlık onayı var: bitişte "Ağrı" nedeni çıkar. */
   pain: boolean;
+  /** Local celebration ledger; not sent to the data repository. */
+  achievementSeen?: string[];
   /** Yerel değişiklik sayacı; sunucuya ulaşan son değişiklik; gönderilmesi gereken son değişiklik. */
   rev: number;
   ackedRev: number;
@@ -235,6 +237,7 @@ export function parseLocalWorkout(text: string | null): LocalWorkout | null {
     plan: raw.plan,
     extras: extrasOf(raw.extras),
     pain: raw.pain === true,
+    ...(Array.isArray(raw.achievementSeen)?{achievementSeen:raw.achievementSeen.filter((key):key is string=>typeof key==='string').slice(0,300)}:{}),
     rev: count(raw.rev),
     ackedRev: count(raw.ackedRev),
     dueRev: count(raw.dueRev),

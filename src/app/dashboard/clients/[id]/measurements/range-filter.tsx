@@ -1,6 +1,6 @@
+import { DatePicker } from '@/components/date-picker';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { isCalendarDate } from '@/lib/measurement-log';
 import { RANGE_PRESETS, rangeStart, type RangePreset } from '@/lib/trend';
 
@@ -41,7 +41,7 @@ const SELECTED = [
   'dark:aria-[current=page]:border-primary-strong dark:aria-[current=page]:bg-primary-strong dark:aria-[current=page]:hover:bg-primary-strong',
 ].join(' ');
 
-/** Hazır aralıklar bağlantı, özel aralık GET formu: JavaScript'siz de çalışır. */
+/** Hazır aralıklar bağlantı, özel aralık shadcn takvim seçicisiyle GET formu olarak gönderilir. */
 export function RangeFilter({ base, range }: { base: string; range: DateRange }) {
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -65,11 +65,11 @@ export function RangeFilter({ base, range }: { base: string; range: DateRange })
       <form method="get" action={base} className="flex flex-wrap items-end gap-2" aria-label="Özel tarih aralığı">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Başlangıç
-          <Input type="date" name="bas" defaultValue={range.preset === null ? range.from : undefined} className="w-40" />
+          <DatePicker aria-label="Başlangıç tarihi" name="bas" defaultValue={range.preset === null ? range.from : undefined} className="w-40" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Bitiş
-          <Input type="date" name="bit" defaultValue={range.preset === null ? range.to : undefined} className="w-40" />
+          <DatePicker aria-label="Bitiş tarihi" name="bit" defaultValue={range.preset === null ? range.to : undefined} className="w-40" />
         </label>
         <Button type="submit" size="sm" variant="outline">
           Uygula

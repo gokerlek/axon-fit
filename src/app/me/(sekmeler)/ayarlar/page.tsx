@@ -1,3 +1,4 @@
+import { CoachPreferenceForm } from '@/components/coach/coach-preference-form';
 import type { Metadata } from 'next';
 import { FirstAidKit, Key } from '@phosphor-icons/react/dist/ssr';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,6 +45,8 @@ export default async function ClientSettingsPage() {
           own={own?.status === 'ok' ? { programId: own.program.id, name: own.program.name } : null}
         />
       ) : null}
+
+      <CoachPreferenceForm clientId={client.id} />
 
       {health === 'off' ? (
         <Card size="sm">

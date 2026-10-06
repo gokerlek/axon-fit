@@ -8,6 +8,7 @@ import {
   lacksRecords,
   mergeBest,
   oneRepMax,
+  strongestOf,
   recordHits,
   sessionRecords,
   topSetOf,
@@ -32,11 +33,11 @@ function indexOf(...docs: SessionDoc[]) {
 }
 
 describe('tahmini 1RM (Epley)', () => {
-  test('tek tekrarda ağırlığın kendisi; 12 üstü 12 sayılır; ağırlıksız ya da tekrarsız yok', () => {
+  test('tek tekrarda ağırlığın kendisi; 12 üstü tahmin yapılmaz; ağırlıksız ya da tekrarsız yok', () => {
     assert.equal(oneRepMax(100, 1), 100);
     assert.equal(oneRepMax(60, 8), 76);
     assert.equal(oneRepMax(62.5, 10), 83.33);
-    assert.equal(oneRepMax(60, 15), oneRepMax(60, 12));
+    assert.equal(oneRepMax(60, 15), null);
     assert.equal(oneRepMax(0, 10), null);
     assert.equal(oneRepMax(60, 0), null);
   });
@@ -176,4 +177,10 @@ describe('en iyi set ve yön', () => {
     assert.equal(lacksRecords({ ...row, exercises: row.exercises.map(({ best: _best, ...rest }) => rest) }), true);
     assert.equal(lacksRecords({ finishedAt: undefined, exercises: [{ exerciseId: 'bench-press', sets: 1, full: true }] }), false);
   });
+});
+
+test('high repetition record does not erase the valid strength estimate', () => {
+ const best = bestOf([{type:'working',kg:60,reps:10},{type:'working',kg:60,reps:15}]);
+ assert.equal(strongestOf(best)?.e1rm,80);
+ assert.equal(mergeBest(bestOf([{type:'working',kg:60,reps:10}]),bestOf([{type:'working',kg:60,reps:15}])).e1rm?.reps,10);
 });

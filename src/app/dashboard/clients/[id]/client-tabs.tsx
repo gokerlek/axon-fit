@@ -30,6 +30,7 @@ export function ClientTabs({ clientId, healthHref }: { clientId: string; healthH
     { key: 'saglik', label: 'Sağlık', href: healthHref, active: (p) => health.some((match) => match(p)), ready: true },
     { key: 'ilerleme', label: 'İlerleme', href: `${base}/ilerleme`, active: under(`${base}/ilerleme`), ready: true },
     { key: 'antrenmanlar', label: 'Antrenmanlar', href: `${base}/sessions`, active: under(`${base}/sessions`), ready: true },
+    { key: 'koc', label: 'AI koç', href: `${base}/coach`, active: under(`${base}/coach`), ready: true },
     { key: 'davet', label: 'Davet', href: `${base}/invite`, active: under(`${base}/invite`), ready: true },
   ];
   const current = tabs.find((tab) => tab.active(pathname))?.key ?? 'genel';

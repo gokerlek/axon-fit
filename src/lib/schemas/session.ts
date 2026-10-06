@@ -116,7 +116,7 @@ export const sessionSetSchema = v.pipe(
     reps: v.optional(int(0, SESSION_LIMITS.reps)),
     seconds: v.optional(int(0, SESSION_LIMITS.seconds)),
     /** Yoksa motor `good` sayar. `fail` yalnız eski kayıtlarda. */
-    effort: v.optional(v.picklist(EFFORTS)),
+    effort: v.optional(v.picklist([...EFFORTS, 'unknown'] as const)),
     /** O günkü hedef (aralık, yük yüzdesi, AMRAP): motor kaydı bununla değerlendirir. */
     target: v.optional(setSpecSchema),
     topWeightKg: v.optional(kg),
@@ -304,6 +304,7 @@ export const sessionIndexExerciseSchema = v.object({
     v.object({
       sets: v.optional(v.pipe(v.array(v.object({ kg, reps: int(1, SESSION_LIMITS.reps) })), v.maxLength(SESSION_LIMITS.setsPerEntry))),
       seconds: v.optional(int(1, SESSION_LIMITS.seconds)),
+      e1rm: v.optional(v.nullable(v.object({kg,reps:int(1,12)}))),
     }),
   ),
 });

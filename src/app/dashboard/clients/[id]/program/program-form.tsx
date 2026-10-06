@@ -120,9 +120,13 @@ export function ProgramForm({
   clientDays = null,
   clientTargets,
   care = null,
+  aiDraftId,
+  transport = fetchJson,
 }: {
   clientId: string;
   mode: 'create' | 'edit';
+  aiDraftId?: string;
+  transport?: typeof fetchJson;
   /** `weekdays`: PT'nin kayıttaki antrenman günleri (danışanınki `clientDays`'te). */
   initial: ProgramBody;
   /** Yüklenen programın sürümü (revision ve oluşturulma anı; kayıtta gönderilir); oluştururken null. */
@@ -196,7 +200,7 @@ export function ProgramForm({
   const draft = useEditorDraft({
     form,
     schema: programFormSchema,
-    storageKey: programDraftKey(clientId),
+    storageKey: aiDraftId ? `${programDraftKey(clientId)}:ai:${aiDraftId}` : programDraftKey(clientId),
     base,
     baseSchema: PROGRAM_DRAFT_BASE,
     prepare: prepareDraft,
@@ -410,14 +414,9 @@ export function ProgramForm({
 
   const save = useServiceMutation({
     fn: (values: ProgramFormValues) =>
-      fetchJson<{ revision: number; unchanged?: true; droppedDevices?: number }>(`/api/clients/${clientId}/program`, {
-        method: 'PUT',
-        // Sürüm çift olarak gider: silinip yeniden oluşturulan program (revision yine 1) da 412 verir.
-        body: JSON.stringify({
-          ...values,
-          baseRevision: draft.saveBase?.revision ?? null,
-          baseCreatedAt: draft.saveBase?.createdAt,
-        }),
+      transport<{ revision: number; unchanged?: true; droppedDevices?: number }>(aiDraftId ? `/api/clients/${clientId}/coach` : `/api/clients/${clientId}/program`, {
+        method: aiDraftId ? 'PATCH' : 'PUT',
+        body: JSON.stringify(aiDraftId ? { id: aiDraftId, body: values } : { ...values, baseRevision: draft.saveBase?.revision ?? null, baseCreatedAt: draft.saveBase?.createdAt }),
       }),
     notify: 'error',
     onError: (error) => {
@@ -431,7 +430,7 @@ export function ProgramForm({
     onSuccess: (result) => {
       draft.discard();
       toast.success(
-        result.unchanged ? 'Değişiklik yoktu; program aynı kaldı.' : mode === 'create' ? 'Program oluşturuldu.' : 'Program kaydedildi.',
+        result.unchanged ? 'Değişiklik yoktu; program aynı kaldı.' : aiDraftId ? 'Program danışana atandı.' : mode === 'create' ? 'Program oluşturuldu.' : 'Program kaydedildi.',
         // Eski sekmede seçilip o arada silinen cihaz sunucuda egzersizin cihazına döner: sessiz kalmasın.
         result.droppedDevices
           ? { description: `${result.droppedDevices} satırın cihazı artık yok; egzersizin kendi cihazı kullanıldı.` }
@@ -444,8 +443,8 @@ export function ProgramForm({
 
   // Kaydedilmemiş değişiklik varken sayfadan çıkış sorulur; cihazı silinmiş satırların düzeltmesi
   // de kaydedilmemiş iştir (Kaydet görünür).
-  const dirty = form.isDirty || start.dropped.length > 0;
-  const guarded = dirty && !save.isPending && !save.isSuccess;
+  const dirty = !!aiDraftId || form.isDirty || start.dropped.length > 0;
+  const guarded = (form.isDirty || start.dropped.length > 0) && !save.isPending && !save.isSuccess;
   // "Kaydedince kalıcı olur" yalnız Kaydet görünürken (taslak yüklenen hâle döndüyse söylenmez).
   const droppedNotice = droppedDeviceNotice(phases, noted, dirty);
 
@@ -565,7 +564,7 @@ export function ProgramForm({
         dirty,
         pending: save.isPending || save.isSuccess,
         creating: mode === 'create',
-        submitLabel: mode === 'create' ? 'Programı oluştur' : 'Programı kaydet',
+        submitLabel: aiDraftId ? 'Onayla ve danışana ata' : mode === 'create' ? 'Programı oluştur' : 'Programı kaydet',
       }}>
       <Form of={form} className="flex flex-col gap-6" onSubmit={submit}>
         <p className="sr-only" aria-live="polite">
@@ -589,7 +588,7 @@ export function ProgramForm({
           </Alert>
         ) : null}
 
-        {mode === 'create' ? (
+        {mode === 'create' && !aiDraftId ? (
           <Card>
             <CardHeader>
               <CardTitle>Başlangıç</CardTitle>

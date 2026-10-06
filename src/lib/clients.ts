@@ -191,7 +191,7 @@ export async function createClient(input: ClientInput, options: { program?: Prog
     ...trainingOf(input),
     createdAt: now,
     status: 'active',
-    modules: { health: nextHealthModule(null, { enabled: input.healthEnabled, fields: input.healthFields }, now) },
+    modules: { ...(input.aiEnabled !== undefined ? { ai: { enabled: input.aiEnabled } } : {}), health: nextHealthModule(null, { enabled: input.healthEnabled, fields: input.healthFields }, now) },
     consents: {},
     access: { version: 1 },
     visibleTo: [],

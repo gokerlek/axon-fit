@@ -117,23 +117,10 @@ describe('hareketin güç kararı', () => {
     close(result.fit?.high, 8);
   });
 
-  test('bütün setleri 12\'den çok tekrarlı günler de sayılır: en ağır setin Epley\'i', () => {
-    // 10–15 tekrarlık hareket çift ilerlemede 13–16 tekrara çıkar; tahmini maksimum (1–12) o günlerde yok.
-    const days: [number, number][] = [
-      [12.5, 13],
-      [12.5, 14],
-      [12.5, 15],
-      [12.5, 16],
-      [15, 13],
-    ];
-    const pts = points('2026-08-23', 7, days.map(() => null)).map((point, i) => ({ ...point, topKg: days[i]![0], topReps: days[i]![1] }));
-    const result = exerciseStrength(source('pushdown', pts), { today: TODAY, window: '8h' });
-    assert.equal(result.status, 'improved');
-    assert.equal(result.missing, undefined);
-    assert.deepEqual(
-      result.points.map((point) => point.value),
-      [17.9, 18.3, 18.8, 19.2, 21.5],
-    );
+  test('high repetition sets do not invent strength estimates',()=>{
+    const pts=points('2026-08-23',7,[null,null,null,null,null]).map(p=>({...p,topKg:80,topReps:15}));
+    const result=exerciseStrength(source('bench',pts),{today:TODAY,window:'8h'});
+    assert.equal(result.status,'insufficient');assert.deepEqual(result.points,[]);
   });
 
   test('tahmini maksimumu olan gün onunla, olmayan en ağır setle', () => {
@@ -141,7 +128,7 @@ describe('hareketin güç kararı', () => {
     const result = exerciseStrength(source('bench', pts), { today: TODAY, window: '8h' });
     assert.deepEqual(
       result.points.map((point) => point.value),
-      [100, 120, 104, 120, 108],
+      [100, 104, 108],
     );
   });
 

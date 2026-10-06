@@ -7,7 +7,7 @@ import type { SessionDoc, SessionEntry } from './schemas/session.ts';
  *
  * `planSession` geçmişi antrenman başına çalışma setleri olarak alır (eskiden yeniye). Bir hareket
  * kaydı (entry) motorun `SetResult`'larına çevrilir: `kg → weightKg`, `reps | seconds → value`, zorluk
- * yoksa `good`; satır (`rowId`) ve cihaz (`deviceId`) hareketten her sete dağıtılır. Isınma ve plandan
+ * yoksa `unknown`; satır (`rowId`) ve cihaz (`deviceId`) hareketten her sete dağıtılır. Isınma ve plandan
  * fazla setler karara girmez (SPEC §7.1); danışanın "bir defalık" dediği hareket (`oneOff`) hiç
  * girmez, motor bir önceki seanstan planlar (§6.2). `lighter` hareket motorda kalır ve her sete
  * işaretlenir: motor ilk kez nötr, üst üste ikincisini kaçırma sayar (§5.5). Tanışma'da ya da ayar
@@ -28,7 +28,7 @@ export function toSetResults(entry: SessionEntry): EngineSetResult[] {
     .map((set) => ({
       weightKg: set.kg ?? 0,
       value: set.reps ?? set.seconds ?? 0,
-      effort: set.effort ?? 'good',
+      effort: set.effort ?? 'unknown',
       ...(set.setIndex !== undefined ? { setIndex: set.setIndex } : {}),
       ...(set.target ? { target: set.target } : {}),
       ...(set.topWeightKg !== undefined ? { topWeightKg: set.topWeightKg } : {}),

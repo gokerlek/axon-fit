@@ -64,6 +64,7 @@ export const HEALTH_FIELD_VERSIONS: Record<HealthField, string> = {
 
 /** Onay metninin güncel sürümü (parça sürümlerinin en yenisi): danışanın ekranı bununla onay verir. */
 export const HEALTH_CONSENT_VERSION = '2026-10';
+export const AI_CONSENT_VERSION = '2026-10-v2';
 
 /**
  * Danışanın uygulamaya gelmeden önceki antrenman geçmişi (tasarım §5.2 "Genel deneyim tabanı", açık
@@ -129,6 +130,7 @@ export const clientSchema = v.object({
   /** Durumun son değiştiği an (ör. duraklatmadan dönüş): kaçan gün penceresi bundan önce sayılmaz (`attention.ts`). */
   statusChangedAt: v.optional(timestamp),
   modules: v.object({
+    ai: v.optional(v.object({ enabled: v.boolean() })),
     health: v.object({
       enabled: v.boolean(),
       fields: healthFieldsSchema,
@@ -136,7 +138,7 @@ export const clientSchema = v.object({
       enabledAt: v.optional(timestamp),
     }),
   }),
-  consents: v.object({ health: v.optional(healthConsentSchema) }),
+  consents: v.object({ health: v.optional(healthConsentSchema), ai: v.optional(v.object({ granted: v.boolean(), version: v.string(), at: timestamp })) }),
   /** PT'nin girdiği antrenman geçmişi; yoksa yeni sayılır (öneri motorunda aşama tabanı). */
   training: v.optional(v.object({ experience: v.picklist(TRAINING_EXPERIENCES) })),
   /**
@@ -196,6 +198,7 @@ export const clientFormSchema = v.pipe(
     name: nameSchema,
     note: noteSchema,
     status: v.picklist(CLIENT_STATUSES, 'Durumu seç.'),
+    aiEnabled: v.optional(v.boolean()),
     healthEnabled: v.boolean(),
     healthFields: healthFieldsSchema,
     trainingExperience: trainingExperienceSchema,
@@ -218,6 +221,7 @@ export const clientSaveSchema = v.pipe(
     name: nameSchema,
     note: noteSchema,
     status: v.picklist(CLIENT_STATUSES, 'Durumu seç.'),
+    aiEnabled: v.optional(v.boolean()),
     healthEnabled: v.boolean(),
     healthFields: healthFieldsSchema,
     trainingExperience: trainingExperienceSchema,

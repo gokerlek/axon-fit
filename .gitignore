@@ -16,3 +16,7 @@ next-env.d.ts
 
 # Guided setup export contains the owner credentials
 axon-fit.env
+
+# Locally generated pose runtime
+public/pose/runtime/
+public/pose/pose-worker.js

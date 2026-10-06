@@ -3,6 +3,13 @@ import assert from 'node:assert/strict';
 import {sealKey,openKey,resolveKey,saveKey,type KeyStore,type KeyRecord} from './credentials.ts';
 const context={secret:'test-secret-'.repeat(4),owner:'test-coach',repo:'test-private-data'};
 const key='AIza'+'test_only_fake_key_'.repeat(2);
+test('authorization keys round-trip through encrypted settings without changing their separator', async()=>{
+  const authKey='AQ.test_only_fake_key_123456789012345678';
+  const f=fixture();
+  await saveKey(f.store,context,authKey);
+  assert.equal((await resolveKey(f.store,context)).key,authKey);
+  assert.ok(!JSON.stringify(f.file).includes(authKey));
+});
 function fixture() {
   let file:{content:unknown;sha:string}|null=null;const calls:string[]=[];
   const store:KeyStore={

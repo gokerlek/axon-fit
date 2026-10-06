@@ -10,6 +10,7 @@ import {
   addExercise,
   canSwap,
   doNowAt,
+  reorderAt,
   dropAt,
   effectiveDay,
   finishRotation,
@@ -411,4 +412,11 @@ describe('bitişte rotasyon satırı (§2.7)', () => {
     assert.equal(finishRotation(legacy, { doneSets: 1, plannedSets: 3 }), null);
     assert.equal(finishRotation({ ...legacy, rotationDays: [{ id: 'd_zzzzzz', name: 'Gün Z' }, { id: 'd_yyyyyy', name: 'Gün Y' }] }, { doneSets: 1, plannedSets: 3 }), null);
   });
+});
+
+test('reordering changes execution order without changing recorded sets',()=>{
+ const day=threeDay();const doc=logNext(day,start(day),1);const moved=reorderAt(day,doc,'b_dddddd','b_aaaaaa',stamp(1),sequence());
+ assert.deepEqual(flowView(day,moved).active.map(item=>item.key),['b_dddddd','b_aaaaaa','b_bbbbbb']);
+ assert.equal(nextSet(day,moved)?.rowId,'r_dddddd');
+ assert.deepEqual(moved.entries.flatMap(e=>e.sets),doc.entries.flatMap(e=>e.sets));valid(moved);
 });

@@ -1,4 +1,5 @@
 'use client';
+import { DatePicker } from '@/components/date-picker';
 
 import { useState } from 'react';
 import Link from 'next/link';
@@ -146,7 +147,7 @@ export function RedFlagActions({
             <FieldLabel htmlFor={`refer-${id}`} className="text-xs">
               Yönlendirme günü
             </FieldLabel>
-            <Input id={`refer-${id}`} type="date" max={today} value={referDate} onChange={(event) => setReferDate(event.currentTarget.value)} className="w-40" />
+            <DatePicker id={`refer-${id}`} max={today} value={referDate} onValueChange={setReferDate} className="w-40" />
           </Field>
           <Button size="sm" disabled={refer.isPending || !referDate} onClick={() => refer.mutate({ action: 'refer', baseUpdatedAt, date: referDate })}>
             {refer.isPending ? <Spinner data-icon="inline-start" /> : <Check data-icon="inline-start" />}
@@ -160,7 +161,7 @@ export function RedFlagActions({
             <FieldLabel htmlFor={`clear-${id}`} className="text-xs">
               Görüş günü
             </FieldLabel>
-            <Input id={`clear-${id}`} type="date" max={today} value={date} onChange={(event) => setDate(event.currentTarget.value)} className="w-40" />
+            <DatePicker id={`clear-${id}`} max={today} value={date} onValueChange={setDate} className="w-40" />
           </Field>
           <Field>
             <FieldLabel id={`basis-${id}`} className="text-xs">

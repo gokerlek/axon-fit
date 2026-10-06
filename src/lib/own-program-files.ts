@@ -221,6 +221,8 @@ export async function saveOwnProgram(
     /** Danışanın kaydında kısıt denetimi; kısıt yoksa verilmez. */
     guard?: OwnGuard | null;
     random?: (n: number) => Uint8Array;
+    /** AI drafts are shared atomically with creation, so PT can see and edit them. */
+    shareOnCreate?: boolean;
   },
 ): Promise<OwnSaveResult> {
   const { id, body, by, now } = input;
@@ -248,7 +250,7 @@ export async function saveOwnProgram(
       if (refused) return { status: 'blocked', errors: refused };
       const taken = await otherIds(repo, state, id, pt.program);
       const settled = reIdCollisions({ currentPhaseId: body.currentPhaseId, phases: normalized.phases }, taken, new Set(), input.random);
-      const program = createOwnProgram({ id, name, currentPhaseId: settled.currentPhaseId, phases: settled.phases, weekdays: body.weekdays, now });
+      const program = { ...createOwnProgram({ id, name, currentPhaseId: settled.currentPhaseId, phases: settled.phases, weekdays: body.weekdays, now }), ...(input.shareOnCreate ? { shared: { at } } : {}) };
       let index = upsertOwnItem(state.index, ownIndexItemOf(program, shaOf(program)));
       // PT'nin programı yokken ilk kendi program Bugün'ün programı olur (§3.2): Bugün boş kalmasın.
       const activated = !pt.exists && state.index.items.length === 0;

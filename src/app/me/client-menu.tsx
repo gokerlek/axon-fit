@@ -65,6 +65,7 @@ export function ClientMenu({
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
+            <DropdownMenuItem className="min-h-11" render={<Link href="/me/koc" />}>AI koç</DropdownMenuItem>
             {health ? (
               <DropdownMenuItem className="min-h-11" render={<Link href="/me/saglik" />}>
                 <FirstAidKit />

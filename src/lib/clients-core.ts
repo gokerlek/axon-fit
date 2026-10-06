@@ -148,6 +148,7 @@ export async function updateClient(store: ClientStore, id: string, input: Client
     ...(input.status !== client.status ? { statusChangedAt: store.now().toISOString() } : {}),
     modules: {
       ...client.modules,
+      ...(input.aiEnabled !== undefined ? { ai: { enabled: input.aiEnabled } } : {}),
       health: nextHealthModule(
         client.modules.health,
         { enabled: input.healthEnabled, fields: input.healthFields },

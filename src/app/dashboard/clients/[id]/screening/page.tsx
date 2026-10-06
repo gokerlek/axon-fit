@@ -47,7 +47,7 @@ import { MeasurementProblemAlert, measurementClient } from '../measurements/meas
 import { CompareSelect } from './compare-select';
 import { PainActions } from './screening-actions';
 
-export const metadata: Metadata = { title: 'Tarama' };
+export const metadata: Metadata = { title: 'PT değerlendirmesi' };
 
 const CHANGE_TEXT: Record<Change, string> = { up: '↑', down: '↓', same: '=', new: 'yeni', pain_new: 'yeni ağrı', pain_gone: 'ağrı geçti' };
 
@@ -361,7 +361,7 @@ export default async function ScreeningPage({
   if (!loaded.ok) {
     return (
       <div className="flex flex-col gap-6">
-        <SectionHeader title="Hareket taraması" />
+        <SectionHeader title="PT değerlendirmesi" />
         <MeasurementProblemAlert title="Danışan kaydı okunamadı" problem={loaded.problem} />
       </div>
     );
@@ -373,13 +373,13 @@ export default async function ScreeningPage({
     <div className="flex flex-col gap-6">
       <HealthStrip client={client} record={view.state === 'ok' ? view.record : null} />
       <SectionHeader
-        title="Hareket taraması"
-        description="Sekiz temel hareket; sonuç gözlenen noktalardan. Toplam ve puan yok."
+        title="PT değerlendirmesi"
+        description="PT, sekiz temel hareketi gözlemleyip ağrı, hareket kontrolü ve uygulama koşullarını kaydeder. Kamera açı ölçümleri Kamera ölçümü sekmesindedir."
         actions={
           view.state === 'ok' ? (
             <Button nativeButton={false} render={<Link href={`/dashboard/clients/${id}/screening/new`} />}>
               <Plus data-icon="inline-start" weight="fill" />
-              Tarama yap
+              Hareket testi yap
             </Button>
           ) : null
         }

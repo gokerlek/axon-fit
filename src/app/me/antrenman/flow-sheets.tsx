@@ -1,8 +1,11 @@
 'use client';
 
 import { useDeferredValue, useMemo, useRef, useState } from 'react';
+import {DndContext,PointerSensor,KeyboardSensor,useSensor,useSensors,useDraggable,useDroppable,closestCenter} from '@dnd-kit/core';
+import {CSS} from '@dnd-kit/utilities';
+import type {ReactNode} from 'react';
 import { motion } from 'motion/react';
-import { ArrowBendUpRight, ArrowClockwise, CaretRight, Check, Circle, MagnifyingGlass, Play, Plus, WarningCircle } from '@phosphor-icons/react';
+import { ArrowBendUpRight, ArrowClockwise, CaretRight, DotsSixVertical, Check, Circle, MagnifyingGlass, Play, Plus, WarningCircle } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
@@ -97,6 +100,14 @@ const ROW = 'flex min-h-13 min-w-0 flex-1 items-center gap-2.5 rounded-md pl-1.5
  * "Hareket ekle" (yalnız bu antrenmana). Sıra değişince satır yerine kayar (`layout`) ve bir an vurgulu
  * kalır (`highlight`, `DRAG.highlightMs`).
  */
+function DragFlowRow({item,children,className,onReorder,previous,next}:{item:FlowItem;children:ReactNode;className:string;onReorder:(from:string,to:string)=>void;previous?:string;next?:string}){
+ const drag=useDraggable({id:item.key});const drop=useDroppable({id:item.key});
+ return <li ref={node=>{drag.setNodeRef(node);drop.setNodeRef(node);}} aria-current={item.state==='current'?'step':undefined} className={className} style={{transform:CSS.Translate.toString(drag.transform),position:'relative',zIndex:drag.isDragging?10:undefined}}>
+  <button type="button" {...drag.attributes} {...drag.listeners} aria-label={`${titleOf(item)}: sırayı değiştir`} title="Sürükle veya Alt + yukarı/aşağı ok" onKeyDown={event=>{if(event.altKey && (event.key==='ArrowUp'||event.key==='ArrowDown')){event.preventDefault();const target=event.key==='ArrowUp'?previous:next;if(target)onReorder(item.key,target);}else drag.listeners?.onKeyDown?.(event);}} className="grid size-11 shrink-0 touch-none place-items-center rounded-md text-muted-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"><DotsSixVertical className="size-5"/></button>
+  {children}
+ </li>;
+}
+
 export function FlowSheet({
   open,
   onOpenChange,
@@ -106,6 +117,7 @@ export function FlowSheet({
   onSkip,
   onRestore,
   onAdd,
+  onReorder,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -116,8 +128,10 @@ export function FlowSheet({
   onSkip: (key: string) => void;
   onRestore: (key: string) => void;
   onAdd: () => void;
+  onReorder:(from:string,to:string)=>void;
 }) {
   const title = useRef<HTMLHeadingElement>(null);
+  const sensors=useSensors(useSensor(PointerSensor,{activationConstraint:{distance:8}}),useSensor(KeyboardSensor));
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" showCloseButton={false} className={TALL} initialFocus={title}>
@@ -130,18 +144,16 @@ export function FlowSheet({
               {view.doneSets}/{view.plannedSets} set
             </span>
           </div>
-          <SheetDescription>Alet doluysa geç: hareket sona alınır, sıra kaldığın yerden sürer. Satıra dokununca o harekete geçersin.</SheetDescription>
+          <SheetDescription>Tutamacı sürükleyerek sırayı değiştir. Klavyede Alt + yukarı/aşağı ok kullan. Alet doluysa Geç; harekete dokunarak hemen başlayabilirsin.</SheetDescription>
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4">
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={({active,over})=>{if(over)onReorder(String(active.id),String(over.id));}}>
           <ul className="flex flex-col">
-            {view.active.map((item) => {
+            {view.active.map((item,index) => {
               const jumpable = item.state !== 'done' && item.state !== 'current';
               return (
-                <motion.li
-                  key={item.key}
-                  layout="position"
-                  transition={tween(DURATION.slow)}
-                  aria-current={item.state === 'current' ? 'step' : undefined}
+                <DragFlowRow
+                  key={item.key} item={item} onReorder={onReorder} previous={view.active[index-1]?.key} next={view.active[index+1]?.key}
                   className={cn(
                     'flex items-center gap-2 rounded-md border-t transition-colors duration-300 first:border-t-0',
                     (item.state === 'current' || item.key === highlight) && 'border-transparent bg-primary/10 [&+li]:border-t-transparent',
@@ -164,10 +176,11 @@ export function FlowSheet({
                       Geç
                     </Button>
                   ) : null}
-                </motion.li>
+                </DragFlowRow>
               );
             })}
           </ul>
+          </DndContext>
           {view.skipped.length > 0 ? (
             <>
               <p className="pt-4 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">Geçilenler</p>

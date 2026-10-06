@@ -322,7 +322,7 @@ describe('gelecek sefer', () => {
       sessionEntry('e_aaaaaa', {
         rowId: 'r_aaaaaa',
         status: 'done',
-        sets: [0, 1, 2].map((i) => workingSet(`st_aaaaaa0${i}`, i + 1, { setIndex: i, kg: 60, reps: 10, target: { min: 8, max: 10 }, topWeightKg: 60, plannedSetCount: 3 })),
+        sets: [0, 1, 2].map((i) => workingSet(`st_aaaaaa0${i}`, i + 1, { setIndex: i, kg: 60, reps: 10, effort: 'good', target: { min: 8, max: 10 }, topWeightKg: 60, plannedSetCount: 3 })),
       }),
       sessionEntry('e_bbbbbb', { rowId: 'r_bbbbbb', status: 'skipped' }),
       sessionEntry('e_cccccc', { exerciseId: 'push-up', title: 'Şınav', added: true, sets: sets('cccccc', [[undefined, 12]]) }),

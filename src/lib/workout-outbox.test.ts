@@ -139,3 +139,11 @@ describe('kuyruk: telefondaki kayıt', () => {
     assert.deepEqual(parseLocalWorkout(JSON.stringify(old))?.extraRounds, {});
   });
 });
+
+
+test('local celebration ledger survives reload and never enters the session document',()=>{
+ const local={...createLocalWorkout(docWith([]),workoutDay()),achievementSeen:['bench-press@:record:heaviest']};
+ const parsed=parseLocalWorkout(JSON.stringify(local));
+ assert.deepEqual(parsed?.achievementSeen,['bench-press@:record:heaviest']);
+ assert.equal('achievementSeen' in parsed!.doc,false);
+});

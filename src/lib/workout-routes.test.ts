@@ -78,7 +78,7 @@ function finished(id: string, startedAt: string, reps: number, water = 0): Sessi
         rowId: 'r_aaaaaa',
         status: 'done',
         sets: [0, 1, 2].map((index) =>
-          workingSet(`st_${(++counter).toString(36).padStart(8, '0')}`, 0, { at: new Date(start + (index + 1) * 60_000).toISOString(), setIndex: index, kg: 60, reps, target: { min: 8, max: 10 } }),
+          workingSet(`st_${(++counter).toString(36).padStart(8, '0')}`, 0, { at: new Date(start + (index + 1) * 60_000).toISOString(), setIndex: index, kg: 60, reps, effort: 'good', target: { min: 8, max: 10 } }),
         ),
       }),
     ],
@@ -601,6 +601,16 @@ describe('kendi programlar (kendi-program.md §3.2, §5.4)', () => {
     const { deps } = setup({ ...files({ programId: null, at: '2026-09-25T10:00:00.000Z' }), [`sessions/${half.id}.json`]: half });
     const data = body(await workoutRoute(deps, null, 'pt'));
     assert.deepEqual([data.day?.dayId, data.day?.programId, data.active?.id], [OWN_DAY_B, OWN_ID, half.id]);
+  });
+
+  test('program değiştirme önizlemesi yarım seansı değiştirmeden seçilen programı açar', async () => {
+    const half = sessionDoc({ program: { revision: 1, dayId: OWN_DAY_B, dayName: 'Gün B', programId: OWN_ID, programName: 'Evde' }, entries: [] });
+    const { deps, gh } = setup({ ...files(), [`sessions/${half.id}.json`]: half });
+    const data = body(await workoutRoute(deps, DAY_A, 'pt', true));
+    assert.equal(data.active, null);
+    assert.equal(data.day?.source, 'pt');
+    assert.equal(data.day?.dayId, DAY_A);
+    assert.equal((await gh.repo.read(`sessions/${half.id}.json`))?.content && body(await workoutRoute(deps, null)).active?.id, half.id);
   });
 
   test('seçili program okunamıyorsa PT\'nin programı ve sorun', async () => {

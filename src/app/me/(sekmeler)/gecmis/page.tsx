@@ -1,3 +1,5 @@
+import {WorkoutCalendar} from '@/components/workout/workout-calendar';
+import {todayIn} from '@/lib/format';
 import type { Metadata } from 'next';
 import { ClockCounterClockwise } from '@phosphor-icons/react/dist/ssr';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,6 +28,7 @@ export default async function HistoryPage() {
         <ClientHeader client={client} appName={config.appName} title="Geçmiş" />
         {list?.recent ? <p className="text-sm text-muted-foreground tabular-nums">{list.recent}</p> : null}
       </div>
+      {list?<WorkoutCalendar months={list.months} today={todayIn(config.timeZone)}/>:null}
       {list === null ? (
         <Card>
           <CardHeader>

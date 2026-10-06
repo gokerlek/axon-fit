@@ -2,7 +2,7 @@ import { buildInsights, type HealthParts, type ProgressInsights } from './progre
 import { buildProgressView, digestSession, PROGRESS_MAX_SESSIONS, type ProgressView, type SessionDigest } from './progress.ts';
 import type { TrainingExperience } from './schemas/client.ts';
 import type { HealthRecord } from './schemas/health.ts';
-import { parseStoredSession, type SessionIndexRow } from './schemas/session.ts';
+import { parseStoredSession, type SessionIndex, type SessionIndexRow } from './schemas/session.ts';
 import { readIndex, type SessionRepo } from './session-files-core.ts';
 import type { PlanExercise } from './template-plan.ts';
 import { parseWaterFile, WATER_PATH } from './water.ts';
@@ -33,6 +33,7 @@ export type ProgressDeps<E extends PlanExercise> = {
   catalog(): Promise<{ exercises: readonly E[]; deviceNames: ReadonlyMap<string, string> }>;
   /** Programın haftalık sıklığı (seri hedefi); okunamazsa undefined. */
   weeklyTarget(): Promise<number | undefined>;
+  weeklyGoals?(index: SessionIndex, target: number | undefined): Promise<Record<string, number>>;
   /** Kas payları (`muscles.ts` → `exerciseSetWeights`). */
   setWeightsOf(exercise: E): Partial<Record<string, number>>;
   /** Haftada planlanan antrenman günü (Bugün'deki "bu hafta x/y"nin y'si); okunamazsa undefined. */
@@ -125,6 +126,13 @@ export async function loadProgressWith<E extends PlanExercise>(
   const skipped = rows.length - read.length;
   if (skipped > 0) deps.log(`[ilerleme] ${client.id}: ${skipped} antrenman dosyası okunamadı.`);
 
+  let weeklyTargets: Record<string, number> | undefined;
+  try {
+    weeklyTargets = deps.weeklyGoals ? await deps.weeklyGoals(index, weeklyTarget) : undefined;
+  } catch {
+    deps.log(`[ilerleme] ${client.id}: haftalık hedefler okunamadı veya sabitlenemedi.`);
+    return { status: 'error', message: PROGRESS_ERROR };
+  }
   const view = buildProgressView({
     index,
     digests: read,
@@ -135,6 +143,7 @@ export async function loadProgressWith<E extends PlanExercise>(
     deviceNames: catalog.deviceNames,
     setWeightsOf: deps.setWeightsOf,
     weeklyTarget,
+    weeklyTargets,
     skipped,
     truncated: finished.length > rows.length,
   });

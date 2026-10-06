@@ -51,7 +51,7 @@ export default async function EditScreeningPage({ params }: { params: Promise<{ 
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeader back={{ href: `/dashboard/clients/${id}/screening`, label: 'Tarama' }} title={`${dateLabel} taraması`} />
+      <SectionHeader back={{ href: `/dashboard/clients/${id}/screening`, label: 'PT değerlendirmesi' }} title={`${dateLabel} taraması`} />
       {!loaded.ok ? <MeasurementProblemAlert title="Danışan kaydı okunamadı" problem={loaded.problem} /> : null}
       {view?.state === 'locked' ? <HealthLockAlert field="screening" lock={view.lock} clientId={id} /> : null}
       {view?.state === 'broken' ? <MeasurementProblemAlert title="Sağlık kaydı okunamadı" problem={view.problem} /> : null}

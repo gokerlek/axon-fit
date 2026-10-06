@@ -1,4 +1,5 @@
 'use client';
+import { DatePicker } from '@/components/date-picker';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -14,7 +15,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group';
 import { Spinner } from '@/components/ui/spinner';
 import { formatDay } from '@/lib/format';
@@ -233,11 +233,11 @@ export function MeasurementForm({
   // "En az bir ölçüm gir" uyarısı bir değer yazılınca kalkar.
   const clearEmptyError = () => setEmptyError(null);
 
-  // Yeni girişte antropometri açık (en sık alınan); düzenlemede değeri olan bölümler.
+  // Yeni girişte işlev odaklı performans açık; düzenlemede değeri olan bölümler.
   const [open, setOpen] = useState<Record<Group, boolean>>(() => {
     const filled = new Set(Object.keys(initialValues).map(groupOfSlot));
     return Object.fromEntries(
-      GROUPS.map((group) => [group, mode.kind === 'new' || filled.size === 0 ? group === 'anthropometry' : filled.has(group)]),
+      GROUPS.map((group) => [group, mode.kind === 'new' || filled.size === 0 ? group === 'performance' : filled.has(group)]),
     ) as Record<Group, boolean>;
   });
   // Hatalı alanı olan bölüm kapanmaz: hata gizli kalmasın.
@@ -332,10 +332,10 @@ export function MeasurementForm({
                         <FieldLabel htmlFor="date" className="flex items-baseline gap-2">
                           Tarih <span className="text-xs font-normal text-muted-foreground">zorunlu</span>
                         </FieldLabel>
-                        <Input
-                          {...field.props}
+                        <DatePicker
                           id="date"
-                          type="date"
+                          name={field.props.name}
+                          onValueChange={value => setInput(form, { path: ['date'], input: value })}
                           required
                           max={mode.today}
                           value={field.input ?? ''}

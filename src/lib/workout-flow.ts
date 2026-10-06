@@ -426,3 +426,13 @@ export function finishRotation(day: Pick<WorkoutDay, 'dayId' | 'dayName' | 'plan
   if (!advance || advance === keep) return null;
   return { initial: defaultRotation(progress.doneSets, progress.plannedSets), advance, keep };
 }
+
+/** Move whole execution units; supersets stay together, recorded sets retain their identities. */
+export function reorderAt(day:WorkoutDay,doc:SessionDoc,from:string,to:string,stamp:Stamp,random?:Random):SessionDoc{
+ if(from===to)return doc;
+ const {ready,units}=prepared(day,doc,from,stamp,random);
+ const source=units.findIndex(unit=>unit.key===from),target=units.findIndex(unit=>unit.key===to);
+ if(source<0 || target<0)return doc;
+ const ordered=[...units];const [moved]=ordered.splice(source,1);ordered.splice(target,0,moved!);
+ return normalizeSession({...ready,order:{value:ordered.flatMap(entryIdsOf),updatedAt:stamp.at,by:stamp.by}});
+}

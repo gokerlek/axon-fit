@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { FirstAidKit } from '@phosphor-icons/react/dist/ssr';
+import { Button } from '@/components/ui/button';
+import { Camera, FirstAidKit } from '@phosphor-icons/react/dist/ssr';
 import { ScreeningRows } from '@/components/progress/screening-card';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { canRecordHealth } from '@/lib/client-status';
@@ -64,11 +65,13 @@ export default async function ClientHealthPage() {
         )
       ) : null}
 
+      {screening ? <Card size="sm"><CardHeader><CardTitle className="flex items-center gap-2"><Camera className="size-5 text-primary" />Kamera ölçümü</CardTitle><CardDescription>Yönlendirmeyi takip ederek duruş ve hareket açılarını ölç. Görüntü kaydedilmez.</CardDescription></CardHeader><CardContent><Button nativeButton={false} render={<Link href="/me/olcum" />} className="min-h-11 w-full">Kamerayla ölçüm al</Button></CardContent></Card> : null}
+
       {screening ? (
         <section aria-labelledby="screening-heading" className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
             <h2 id="screening-heading" className="font-heading text-lg font-semibold">
-              {latest ? `Hareket taraman · ${formatDay(latest.date)}` : 'Hareket taraman'}
+              {latest ? `PT değerlendirmesi · ${formatDay(latest.date)}` : 'PT değerlendirmesi'}
             </h2>
             <p className="text-sm text-muted-foreground">
               {latest ? 'Antrenörün temel hareketlerine baktı. Not değil; nereden başlayacağınızın haritası.' : 'Antrenörün henüz tarama yapmadı.'}

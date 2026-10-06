@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import {cameraMeasurementSchema,CAMERA_RECORD_LIMIT} from './camera-measurement.ts';
 import { IRRITABILITY_LEVELS, RED_FLAG_CHECKS, SYMPTOM_DIRECTIONS, TOLERANCE_MODES } from '../check-in.ts';
 import { parseCondition } from '../conditions.ts';
 import {
@@ -304,6 +305,7 @@ export const healthRecordSchema = v.object({
   constraints: v.optional(v.pipe(v.array(constraintSchema), v.maxLength(CONSTRAINT_LIMITS.total))),
   overrides: v.optional(v.pipe(v.array(overrideSchema), v.maxLength(CONSTRAINT_LIMITS.overrides))),
   constraintLog: v.optional(v.pipe(v.array(constraintLogSchema), v.maxLength(CONSTRAINT_LIMITS.log))),
+  cameraMeasurements: v.optional(v.pipe(v.array(cameraMeasurementSchema),v.maxLength(CAMERA_RECORD_LIMIT))),
   screenings: v.optional(v.pipe(v.array(screeningSchema), v.maxLength(SCREENING_LIMIT))),
 });
 export type HealthRecord = v.InferOutput<typeof healthRecordSchema>;

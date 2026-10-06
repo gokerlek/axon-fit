@@ -1,4 +1,5 @@
 'use client';
+import { DatePicker } from '@/components/date-picker';
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -354,7 +355,7 @@ export function ConstraintFormView({
             {details.surgery ? (
               <Field data-invalid={Boolean(errors['details.surgeryDate']) || undefined} className="max-w-xs">
                 <FieldLabel htmlFor="surgery">Ameliyat tarihi</FieldLabel>
-                <Input id="surgery" type="date" max={today} value={draft.surgeryDate ?? ''} onChange={(event) => set('surgeryDate', event.currentTarget.value || undefined)} />
+                <DatePicker id="surgery" max={today} value={draft.surgeryDate ?? ''} onValueChange={value => set('surgeryDate', value || undefined)} />
                 <FieldDescription>Haftaya bağlı kurallar (açık zincir diz açma) buna göre.</FieldDescription>
                 <FieldError>{errors['details.surgeryDate']}</FieldError>
               </Field>

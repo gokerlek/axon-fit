@@ -11,6 +11,6 @@ import { workoutRoute } from '@/lib/workout-routes';
  */
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
-  const result = await workoutRoute(await workoutRouteDeps(), params.get('day'), params.get('program'));
+  const result = await workoutRoute(await workoutRouteDeps(), params.get('day'), params.get('program'), params.get('preview')==='1');
   return NextResponse.json(result.body, { status: result.status, headers: result.headers });
 }

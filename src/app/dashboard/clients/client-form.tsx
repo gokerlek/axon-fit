@@ -65,6 +65,7 @@ export function ClientForm({ editing }: { editing: Client | null }) {
       name: editing?.name ?? '',
       note: editing?.note ?? '',
       status: editing?.status ?? 'active',
+      aiEnabled: editing?.modules.ai?.enabled ?? false,
       healthEnabled: editing?.modules.health.enabled ?? false,
       healthFields: editing?.modules.health.fields ?? [],
       trainingExperience: editing?.training?.experience ?? 'new',
@@ -179,6 +180,20 @@ export function ClientForm({ editing }: { editing: Client | null }) {
           </FormField>
         </CardContent>
       </Card>
+
+      <FormField of={form} path={['aiEnabled']}>
+        {(field) => <Card>
+          <CardHeader>
+            <CardTitle>AI koç desteği</CardTitle>
+            <CardDescription>Danışan ve sen kayıtlar hakkında soru sorabilir, program taslağı isteyebilirsiniz. Taslaklar yalnız sen onaylayınca uygulanır. Danışanın ayrıca veri kullanımını onaylaması gerekir.</CardDescription>
+            <CardAction>
+              <label className="-m-2 flex min-h-11 min-w-11 cursor-pointer items-center justify-center">
+                <Switch aria-label="AI koç desteği" checked={Boolean(field.input)} onCheckedChange={checked => setInput(form, { path: ['aiEnabled'], input: checked })} />
+              </label>
+            </CardAction>
+          </CardHeader>
+        </Card>}
+      </FormField>
 
       <FormField of={form} path={['healthEnabled']}>
         {(enabledField) => (

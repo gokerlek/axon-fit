@@ -1,3 +1,4 @@
+import {achievementBaseline,type AchievementBaseline} from './workout-achievements.ts';
 import type { AlternativeCandidate } from './alternatives.ts';
 import { withClientTargets } from './client-targets.ts';
 import type { RowCare } from './constraint-filter.ts';
@@ -119,6 +120,8 @@ export type WorkoutRow = {
   plan: SessionPlan;
   /** Geçen seferki çalışma setleri (fazladan setler hariç). */
   lastTime: PreviousSet[];
+  /** Display-only achievements, independent of program-specific prescription history. */
+  achievements?: AchievementBaseline;
   /** PT'nin satır notu. */
   note?: string;
   /** Isınma setleri; hesaplanmadıysa (ya da eski anlık görüntüde) yok. */
@@ -266,11 +269,12 @@ function latestEntry(history: readonly HistoryDoc[], select: HistorySelect, usab
 }
 
 /**
- * Geçen seferki setler: en yeni bitmiş antrenmanda aynı satırın kaydı; satırın hiç kaydı yoksa aynı
- * egzersiz ve cihazın en yeni kaydı (önce aynı programda). Bulunamazsa boş ("—").
+ * Geçen seferki setler: program ve günden bağımsız, aynı egzersiz ve cihazın en yeni bitmiş kaydı.
+ * Bulunamazsa boş ("—"). Öneri motorunun programa özgü serisi bundan bağımsızdır.
  */
 export function lastTimeOf(history: readonly HistoryDoc[], select: HistorySelect): PreviousSet[] {
-  const entry = latestEntry(history, select, (item) => previousSets(item).length > 0);
+  const entry = history.filter(doc=>doc.status==='finished').sort((a,b)=>time(b.startedAt)-time(a.startedAt))
+    .flatMap(doc=>doc.entries).find(item=>item.exerciseId===select.exerciseId && item.deviceId===select.deviceId && previousSets(item).length>0);
   return entry ? previousSets(entry) : [];
 }
 
@@ -399,6 +403,7 @@ export function workoutRowFor(input: {
     rule,
     plan,
     lastTime: lastTimeOf(input.history, select),
+    ...(insight?{achievements:achievementBaseline(insight.index.items,input.history,select)}:{}),
     ...(row.note ? { note: row.note } : {}),
     ...(warmups.length > 0 ? { warmups } : {}),
     ...(setupNote ? { setupNote } : {}),
@@ -595,6 +600,13 @@ export function historyRows(
     .filter((row) => row.finishedAt && (hasExercise(row) || row.exercises.some((item) => item.rowId !== undefined && rowIds.has(item.rowId))))
     .sort((a, b) => time(b.startedAt ?? b.date) - time(a.startedAt ?? a.date) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const picked = new Set(rows.filter(hasExercise).slice(0, limit).map((row) => row.id));
+  // Always retain the newest exposure per exercise/device, even when other exercises fill the cap.
+  const latestKeys=new Set<string>();
+  for(const row of rows)for(const exercise of row.exercises){
+    if(!window.exerciseIds.has(exercise.exerciseId))continue;
+    const key=`${exercise.exerciseId}@${exercise.deviceId??''}`;
+    if(!latestKeys.has(key)){latestKeys.add(key);picked.add(row.id);}
+  }
   for (const rowId of rowIds) {
     for (const row of rows.filter((item) => item.exercises.some((exercise) => exercise.rowId === rowId)).slice(0, perRow)) picked.add(row.id);
   }

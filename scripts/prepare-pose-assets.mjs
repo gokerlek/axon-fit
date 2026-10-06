@@ -1,0 +1,14 @@
+import { mkdir, copyFile, readFile, writeFile } from 'node:fs/promises';
+import ts from 'typescript';
+import { Script } from 'node:vm';
+const root=new URL('../',import.meta.url);
+const sdk=new URL('node_modules/@mediapipe/tasks-vision/',root);
+const version=JSON.parse(await readFile(new URL('package.json',sdk),'utf8')).version;
+if(version!=='1.0.1') throw new Error('Update pinned pose runtime paths before changing SDK version');
+const target=new URL(`public/pose/runtime/${version}/`,root);
+await mkdir(new URL('wasm/',target),{recursive:true});
+for(const file of ['vision_bundle.js','wasm/vision_wasm_internal.js','wasm/vision_wasm_internal.wasm','wasm/vision_wasm_nosimd_internal.js','wasm/vision_wasm_nosimd_internal.wasm']) await copyFile(new URL(file,sdk),new URL(file,target));
+const source=await readFile(new URL('src/lib/pose/pose-worker.ts',root),'utf8');
+const code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText.replace(/export\s*\{\s*\};?\s*$/,'');
+new Script(code);
+await writeFile(new URL('public/pose/pose-worker.js',root),code);

@@ -7,5 +7,6 @@ import type { HealthField } from '@/lib/schemas/client';
 export const HEALTH_PARTS: readonly { field: HealthField; path: string; label: string }[] = [
   { field: 'conditions', path: 'constraints', label: 'Kısıtlar' },
   { field: 'measurements', path: 'measurements', label: 'Ölçümler' },
-  { field: 'screening', path: 'screening', label: 'Tarama' },
+  { field: 'screening', path: 'measurements/camera', label: 'Kamera ölçümü' },
+  { field: 'screening', path: 'screening', label: 'PT değerlendirmesi' },
 ];

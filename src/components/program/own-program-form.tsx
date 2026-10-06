@@ -75,6 +75,7 @@ export type OwnProgramFormProps = {
   /** Programın kimliği (oluştururken telefonda üretilen). */
   programId: string;
   creating: boolean;
+  draftIdentity?: string;
   initial: { name: string; currentPhaseId: string; phases: OwnProgramPhase[]; weekdays: number[] };
   /** Yüklenen sürüm (revision ve oluşturulma anı); oluştururken null. */
   base: ProgramBase | null;
@@ -147,7 +148,7 @@ export function OwnProgramForm(props: OwnProgramFormProps) {
   const [addOpen, setAddOpen] = useState(false);
   const [problem, setProblem] = useState<'stale' | 'unshared' | 'missing' | null>(null);
   const guard = useRef<UnsavedChangesGuardHandle>(null);
-  const draftKey = ownProgramDraftKey(clientId, creating ? null : programId);
+  const draftKey = ownProgramDraftKey(clientId, props.draftIdentity ?? (creating ? null : programId));
   const draft = useEditorDraft({ form, schema: ownProgramFormSchema, storageKey: draftKey, base: props.base, baseSchema: PROGRAM_DRAFT_BASE });
 
   const dayIndex = Math.max(0, days.findIndex((day) => day.id === selectedDayId));

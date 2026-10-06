@@ -1,3 +1,7 @@
+import {freezeWeeklyGoals} from './weekly-goals';
+import {readIndex} from './session-files-core';
+import {sessionRepo} from './session-files';
+import {currentPhaseOf} from './program-plan';
 import 'server-only';
 import * as v from 'valibot';
 import type { DeviceWithSource } from './devices';
@@ -76,6 +80,8 @@ export async function writeProgramFile(
     const issue = parsed.issues[0];
     throw new GithubError(`Program kaydı geçersiz: ${v.getDotPath(issue) ?? 'dosya'}: ${issue.message}`, 500);
   }
+  const prior=await readProgramFile(clientId);
+  if(prior?.program){const repo=sessionRepo(clientId);await freezeWeeklyGoals(repo,(await readIndex(repo)).index,currentPhaseOf(prior.program)?.phase.daysPerWeek??1);}
   const written = await writeJson(clientRepoName(clientId), PROGRAM_PATH, parsed.output, { sha: options.sha, message: options.message });
   // Genel bakış'ın özeti (antrenman günleri, evre, bildirimler) programdan: yeniden türetilsin.
   dropNotices(clientId);

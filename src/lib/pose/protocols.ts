@@ -1,0 +1,19 @@
+export const POSE_TASKS=['front','side','squat','knee','hinge','shoulder_flexion','shoulder_abduction','elbow','sit_stand'] as const;
+export type PoseTask=(typeof POSE_TASKS)[number];
+export const POSE_PROTOCOL=2 as const;
+export type PoseProtocol={id:PoseTask;title:string;subtitle:string;view:'Önden'|'Yandan';dynamic:boolean;primary:string;direction:1|-1;metrics:readonly string[];instructions:readonly string[]};
+const camera=['Telefonu düz ve sabit yerleştir; çekim boyunca oynatma.','Başın ve ayakların dahil vücudun görünür olsun.'];
+const movement='Başlangıç konumundan rahat ve ağrısız sınırında yavaşça hareket et, sonra başlangıca dön. Üç tam tekrar yap; istediğin an durabilirsin.';
+export const PROTOCOLS:Record<PoseTask,PoseProtocol>={
+ front:{id:'front',title:'Önden duruş',subtitle:'Omuz, kalça ve gövde çizgileri',view:'Önden',dynamic:false,primary:'shoulder_tilt',direction:1,metrics:['shoulder_tilt','hip_tilt','trunk_tilt'],instructions:[...camera,'Kameraya tam dön; kendini zorla düzeltmeden rahatça dur. Ölçüm boyunca sabit kal.']},
+ side:{id:'side',title:'Yandan duruş',subtitle:'Gövdenin dikeye göre izdüşümü',view:'Yandan',dynamic:false,primary:'trunk_tilt',direction:1,metrics:['trunk_tilt'],instructions:[...camera,'Kameraya tam yan dön; rahat dur, omuzlarını zorla geri çekme. Ölçüm boyunca sabit kal.']},
+ squat:{id:'squat',title:'Kontrollü squat',subtitle:'Diz hareket açıklığı ve gövde açısı',view:'Yandan',dynamic:true,primary:'near_knee',direction:-1,metrics:['near_knee','trunk_tilt'],instructions:[...camera,'Kameraya yan dön. Ayakta rahat başlangıç konumunu al.',movement]},
+ knee:{id:'knee',title:'Diz bükme ve açma',subtitle:'Görünür bacağın hareket açıklığı',view:'Yandan',dynamic:true,primary:'near_knee',direction:-1,metrics:['near_knee'],instructions:[...camera,'Yan dön. PT ile seçtiğin güvenli konumda bacak açıkken başla; yalnız kameraya yakın bacağı ölç.',movement]},
+ hinge:{id:'hinge',title:'Kalça menteşesi',subtitle:'Gövde–kalça–diz izdüşüm açısı',view:'Yandan',dynamic:true,primary:'near_hip',direction:-1,metrics:['near_hip','trunk_tilt'],instructions:[...camera,'Yan dön. Ayakta başla; PT’nin gösterdiği kalçadan eğilme hareketini uygula.',movement]},
+ shoulder_flexion:{id:'shoulder_flexion',title:'Omuzu öne kaldırma',subtitle:'Kolun gövdeye göre hareket açıklığı',view:'Yandan',dynamic:true,primary:'near_shoulder',direction:1,metrics:['near_shoulder','trunk_tilt'],instructions:[...camera,'Yan dön. Kameraya yakın kol aşağıdayken başla; kolunu önünden kaldır. Elin kadrajda kalsın.',movement]},
+ shoulder_abduction:{id:'shoulder_abduction',title:'Omuzu yana kaldırma',subtitle:'İki kolun gövdeye göre izdüşümü',view:'Önden',dynamic:true,primary:'left_shoulder',direction:1,metrics:['left_shoulder','right_shoulder','trunk_tilt'],instructions:[...camera,'Öne dön. İki kol aşağıdayken başla; kollarını yanlardan kaldır. Ellerini kadrajda tut.',movement]},
+ elbow:{id:'elbow',title:'Dirsek bükme ve açma',subtitle:'Görünür dirseğin hareket açıklığı',view:'Yandan',dynamic:true,primary:'near_elbow',direction:-1,metrics:['near_elbow'],instructions:[...camera,'Yan dön. Kameraya yakın kol açıkken başla; üst kolunu rahat tutup dirseğini bük ve aç.',movement]},
+ sit_stand:{id:'sit_stand',title:'Otur ve kalk',subtitle:'Tamamlanan tekrarlar, süre ve diz açıklığı',view:'Yandan',dynamic:true,primary:'near_knee',direction:-1,metrics:['near_knee','trunk_tilt'],instructions:[...camera,'Sabit, güvenli sandalye kullan. Kameraya yan dön; ayakta başla, otur ve tekrar ayağa kalk. Sandalye ve yardım koşullarını koru.',movement]},
+};
+
+export const METRIC_LABELS: Record<string, string> = {shoulder_tilt:'Omuz eğimi',hip_tilt:'Kalça çizgisi',trunk_tilt:'Gövde eğimi',near_knee:'Diz',near_hip:'Kalça',near_shoulder:'Kol kaldırma',near_elbow:'Dirsek',left_shoulder:'Sol kol',right_shoulder:'Sağ kol'};

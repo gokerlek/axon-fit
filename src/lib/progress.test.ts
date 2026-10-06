@@ -507,3 +507,12 @@ describe('sayfanın tamamı', () => {
     );
   });
 });
+
+ test('geçmiş haftaların hedefleri değişince kazanılmış seri rozeti değişmez', () => {
+  const dates = ['2026-09-07','2026-09-14','2026-09-21','2026-09-28'];
+  const weeklyTargets = Object.fromEntries(dates.map(date => [date, 1]));
+  const original = achievementsOf({dates, recordDates: [], today:'2026-10-05',weeklyTarget:1,weeklyTargets});
+  const changed = achievementsOf({dates, recordDates: [], today:'2026-10-05',weeklyTarget:5,weeklyTargets});
+  assert.deepEqual(changed.find(item=>item.id==='streak_4'), original.find(item=>item.id==='streak_4'));
+  assert.equal(weeklyStreak(dates,'2026-10-05',5,weeklyTargets).best,4);
+ });

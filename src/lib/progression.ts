@@ -79,16 +79,17 @@ export type LoadSpec = {
 
 /** Danışanın setten sonra tek dokunuşla seçtiği zorluk. */
 export const EFFORTS = ['easy', 'good', 'hard', 'fail'] as const;
-export type Effort = (typeof EFFORTS)[number];
+export type Effort = (typeof EFFORTS)[number] | 'unknown';
 
 /** Zorluk → yedekte kalan tekrar tahmini (RIR). */
-export const EFFORT_RIR: Record<Effort, number> = { easy: 4, good: 2, hard: 1, fail: 0 };
+export const EFFORT_RIR: Record<Effort, number> = { easy: 4, good: 2, hard: 1, fail: 0, unknown: 0 };
 
 export const EFFORT_LABELS: Record<Effort, string> = {
   easy: 'Kolay',
   good: 'İyi',
   hard: 'Zor',
   fail: 'Başaramadım',
+  unknown: 'Belirtilmedi',
 };
 
 export const PROGRESSION_LABELS: Record<ProgressionScheme, string> = {
@@ -391,7 +392,7 @@ function inRow(set: SetResult, rowId: string | undefined): boolean {
 
 /** Tepe: kaydın kendi hedefinin ve güncel aralığın tepesine ulaşıldı (genişletilen aralıkta tepe yukarı kayar). */
 function reachedTop(set: SetResult, rule: ProgressionRule): boolean {
-  return set.effort !== 'fail' && set.value >= Math.max(rangeOf(set, rule).max, rule.targetMax);
+  return set.effort !== 'unknown' && set.effort !== 'fail' && set.value >= Math.max(rangeOf(set, rule).max, rule.targetMax);
 }
 
 function missed(set: SetResult, rule: ProgressionRule): boolean {
@@ -559,6 +560,7 @@ export function nextSession({
   // Yarıda bırakıldı (hafifletme antrenmanı değil): yapılmayan set tepeye ulaşmadı sayılır, tıkanma değil.
   const incomplete = short(last) && failedStreak(chain.slice(0, -1), failed, short) < DELOAD_AFTER_FAILED;
   const lowest = Math.min(...last.map((set) => set.value));
+  if (!incomplete && last.some(set=>set.effort==='unknown') && !sessionFailed(last,rule)) return {weightKg:kept,target:rule.targetMin,reason:'hold'};
 
   if (grid) {
     if (!incomplete && last.every((set) => missed(set, rule))) {
@@ -686,7 +688,7 @@ function topOf({ set, current }: Pair): number {
 }
 
 function reachedPair(pair: Pair): boolean {
-  return (pair.set.amrap || pair.result.effort !== 'fail') && pair.result.value >= topOf(pair);
+  return (pair.set.amrap || (pair.result.effort !== 'unknown' && pair.result.effort !== 'fail')) && pair.result.value >= topOf(pair);
 }
 
 /**
@@ -945,6 +947,7 @@ export function planSession({
   const incomplete = lastSession.short && failedStreak(chain.slice(0, -1), stalled, neutralSession) < DELOAD_AFTER_FAILED;
 
   const decisive = deciding(last);
+  if (!incomplete && decisive.some(pair=>!pair.set.amrap && pair.result.effort==='unknown') && !decisive.some(missedPair)) return build(kept,mins,'hold');
   if (grid) {
     // Bütün setler tıkandıysa iner; karar setlerinden biri tıkandıysa (yüzdeli setler iyi olsa da) korunur.
     if (!incomplete && last.every(missedPair)) {

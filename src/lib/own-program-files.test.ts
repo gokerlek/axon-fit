@@ -283,3 +283,13 @@ test('bir günün şablonu başka günün yasaklı hareketine izin vermez', asyn
   assert.equal((await save(gh, createBody({ phases }), 'client', OWN_ID, guardOf(['crunch'], { t_evdeaaaa: ['crunch'] }))).status, 'blocked');
   assert.equal(gh.commitCount(), 0);
 });
+
+test('AI own draft creation shares program and index in the same commit and preserves PT program', async () => {
+  const pt = programFile(), gh = fakeSessionRepo({ 'program.json': pt });
+  const result = await saveOwnProgram(gh.repo, { id: OWN_ID, body: createBody(), by: 'client', library, ctx, now: NOW, shareOnCreate: true });
+  assert.equal(result.status, 'created'); assert.equal(gh.commitCount(), 1);
+  assert.deepEqual(gh.lastChanged(), [OWN_INDEX_PATH, PATH].sort());
+  assert.ok((gh.get(PATH) as OwnProgram).shared);
+  assert.ok((gh.get(OWN_INDEX_PATH) as OwnIndex).items[0]?.shared);
+  assert.deepEqual(gh.get('program.json'), pt);
+});

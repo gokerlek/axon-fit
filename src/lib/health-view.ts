@@ -27,6 +27,7 @@ export function healthSlice(record: HealthRecord, fields: readonly HealthField[]
     }
   }
   if (allowed.has('screening')) {
+    if (record.cameraMeasurements) slice.cameraMeasurements = record.cameraMeasurements;
     if (record.screenings) slice.screenings = record.screenings;
     if (record.movementScreens) slice.movementScreens = record.movementScreens;
   }

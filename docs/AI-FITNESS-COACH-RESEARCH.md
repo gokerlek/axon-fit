@@ -212,7 +212,7 @@ Tek kamera için güncel OpenCap Monocular ön baskısı, belirli doğrulama gö
 
 **Ürün sınırı:** İlk sürümde video uygunluğu, gözlenebilir 2D hareket olayları ve kullanıcının bildirdiği semptomlar. Daha sonra göreve özgü validasyon tamamlanırsa kinematik ölçüm eklenir. Kalça kapsülü, disk sorunu, gerçek bacak uzunluğu farkı, skolyoz tanısı, kas EMG'si veya doku gerginliği fotoğraftan üretilemez. 2D omuz hattı eğimi anatomik pelvis rotasyonu değildir.
 
-Önerilen veri politikası: Kullanıcının açık kamera onayıyla görüntüyü mümkün olduğunca cihazda işle; görüntüyü varsayılan olarak saklama veya Gemini'ye gönderme. Saklanan türetilmiş değerler de sağlık verisi niteliğinde olabilir. Kaynak, yöntem/model sürümü, kalite ve taraf bilgisi değerle birlikte tutulmalı. PT ham görüntü isterse ayrı, açık amaç/süre/onay gerekir.
+Ürün veri politikası: Kullanıcının açık kamera işleme onayıyla görüntüyü yalnız cihazda geçici işle; ham görüntüyü saklama veya sunucuya/Gemini'ye gönderme. Bu kapsamda PT için ham görüntü paylaşma seçeneği yoktur. Yalnız gerekli türetilmiş ölçüm özeti ayrı saklama onayıyla tutulur; bu değerler de hassas sağlık verisi olabilir. Kaynak, yöntem/model sürümü, kalite, belirsizlik ve taraf bilgisi değerle birlikte tutulur. Uygulama sınırları ve validasyon kapıları [motor sözleşmesinde](AI-FITNESS-COACH-DESIGN.md).
 
 ## 7. Yargılamayan ve beden algısına duyarlı koç
 
@@ -243,4 +243,10 @@ Bu nedenle NASM/FRC/FP birer hedefe yönelik araç olmalıdır. Program; kişini
 5. PT incelemesiyle, gerçek danışan verisi olmadan senaryo testleri yapmak; sonra ayrı onamlı pilotta fayda, yanlış alarm ve uygunsuz öneriyi ölçmek.
 6. Ölçüm izni reddi, yeme/beden algısı hassasiyeti, ağrı, eksik ekipman ve sağlayıcı kesintisini ilk test paketine almak.
 
-Bu rapor sonraki motor tasarımı için kaynak haritasıdır. Yeni chat, kamera ölçümü veya otomatik program yazımı bu dalda henüz uygulanmamıştır.
+Bu rapor sonraki motor tasarımı için kaynak haritasıdır. Yeni chat, kamera açı ölçümü veya otomatik program yazımı bu dalda henüz uygulanmamıştır. Kamera hazırlığı/yerel önizleme arayüzünün mevcut kapsamı [motor belgesinde](AI-FITNESS-COACH-DESIGN.md#18-ilk-ölçüm-arayüzü--uygulanan-kapsam) ayrıca belirtilir.
+
+Uygulama durumu eki: İlk kamera önizlemesinden sonra yerel MediaPipe Worker ve betimleyici 2D açı pilotu eklendi (tasarım §18.1). Klinik eşik ve AI programına karar girdisi olarak kullanma henüz açılmadı. Sonraki uygulama aşamasında sayısal kayıt/geçmiş eklendi (tasarım §18.3). Model örnek fotoğrafla doğrulandı; klinik yöntem anlaşması/cihaz validasyonu yapılmış sayılmaz.
+
+## 10. Kamera ölçümünde mevcut ürün ve araştırma karşılaştırması
+
+4 Ekim 2026 araştırması: Hinge Health, OpenCap (çok kamera ve 2026 monocular ön baskı), VALD HumanTrak ve msk.ai Deep Vision karşılaştırıldı. Ürün özellikleri, donanım, doğrulama ve gizlilik farkları; ilk test adayları ve açılma koşulları [kamera ölçüm raporunda](CAMERA-MEASUREMENT-RESEARCH.md) yer alır. Bu ek uygulama veya klinik doğrulama değildir.

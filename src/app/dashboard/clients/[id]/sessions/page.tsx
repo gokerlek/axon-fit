@@ -1,3 +1,5 @@
+import {WorkoutCalendar} from '@/components/workout/workout-calendar';
+import {todayIn} from '@/lib/format';
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { Barbell } from '@phosphor-icons/react/dist/ssr';
@@ -42,6 +44,7 @@ export default async function SessionsPage({ params }: { params: Promise<{ id: s
 
       <LiveSession clientId={id} initial={live} />
 
+      {list?<WorkoutCalendar months={list.months} today={todayIn(config.timeZone)} hrefPrefix={`/dashboard/clients/${id}/sessions`}/>:null}
       {list === null ? (
         <Card>
           <CardHeader>

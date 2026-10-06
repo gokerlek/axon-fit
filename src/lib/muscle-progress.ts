@@ -1,3 +1,4 @@
+import {epley} from './personal-records.ts';
 import { classifyChange, measurementTrends, type ChangeKind, type LineKey } from './measurement-trends.ts';
 import type { MeasurementId } from './measurements.ts';
 import type { ExercisePoint } from './progress.ts';
@@ -84,13 +85,12 @@ export type ExerciseStrength = Omit<StrengthSource, 'points'> & {
 
 /**
  * Güç kararının günlük değeri. Ağırlıklıda tahmini maksimum; bütün setleri 12'den çok tekrarlı günde en
- * ağır setin sınırsız Epley'i (kg × (1 + tekrar ÷ 30)). Karar yalnız değişim oranına bakar ve Epley sabit
- * ağırlıkta tekrarla artar; 10–15 tekrarlık hareketin günleri düşmesin **[sentez]**.
+ * ağır setten tahmin türetilmez. Tüm güç yüzeyleri aynı 1–12 tekrar kuralını kullanır.
  */
 function strengthPoints(raw: readonly ExercisePoint[], metric: Metric): Point[] {
   if (metric !== 'e1rm') return metricPoints(raw, metric);
   return raw.flatMap((point) => {
-    const value = point.e1rm ?? (point.topKg !== undefined && point.topReps !== undefined ? point.topKg * (1 + point.topReps / 30) : undefined);
+    const value = point.e1rm ?? (epley(point.topKg,point.topReps) ?? undefined);
     return value === undefined ? [] : [{ date: point.date, value: Math.round(value * 10) / 10 }];
   });
 }

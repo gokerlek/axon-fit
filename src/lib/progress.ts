@@ -273,10 +273,10 @@ function trainingDaysByWeek(dates: readonly string[], today: string): Map<string
  * Hedef programın haftalık sıklığıdır; yoksa haftada 1 antrenman **[sentez]**. Bugünkü hedef geçmiş
  * haftalara da uygulanır (o günkü hedef kayıtlı değil).
  */
-export function weeklyStreak(dates: readonly string[], today: string, target: number): Streak {
+export function weeklyStreak(dates: readonly string[], today: string, target: number, targets: Record<string,number> = {}): Streak {
   const goal = Math.max(1, Math.trunc(target) || 1);
   const weeks = trainingDaysByWeek(dates, today);
-  const met = (week: string) => (weeks.get(week)?.length ?? 0) >= goal;
+  const met = (week: string) => (weeks.get(week)?.length ?? 0) >= (targets[week] ?? goal);
   const thisWeekStart = mondayOf(today);
   let current = met(thisWeekStart) ? 1 : 0;
   for (let week = addDays(thisWeekStart, -7); met(week); week = addDays(week, -7)) current += 1;
@@ -287,7 +287,7 @@ export function weeklyStreak(dates: readonly string[], today: string, target: nu
     run = met(week) ? run + 1 : 0;
     best = Math.max(best, run);
   }
-  return { current, best, thisWeek: weeks.get(thisWeekStart)?.length ?? 0, target: goal };
+  return { current, best, thisWeek: weeks.get(thisWeekStart)?.length ?? 0, target: targets[thisWeekStart] ?? goal };
 }
 
 export type AchievementId = 'first_workout' | 'workouts_10' | 'workouts_25' | 'workouts_50' | 'streak_4' | 'streak_12' | 'first_record';
@@ -319,22 +319,24 @@ export function achievementsOf(input: {
   recordDates: readonly string[];
   today: string;
   weeklyTarget: number;
+  weeklyTargets?: Record<string,number>;
 }): Achievement[] {
   const dates = input.dates.filter((date) => date <= input.today).sort();
-  const streak = weeklyStreak(dates, input.today, input.weeklyTarget);
+  const streak = weeklyStreak(dates, input.today, input.weeklyTarget, input.weeklyTargets);
   // Serinin N. haftaya ilk ulaştığı gün: o haftada hedefin tamamlandığı gün.
   const streakDays = new Map<number, string>();
   let run = 0;
   let previous: string | null = null;
   for (const [week, days] of trainingDaysByWeek(dates, input.today)) {
-    if (days.length < streak.target) {
+    const weekGoal=input.weeklyTargets?.[week] ?? input.weeklyTarget;
+    if (days.length < weekGoal) {
       run = 0;
       previous = week;
       continue;
     }
     run = previous !== null && addDays(previous, 7) === week && run > 0 ? run + 1 : 1;
     previous = week;
-    if (!streakDays.has(run)) streakDays.set(run, days[streak.target - 1]!);
+    if (!streakDays.has(run)) streakDays.set(run, days[weekGoal - 1]!);
   }
   const records = input.recordDates.filter((date) => date <= input.today).sort();
 
@@ -399,6 +401,7 @@ export function buildProgressView<E extends PlanExercise>(input: {
   setWeightsOf: (exercise: E) => Partial<Record<string, number>>;
   /** Haftalık hedef (antrenman günü); yoksa 1. */
   weeklyTarget?: number | undefined;
+  weeklyTargets?: Record<string,number>;
   skipped?: number;
   truncated?: boolean;
 }): ProgressView {
@@ -463,11 +466,11 @@ export function buildProgressView<E extends PlanExercise>(input: {
     workouts: finished.length,
     firstDate: dates[0] ?? null,
     records: items.length,
-    streak: weeklyStreak(dates, input.today, weeklyTarget),
+    streak: weeklyStreak(dates, input.today, weeklyTarget, input.weeklyTargets),
     exercises,
     weeks: weeklyViews({ rows: finished, today: input.today, exercises: input.exercises, setWeightsOf: input.setWeightsOf }),
     recentRecords: items.slice(0, RECENT_RECORDS),
-    achievements: achievementsOf({ dates, recordDates: items.map((item) => item.date), today: input.today, weeklyTarget }),
+    achievements: achievementsOf({ dates, recordDates: items.map((item) => item.date), today: input.today, weeklyTarget, weeklyTargets: input.weeklyTargets }),
     skipped: input.skipped ?? 0,
     truncated: input.truncated ?? false,
   };

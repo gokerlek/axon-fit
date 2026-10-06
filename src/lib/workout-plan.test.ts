@@ -35,7 +35,7 @@ function finished(id: string, minute: number, sets: { kg: number; reps: number }
       sessionEntry(`e_${id.slice(2, 8)}`, {
         rowId: 'r_aaaaaa',
         status: 'done',
-        sets: sets.map((set, index) => workingSet(setId(), minute + index + 1, { setIndex: index, kg: set.kg, reps: set.reps, target: { min: 8, max: 10 } })),
+        sets: sets.map((set, index) => workingSet(setId(), minute + index + 1, { setIndex: index, kg: set.kg, reps: set.reps, effort: 'good', target: { min: 8, max: 10 } })),
       }),
     ],
     ...extra,
@@ -349,7 +349,7 @@ describe('kendi programlar ve geçmiş penceresi (kendi-program.md §3.9)', () =
         sessionEntry(`e_${n.toString(36).padStart(6, '0')}`, {
           rowId,
           status: 'done',
-          sets: sets.map((set, index) => workingSet(setId(), minute + index + 1, { setIndex: index, kg: set.kg, reps: set.reps, target: { min: 8, max: 10 } })),
+          sets: sets.map((set, index) => workingSet(setId(), minute + index + 1, { setIndex: index, kg: set.kg, reps: set.reps, effort: 'good', target: { min: 8, max: 10 } })),
         }),
       ],
     });
@@ -381,7 +381,7 @@ describe('kendi programlar ve geçmiş penceresi (kendi-program.md §3.9)', () =
     const row = built?.rows.r_aaaaaa;
     assert.equal(row?.plan.reason, 'increase');
     assert.equal(row?.plan.topWeightKg, 62.5, 'evdeki 30 kg salonun planını çekmez');
-    assert.deepEqual(row?.lastTime.map((set) => set.kg), [60, 60, 60], '"Önceki" satırın kendi kaydı');
+    assert.deepEqual(row?.lastTime.map((set) => set.kg), [30, 30, 30], '"Önceki" en son eşleşen kaydı; öneri serisinden bağımsız');
 
     // Eski pencere (yalnız en yeni 8) PT satırını evdeki seriye bırakırdı.
     const old = new Set(historyRows(index, new Set(['bench-press'])).map((item) => item.id));
@@ -409,10 +409,10 @@ describe('kendi programlar ve geçmiş penceresi (kendi-program.md §3.9)', () =
     assert.equal(same?.rows[HOME_ROW]?.plan.topWeightKg, 42.5);
   });
 
-  test('"Önceki": satırın kaydı yoksa önce aynı programın aynı egzersizi', () => {
+  test('"Önceki": programdan bağımsız en yeni aynı egzersiz', () => {
     const gym = session(1, 0, 'r_aaaaaa', three(60, 10));
     const home = session(2, -DAY, 'r_baskaaa', three(30, 10), OWN);
-    assert.deepEqual(lastTimeOf([gym, home], { rowId: HOME_ROW, exerciseId: 'bench-press', programId: OWN }).map((set) => set.kg), [30, 30, 30]);
+    assert.deepEqual(lastTimeOf([gym, home], { rowId: HOME_ROW, exerciseId: 'bench-press', programId: OWN }).map((set) => set.kg), [60, 60, 60]);
     assert.deepEqual(lastTimeOf([gym, home], { rowId: HOME_ROW, exerciseId: 'bench-press' }).map((set) => set.kg), [60, 60, 60]);
   });
 
@@ -420,4 +420,24 @@ describe('kendi programlar ve geçmiş penceresi (kendi-program.md §3.9)', () =
     const program = parsedProgram();
     assert.notEqual(programStamp(program, OWN), programStamp(program));
   });
+});
+
+test('Önceki always uses the latest matching exercise and device across days and programs',()=>{
+ const old=finished('s_oldaaaaa',0,three(30,10));
+ const recent=finished('s_newaaaaa',100,three(60,8));
+ recent.entries[0]!.rowId='r_bbbbbb';
+ recent.program={revision:1,dayId:DAY_B,dayName:'Gün B'};
+ assert.deepEqual(lastTimeOf([old,recent],{rowId:'r_aaaaaa',exerciseId:'bench-press'}).map(s=>s.kg),[60,60,60]);
+ recent.entries[0]!.deviceId='other-machine';
+ assert.deepEqual(lastTimeOf([old,recent],{rowId:'r_aaaaaa',exerciseId:'bench-press'}).map(s=>s.kg),[30,30,30]);
+});
+
+test('history window retains the latest exposure of every requested exercise/device beyond its global cap',()=>{
+ const old=finished('s_oldaaaaa',0,three(30,10));old.entries[0]!.deviceId='machine-a';
+ const recent=finished('s_newaaaaa',100,three(60,8));recent.entries[0]!.deviceId='machine-b';
+ const index:SessionIndex={version:1,deleted:[],items:[indexRowOf(old,'old'),indexRowOf(recent,'new')]};
+ assert.deepEqual(historyRows(index,new Set(['bench-press']),1).map(row=>row.id),['s_newaaaaa','s_oldaaaaa']);
+ const skipped=finished('s_skipped1',200,[]);skipped.entries[0]!.deviceId='machine-a';
+ index.items.unshift(indexRowOf(skipped,'skipped'));
+ assert.ok(historyRows(index,new Set(['bench-press']),1).some(row=>row.id==='s_oldaaaaa'));
 });

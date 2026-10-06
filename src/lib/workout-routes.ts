@@ -368,7 +368,7 @@ function withExtrasCare(extras: ExtraRows, exercises: ReadonlyMap<string, Workou
   );
 }
 
-export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null, programParam: string | null = null): Promise<SessionRouteResult> {
+export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null, programParam: string | null = null, preview=false): Promise<SessionRouteResult> {
   return run(deps, null, 'workout', async ({ client, repo }) => {
     const head = await repo.head();
     const [repaired, own, programFile, waterFile, catalog, timeZone, proposalsFile, healthFile] = await Promise.all([
@@ -390,7 +390,7 @@ export function workoutRoute(deps: WorkoutRouteDeps, dayParam: string | null, pr
 
     const unfinished = activeRow(index);
     const active = unfinished ? await readSessionBlob(repo, unfinished.sha) : null;
-    const current = active?.status === 'active' ? active : null;
+    const current = !preview && active?.status === 'active' ? active : null;
     // Yarım antrenman seçimden bağımsız kendi programıyla sürer; yoksa adresteki ya da kalıcı seçim (§3.2, §5.4).
     const chosen = await planSource({ repo, own, pt, current, param: programParam });
     const { program, owner, problem } = chosen.source;

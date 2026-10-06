@@ -96,7 +96,7 @@ describe('antrenman belgesi: başlangıç ve sıradaki set', () => {
         entries: [
           sessionEntry('e_aaaaaa', {
             rowId: 'r_aaaaaa',
-            sets: [0, 1, 2].map((index) => workingSet(`st_0000000${index}`, -999 + index, { setIndex: index, kg: 60, reps, target: { min: 8, max: 10 } })),
+            sets: [0, 1, 2].map((index) => workingSet(`st_0000000${index}`, -999 + index, { setIndex: index, kg: 60, reps, effort: 'good', target: { min: 8, max: 10 } })),
           }),
         ],
       }),
@@ -350,7 +350,7 @@ describe('antrenman belgesi: aşırı yük, ısınma, ayar notu', () => {
           sessionEntry('e_aaaaaa', {
             rowId: 'r_aaaaaa',
             setupNote: 'Sehpa 3. delik',
-            sets: [0, 1, 2].map((index) => workingSet(`st_0000000${index}`, -999 + index, { setIndex: index, kg: 60, reps: 10, target: { min: 8, max: 10 } })),
+            sets: [0, 1, 2].map((index) => workingSet(`st_0000000${index}`, -999 + index, { setIndex: index, kg: 60, reps: 10, effort: 'good', target: { min: 8, max: 10 } })),
           }),
         ],
       }),
